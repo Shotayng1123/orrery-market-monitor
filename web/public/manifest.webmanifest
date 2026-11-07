@@ -1,7 +1,7 @@
 {
   "name": "Orrery Market Monitor",
   "short_name": "Orrery Monitor",
-  "description": "Orrery Market Monitor — Japan and global equity market monitor with research from Orrery Analytics",
+  "description": "Orrery Monitor — real-time market numbers, flow and trending data for professional investors",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
