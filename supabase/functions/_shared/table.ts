@@ -8,12 +8,17 @@ const PERIODS: PeriodKey[] = ["d1", "w1", "m1", "m3", "m12", "m36"];
 
 interface Anchor { symbol: string; ref_d: string; last_d: string | null; last_close: number | null; [k: string]: string | number | null }
 interface Quote { symbol: string; price: number; prev_close: number | null; market_time: string; fetched_at: string }
+interface Stat { symbol: string; mean21: number | null; sd21: number | null; hi252: number | null; lo252: number | null; mean200: number | null }
 
 export interface TableRow {
   symbol: string; name: string; cls: string; group: string; market: string; currency: string; decimals: number; proxyFor?: string; order: number;
   last: number | null; lastAt: string | null; live: boolean; source: string;
   closes: Partial<Record<PeriodKey, number | null>>; closeDates: Partial<Record<PeriodKey, string | null>>;
   pct: Partial<Record<PeriodKey, number | null>>; chg: Partial<Record<PeriodKey, number | null>>;
+  marketTab: boolean; chart: boolean;
+  z1m: number | null;    // (last − 21-day mean) / 21-day standard deviation
+  pos52: number | null;  // position in the 52-week range, 0–100
+  vs200: number | null;  // % (bp for yields handled by the view) above the 200-day average
 }
 
 export async function loadHolidays(): Promise<Holidays> {
@@ -24,13 +29,15 @@ export async function loadHolidays(): Promise<Holidays> {
 }
 
 export async function computeTable(now: Date = new Date()): Promise<{ rows: TableRow[]; asOf: string }> {
-  const [{ data: inst, error: e1 }, { data: anchors, error: e2 }, { data: quotes, error: e3 }, holidays] = await Promise.all([
+  const [{ data: inst, error: e1 }, { data: anchors, error: e2 }, { data: quotes, error: e3 }, holidays, { data: stats }] = await Promise.all([
     db.from("instruments").select("*").eq("active", true).order("ord"),
     db.rpc("fn_table_anchors"),
     db.from("quotes_latest").select("symbol,price,prev_close,market_time,fetched_at"),
     loadHolidays(),
+    db.rpc("fn_table_stats"),
   ]);
   if (e1 || e2 || e3) throw new Error((e1 ?? e2 ?? e3)!.message);
+  const sBy = new Map(((stats ?? []) as Stat[]).map((x) => [x.symbol, x]));
   const aBy = new Map((anchors as Anchor[]).map((a) => [a.symbol, a]));
   const qBy = new Map((quotes as Quote[]).map((q) => [q.symbol, q]));
   const rows: TableRow[] = [];
@@ -52,7 +59,11 @@ export async function computeTable(now: Date = new Date()): Promise<{ rows: Tabl
       pct[p] = c != null && last != null && c !== 0 ? (last / c - 1) * 100 : null;
       chg[p] = c != null && last != null ? last - c : null;
     }
-    rows.push({ symbol: i.symbol, name: i.name, cls: i.cls, group: i.grp, market: i.market, currency: i.currency, decimals: i.decimals, proxyFor: i.proxy_for ?? undefined, order: i.ord, last, lastAt, live, source: i.provider, closes, closeDates, pct, chg });
+    const st = sBy.get(i.symbol);
+    const z1m = st && st.mean21 != null && st.sd21 && last != null ? (last - st.mean21) / st.sd21 : null;
+    const pos52 = st && st.hi252 != null && st.lo252 != null && st.hi252 > st.lo252 && last != null ? ((last - st.lo252) / (st.hi252 - st.lo252)) * 100 : null;
+    const vs200 = st && st.mean200 && last != null ? (i.grp === "rates" ? last - st.mean200 : (last / st.mean200 - 1) * 100) : null;
+    rows.push({ marketTab: i.market_tab !== false, chart: i.chart !== false, z1m, pos52, vs200, symbol: i.symbol, name: i.name, cls: i.cls, group: i.grp, market: i.market, currency: i.currency, decimals: i.decimals, proxyFor: i.proxy_for ?? undefined, order: i.ord, last, lastAt, live, source: i.provider, closes, closeDates, pct, chg });
   }
   return { rows, asOf: now.toISOString() };
 }

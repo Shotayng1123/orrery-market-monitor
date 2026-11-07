@@ -41,14 +41,16 @@ const UP_RGB = "63,208,126", DN_RGB = "255,77,66";
 const bg = (v: number | null) => (v == null ? "#2a2b30" : `rgba(${v >= 0 ? UP_RGB : DN_RGB},${(0.22 + Math.min(1, Math.abs(v) / 5) * 0.68).toFixed(3)})`);
 const fmtP = (v: number | null) => (v == null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`);
 
-export function Treemap({ groups, height = 560, onEnter, onLeave, onClick }: { groups: TreeGroup[]; height?: number; onEnter?: (id: string, e: React.MouseEvent) => void; onLeave?: () => void; onClick?: (id: string) => void }) {
+export function Treemap({ groups, height = 560, onEnter, onLeave, onClick }: { groups: TreeGroup[]; height?: number | "fill"; onEnter?: (id: string, e: React.MouseEvent) => void; onLeave?: () => void; onClick?: (id: string) => void }) {
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
-  useEffect(() => { const el = box.current; if (!el) return; const ro = new ResizeObserver(() => setWidth(el.clientWidth || 600)); ro.observe(el); setWidth(el.clientWidth || 600); return () => ro.disconnect(); }, []);
+  const [hFill, setHFill] = useState(400);
+  useEffect(() => { const el = box.current; if (!el) return; const measure = () => { setWidth(el.clientWidth || 600); setHFill(Math.max(160, (el.parentElement?.clientHeight ?? 400) - 2)); }; const ro = new ResizeObserver(measure); ro.observe(el); if (el.parentElement) ro.observe(el.parentElement); measure(); return () => ro.disconnect(); }, []);
+  const h = height === "fill" ? hFill : height;
   const gs = groups.map((g) => ({ ...g, value: g.leaves.reduce((a, l) => a + l.value, 0) })).filter((g) => g.value > 0);
-  const placed = squarify(gs, { x: 0, y: 0, w: width, h: height });
+  const placed = squarify(gs, { x: 0, y: 0, w: width, h });
   return (
-    <div className="tmap" ref={box} style={{ height }} onMouseLeave={onLeave}>
+    <div className="tmap" ref={box} style={{ height: h }} onMouseLeave={onLeave}>
       {placed.map(({ item: g, rect }) => (
         <div className="tgrp" key={g.id} style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}>
           {squarify(g.leaves, { x: 0, y: 0, w: rect.w, h: rect.h }).map(({ item: l, rect: r }) => {

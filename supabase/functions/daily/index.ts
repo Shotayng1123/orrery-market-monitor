@@ -282,6 +282,10 @@ async function curves(country: string, full: boolean): Promise<string> {
     } catch (e) { await sourceErr(srcName, e); throw e; }
   } else throw new Error("country must be one of US JP DE EA EB GB CA");
   for (const part of chunk(curveRows, 1000)) { const { error } = await db.from("curves").upsert(part, { onConflict: "country,d,tenor" }); if (error) throw new Error("curves: " + error.message); }
+  // instruments whose daily series is a point on this curve (provider 'curve', provider_symbol 'CC:years')
+  const { data: yi } = await db.from("instruments").select("symbol,provider_symbol").eq("provider", "curve").eq("active", true);
+  const want = new Map(((yi ?? []) as Array<{ symbol: string; provider_symbol: string | null }>).filter((x) => x.provider_symbol?.startsWith(country + ":")).map((x) => [Number(x.provider_symbol!.split(":")[1]), x.symbol]));
+  if (want.size) for (const r of curveRows as Array<{ d: string; years: number; yield: number; source: string }>) { const sym = want.get(r.years); if (sym) priceRows.push({ symbol: sym, d: r.d, close: r.yield, source: r.source, updated_at: now }); }
   for (const part of chunk(priceRows, 1000)) { const { error } = await db.from("prices_daily").upsert(part, { onConflict: "symbol,d" }); if (error) throw new Error("prices_daily: " + error.message); }
   const n = await saveTableSnapshot();
   return `${country}: ${curveRows.length} curve points, ${priceRows.length} daily yields; table ${n} rows`;

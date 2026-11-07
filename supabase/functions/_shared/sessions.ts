@@ -1,5 +1,5 @@
 // Exchange sessions for the server side (same rules as web/src/lib/sessions.ts; keep the two in step).
-export type MarketId = "TSE" | "HKEX" | "SSE" | "KRX" | "TWSE" | "NSE" | "SGX" | "XETRA" | "LSE" | "NYSE" | "CME" | "FX";
+export type MarketId = "TSE" | "HKEX" | "SSE" | "KRX" | "TWSE" | "NSE" | "SGX" | "ASX" | "XETRA" | "SIX" | "LSE" | "NYSE" | "B3" | "BMV" | "CME" | "FX" | "CRYPTO";
 export type MarketState = "OPEN" | "BREAK" | "CLOSED" | "HOLIDAY";
 export interface Market { id: MarketId; name: string; tz: string; sessions: Array<[number, number]>; days: number[]; delayMin: number }
 
@@ -16,10 +16,15 @@ export const MARKETS: Market[] = [
   { id: "NSE", name: "Mumbai", tz: "Asia/Kolkata", sessions: [[hm(9, 15), hm(15, 30)]], days: MF, delayMin: 15 },
   { id: "SGX", name: "Singapore", tz: "Asia/Singapore", sessions: [[hm(9), hm(12)], [hm(13), hm(17)]], days: MF, delayMin: 20 },
   { id: "XETRA", name: "Frankfurt", tz: "Europe/Berlin", sessions: [[hm(9), hm(17, 30)]], days: MF, delayMin: 15 },
+  { id: "ASX", name: "Sydney", tz: "Australia/Sydney", sessions: [[hm(10), hm(16)]], days: MF, delayMin: 20 },
+  { id: "SIX", name: "Zurich", tz: "Europe/Zurich", sessions: [[hm(9), hm(17, 30)]], days: MF, delayMin: 15 },
   { id: "LSE", name: "London", tz: "Europe/London", sessions: [[hm(8), hm(16, 30)]], days: MF, delayMin: 15 },
   { id: "NYSE", name: "New York", tz: "America/New_York", sessions: [[hm(9, 30), hm(16)]], days: MF, delayMin: 0 },
   { id: "CME", name: "CME Globex", tz: "America/New_York", sessions: [[hm(0), hm(17)], [hm(18), hm(24)]], days: [0, 1, 2, 3, 4, 5], delayMin: 10 },
+  { id: "B3", name: "São Paulo", tz: "America/Sao_Paulo", sessions: [[hm(10), hm(17)]], days: MF, delayMin: 15 },
+  { id: "BMV", name: "Mexico City", tz: "America/Mexico_City", sessions: [[hm(8, 30), hm(15)]], days: MF, delayMin: 20 },
   { id: "FX", name: "FX", tz: SGT, sessions: [[hm(0), hm(24)]], days: [1, 2, 3, 4, 5, 6], delayMin: 0 },
+  { id: "CRYPTO", name: "Crypto", tz: "UTC", sessions: [[hm(0), hm(24)]], days: [0, 1, 2, 3, 4, 5, 6], delayMin: 0 },
 ];
 export const marketById = (id: string): Market | undefined => MARKETS.find((m) => m.id === id);
 

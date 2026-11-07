@@ -4,7 +4,7 @@
 // and the chip tooltip says so.
 import { partsIn, SGT } from "./time";
 
-export type MarketId = "TSE" | "HKEX" | "SSE" | "KRX" | "TWSE" | "NSE" | "SGX" | "XETRA" | "LSE" | "NYSE" | "CME" | "FX";
+export type MarketId = "TSE" | "HKEX" | "SSE" | "KRX" | "TWSE" | "NSE" | "SGX" | "ASX" | "XETRA" | "SIX" | "LSE" | "NYSE" | "B3" | "BMV" | "CME" | "FX" | "CRYPTO";
 export type MarketState = "OPEN" | "BREAK" | "CLOSED" | "HOLIDAY";
 
 export interface Market {
@@ -31,12 +31,17 @@ export const MARKETS: Market[] = [
   { id: "NSE", name: "Mumbai", tz: "Asia/Kolkata", sessions: [[hm(9, 15), hm(15, 30)]], days: MF, delayMin: 15 },
   { id: "SGX", name: "Singapore", tz: "Asia/Singapore", sessions: [[hm(9), hm(12)], [hm(13), hm(17)]], days: MF, delayMin: 20 },
   { id: "XETRA", name: "Frankfurt", tz: "Europe/Berlin", sessions: [[hm(9), hm(17, 30)]], days: MF, delayMin: 15 },
+  { id: "ASX", name: "Sydney", tz: "Australia/Sydney", sessions: [[hm(10), hm(16)]], days: MF, delayMin: 20 },
+  { id: "SIX", name: "Zurich", tz: "Europe/Zurich", sessions: [[hm(9), hm(17, 30)]], days: MF, delayMin: 15 },
   { id: "LSE", name: "London", tz: "Europe/London", sessions: [[hm(8), hm(16, 30)]], days: MF, delayMin: 15 },
   { id: "NYSE", name: "New York", tz: "America/New_York", sessions: [[hm(9, 30), hm(16)]], days: MF, delayMin: 0 },
   // CME Globex: Sunday 18:00 to Friday 17:00 ET with a daily 17:00–18:00 maintenance break.
   { id: "CME", name: "CME Globex", tz: "America/New_York", sessions: [[hm(0), hm(17)], [hm(18), hm(24)]], days: [0, 1, 2, 3, 4, 5], delayMin: 10 },
   // Spot FX: continuous from the Sydney open on Monday morning to the New York close on Friday evening, in SGT.
+  { id: "B3", name: "São Paulo", tz: "America/Sao_Paulo", sessions: [[hm(10), hm(17)]], days: MF, delayMin: 15 },
+  { id: "BMV", name: "Mexico City", tz: "America/Mexico_City", sessions: [[hm(8, 30), hm(15)]], days: MF, delayMin: 20 },
   { id: "FX", name: "FX", tz: SGT, sessions: [[hm(0), hm(24)]], days: [1, 2, 3, 4, 5, 6], delayMin: 0 },
+  { id: "CRYPTO", name: "Crypto", tz: "UTC", sessions: [[hm(0), hm(24)]], days: [0, 1, 2, 3, 4, 5, 6], delayMin: 0 },
 ];
 
 let HOLIDAYS: Partial<Record<MarketId, Set<string>>> = {};

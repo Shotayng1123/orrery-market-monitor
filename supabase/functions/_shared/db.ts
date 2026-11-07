@@ -36,5 +36,5 @@ export function chunk<T>(arr: T[], n: number): T[][] {
 
 export interface InstrumentRow {
   symbol: string; name: string; cls: string; grp: string; market: string; tz: string; currency: string; decimals: number;
-  proxy_for: string | null; provider: string; provider_symbol: string | null; ord: number; active: boolean; notes: string | null;
+  proxy_for: string | null; provider: string; provider_symbol: string | null; ord: number; active: boolean; notes: string | null; market_tab?: boolean; chart?: boolean;
 }

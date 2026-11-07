@@ -163,7 +163,7 @@ function HeatMap({ s, rows }: { s: IndexStats; rows: StatRow[] }) {
     for (const r of rows) { const k = r.sector ?? "Other"; by.set(k, [...(by.get(k) ?? []), r]); }
     return [...by.entries()].map(([sector, rs]) => ({ id: sector, label: sector, leaves: rs.map((r) => ({ id: r.symbol, label: shortName(r.name), name: shortName(r.name), value: size(r), pct: r.pct1d, title: r.name })) }));
   }, [rows, s.idx]);
-  return <Treemap groups={groups} height={Math.max(640, Math.min(900, Math.round(window.innerWidth * 0.42)))} onEnter={(id, e) => showCard(id, e)} onLeave={hideCard} onClick={openAsset} />;
+  return <Treemap groups={groups} height={document.body.classList.contains("term") ? "fill" : Math.max(640, Math.min(900, Math.round(window.innerWidth * 0.42)))} onEnter={(id, e) => showCard(id, e)} onLeave={hideCard} onClick={openAsset} />;
 }
 
 // ---- Japan short selling (JPX) ----
@@ -312,8 +312,8 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
           </>
         ) : <Empty title={us ? "No short-volume data" : "No short data for this market"}>{us ? "The FINRA job runs after the US close." : "Public per-name short data is not available for this exchange."}</Empty>}
       </Panel>
-      <Panel no="08" title="MOVERS" span={12} aux={statsAux}>{s ? <div className="msg2"><div><Movers rows={movers.top} title="Top 15 · 1D" /></div><div><Movers rows={movers.bottom} title="Bottom 15 · 1D" /></div></div> : noStats}</Panel>
       <Panel no="07" title="HEAT MAP" span={12} aux={s ? <>{statsAux} · GICS sectors · colour = 1D % · size = {hasMcap ? "market cap" : s.rows.some((r) => r.weight != null) ? "index weight" : "equal"}</> : ""}>{s ? <HeatMap s={s} rows={merged} /> : noStats}</Panel>
+      <Panel no="08" title="MOVERS" span={12} aux={statsAux}>{s ? <div className="msg2"><div><Movers rows={movers.top} title="Top 15 · 1D" /></div><div><Movers rows={movers.bottom} title="Bottom 15 · 1D" /></div></div> : noStats}</Panel>
       <Panel no="09" title="SCREENER" span={12} aux={statsAux}>{s ? <Screener s={s} /> : noStats}</Panel>
       {drawer && s && <SectorDrawer title={ix.label} sector={drawer} rows={drawerRows} ccy={ccy} onClose={() => setDrawer(null)} />}
     </>

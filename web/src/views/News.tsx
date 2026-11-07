@@ -100,7 +100,7 @@ export function NewsView({ tick }: { tick: number }) {
           <Empty title="No morning note yet">{note.error ?? "The note is written each weekday around 07:00 SGT with the overnight US session, movers above 5% and their reasons, the Japan outlook and the day's strategy."}</Empty>
         )}
       </Panel>
-      <Panel no="02" title="ECONOMIC CALENDAR" span={12} aux={<span className="chips" style={{ margin: 0 }}><span className="lbl">Impact</span>{chip(imp === "high", "High", () => setImp("high"))}{chip(imp === "hm", "High + Medium", () => setImp("hm"))}{chip(imp === "all", "All", () => setImp("all"))}<span className="lbl" style={{ marginLeft: 10 }}>Countries</span>{chip(scope === "major", "Major", () => setScope("major"))}{chip(scope === "all", "All", () => setScope("all"))}<span className="mut" style={{ marginLeft: 10 }}>times in SGT{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""}</span></span>}>
+      <Panel no="02" title="ECONOMIC CALENDAR" span={7} aux={<span className="chips" style={{ margin: 0 }}><span className="lbl">Impact</span>{chip(imp === "high", "High", () => setImp("high"))}{chip(imp === "hm", "High + Medium", () => setImp("hm"))}{chip(imp === "all", "All", () => setImp("all"))}<span className="lbl" style={{ marginLeft: 10 }}>Countries</span>{chip(scope === "major", "Major", () => setScope("major"))}{chip(scope === "all", "All", () => setScope("all"))}<span className="mut" style={{ marginLeft: 10 }}>times in SGT{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""}</span></span>}>
         {events.length ? (
           <table className="mini calT">
             <thead><tr><th className="l">When (SGT)</th><th className="l">Ccy</th><th className="l">Event</th><th className="l">Impact</th><th>Consensus</th><th>Previous</th><th>Actual</th></tr></thead>
@@ -119,15 +119,15 @@ export function NewsView({ tick }: { tick: number }) {
           </table>
         ) : <Empty title="No calendar loaded">{cal.error ?? "The calendar sync runs every hour."}</Empty>}
       </Panel>
-      <Panel no="03" title="NEWS" span={12} aux={<span className="chips" style={{ margin: 0 }}>{NEWS_CATEGORIES.map((c) => <span key={c} className={`chip-sm${c === cat ? " on" : ""}`} onClick={() => setCat(c)}>{c}</span>)}</span>}>
-        {news.data?.rows.length ? news.data.rows.map((it) => (
+      <Panel no="03" title="NEWS" span={5} aux={<span className="chips" style={{ margin: 0 }}>{NEWS_CATEGORIES.map((c) => <span key={c} className={`chip-sm${c === cat ? " on" : ""}`} onClick={() => setCat(c)}>{c}</span>)}</span>}>
+        {news.data?.rows.length ? <div className="nwlist">{news.data.rows.map((it) => (
           <div className="nwrow" key={it.id}>
             <span className="nwt">{fmtStampSafe(it.publishedAt)}</span>
             <span className="nwc cat">{it.category}</span>
             <span className="nwh"><a href={it.url} target="_blank" rel="noreferrer">{it.title}</a></span>
             <span className="nwsrc">{it.source}</span>
           </div>
-        )) : <Empty title="No headlines">{news.error ?? "The news job runs every ten minutes."}</Empty>}
+        ))}</div> : <Empty title="No headlines">{news.error ?? "The news job runs every ten minutes."}</Empty>}
       </Panel>
     </>
   );

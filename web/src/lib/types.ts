@@ -2,7 +2,7 @@
 // views agree; the server mirrors these shapes.
 import type { MarketId } from "./sessions";
 
-export type AssetClass = "Equities" | "Volatility" | "Futures" | "Currency" | "Fixed income" | "Commodities";
+export type AssetClass = "Equities" | "Volatility" | "Futures" | "Currency" | "Crypto" | "Fixed income" | "Commodities";
 export type PeriodKey = "d1" | "w1" | "m1" | "m3" | "m12" | "m36";
 export const PERIODS: Array<{ key: PeriodKey; label: string }> = [
   { key: "d1", label: "1D" }, { key: "w1", label: "1W" }, { key: "m1", label: "1M" }, { key: "m3", label: "3M" }, { key: "m12", label: "12M" }, { key: "m36", label: "36M" },
@@ -27,6 +27,11 @@ export interface TableRow extends Instrument {
   closes: Partial<Record<PeriodKey, number | null>>;   // absolute close at each period's start
   closeDates: Partial<Record<PeriodKey, string | null>>;
   pct: Partial<Record<PeriodKey, number | null>>;      // % change from that close to `last`
+  marketTab?: boolean;   // row in the MARKET table (minors live on RATES & CURRENCY only)
+  chart?: boolean;       // tile in the chart groups
+  z1m?: number | null;   // (last − 21-day mean) / 21-day sd
+  pos52?: number | null; // position in the 52-week range, 0–100
+  vs200?: number | null; // % above the 200-day average (yield points for rates)
 }
 
 export interface SeriesPoint { t: number; v: number }   // epoch seconds, value
