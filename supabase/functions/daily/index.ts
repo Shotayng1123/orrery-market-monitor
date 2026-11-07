@@ -78,7 +78,8 @@ async function history(): Promise<string> {
       rows.push({ symbol: i.symbol, d, close: v, source: "yahoo", updated_at: now.toISOString() });
     }
   }
-  for (const part of chunk(rows, 1000)) {
+  const uniq = [...new Map(rows.map((r) => [`${r.symbol}|${r.d}`, r])).values()];   // two bars can land on one exchange-local date (DST edges, Sydney): keep the last
+  for (const part of chunk(uniq, 1000)) {
     const { error: ue } = await db.from("prices_daily").upsert(part, { onConflict: "symbol,d" });
     if (ue) throw new Error("prices_daily: " + ue.message);
   }

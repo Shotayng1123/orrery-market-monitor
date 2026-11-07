@@ -34,6 +34,9 @@ async function getJson(url: string): Promise<unknown> {
 }
 
 async function upsert(table: string, rows: Record<string, unknown>[], onConflict: string): Promise<void> {
+  // two Yahoo bars can map to one exchange-local date (DST edges, e.g. Sydney): keep the last per key
+  const keys = onConflict.split(",");
+  rows = [...new Map(rows.map((r) => [keys.map((k) => String(r[k])).join("|"), r])).values()];
   for (let i = 0; i < rows.length; i += 1000) {
     const { error } = await db.from(table).upsert(rows.slice(i, i + 1000), { onConflict });
     if (error) throw new Error(`${table}: ${error.message}`);
