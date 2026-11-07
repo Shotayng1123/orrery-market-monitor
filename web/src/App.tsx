@@ -10,10 +10,14 @@ import { NewsView } from "./views/News";
 import { ResearchView } from "./views/Research";
 import { EquitiesView } from "./views/Equities";
 import { RatesFxView } from "./views/RatesFx";
+import { AssetView } from "./views/Asset";
+import { CardLayer } from "./components/CompanyCard";
 
 interface Route { view: ViewId; sub: string }
 function parseHash(): Route {
-  const [v, sub = ""] = location.hash.replace(/^#/, "").split("/");
+  const [v, ...rest] = location.hash.replace(/^#/, "").split("/");
+  const sub = decodeURIComponent(rest.join("/"));
+  if (v === "asset") return { view: "asset", sub };
   return { view: VIEWS.some((x) => x.id === v) ? (v as ViewId) : "market", sub };
 }
 const setHash = (view: ViewId, sub = "") => { location.hash = sub ? `${view}/${sub}` : view; };
@@ -87,6 +91,7 @@ export default function App() {
   const { view, sub } = route;
   return (
     <>
+      <CardLayer />
       <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={userId} onSignOut={signOut} updatedAt={updatedAt} nextIn={nextIn} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={setFull} />
       <div id="fsx" onClick={() => setFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–5 TABS · ESC</span><span>&#9974;</span></div>
       <div id="wrap">
@@ -96,6 +101,7 @@ export default function App() {
           {view === "research" && <ResearchView tick={tick} />}
           {view === "equities" && <EquitiesView sub={sub} onSub={(s) => setHash("equities", s)} tick={tick} />}
           {view === "rates" && <RatesFxView sub={sub} onSub={(s) => setHash("rates", s)} tick={tick} />}
+          {view === "asset" && <AssetView symbol={sub} tick={tick} />}
         </div>
         <footer>Orrery Monitor shows market data from third-party feeds (Yahoo Finance; US Treasury; Japan MOF; exchange and central-bank publications) that may be delayed or incomplete; every panel states its source and as-of time. Information only; nothing here is investment advice. Default time zone: Singapore.</footer>
       </div>

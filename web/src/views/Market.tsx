@@ -132,7 +132,6 @@ export function MarketView({ tick }: { tick: number }) {
     <>
       <Panel no="01" title="MARKETS" aux={table.data ? <>as of {fmtStampSafe(table.data.asOf)} · Yahoo Finance, US Treasury, MOF{DEV_MOCK && <span className="badge est">MOCK</span>}</> : table.error ? <span className="warn">{table.error}</span> : "loading…"}>
         {rows.length ? <MarketsTable rows={rows} /> : <Empty title="Awaiting the data feed">{table.error ?? "The market table fills once the Monitor backend is deployed and its first daily history run has completed."}</Empty>}
-        <div className="hint2">Closes are the last session on or before each window start (1W = 7 calendar days, 1M/3M/12M/36M = calendar months). % = change from that close to the last print; yields show the change in bp. After a market closes its closing level and day change are held until the next session&apos;s first print. Rows of open markets are highlighted; delayed feeds carry a badge; hover a row for the source time.</div>
       </Panel>
       <div className="c12">{selector}</div>
       <ChartGroup no="02" title="EQUITIES" rows={by("equity")} period={period} tick={tick} sigmaWindow={sigmaWindow} />

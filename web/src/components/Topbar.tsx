@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Logo } from "./Logo";
 import { Alerts } from "./Alerts";
+import { Search } from "./Search";
 import { allStatuses, haveHolidays, type MarketId } from "../lib/sessions";
 import { fmtClock, fmtStamp, SGT, TZ_ABBR } from "../lib/time";
 import { SIZES, type Prefs, type SizeKey } from "../lib/prefs";
 
-export type ViewId = "market" | "news" | "research" | "equities" | "rates";
+export type ViewId = "market" | "news" | "research" | "equities" | "rates" | "asset";
 export const VIEWS: Array<{ id: ViewId; label: string }> = [
   { id: "market", label: "MARKET" }, { id: "news", label: "NEWS" }, { id: "research", label: "RESEARCH" }, { id: "equities", label: "EQUITIES" }, { id: "rates", label: "RATES & CURRENCY" },
 ];
@@ -40,6 +41,7 @@ export function Topbar(p: TopbarProps) {
         {VIEWS.map((v) => <a key={v.id} href={`#${v.id}`} className={v.id === p.view ? "on" : ""} onClick={(e) => { e.preventDefault(); p.onNav(v.id); }}>{v.label}</a>)}
       </nav>
       <Alerts tick={p.tick} />
+      <Search />
       <span className="bmq">
         <span id="mktstat" title={`Regular sessions, each in its exchange's local time${hol}`}>
           {statuses.map((s) => (

@@ -1,0 +1,25 @@
+name: stats-topix
+# TOPIX has ~1,600 names: too many for one Edge Function call, so its daily statistics and net money flow run
+# here with Deno (same code as the `daily` function). 07:40 UTC = 16:40 JST, after the Tokyo close.
+on:
+  schedule:
+    - cron: "40 7 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      indices:
+        description: "Space-separated index ids (TOPIX NK225 SP500 NDX KOSPI200 HSI SSE180)"
+        default: "TOPIX"
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Statistics and money flow
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: deno run -A jobs/stats_deno.ts ${{ github.event.inputs.indices || 'TOPIX' }} --mflow

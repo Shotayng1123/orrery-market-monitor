@@ -244,7 +244,9 @@ body.term .empty{padding:8px 4px;font-size:11px}
 .mtile.cp .vl{font-size:13.5px;font-weight:600;margin-top:1px;font-variant-numeric:tabular-nums;line-height:1.2}
 .mtile.cp .ch{font-size:11px;margin:1px 0 2px;font-variant-numeric:tabular-nums}
 .mtile.cp .ch .mut{font-size:9.5px}
-.mtile.cp.square{aspect-ratio:1/1}
+.mtile.cp.square{aspect-ratio:1/1;overflow:hidden;min-height:0}   /* always a square (Shota): the chart shrinks to fit, never the tile grows */
+.mtile.cp.square .chartbox.fill{min-height:0;flex:1 1 0}
+.mtile.cp.square .uplot{max-height:100%}
 .mtile.cp.large{aspect-ratio:2/1;min-height:260px}
 .mtile.cp.large .vl{font-size:16px}
 .chartbox{position:relative;width:100%;min-width:0}
@@ -312,3 +314,55 @@ table.mkt td,table.mkt th{overflow:hidden;text-overflow:ellipsis}
 .flowT .bbar .mark{position:absolute;top:-2px;width:1px;height:12px;background:#e8e5de;opacity:.85}
 .secT tr.tot td{border-top:1px solid var(--bord2);font-weight:600}
 .secT td.nm{max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* clickable text (Shota): a distinct colour, underline on hover */
+.lnk{color:var(--cyan);cursor:pointer}
+.lnk:hover{text-decoration:underline}
+.lnk .lnk-sub{color:var(--mut)}
+.tleaf.clk{cursor:pointer}
+/* open-market highlight in orange (Shota), replacing the green */
+:root{--open:#f5a142}
+tbody tr.live td{background:rgba(245,161,66,.05)}
+tbody tr.live td:first-child{box-shadow:inset 2px 0 0 var(--open)}
+tbody tr.live:hover td{background:rgba(245,161,66,.1)}
+.mtile.cp.live{border-color:#7a4a16;box-shadow:inset 2px 0 0 var(--open)}
+.mtile.cp .asof .st.live{color:var(--open);border-color:#7a4a16}
+.badge.live{color:var(--open);border-color:#7a4a16}
+#mktstat .mk.open{color:var(--open)}
+/* search */
+#search{position:relative;margin-left:auto}
+#search input{width:250px;background:#0c0c0c;border:1px solid var(--bord2);color:var(--txt);border-radius:3px;padding:3px 8px;font:inherit;font-size:11px}
+#search input:focus{outline:none;border-color:var(--amber)}
+.sres{position:absolute;right:0;top:26px;width:440px;max-height:380px;overflow:auto;background:#0c0c0c;border:1px solid var(--bord2);border-radius:3px;z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.6)}
+.sitem{display:flex;gap:10px;align-items:baseline;padding:5px 9px;font-size:11px;cursor:pointer;border-bottom:1px solid #16171a}
+.sitem b{color:var(--cyan);min-width:84px}
+.sitem .nm{flex:1;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sitem .mut{font-size:10px;white-space:nowrap}
+.sitem.on,.sitem:hover{background:#15171c}
+/* company card */
+.ccard{position:fixed;z-index:70;background:#0e0f12;border:1px solid var(--bord2);border-radius:3px;padding:8px 10px;box-shadow:0 10px 30px rgba(0,0,0,.65);font-size:11px;cursor:pointer}
+.ccard-h b{font-size:12px}
+.ccard-px{margin-top:2px;font-variant-numeric:tabular-nums}
+.ccard-px b{font-size:14px}
+.ccard-loading{color:var(--mut);padding:10px 0}
+.ccard table.secT{font-size:10.5px}
+.ccard table.secT td,.ccard table.secT th{padding:1px 4px}
+.relline{display:block;margin:2px 0 4px}
+/* sector drawer */
+.drawer-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:flex;justify-content:flex-end}
+.drawer{width:min(1180px,96vw);height:100%;background:var(--panel);border-left:1px solid var(--bord2);display:flex;flex-direction:column;box-shadow:-10px 0 30px rgba(0,0,0,.6)}
+.drawer .phead .chip-sm{margin-left:auto}
+.drawer-body{overflow:auto;padding:6px 10px 14px}
+/* breadth / flow tables */
+table.brT td.l{min-width:150px}
+table.secT tr.sep td{border-top:1px solid var(--bord2)}
+.mfbar{position:relative;display:block;width:100%;height:8px;background:#15161a;border-radius:2px;overflow:hidden}
+.mfbar .mid{position:absolute;left:50%;top:0;width:1px;height:100%;background:#3a3b40}
+.mfbar .pos{position:absolute;left:50%;top:0;height:100%;background:var(--up)}
+.mfbar .neg{position:absolute;right:50%;top:0;height:100%;background:var(--dn)}
+table.stm th{font-size:8.5px}
+table.mvT{table-layout:fixed;width:100%}
+table.mvT td.nm{max-width:none;overflow:hidden;text-overflow:ellipsis}
+.barsbox{width:100%}
+.barsbox svg{display:block}
+.barsax{display:flex;justify-content:space-between;color:var(--mut);font-size:9.5px;margin-top:-10px}

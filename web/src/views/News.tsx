@@ -50,7 +50,6 @@ export function NewsView({ tick }: { tick: number }) {
             <p><b>{n.title}</b></p>
             {n.sections.map((s) => <div key={s.heading}><h4>{s.heading}</h4><Md text={s.md} sources={n.sources} /></div>)}
             {n.sources.length > 0 && <div className="src">Sources: {n.sources.map((s) => <span key={s.n}>[{s.n}] <a href={s.url} target="_blank" rel="noreferrer">{s.title}</a> · </span>)}</div>}
-            <div className="hint2">Numbers come from the Monitor&apos;s own data pack; external claims are cited; (E) marks a judgement rather than a sourced fact.</div>
           </div>
         ) : (
           <Empty title="No morning note yet">The note is written each weekday around 07:00 SGT: the overnight US session, movers above 5% with their reasons, the Japan outlook and the day&apos;s strategy. Every number comes from the Monitor&apos;s own data and every claim links to its source.</Empty>

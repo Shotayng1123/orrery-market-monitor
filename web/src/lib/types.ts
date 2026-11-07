@@ -30,7 +30,7 @@ export interface TableRow extends Instrument {
 }
 
 export interface SeriesPoint { t: number; v: number }   // epoch seconds, value
-export interface Series { symbol: string; res: "1m" | "5m" | "1h" | "1d"; points: SeriesPoint[]; asOf: string | null }
+export interface Series { symbol: string; res: "1m" | "5m" | "15m" | "1h" | "1d"; points: SeriesPoint[]; asOf: string | null }
 
 /** An excessive move: a single stock beyond ±7% or an index beyond ±3% against the previous close. */
 export interface Alert { id: number; at: string; d: string; symbol: string; name: string; kind: "stock" | "index"; pct: number; price: number | null; market: string; msg: string }

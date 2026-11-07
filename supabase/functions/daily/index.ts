@@ -5,14 +5,15 @@
 //   news      RSS feeds -> news_items with rule-based categories
 //   fred      Fed funds target (DFEDTARU) -> policy_rates
 //   prune     old intraday bars, login attempts, job runs, news
-import { chunk, db, logRun, sourceErr, sourceOk, type InstrumentRow } from "../_shared/db.ts";
+import { chunk, db, logRun, selectAll, sourceErr, sourceOk, type InstrumentRow } from "../_shared/db.ts";
 import { fetchJson, fetchText, isCron, json } from "../_shared/http.ts";
 import { localDate, marketById, marketState, partsIn } from "../_shared/sessions.ts";
 import { loadHolidays, saveTableSnapshot } from "../_shared/table.ts";
 import { chart, spark } from "../_shared/yahoo.ts";
-import { fetchNikkei225, fetchSp500 } from "../_shared/constituents.ts";
+import { fetchHsi, fetchKospi200, fetchNikkei225, fetchSp500, fetchSse180, fetchTopix, type IndexId } from "../_shared/constituents.ts";
 import { fetchBoc, fetchBoe, fetchBundesbank, fetchEcb } from "../_shared/curves.ts";
-import { computeIndexStats, loadShortVolume, refreshQuotes } from "../_shared/istats.ts";
+import { computeIndexStats, computeMoneyFlow, loadShortVolume, refreshQuotes } from "../_shared/istats.ts";
+import { loadMarginTotals, loadShortPositions, loadShortRatio } from "../_shared/jpx.ts";
 import { fetchNasdaq100 } from "../_shared/constituents.ts";
 
 Deno.serve(async (req) => {
@@ -25,10 +26,14 @@ Deno.serve(async (req) => {
     switch (job) {
       case "history": detail = await history(); break;
       case "hourly": detail = await hourly(); break;
-      case "constituents": detail = await constituents(); break;
-      case "stats": { const idx = (url.searchParams.get("idx") ?? "SP500") as "SP500" | "NK225" | "NDX"; detail = await computeIndexStats(idx); break; }
-      case "shorts": detail = await loadShortVolume(); break;
-      case "flow": { const idx = (url.searchParams.get("idx") ?? "SP500") as "SP500" | "NK225" | "NDX"; detail = await refreshQuotes(idx); break; }
+      case "q15": detail = await intradayBars("15m", url.searchParams.get("all") === "1"); break;
+      case "bars1m": detail = await intradayBars("1m", true); break;
+      case "constituents": detail = await constituents(req.url); break;
+      case "stats": { const idx = (url.searchParams.get("idx") ?? "SP500") as IndexId; detail = await computeIndexStats(idx); break; }
+      case "mflow": { const idx = (url.searchParams.get("idx") ?? "SP500") as IndexId; detail = await computeMoneyFlow(idx); break; }
+      case "jpx": { const part = url.searchParams.get("part") ?? "positions"; detail = part === "ratio" ? await loadShortRatio() : part === "margin" ? await loadMarginTotals() : await loadShortPositions(); break; }
+      case "shorts": { const back = Number(url.searchParams.get("back") ?? ""); detail = await loadShortVolume(Number.isFinite(back) && back > 0 ? back : undefined); break; }
+      case "flow": { const idx = (url.searchParams.get("idx") ?? "SP500") as IndexId; detail = await refreshQuotes(idx); break; }
       case "policy": detail = await policy(url.searchParams.get("full") === "1", url.searchParams.get("bank")); break;
       case "curves": detail = await curves(url.searchParams.get("country") ?? "US", url.searchParams.get("full") === "1"); break;
       case "calendar": detail = await calendar(); break;
@@ -81,25 +86,70 @@ async function history(): Promise<string> {
 }
 
 // ---------- constituents (alert scan, breadth, movers) ----------
-async function constituents(): Promise<string> {
+async function constituents(reqUrl: string): Promise<string> {
   const parts: string[] = [];
   const { data: spRows } = await db.from("constituents").select("symbol,sector").eq("idx", "SP500");
   const spSector = new Map((spRows ?? []).map((r) => [r.symbol, r.sector as string | null]));
   const ndx = () => fetchNasdaq100((sym) => spSector.get(sym) ?? null);
-  for (const [name, fn] of [["SP500", fetchSp500], ["NK225", fetchNikkei225], ["NDX", ndx]] as const) {
+  const only = new URL(reqUrl).searchParams.get("idx");
+  const all = [["SP500", fetchSp500], ["NK225", fetchNikkei225], ["NDX", ndx], ["TOPIX", fetchTopix], ["KOSPI200", fetchKospi200], ["HSI", fetchHsi], ["SSE180", fetchSse180]] as const;
+  for (const [name, fn] of all.filter(([n]) => !only || n === only)) {
     try {
-      const rows = await fn();
+      const rows = [...new Map((await fn()).map((r) => [r.symbol, r])).values()];   // one row per symbol (lists can repeat a code)
       for (const part of chunk(rows, 500)) { const { error } = await db.from("constituents").upsert(part, { onConflict: "idx,symbol" }); if (error) throw new Error(error.message); }
       // drop names that left the index
       const keep = rows.map((r) => r.symbol);
-      const { data: existing } = await db.from("constituents").select("symbol").eq("idx", name);
-      const gone = (existing ?? []).map((e) => e.symbol).filter((s) => !keep.includes(s));
+      const existing = await selectAll<{ symbol: string }>(() => db.from("constituents").select("symbol").eq("idx", name).order("symbol"));
+      const keepSet = new Set(keep);
+      const gone = existing.map((e) => e.symbol).filter((s) => !keepSet.has(s));
       if (gone.length) await db.from("constituents").delete().eq("idx", name).in("symbol", gone);
       parts.push(`${name} ${rows.length} (as of ${rows[0]?.as_of}${gone.length ? `, ${gone.length} removed` : ""})`);
       await sourceOk(`constituents:${name}`);
     } catch (e) { parts.push(`${name} ERR ${e instanceof Error ? e.message : e}`); await sourceErr(`constituents:${name}`, e); }
   }
   return parts.join("; ");
+}
+
+// ---------- 15-minute bars (1W charts) and the minute-bar backfill (1D charts after a weekend) ----------
+/** Fetches Yahoo bars for the instruments whose market is open or closed within the last 45 minutes (all of
+ *  them with `all`), and upserts them: 15-minute bars into bars_15m (last ten days), one-minute bars into
+ *  bars_intraday (last three days, the same table the tick writes every minute). */
+async function intradayBars(res: "15m" | "1m", all: boolean): Promise<string> {
+  const now = new Date();
+  const holidays = await loadHolidays();
+  const { data, error } = await db.from("instruments").select("*").eq("active", true).eq("provider", "yahoo");
+  if (error) throw new Error(error.message);
+  const inst = (data as InstrumentRow[]).filter((i) => {
+    if (all) return true;
+    const m = marketById(i.market); if (!m) return false;
+    const st = marketState(m, now, holidays);
+    return st === "OPEN" || st === "BREAK" || recentlyClosedMin(m, now, 45, holidays);
+  });
+  if (!inst.length) return "idle: no market open";
+  const table = res === "15m" ? "bars_15m" : "bars_intraday";
+  const cutoff = now.getTime() / 1000 - (res === "15m" ? 10 : 3) * 86400;
+  const rows: Array<Record<string, unknown>> = [];
+  const failed: string[] = [];
+  let i = 0;
+  await Promise.all(Array.from({ length: 5 }, async () => {
+    for (;;) {
+      const k = i++; if (k >= inst.length) return;
+      const ins = inst[k];
+      try {
+        const c = await chart(ins.symbol, res === "15m" ? "1mo" : "5d", res);
+        for (let j = 0; j < c.timestamp.length; j++) { const v = c.close[j]; if (v != null && Number.isFinite(v) && c.timestamp[j] >= cutoff) rows.push({ symbol: ins.symbol, t: new Date(c.timestamp[j] * 1000).toISOString(), close: v }); }
+      } catch { failed.push(ins.symbol); }
+    }
+  }));
+  for (const part of chunk(rows, 1000)) { const { error: ue } = await db.from(table).upsert(part, { onConflict: "symbol,t" }); if (ue) throw new Error(table + ": " + ue.message); }
+  if (failed.length < inst.length) await sourceOk("yahoo"); else await sourceErr("yahoo", res + ": every chart call failed");
+  return `${rows.length} ${res} bars for ${inst.length - failed.length} instruments${failed.length ? `, failed: ${failed.join(" ")}` : ""}`;
+}
+/** True when the market's regular session ended within the last `min` minutes (same rule as the tick). */
+function recentlyClosedMin(m: ReturnType<typeof marketById>, now: Date, min: number, holidays: Awaited<ReturnType<typeof loadHolidays>>): boolean {
+  if (!m) return false;
+  for (let k = 1; k <= min; k++) if (marketState(m, new Date(now.getTime() - k * 60e3), holidays) === "OPEN") return true;
+  return false;
 }
 
 // ---------- hourly bars (1W and 1M charts) ----------
@@ -377,9 +427,10 @@ async function prune(): Promise<string> {
   const ago = (days: number) => new Date(Date.now() - days * 86400e3).toISOString();
   const r1 = await db.from("bars_intraday").delete({ count: "exact" }).lt("t", ago(3));
   const r5 = await db.from("bars_hourly").delete({ count: "exact" }).lt("t", ago(60));
+  const r6 = await db.from("bars_15m").delete({ count: "exact" }).lt("t", ago(14));
   const r2 = await db.from("login_attempts").delete({ count: "exact" }).lt("at", ago(2));
   const r3 = await db.from("job_runs").delete({ count: "exact" }).lt("at", ago(30));
   const r4 = await db.from("news_items").delete({ count: "exact" }).lt("published_at", ago(90));
-  for (const r of [r1, r5, r2, r3, r4]) if (r.error) throw new Error(r.error.message);
-  return `1m bars ${r1.count ?? 0}, hourly bars ${r5.count ?? 0}, attempts ${r2.count ?? 0}, runs ${r3.count ?? 0}, news ${r4.count ?? 0}`;
+  for (const r of [r1, r5, r6, r2, r3, r4]) if (r.error) throw new Error(r.error.message);
+  return `1m bars ${r1.count ?? 0}, 15m bars ${r6.count ?? 0}, hourly bars ${r5.count ?? 0}, attempts ${r2.count ?? 0}, runs ${r3.count ?? 0}, news ${r4.count ?? 0}`;
 }

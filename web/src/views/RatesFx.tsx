@@ -67,13 +67,12 @@ function PolicyTable({ tick }: { tick: number }) {
   const rows = p.data?.rows ?? [];
   const steps = h.data?.rows ?? [];
   return (
-    <Panel no="10" title="POLICY RATES" span={12} aux="values only when a job or a person has filled them from the source; blanks are blanks">
+    <Panel no="10" title="POLICY RATES" span={12} aux={h.data && Object.keys(h.data.sources).length > 0 ? <span title={Object.entries(h.data.sources).map(([b, src]) => `${b}: ${src}`).join("\n")}>sources on hover</span> : ""}>
       {steps.length ? <PolicyChart steps={steps} /> : <Empty title="No rate history yet">{h.error ?? "Loads once the policy jobs have run."}</Empty>}
-      {h.data && Object.keys(h.data.sources).length > 0 && <div className="hint2" style={{ marginBottom: 8 }}>{Object.entries(h.data.sources).map(([b, src]) => <span key={b} style={{ marginRight: 12 }}><b>{b}</b> {src}</span>)}</div>}
       {rows.length ? (
         <table className="mini">
           <thead><tr><th className="l">Central bank</th><th className="l">Rate</th><th>Level</th><th className="l">As of</th><th className="l">Last change</th><th className="l">Next meeting</th><th className="l">Source</th></tr></thead>
-          <tbody>{rows.map((r) => <tr key={r.bank}><td className="l"><b>{r.bank}</b> <span className="mut">{r.name}</span></td><td className="l">{r.rateLabel}</td><td className="num">{r.rate == null ? "–" : `${r.rate.toFixed(2)}%`}</td><td className="l">{r.asOf ?? "–"}</td><td className="l">{r.lastChange ?? "–"}</td><td className="l">{r.nextMeeting ?? "–"}</td><td className="l">{r.sourceUrl ? <a href={r.sourceUrl} target="_blank" rel="noreferrer">{new URL(r.sourceUrl).hostname}</a> : "–"}{r.sourceNote && <span className="mut"> · {r.sourceNote}</span>}</td></tr>)}</tbody>
+          <tbody>{rows.map((r) => <tr key={r.bank}><td className="l"><b>{r.bank}</b> <span className="mut">{r.name}</span></td><td className="l">{r.rateLabel}</td><td className="num">{r.rate == null ? "–" : r.bank === "FED" ? `${(r.rate - 0.25).toFixed(2)}–${r.rate.toFixed(2)}%` : `${r.rate.toFixed(2)}%`}</td><td className="l">{r.asOf ?? "–"}</td><td className="l">{r.lastChange ?? "–"}</td><td className="l">{r.nextMeeting ?? "–"}</td><td className="l">{r.sourceUrl ? <a href={r.sourceUrl} target="_blank" rel="noreferrer">{new URL(r.sourceUrl).hostname}</a> : "–"}{r.sourceNote && <span className="mut"> · {r.sourceNote}</span>}</td></tr>)}</tbody>
         </table>
       ) : <Empty title="No policy rates loaded">{p.error ?? "Fed from FRED; the others follow."}</Empty>}
     </Panel>
