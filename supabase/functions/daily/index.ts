@@ -143,7 +143,7 @@ async function sectorsJob(limit: number, only: string | null): Promise<string> {
       if (r.gics_sector == null && prof[r.symbol]) {
         const pr = prof[r.symbol]; const gs = pr.sector ? (GICS_MAP[pr.sector] ?? pr.sector) : null;
         Object.assign(upd, { gics_sector: gs ?? "", gics_industry: pr.industry, gics_source: gs ? "Yahoo classification mapped to GICS sector names" : "not classified" });
-        if (gs && r.idx !== "SP500") upd.sector = gs;
+        if (r.idx !== "SP500") upd.sector = gs;   // no Yahoo sector: null (shown as Other) rather than the exchange scheme, so groupings stay on GICS names
         sectored++;
       }
       if (r.name_en == null && qs[r.symbol]?.name) { upd.name_en = qs[r.symbol].name; named++; }
@@ -311,22 +311,28 @@ async function calendar(): Promise<string> {
 }
 
 // ---------- news ----------
-const GN = (q: string) => `https://news.google.com/rss/search?q=${encodeURIComponent(q)}+when:2d&hl=en-US&gl=US&ceid=US:en`;
+const BN = (q: string) => `https://www.bing.com/news/search?q=${encodeURIComponent(q)}&format=rss`;
 const FEEDS: Array<{ source: string; url: string; lang?: string; cat?: string }> = [
   { source: "WSJ Markets", url: "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain" },
   { source: "CNBC Markets", url: "https://www.cnbc.com/id/10000664/device/rss/rss.html" },
   { source: "CNBC World", url: "https://www.cnbc.com/id/100727362/device/rss/rss.html" },
+  { source: "CNBC Asia", url: "https://www.cnbc.com/id/19832390/device/rss/rss.html", cat: "Asia Equities" },
   { source: "Nikkei Asia", url: "https://asia.nikkei.com/rss/feed/nar" },          // RSS 1.0 without dates: first-seen time is used
   { source: "MarketWatch", url: "https://feeds.content.dowjones.io/public/rss/mw_topstories" },
-  // Google News searches (headline + link to the publisher), one per desk, tagged with the desk when no rule matches
-  { source: "Google News", url: GN("Nikkei OR TOPIX OR \"Tokyo stocks\" OR \"Japanese stocks\""), cat: "JP Equities" },
-  { source: "Google News", url: GN("\"Hang Seng\" OR Kospi OR \"Shanghai Composite\" OR \"Asian stocks\""), cat: "Asia Equities" },
-  { source: "Google News", url: GN("\"Wall Street\" OR \"S&P 500\" OR Nasdaq stocks"), cat: "US Equities" },
-  { source: "Google News", url: GN("\"Treasury yields\" OR \"Federal Reserve\" OR \"Bank of Japan\" OR JGB OR ECB rates"), cat: "DM Rates" },
-  { source: "Google News", url: GN("yen OR \"dollar index\" OR \"currency markets\" OR yuan"), cat: "Currency" },
-  { source: "Google News", url: GN("\"Bank of Korea\" OR PBOC OR \"loan prime rate\" OR \"emerging market bonds\""), cat: "EM Rates" },
-  { source: "Google News", url: GN("crude oil OR Brent OR gold price OR copper price"), cat: "Commodities" },
-  { source: "Google News", url: GN("inflation OR payrolls OR GDP OR tariffs OR PMI economy"), cat: "Macro" },
+  { source: "FT Markets", url: "https://www.ft.com/markets?format=rss" },
+  { source: "Investing.com", url: "https://www.investing.com/rss/news_25.rss", cat: "US Equities" },
+  { source: "Investing.com", url: "https://www.investing.com/rss/news_14.rss", cat: "Macro" },
+  { source: "Investing.com", url: "https://www.investing.com/rss/news_1.rss", cat: "Currency" },
+  { source: "Japan Times", url: "https://www.japantimes.co.jp/feed/", cat: "JP Equities" },
+  { source: "BBC Business", url: "https://feeds.bbci.co.uk/news/business/rss.xml", cat: "Macro" },
+  // Bing News searches (publisher taken from the item), one per desk, tagged with the desk when no rule matches
+  { source: "Bing News", url: BN("Nikkei OR TOPIX OR \"Tokyo stocks\" OR \"Japanese stocks\""), cat: "JP Equities" },
+  { source: "Bing News", url: BN("\"Hang Seng\" OR Kospi OR \"Shanghai Composite\" OR \"Asian stocks\""), cat: "Asia Equities" },
+  { source: "Bing News", url: BN("\"Wall Street\" OR \"S&P 500\" OR Nasdaq stocks"), cat: "US Equities" },
+  { source: "Bing News", url: BN("\"Treasury yields\" OR \"Federal Reserve\" OR \"Bank of Japan\" OR JGB"), cat: "DM Rates" },
+  { source: "Bing News", url: BN("yen OR \"dollar index\" OR \"currency markets\" OR yuan"), cat: "Currency" },
+  { source: "Bing News", url: BN("\"Bank of Korea\" OR PBOC OR \"loan prime rate\" OR \"emerging markets\" bonds"), cat: "EM Rates" },
+  { source: "Bing News", url: BN("crude oil OR Brent OR \"gold price\" OR \"copper price\""), cat: "Commodities" },
 ];
 const RULES: Array<[string, RegExp]> = [
   ["JP Equities", /\b(nikkei|topix|tokyo stocks?|japan(ese)? (stocks?|shares|equit)|toyota|sony|softbank|hitachi|keyence|fast retailing|jpx)\b/i],
@@ -340,14 +346,14 @@ const RULES: Array<[string, RegExp]> = [
 ];
 function categorise(title: string, fallback = "Macro"): string { for (const [cat, re] of RULES) if (re.test(title)) return cat; return fallback; }
 const unesc = (s: string) => s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/<[^>]+>/g, "").trim();
-function parseRss(xml: string): Array<{ title: string; link: string; pubDate: string }> {
-  const items: Array<{ title: string; link: string; pubDate: string }> = [];
+function parseRss(xml: string): Array<{ title: string; link: string; pubDate: string; src?: string }> {
+  const items: Array<{ title: string; link: string; pubDate: string; src?: string }> = [];
   for (const m of xml.matchAll(/<item\b[\s\S]*?<\/item>/gi)) {
     const it = m[0];
     const title = unesc(it.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
     const link = unesc(it.match(/<link[^>]*>([\s\S]*?)<\/link>/i)?.[1] ?? it.match(/<guid[^>]*>([\s\S]*?)<\/guid>/i)?.[1] ?? "");
     const pubDate = unesc(it.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i)?.[1] ?? it.match(/<dc:date[^>]*>([\s\S]*?)<\/dc:date>/i)?.[1] ?? "");
-    if (title && /^https?:\/\//.test(link)) items.push({ title, link, pubDate });
+    if (title && /^https?:\/\//.test(link)) items.push({ title, link, pubDate, src: unesc(it.match(/<News:Source[^>]*>([\s\S]*?)<\/News:Source>/i)?.[1] ?? "").trim() || undefined });
   }
   return items;
 }
@@ -363,9 +369,9 @@ async function news(): Promise<string> {
       for (const it of items) {
         const t = it.pubDate ? Date.parse(it.pubDate) : Date.now();   // feeds without dates (RSS 1.0) are stamped when first seen
         if (!Number.isFinite(t) || t < since) continue;
-        const gm = f.source === "Google News" ? it.title.match(/^(.*)s+-s+([^-]{2,40})$/) : null;
+        const gm = f.source === "Bing News" && !it.src ? it.title.match(/^(.*)\s+-\s+([^-]{2,40})$/) : null;
         if (gm) it.title = gm[1].trim();
-        rows.push({ url: it.link.slice(0, 1000), published_at: new Date(t).toISOString(), source: gm ? gm[2].trim() : f.source, title: it.title.slice(0, 400), category: categorise(it.title, f.cat ?? "Macro"), tagged_by: f.cat ? "rules+feed" : "rules" });
+        rows.push({ url: it.link.slice(0, 1000), published_at: new Date(t).toISOString(), source: f.source === "Bing News" ? (it.src ?? gm?.[2]?.trim() ?? f.source) : f.source, title: it.title.slice(0, 400), category: categorise(it.title, f.cat ?? "Macro"), tagged_by: f.cat ? "rules+feed" : "rules" });
         n++;
       }
       report.push(`${f.source} ${n}`);
