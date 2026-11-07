@@ -26,12 +26,11 @@ export interface SigmaChartProps {
   color?: string;                 // price line colour (UP / DN / FLAT)
   onReadout?: (r: { t: number; v: number; z1: number | null; z12: number | null; z36: number | null } | null) => void;
   onPan?: (offsetSec: number) => void;   // how far back the window has been dragged (0 = latest)
-  syncKey?: string;
 }
 
 const nf = (d: number) => new Intl.NumberFormat("en-GB", { minimumFractionDigits: d, maximumFractionDigits: d });
 
-export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, showTwoSigma = false, height = 160, fill = false, axes = false, color = FLAT, onReadout, onPan, syncKey = "om" }: SigmaChartProps) {
+export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, showTwoSigma = false, height = 160, fill = false, axes = false, color = FLAT, onReadout, onPan }: SigmaChartProps) {
   const el = useRef<HTMLDivElement>(null);
 
   // data: [x, price, (bands…)]; `ts` holds the real timestamp of every x (x is a bar index on intraday views)
@@ -106,7 +105,7 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
         : [{ show: false }, { show: false }],
       series,
       legend: { show: false },
-      cursor: { drag: { x: false, y: false }, points: { show: false }, sync: intraday ? undefined : { key: syncKey } },
+      cursor: { drag: { x: false, y: false }, points: { show: false } },   // no cross-panel sync: only the panel under the pointer responds
       hooks: {
         setCursor: [(u) => {
           const i = u.cursor.idx;
@@ -152,7 +151,7 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
     over.addEventListener("dblclick", onDbl);
     return () => { ro.disconnect(); over.removeEventListener("mousedown", onDown); window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); over.removeEventListener("dblclick", onDbl); u.destroy(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prepared, windowSec, intraday, decimals, showTwoSigma, height, fill, axes, color, syncKey]);
+  }, [prepared, windowSec, intraday, decimals, showTwoSigma, height, fill, axes, color]);
 
   return <div className={`chartbox${fill ? " fill" : ""}`} ref={el} style={fill ? undefined : { height }} />;
 }
