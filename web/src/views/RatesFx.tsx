@@ -8,7 +8,6 @@ import type { Curve, TableRow } from "../lib/types";
 import { fmtChg, fmtNum, fmtPct, fmtStampSafe, signCls } from "./shared";
 import { PERIODS } from "../lib/types";
 
-export const RATES_SUBS = [{ id: "fx", label: "FOREX" }, { id: "curve", label: "CURVE" }, { id: "tbd", label: "TBD" }] as const;
 
 interface PolicyRow { bank: string; name: string; rateLabel: string; rate: number | null; asOf: string | null; lastChange: string | null; nextMeeting: string | null; sourceUrl: string | null; sourceNote: string | null }
 
@@ -27,7 +26,7 @@ function CurveBlock({ country, label, ago, tick }: { country: "US" | "JP"; label
   const c = d.data?.current ?? null, g = d.data?.ghost ?? null;
   const row = (t: string, v: number | null, gv: number | null) => <tr key={t}><td className="l">{t}</td><td className="num">{v == null ? "–" : v.toFixed(3)}</td><td className="num mut">{gv == null ? "–" : gv.toFixed(3)}</td><td className={`num ${signCls(v != null && gv != null ? v - gv : null)}`}>{v != null && gv != null ? fmtChg(v - gv, 1, true) : "–"}</td></tr>;
   return (
-    <Panel no={country === "US" ? "01" : "02"} title={label} span={6} aux={c ? <>{c.date} · ghost {g?.date ?? "–"} ({a} ago) · {c.source}</> : d.error ? <span className="warn">{d.error}</span> : ""}>
+    <Panel no={country === "US" ? "03" : "04"} title={label} span={6} aux={c ? <>{c.date} · ghost {g?.date ?? "–"} ({a} ago) · {c.source}</> : d.error ? <span className="warn">{d.error}</span> : ""}>
       {c ? (
         <>
           <CurveChart current={c} ghost={g} height={230} />
@@ -48,7 +47,7 @@ function PolicyTable({ tick }: { tick: number }) {
   const p = useApi<{ rows: PolicyRow[] }>("policy", undefined, tick);
   const rows = p.data?.rows ?? [];
   return (
-    <Panel no="03" title="POLICY RATES" span={12} aux="values only when a job or a person has filled them from the source; blanks are blanks">
+    <Panel no="05" title="POLICY RATES" span={12} aux="values only when a job or a person has filled them from the source; blanks are blanks">
       {rows.length ? (
         <table className="mini">
           <thead><tr><th className="l">Central bank</th><th className="l">Rate</th><th>Level</th><th className="l">As of</th><th className="l">Last change</th><th className="l">Next meeting</th><th className="l">Source</th></tr></thead>
@@ -59,43 +58,27 @@ function PolicyTable({ tick }: { tick: number }) {
   );
 }
 
-export function RatesFxView({ sub, onSub, tick }: { sub: string; onSub: (s: string) => void; tick: number }) {
-  const cur = RATES_SUBS.find((s) => s.id === sub) ?? RATES_SUBS[0];
+export function RatesFxView({ tick }: { sub: string; onSub: (s: string) => void; tick: number }) {
   const [period, setPeriod] = useState<ChartPeriod>("12M");
   const [twoSigma, setTwoSigma] = useState(false);
   const table = useApi<{ rows: TableRow[]; asOf: string }>("table", undefined, tick);
   const fx = (table.data?.rows ?? []).filter((r) => r.group === "fx").sort((a, b) => a.order - b.order);
   const rates = (table.data?.rows ?? []).filter((r) => r.group === "rates").sort((a, b) => a.order - b.order);
-  const toggle = (
-    <div className="chips">
-      <span className="lbl">View</span>
-      {RATES_SUBS.map((s) => <span key={s.id} className={`chip-sm${s.id === cur.id ? " on" : ""}`} onClick={() => onSub(s.id)}>{s.label}</span>)}
-    </div>
-  );
   return (
     <>
-      <div className="c12">{toggle}{cur.id !== "tbd" && <PeriodBar period={period} onPeriod={setPeriod} twoSigma={twoSigma} onTwoSigma={setTwoSigma} />}</div>
-      {cur.id === "fx" && (
-        <>
-          <Panel no="01" title="FOREX" span={12} aux={table.data ? <>as of {fmtStampSafe(table.data.asOf)} · Yahoo Finance</> : ""}>
-            {fx.length ? <FxTable rows={fx} /> : <Empty title="Awaiting the data feed">{table.error ?? "Pairs load with the market table."}</Empty>}
-          </Panel>
-          <Panel no="02" title="PAIRS" span={12} aux={`${fx.length} panels · ${period}`}>
-            {fx.length ? <div className="cgrid">{fx.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} twoSigma={twoSigma} />)}</div> : <Empty title="No pairs yet" />}
-          </Panel>
-        </>
-      )}
-      {cur.id === "curve" && (
-        <>
-          <CurveBlock country="US" label="US TREASURY CURVE" ago={period} tick={tick} />
-          <CurveBlock country="JP" label="JGB CURVE" ago={period} tick={tick} />
-          <PolicyTable tick={tick} />
-          <Panel no="04" title="YIELDS" span={12} aux={`${rates.length} panels · ${period}`}>
-            {rates.length ? <div className="cgrid">{rates.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} twoSigma={twoSigma} />)}</div> : <Empty title="No yields yet" />}
-          </Panel>
-        </>
-      )}
-      {cur.id === "tbd" && <Panel no="01" title="TBD" span={12}><Empty title="Reserved">Further rates and currency functions, to be defined with Shota.</Empty></Panel>}
+      <div className="c12"><PeriodBar period={period} onPeriod={setPeriod} twoSigma={twoSigma} onTwoSigma={setTwoSigma} /></div>
+      <Panel no="01" title="FOREX" span={12} aux={table.data ? <>as of {fmtStampSafe(table.data.asOf)} · Yahoo Finance</> : ""}>
+        {fx.length ? <FxTable rows={fx} /> : <Empty title="Awaiting the data feed">{table.error ?? "Pairs load with the market table."}</Empty>}
+      </Panel>
+      <Panel no="02" title="PAIRS" span={12} aux={`${fx.length} panels · ${period}`}>
+        {fx.length ? <div className="cgrid">{fx.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} twoSigma={twoSigma} />)}</div> : <Empty title="No pairs yet" />}
+      </Panel>
+      <CurveBlock country="US" label="US TREASURY CURVE" ago={period} tick={tick} />
+      <CurveBlock country="JP" label="JGB CURVE" ago={period} tick={tick} />
+      <PolicyTable tick={tick} />
+      <Panel no="06" title="YIELDS" span={12} aux={`${rates.length} panels · ${period}`}>
+        {rates.length ? <div className="cgrid">{rates.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} twoSigma={twoSigma} />)}</div> : <Empty title="No yields yet" />}
+      </Panel>
     </>
   );
 }
