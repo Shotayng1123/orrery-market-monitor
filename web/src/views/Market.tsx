@@ -39,22 +39,40 @@ function MarketsTable({ rows }: { rows: TableRow[] }) {
   );
 }
 
+// Conditional shading, as in a spreadsheet: the level cells of a row are shaded on a red-to-green scale between
+// the row's lowest and highest level (last print included), so the eye sees where today sits in three years;
+// the change cells are shaded by sign and size (full tint at ±10%, or ±50bp for yields).
+const UP_RGB = "63,208,126", DN_RGB = "255,77,66";
+function levelShade(v: number | null | undefined, lo: number, hi: number): string | undefined {
+  if (v == null || !(hi > lo)) return undefined;
+  const x = (v - lo) / (hi - lo);                       // 0 = lowest level of the row, 1 = highest
+  const a = Math.abs(x - 0.5) * 2 * 0.32;               // transparent in the middle, tinted at the ends
+  return `rgba(${x >= 0.5 ? UP_RGB : DN_RGB},${a.toFixed(3)})`;
+}
+function changeShade(v: number | null | undefined, full: number): string | undefined {
+  if (v == null || v === 0) return undefined;
+  const a = Math.min(1, Math.abs(v) / full) * 0.38;
+  return `rgba(${v > 0 ? UP_RGB : DN_RGB},${a.toFixed(3)})`;
+}
+
 function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
   return (
     <>
       <tr className="cls"><td colSpan={3 + PERIODS.length * 2}>{cls}</td></tr>
       {rs.map((r) => {
         const isRate = r.group === "rates";
+        const levels = [r.last, ...PERIODS.map((p) => r.closes[p.key])].filter((x): x is number => x != null);
+        const lo = Math.min(...levels), hi = Math.max(...levels);
         return (
-          <tr key={r.symbol} className={r.live ? "live" : undefined} title={`${r.symbol} · last ${fmtStampSafe(r.lastAt)}${r.live ? " · market open" : ""}`}>
+          <tr key={r.symbol} className={r.live ? "live" : undefined} title={`${r.symbol} · last ${fmtStampSafe(r.lastAt)}${r.live ? " · market open" : ""} · level shading: red = lowest of the row's levels, green = highest`}>
             <td className="l mut">{r.cls}</td>
             <td className="l">{r.name}<Badges r={r} /></td>
-            <td className="num"><b>{fmtNum(r.last, r.decimals)}</b></td>
-            {PERIODS.map((p) => <td key={p.key} className={`num${p.key === "d1" ? " grp" : ""}`} title={r.closeDates[p.key] ?? ""}>{fmtNum(r.closes[p.key], r.decimals)}</td>)}
+            <td className="num" style={{ background: levelShade(r.last, lo, hi) }}><b>{fmtNum(r.last, r.decimals)}</b></td>
+            {PERIODS.map((p) => <td key={p.key} className={`num${p.key === "d1" ? " grp" : ""}`} style={{ background: levelShade(r.closes[p.key], lo, hi) }} title={r.closeDates[p.key] ?? ""}>{fmtNum(r.closes[p.key], r.decimals)}</td>)}
             {PERIODS.map((p) => {
               const c = r.closes[p.key];
               const v = isRate ? (c != null && r.last != null ? r.last - c : null) : r.pct[p.key];
-              return <td key={p.key} className={`num ${signCls(v)}${p.key === "d1" ? " grp" : ""}`}>{isRate ? fmtChg(v, 3, true) : fmtPct(v)}</td>;
+              return <td key={p.key} className={`num ${signCls(v)}${p.key === "d1" ? " grp" : ""}`} style={{ background: changeShade(v, isRate ? 0.5 : 10) }}>{isRate ? fmtChg(v, 3, true) : fmtPct(v)}</td>;
             })}
           </tr>
         );
