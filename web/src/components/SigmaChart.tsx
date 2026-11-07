@@ -32,6 +32,7 @@ const nf = (d: number) => new Intl.NumberFormat("en-GB", { minimumFractionDigits
 
 export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, showTwoSigma = false, height = 160, fill = false, axes = false, color = FLAT, onReadout, onPan }: SigmaChartProps) {
   const el = useRef<HTMLDivElement>(null);
+  const panRef = useRef(0);   // bars back from the latest, kept across rebuilds
 
   // data: [x, price, (bands…)]; `ts` holds the real timestamp of every x (x is a bar index on intraday views)
   const prepared = useMemo(() => {
@@ -132,24 +133,30 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
     const ro = new ResizeObserver(() => u.setSize(size()));
     ro.observe(box);
 
+    // panning with pointer events (mouse, pen and touch; the pointer is captured so the drag survives leaving the
+    // tile). The offset from the latest bar is kept in a ref so a data refresh rebuilds the chart where it was.
     const over = u.over;
     over.style.cursor = "grab";
-    let drag: { x0: number; i1_0: number } | null = null;
-    const apply = () => { u.setScale("x", { min: xsAll[i0], max: xsAll[i1] }); onPan?.(Math.round(lastT - ts[i1])); };
-    const onDown = (e: MouseEvent) => { if (e.button !== 0) return; drag = { x0: e.clientX, i1_0: i1 }; over.style.cursor = "grabbing"; e.preventDefault(); };
-    const onMove = (e: MouseEvent) => {
-      if (!drag) return;
-      const pxW = u.bbox.width / devicePixelRatio;
+    over.style.touchAction = "none";
+    const keep = panRef.current;
+    if (keep > 0 && keep < nAll - winN) { i1 = nAll - 1 - keep; i0 = i1 - winN; u.setScale("x", { min: xsAll[i0], max: xsAll[i1] }); }
+    let drag: { x0: number; i1_0: number; id: number } | null = null;
+    const apply = () => { u.setScale("x", { min: xsAll[i0], max: xsAll[i1] }); panRef.current = nAll - 1 - i1; onPan?.(Math.round(lastT - ts[i1])); };
+    const onDown = (e: PointerEvent) => { if (e.button !== 0 && e.pointerType === "mouse") return; drag = { x0: e.clientX, i1_0: i1, id: e.pointerId }; over.setPointerCapture?.(e.pointerId); over.style.cursor = "grabbing"; e.preventDefault(); };
+    const onMove = (e: PointerEvent) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const pxW = over.clientWidth || u.bbox.width / devicePixelRatio;
       const dIdx = Math.round(((drag.x0 - e.clientX) / Math.max(1, pxW)) * winN);   // drag left = move the window back in time
       i1 = Math.min(nAll - 1, Math.max(winN, drag.i1_0 - dIdx)); i0 = i1 - winN; apply();
     };
-    const onUp = () => { if (drag) { drag = null; over.style.cursor = "grab"; } };
+    const onUp = (e: PointerEvent) => { if (drag && e.pointerId === drag.id) { drag = null; over.style.cursor = "grab"; } };
     const onDbl = () => { i1 = nAll - 1; i0 = i1 - winN; apply(); };
-    over.addEventListener("mousedown", onDown);
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    over.addEventListener("pointerdown", onDown);
+    over.addEventListener("pointermove", onMove);
+    over.addEventListener("pointerup", onUp);
+    over.addEventListener("pointercancel", onUp);
     over.addEventListener("dblclick", onDbl);
-    return () => { ro.disconnect(); over.removeEventListener("mousedown", onDown); window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); over.removeEventListener("dblclick", onDbl); u.destroy(); };
+    return () => { ro.disconnect(); over.removeEventListener("pointerdown", onDown); over.removeEventListener("pointermove", onMove); over.removeEventListener("pointerup", onUp); over.removeEventListener("pointercancel", onUp); over.removeEventListener("dblclick", onDbl); u.destroy(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prepared, windowSec, intraday, decimals, showTwoSigma, height, fill, axes, color]);
 
