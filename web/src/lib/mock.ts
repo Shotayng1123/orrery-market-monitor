@@ -151,6 +151,15 @@ export function mockAction(action: string, params: Record<string, string | numbe
         sectors: [...by.entries()].map(([sector, xs]) => ({ sector, n: xs.length, weight: idx === "NK225" ? xs.reduce((a, x) => a + (x.weight ?? 0), 0) : null, pct1d: avg(xs, "pct1d"), pct1w: avg(xs, "pct1w"), pct1m: avg(xs, "pct1m"), pct3m: avg(xs, "pct3m"), pct12m: avg(xs, "pct12m"), above200: xs.filter((x) => x.close > x.dma200).length })).sort((a, b) => b.pct1d - a.pct1d),
         movers: { top: sorted.slice(0, 15), bottom: sorted.slice(-15).reverse() }, shorts: idx === "NK225" ? null : { d: new Date().toISOString().slice(0, 10), avgRatio: 0.47, top: [...rows].sort((a, b) => (b.shortRatio ?? 0) - (a.shortRatio ?? 0)).slice(0, 15).map((x) => ({ symbol: x.symbol, name: x.name, ratio: x.shortRatio ?? 0 })) } };
     }
+    case "policy_history": {
+      const mk = (bank: string, pts: Array<[string, number]>) => pts.map(([d, rate]) => ({ bank, d, rate }));
+      return { sources: { FED: "FRED DFEDTAR + DFEDTARU (mock)", ECB: "ECB DFR (mock)", BOE: "BoE IUDBEDR (mock)", BOJ: "OECD via FRED, monthly (mock)" }, rows: [
+        ...mk("FED", [["1996-01-31", 5.5], ["1998-11-17", 4.75], ["2000-05-16", 6.5], ["2001-12-11", 1.75], ["2003-06-25", 1], ["2006-06-29", 5.25], ["2008-12-16", 0.25], ["2015-12-17", 0.5], ["2018-12-20", 2.5], ["2020-03-16", 0.25], ["2022-03-17", 0.5], ["2023-07-27", 5.5], ["2024-12-19", 4.5], ["2025-12-11", 3.75], ["2026-10-29", 4.0]]),
+        ...mk("ECB", [["1999-01-01", 2], ["2000-10-06", 3.75], ["2003-06-06", 1], ["2008-07-09", 3.25], ["2009-05-13", 0.25], ["2014-06-11", -0.1], ["2019-09-18", -0.5], ["2022-07-27", 0], ["2023-09-20", 4], ["2025-06-11", 2], ["2026-09-16", 2.5]]),
+        ...mk("BOE", [["1997-06-06", 6.5], ["2001-11-08", 4], ["2007-07-05", 5.75], ["2009-03-05", 0.5], ["2020-03-19", 0.1], ["2023-08-03", 5.25], ["2025-08-07", 4], ["2026-02-05", 3.75], ["2026-11-05", 4]]),
+        ...mk("BOJ", [["1996-01-31", 0.5], ["1999-02-28", 0.03], ["2006-07-31", 0.25], ["2008-12-31", 0.1], ["2016-02-29", -0.05], ["2024-03-31", 0.08], ["2024-07-31", 0.25], ["2025-01-31", 0.48]]),
+      ] };
+    }
     case "policy": return { rows: [
       { bank: "FED", name: "Federal Reserve", rateLabel: "Fed funds target range, upper bound", rate: 4.0, asOf: "2026-11-06", lastChange: "2026-10-29", nextMeeting: null, sourceUrl: "https://www.federalreserve.gov/monetarypolicy/openmarket.htm", sourceNote: "FRED DFEDTARU (mock)" },
       { bank: "BOJ", name: "Bank of Japan", rateLabel: "Uncollateralised overnight call rate", rate: null, asOf: null, lastChange: null, nextMeeting: null, sourceUrl: "https://www.boj.or.jp/en/mopo/mpmdeci/index.htm", sourceNote: null },

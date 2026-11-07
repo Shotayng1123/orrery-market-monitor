@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
       case "constituents": detail = await constituents(); break;
       case "stats": { const idx = (url.searchParams.get("idx") ?? "SP500") as "SP500" | "NK225" | "NDX"; detail = await computeIndexStats(idx); break; }
       case "shorts": detail = await loadShortVolume(); break;
-      case "policy": detail = await policy(); break;
+      case "policy": detail = await policy(url.searchParams.get("full") === "1"); break;
       case "curves": detail = await curves(url.searchParams.get("country") ?? "US", url.searchParams.get("full") === "1"); break;
       case "calendar": detail = await calendar(); break;
       case "news": detail = await news(); break;
@@ -284,41 +284,61 @@ async function fred(): Promise<string> {
 }
 
 // ---------- policy rates from official feeds (Fed comes from the fred GitHub job) ----------
-async function policy(): Promise<string> {
+async function policy(full: boolean): Promise<string> {
   const parts: string[] = [];
   const set = async (bank: string, rate: number, asOf: string, lastChange: string | null, note: string) => {
     const { error } = await db.from("policy_rates").update({ rate, as_of: asOf, last_change: lastChange, source_note: note, updated_at: new Date().toISOString() }).eq("bank", bank);
     if (error) throw new Error(error.message);
   };
+  // history rows (collapsed to change points so the table stays small)
+  const history = async (bank: string, obs: Array<{ d: string; v: number }>, source: string) => {
+    const rows: Array<Record<string, unknown>> = [];
+    let prev: number | null = null;
+    for (const o of obs) { if (prev === null || o.v !== prev) rows.push({ bank, d: o.d, rate: o.v, source }); prev = o.v; }
+    if (obs.length) { const last = obs[obs.length - 1]; if (!rows.length || rows[rows.length - 1].d !== last.d) rows.push({ bank, d: last.d, rate: last.v, source }); }
+    for (const part of chunk(rows, 1000)) { const { error } = await db.from("policy_history").upsert(part, { onConflict: "bank,d" }); if (error) throw new Error("policy_history: " + error.message); }
+    return rows.length;
+  };
+  const lastChangeOf = (obs: Array<{ d: string; v: number }>) => { const last = obs[obs.length - 1]; let lc = last.d; for (let k = obs.length - 2; k >= 0; k--) { if (obs[k].v !== last.v) break; lc = obs[k].d; } return lc; };
   // ECB deposit facility rate: the series only has rows on change dates
   try {
-    const t = await fetchText("https://data-api.ecb.europa.eu/service/data/FM/B.U2.EUR.4F.KR.DFR.LEV?format=csvdata&lastNObservations=3", { headers: { accept: "text/csv" } }, 60000);
+    const t = await fetchText(`https://data-api.ecb.europa.eu/service/data/FM/B.U2.EUR.4F.KR.DFR.LEV?format=csvdata${full ? "" : "&lastNObservations=3"}`, { headers: { accept: "text/csv" } }, 60000);
     const lines = t.split(/\r?\n/).filter(Boolean); const head = lines[0].split(","); const iT = head.indexOf("TIME_PERIOD"), iV = head.indexOf("OBS_VALUE");
-    const obs = lines.slice(1).map((l) => l.split(",")).map((c) => ({ d: c[iT], v: Number(c[iV]) })).filter((o) => /^\d{4}-\d{2}-\d{2}$/.test(o.d) && Number.isFinite(o.v));
+    const obs = lines.slice(1).map((l) => l.split(",")).map((c) => ({ d: c[iT], v: Number(c[iV]) })).filter((o) => /^\d{4}-\d{2}-\d{2}$/.test(o.d) && Number.isFinite(o.v)).sort((a, b) => a.d.localeCompare(b.d));
     const last = obs[obs.length - 1];
     if (!last) throw new Error("no observations");
-    await set("ECB", last.v, last.d, last.d, "ECB Data Portal FM.B.U2.EUR.4F.KR.DFR.LEV (rows on change dates)");
-    parts.push(`ECB ${last.v}`); await sourceOk("ecb");
+    const src = "ECB Data Portal FM.B.U2.EUR.4F.KR.DFR.LEV (deposit facility rate)";
+    await set("ECB", last.v, last.d, last.d, src + " (rows on change dates)");
+    const n = await history("ECB", obs, src);
+    parts.push(`ECB ${last.v} (${n} hist)`); await sourceOk("ecb");
   } catch (e) { parts.push(`ECB ERR ${e instanceof Error ? e.message : e}`); await sourceErr("ecb", e); }
-  // Bank of England Bank Rate: daily series IUDBEDR
+  // Bank of England Bank Rate: daily series IUDBEDR (from 1975)
   try {
-    const t = await fetchText("https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp?csv.x=yes&Datefrom=01/Jan/2024&Dateto=now&SeriesCodes=IUDBEDR&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N", {}, 60000);
+    const t = await fetchText(`https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp?csv.x=yes&Datefrom=${full ? "01/Jan/1975" : "01/Jan/2024"}&Dateto=now&SeriesCodes=IUDBEDR&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N`, {}, 90000);
     const obs = t.split(/\r?\n/).map((l) => l.split(",")).filter((c) => c.length >= 2 && /^\d{2} \w{3} \d{4}$/.test(c[0]) && Number.isFinite(Number(c[1]))).map((c) => ({ d: new Date(c[0] + " UTC").toISOString().slice(0, 10), v: Number(c[1]) }));
     const last = obs[obs.length - 1];
     if (!last) throw new Error("no observations");
-    let lastChange = last.d; for (let k = obs.length - 2; k >= 0; k--) { if (obs[k].v !== last.v) break; lastChange = obs[k].d; }
-    await set("BOE", last.v, last.d, lastChange, "Bank of England IADB series IUDBEDR");
-    parts.push(`BOE ${last.v}`); await sourceOk("boe");
+    const src = "Bank of England IADB series IUDBEDR (Bank Rate)";
+    await set("BOE", last.v, last.d, lastChangeOf(obs), src);
+    const n = await history("BOE", obs, src);
+    parts.push(`BOE ${last.v} (${n} hist)`); await sourceOk("boe");
   } catch (e) { parts.push(`BOE ERR ${e instanceof Error ? e.message : e}`); await sourceErr("boe", e); }
-  // HKMA base rate: daily monetary statistics API
+  // HKMA base rate: daily monetary statistics API (paged when loading history)
   try {
-    const j = await fetchJson<{ result: { records: Array<{ end_of_date: string; disc_win_base_rate: number }> } }>("https://api.hkma.gov.hk/public/market-data-and-statistics/daily-monetary-statistics/daily-figures-interbank-liquidity?pagesize=60&sortby=end_of_date&sortorder=desc", 60000);
-    const recs = (j.result?.records ?? []).filter((r) => Number.isFinite(r.disc_win_base_rate));
-    const last = recs[0];
+    const recs: Array<{ end_of_date: string; disc_win_base_rate: number }> = [];
+    for (let offset = 0; offset < (full ? 20000 : 60); offset += 1000) {
+      const j = await fetchJson<{ result: { records: Array<{ end_of_date: string; disc_win_base_rate: number }> } }>(`https://api.hkma.gov.hk/public/market-data-and-statistics/daily-monetary-statistics/daily-figures-interbank-liquidity?pagesize=${full ? 1000 : 60}&offset=${offset}&sortby=end_of_date&sortorder=desc`, 60000);
+      const page = (j.result?.records ?? []).filter((r) => Number.isFinite(r.disc_win_base_rate));
+      recs.push(...page);
+      if (!full || page.length < 1000) break;
+    }
+    const obs = recs.map((r) => ({ d: r.end_of_date, v: r.disc_win_base_rate })).sort((a, b) => a.d.localeCompare(b.d));
+    const last = obs[obs.length - 1];
     if (!last) throw new Error("no records");
-    let lastChange = last.end_of_date; for (let k = 1; k < recs.length; k++) { if (recs[k].disc_win_base_rate !== last.disc_win_base_rate) break; lastChange = recs[k].end_of_date; }
-    await set("HKMA", last.disc_win_base_rate, last.end_of_date, lastChange, "HKMA daily monetary statistics API, discount window base rate");
-    parts.push(`HKMA ${last.disc_win_base_rate}`); await sourceOk("hkma");
+    const src = "HKMA daily monetary statistics API, discount window base rate";
+    await set("HKMA", last.v, last.d, lastChangeOf(obs), src);
+    const n = await history("HKMA", obs, src);
+    parts.push(`HKMA ${last.v} (${n} hist)`); await sourceOk("hkma");
   } catch (e) { parts.push(`HKMA ERR ${e instanceof Error ? e.message : e}`); await sourceErr("hkma", e); }
   return parts.join("; ");
 }

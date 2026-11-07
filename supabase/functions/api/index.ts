@@ -52,6 +52,14 @@ Deno.serve(async (req) => {
         const { data } = await db.from("alerts").select("id,at,upd,d,symbol,name,kind,pct,price,market,msg").order("upd", { ascending: false }).limit(Math.min(50, Number(q("n") ?? 20)));
         return json(req, { rows: (data ?? []).map((a) => ({ id: a.id, at: a.upd, first: a.at, d: a.d, symbol: a.symbol, name: a.name, kind: a.kind, pct: a.pct, price: a.price, market: a.market, msg: a.msg })) });
       }
+      case "policy_history": {
+        const { data, error } = await db.rpc("fn_policy_steps");
+        if (error) return json(req, { error: error.message }, 500);
+        const { data: src } = await db.from("policy_history").select("bank,source").order("d", { ascending: false }).limit(2000);
+        const sources: Record<string, string> = {};
+        for (const r of (src ?? []) as Array<{ bank: string; source: string }>) if (!sources[r.bank]) sources[r.bank] = r.source;
+        return json(req, { rows: data ?? [], sources });
+      }
       case "policy": {
         const { data } = await db.from("policy_rates").select("bank,name,rate_label,rate,as_of,last_change,next_meeting,source_url,source_note,updated_at").order("bank");
         return json(req, { rows: (data ?? []).map((r) => ({ bank: r.bank, name: r.name, rateLabel: r.rate_label, rate: r.rate, asOf: r.as_of, lastChange: r.last_change, nextMeeting: r.next_meeting, sourceUrl: r.source_url, sourceNote: r.source_note, updatedAt: r.updated_at })) });
@@ -108,13 +116,14 @@ async function reportPut(req: Request): Promise<Response> {
 // ---------- health ----------
 async function health() {
   const now = Date.now();
-  const [{ data: tick }, { data: daily }, { data: sources }, { data: cal }, { data: unverified }] = await Promise.all([
+  const [{ data: tick }, { data: daily }, { data: sources }, { data: cal }, unverifiedRes] = await Promise.all([
     db.from("job_runs").select("at,ok,detail").eq("job", "tick").order("at", { ascending: false }).limit(1).maybeSingle(),
     db.from("job_runs").select("at,ok,detail,job").like("job", "daily:%").order("at", { ascending: false }).limit(1).maybeSingle(),
     db.from("source_status").select("*"),
     db.from("sessions_cal").select("market,d").gte("d", new Date(now - 2 * 86400e3).toISOString().slice(0, 10)),
     db.from("sessions_cal").select("market", { count: "exact", head: true }).eq("verified", false),
   ]);
+  const unverifiedCount = unverifiedRes.count ?? 0;
   const tickAge = tick ? Math.round((now - Date.parse(tick.at)) / 60000) : null;
   const holidays: Record<string, string[]> = {};
   for (const r of (cal ?? []) as Array<{ market: string; d: string }>) (holidays[r.market] ??= []).push(r.d);
@@ -126,7 +135,7 @@ async function health() {
     daily: { lastAt: daily?.at ?? null, ok: !!daily && daily.ok, note: daily ? `${daily.job}: ${daily.detail}` : "no daily run yet" },
     sources: (sources ?? []).map((s) => ({ name: s.name, lastOk: s.last_ok, lastError: s.last_error })),
     holidays,
-    holidaysVerified: ((unverified as unknown as { count?: number } | null)?.count ?? 1) === 0,
+    holidaysVerified: unverifiedCount === 0,
   };
 }
 

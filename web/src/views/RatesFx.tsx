@@ -3,6 +3,7 @@ import { Empty, Panel } from "../components/Panel";
 import { ChartPanel, type ChartPeriod } from "../components/ChartPanel";
 import { PeriodBar } from "../components/PeriodBar";
 import { CurveChart, spread } from "../components/CurveChart";
+import { PolicyChart, type PolicyStep } from "../components/PolicyChart";
 import { useApi } from "../lib/useApi";
 import type { Curve, TableRow } from "../lib/types";
 import { fmtChg, fmtNum, fmtPct, fmtStampSafe, signCls } from "./shared";
@@ -61,9 +62,13 @@ function CurveBlock({ country, label, ago, tick, no, span, set = "std" }: { coun
 
 function PolicyTable({ tick }: { tick: number }) {
   const p = useApi<{ rows: PolicyRow[] }>("policy", undefined, tick);
+  const h = useApi<{ rows: PolicyStep[]; sources: Record<string, string> }>("policy_history", undefined, tick);
   const rows = p.data?.rows ?? [];
+  const steps = h.data?.rows ?? [];
   return (
     <Panel no="10" title="POLICY RATES" span={12} aux="values only when a job or a person has filled them from the source; blanks are blanks">
+      {steps.length ? <PolicyChart steps={steps} /> : <Empty title="No rate history yet">{h.error ?? "Loads once the policy jobs have run."}</Empty>}
+      {h.data && Object.keys(h.data.sources).length > 0 && <div className="hint2" style={{ marginBottom: 8 }}>{Object.entries(h.data.sources).map(([b, src]) => <span key={b} style={{ marginRight: 12 }}><b>{b}</b> {src}</span>)}</div>}
       {rows.length ? (
         <table className="mini">
           <thead><tr><th className="l">Central bank</th><th className="l">Rate</th><th>Level</th><th className="l">As of</th><th className="l">Last change</th><th className="l">Next meeting</th><th className="l">Source</th></tr></thead>
