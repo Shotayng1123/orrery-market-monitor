@@ -1,0 +1,100 @@
+// Dev-only mock feed: `VITE_DEV_MOCK=1 npm run dev` serves synthetic data so the panels can be laid out and
+// checked before the backend exists. Deterministic random walks, clearly labelled MOCK in the UI.
+// Never active in production builds (gated on import.meta.env.DEV in useApi).
+import type { TableRow, Health, Curve, Series } from "./types";
+
+const MASTER: Array<Pick<TableRow, "symbol" | "name" | "cls" | "group" | "market" | "currency" | "decimals" | "order"> & { base: number; vol: number; proxyFor?: string }> = [
+  { symbol: "^N225", name: "Nikkei 225", cls: "Equities", group: "equity", market: "TSE", currency: "JPY", decimals: 2, order: 1, base: 57000, vol: 0.013 },
+  { symbol: "1306.T", name: "TOPIX via 1306.T", cls: "Equities", group: "equity", market: "TSE", currency: "JPY", decimals: 1, order: 2, base: 388, vol: 0.011, proxyFor: "TOPIX" },
+  { symbol: "^GSPC", name: "S&P 500", cls: "Equities", group: "equity", market: "NYSE", currency: "USD", decimals: 2, order: 3, base: 7376, vol: 0.01 },
+  { symbol: "^IXIC", name: "NASDAQ Composite", cls: "Equities", group: "equity", market: "NYSE", currency: "USD", decimals: 2, order: 4, base: 24579, vol: 0.013 },
+  { symbol: "^SOX", name: "PHLX Semiconductor (SOX)", cls: "Equities", group: "equity", market: "NYSE", currency: "USD", decimals: 2, order: 5, base: 9390, vol: 0.02 },
+  { symbol: "^KS11", name: "KOSPI", cls: "Equities", group: "equity", market: "KRX", currency: "KRW", decimals: 2, order: 8, base: 5059, vol: 0.015 },
+  { symbol: "^HSI", name: "Hang Seng", cls: "Equities", group: "equity", market: "HKEX", currency: "HKD", decimals: 2, order: 9, base: 24481, vol: 0.013 },
+  { symbol: "000001.SS", name: "Shanghai Composite", cls: "Equities", group: "equity", market: "SSE", currency: "CNY", decimals: 2, order: 10, base: 3649, vol: 0.009 },
+  { symbol: "^VIX", name: "VIX", cls: "Volatility", group: "equity", market: "NYSE", currency: "USD", decimals: 2, order: 17, base: 25.6, vol: 0.06 },
+  { symbol: "NKD=F", name: "Nikkei 225 future (CME)", cls: "Futures", group: "equity", market: "CME", currency: "USD", decimals: 0, order: 18, base: 58265, vol: 0.013 },
+  { symbol: "USDJPY=X", name: "USD/JPY", cls: "Currency", group: "fx", market: "FX", currency: "JPY", decimals: 3, order: 21, base: 158.4, vol: 0.005 },
+  { symbol: "EURUSD=X", name: "EUR/USD", cls: "Currency", group: "fx", market: "FX", currency: "USD", decimals: 4, order: 22, base: 1.1143, vol: 0.004 },
+  { symbol: "DX-Y.NYB", name: "US Dollar Index (DXY)", cls: "Currency", group: "fx", market: "NYSE", currency: "USD", decimals: 3, order: 29, base: 102.28, vol: 0.004 },
+  { symbol: "UST2Y", name: "UST 2Y yield", cls: "Fixed income", group: "rates", market: "NYSE", currency: "USD", decimals: 3, order: 30, base: 4.51, vol: 0.012 },
+  { symbol: "^TNX", name: "UST 10Y yield", cls: "Fixed income", group: "rates", market: "NYSE", currency: "USD", decimals: 3, order: 32, base: 4.859, vol: 0.01 },
+  { symbol: "JGB10Y", name: "JGB 10Y yield", cls: "Fixed income", group: "rates", market: "TSE", currency: "JPY", decimals: 3, order: 34, base: 2.817, vol: 0.012 },
+  { symbol: "CL=F", name: "WTI crude", cls: "Commodities", group: "cmdty", market: "CME", currency: "USD", decimals: 2, order: 36, base: 90.83, vol: 0.02 },
+  { symbol: "GC=F", name: "Gold", cls: "Commodities", group: "cmdty", market: "CME", currency: "USD", decimals: 2, order: 38, base: 4074.9, vol: 0.011 },
+];
+
+function rng(seed: number): () => number {
+  let s = seed >>> 0 || 1;
+  return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return (s % 100000) / 100000; };
+}
+const seedOf = (s: string) => Array.from(s).reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+
+const DAY = 86400;
+function dailySeries(symbol: string, n: number): Array<{ t: number; v: number }> {
+  const m = MASTER.find((x) => x.symbol === symbol) ?? MASTER[0];
+  const r = rng(seedOf(symbol));
+  const today = Math.floor(Date.now() / 1000 / DAY) * DAY;
+  const pts: Array<{ t: number; v: number }> = [];
+  let v = m.base * (0.75 + r() * 0.2);
+  // walk forward over weekdays only, ending near the base
+  const days: number[] = [];
+  for (let d = today - n * DAY * 1.45; d <= today - DAY; d += DAY) { const wd = new Date(d * 1000).getUTCDay(); if (wd !== 0 && wd !== 6) days.push(d); }
+  const drift = Math.log(m.base / v) / days.length;
+  for (const t of days) { v = v * Math.exp(drift + (r() - 0.5) * 2 * m.vol); pts.push({ t, v }); }
+  return pts.slice(-n);
+}
+function intradaySeries(symbol: string): Array<{ t: number; v: number }> {
+  const m = MASTER.find((x) => x.symbol === symbol) ?? MASTER[0];
+  const r = rng(seedOf(symbol) + 1);
+  const start = Math.floor(Date.now() / 1000 / DAY) * DAY + 1 * 3600;   // 09:00 SGT
+  const pts: Array<{ t: number; v: number }> = [];
+  let v = m.base;
+  for (let k = 0; k < 90; k++) { v = v * Math.exp((r() - 0.5) * m.vol * 0.25); pts.push({ t: start + k * 300, v }); }
+  return pts;
+}
+
+export function mockTable(): { rows: TableRow[]; asOf: string } {
+  const rows: TableRow[] = MASTER.map((m) => {
+    const s = dailySeries(m.symbol, 800);
+    const last = s[s.length - 1].v;
+    const at = (daysBack: number) => s[Math.max(0, s.length - 1 - daysBack)];
+    const a = { d1: at(1), w1: at(5), m1: at(21), m3: at(63), m12: at(252), m36: at(756) };
+    const closes: TableRow["closes"] = {}, closeDates: TableRow["closeDates"] = {}, pct: TableRow["pct"] = {};
+    for (const [k, p] of Object.entries(a) as Array<[keyof typeof a, { t: number; v: number }]>) { closes[k] = p.v; closeDates[k] = new Date(p.t * 1000).toISOString().slice(0, 10); pct[k] = (last / p.v - 1) * 100; }
+    return { ...m, proxyFor: m.proxyFor, last, lastAt: new Date().toISOString(), live: m.market === "FX", closes, closeDates, pct };
+  });
+  return { rows, asOf: new Date().toISOString() };
+}
+
+export function mockSeries(symbol: string, range: string): Series & { shownFrom?: string } {
+  if (range === "1D") return { symbol, res: "5m", points: intradaySeries(symbol), asOf: new Date().toISOString() };
+  const days: Record<string, number> = { "1W": 7, "1M": 31, "3M": 93, "12M": 366, "36M": 1096 };
+  const n = Math.round(((days[range] ?? 366) + 1120) * 0.69);
+  const pts = dailySeries(symbol, n);
+  return { symbol, res: "1d", points: pts, asOf: new Date(pts[pts.length - 1].t * 1000).toISOString().slice(0, 10), shownFrom: new Date(Date.now() - (days[range] ?? 366) * DAY * 1000).toISOString().slice(0, 10) };
+}
+
+export function mockCurve(country: string, ago: string | null): { country: string; current: Curve | null; ghost: Curve | null } {
+  const us: Array<[string, number, number]> = [["1 Mo", 1 / 12, 4.02], ["3 Mo", 0.25, 4.19], ["6 Mo", 0.5, 4.23], ["1 Yr", 1, 4.33], ["2 Yr", 2, 4.51], ["3 Yr", 3, 4.59], ["5 Yr", 5, 4.64], ["7 Yr", 7, 4.74], ["10 Yr", 10, 4.86], ["20 Yr", 20, 5.29], ["30 Yr", 30, 5.26]];
+  const jp: Array<[string, number, number]> = [["1Y", 1, 1.671], ["2Y", 2, 1.88], ["3Y", 3, 1.982], ["5Y", 5, 2.243], ["7Y", 7, 2.429], ["10Y", 10, 2.817], ["15Y", 15, 3.362], ["20Y", 20, 3.669], ["30Y", 30, 3.94], ["40Y", 40, 3.96]];
+  const src = country === "JP" ? jp : us;
+  const mk = (shift: number, d: string): Curve => ({ country: country as "US" | "JP", date: d, source: country === "JP" ? "MOF (mock)" : "treasury.gov (mock)", points: src.map(([tenor, years, y]) => ({ tenor, years, yield: y + shift * (1 - years / 40) })) });
+  return { country, current: mk(0, new Date().toISOString().slice(0, 10)), ghost: ago ? mk(ago === "36M" ? -0.9 : ago === "12M" ? -0.35 : 0.12, "earlier") : null };
+}
+
+export const mockHealth = (): Health => ({ ok: true, at: new Date().toISOString(), tick: { lastAt: new Date().toISOString(), ageMin: 1, ok: true, note: "mock" }, daily: { lastAt: new Date().toISOString(), ok: true, note: "mock" }, sources: [{ name: "mock", lastOk: new Date().toISOString(), lastError: null }], holidays: {}, holidaysVerified: false });
+
+export function mockAction(action: string, params: Record<string, string | number | boolean | undefined> | undefined): unknown {
+  switch (action) {
+    case "table": return mockTable();
+    case "series": return mockSeries(String(params?.symbol ?? "^N225"), String(params?.range ?? "12M"));
+    case "curve": return mockCurve(String(params?.country ?? "US"), params?.ago ? String(params.ago) : null);
+    case "health": return mockHealth();
+    case "note": return { note: null };
+    case "calendar": return { rows: [] };
+    case "news": return { rows: [] };
+    case "reports": return { rows: [] };
+    default: return { rows: [] };
+  }
+}

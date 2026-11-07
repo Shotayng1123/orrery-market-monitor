@@ -231,3 +231,15 @@ body.term .empty{padding:8px 4px;font-size:11px}
   .cpanel{grid-template-columns:minmax(0,1fr)}
   .cpanel .side{border-left:0;padding-left:0;flex-direction:row;gap:12px}
 }
+
+/* chart panel grids (MARKET tab) */
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(430px,1fr));gap:8px}
+.cgrid.two{grid-template-columns:repeat(auto-fill,minmax(430px,1fr))}
+.mtile.cp{padding:6px 8px 4px}
+.mtile.cp .lb{margin-bottom:4px}
+.rdout{font-size:10px;min-height:14px;padding:2px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.uplot,.uplot *{box-sizing:border-box}
+.u-legend{display:none}
+@media (max-width:720px){.cgrid{grid-template-columns:minmax(0,1fr)}}
+.curvex{position:relative;height:14px;font-size:10px;color:var(--mut)}
+.curvex span{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap}

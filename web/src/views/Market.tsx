@@ -1,20 +1,19 @@
 import { useState } from "react";
 import { Empty, Panel } from "../components/Panel";
-import { useApi } from "../lib/useApi";
-import { fmtNum, fmtPct, fmtStampSafe, signCls } from "./shared";
-import { PERIODS, type TableRow } from "../lib/types";
+import { ChartPanel, CHART_PERIODS, type ChartPeriod } from "../components/ChartPanel";
+import { CurveChart, spread } from "../components/CurveChart";
+import { useApi, DEV_MOCK } from "../lib/useApi";
+import { fmtNum, fmtPct, fmtChg, fmtStampSafe, signCls } from "./shared";
+import { PERIODS, type Curve, type TableRow } from "../lib/types";
 import { marketById } from "../lib/sessions";
-
-const CHART_PERIODS = ["1M", "3M", "12M", "36M"] as const;
-export type ChartPeriod = (typeof CHART_PERIODS)[number];
 
 function Badges({ r }: { r: TableRow }) {
   const m = marketById(r.market);
   return (
     <>
-      {r.proxyFor && <span className="badge proxy" title={`${r.name} stands in for ${r.proxyFor}; the table closes use the official index value when available`}>PROXY</span>}
-      {r.live && m.delayMin > 0 && <span className="badge delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>DELAYED ~{m.delayMin}m</span>}
-      {r.live && m.delayMin === 0 && <span className="badge live">LIVE</span>}
+      {r.proxyFor && <span className="badge proxy" title={`${r.name} stands in for ${r.proxyFor}; table closes use the official index value when available`}>PROXY</span>}
+      {r.live && m && m.delayMin > 0 && <span className="badge delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>DELAYED ~{m.delayMin}m</span>}
+      {r.live && m && m.delayMin === 0 && <span className="badge live">LIVE</span>}
     </>
   );
 }
@@ -28,7 +27,7 @@ function MarketsTable({ rows }: { rows: TableRow[] }) {
         <tr>
           <th className="l">Asset class</th><th className="l">Name</th><th>Last</th>
           {PERIODS.map((p) => <th key={p.key} className={p.key === "d1" ? "grp" : ""} title={`Close at the start of the ${p.label} window`}>{p.label} close</th>)}
-          {PERIODS.map((p) => <th key={p.key} className={p.key === "d1" ? "grp" : ""} title={`Change from the ${p.label} close to the last print`}>{p.label} %</th>)}
+          {PERIODS.map((p) => <th key={p.key} className={p.key === "d1" ? "grp" : ""} title={`Change from the ${p.label} close to the last print (bp for yields)`}>{p.label} %</th>)}
         </tr>
       </thead>
       <tbody>
@@ -44,53 +43,91 @@ function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
   return (
     <>
       <tr className="cls"><td colSpan={3 + PERIODS.length * 2}>{cls}</td></tr>
-      {rs.map((r) => (
-        <tr key={r.symbol} title={`${r.symbol} · last ${fmtStampSafe(r.lastAt)}`}>
-          <td className="l mut">{r.cls}</td>
-          <td className="l">{r.name}<Badges r={r} /></td>
-          <td className="num"><b>{fmtNum(r.last, r.decimals)}</b></td>
-          {PERIODS.map((p) => <td key={p.key} className={`num${p.key === "d1" ? " grp" : ""}`} title={r.closeDates[p.key] ?? ""}>{fmtNum(r.closes[p.key], r.decimals)}</td>)}
-          {PERIODS.map((p) => <td key={p.key} className={`num ${signCls(r.pct[p.key])}${p.key === "d1" ? " grp" : ""}`}>{fmtPct(r.pct[p.key])}</td>)}
-        </tr>
-      ))}
+      {rs.map((r) => {
+        const isRate = r.group === "rates";
+        return (
+          <tr key={r.symbol} title={`${r.symbol} · last ${fmtStampSafe(r.lastAt)}`}>
+            <td className="l mut">{r.cls}</td>
+            <td className="l">{r.name}<Badges r={r} /></td>
+            <td className="num"><b>{fmtNum(r.last, r.decimals)}</b></td>
+            {PERIODS.map((p) => <td key={p.key} className={`num${p.key === "d1" ? " grp" : ""}`} title={r.closeDates[p.key] ?? ""}>{fmtNum(r.closes[p.key], r.decimals)}</td>)}
+            {PERIODS.map((p) => {
+              const c = r.closes[p.key];
+              const v = isRate ? (c != null && r.last != null ? r.last - c : null) : r.pct[p.key];
+              return <td key={p.key} className={`num ${signCls(v)}${p.key === "d1" ? " grp" : ""}`}>{isRate ? fmtChg(v, 3, true) : fmtPct(v)}</td>;
+            })}
+          </tr>
+        );
+      })}
     </>
   );
+}
+
+function ChartGroup({ no, title, rows, period, tick, twoSigma, children }: { no: string; title: string; rows: TableRow[]; period: ChartPeriod; tick: number; twoSigma: boolean; children?: React.ReactNode }) {
+  return (
+    <Panel no={no} title={title} span={12} aux={`${rows.length} panels · ${period}`}>
+      {children}
+      {rows.length ? <div className="cgrid">{rows.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} twoSigma={twoSigma} />)}</div> : <Empty title="No instruments in this group yet" />}
+    </Panel>
+  );
+}
+
+function CurvePanel({ period, tick }: { period: ChartPeriod; tick: number }) {
+  const ago = period === "1D" || period === "1W" ? "1M" : period;
+  const us = useApi<{ current: Curve | null; ghost: Curve | null }>("curve", { country: "US", ago }, tick);
+  const jp = useApi<{ current: Curve | null; ghost: Curve | null }>("curve", { country: "JP", ago }, tick);
+  const one = (label: string, d: { current: Curve | null; ghost: Curve | null } | null, err: string | null) => (
+    <div className="mtile cp">
+      <div className="lb"><span className="lbtxt">{label}</span><span className="asof">{d?.current ? `${d.current.date} · ghost ${d.ghost?.date ?? "–"} (${ago} ago)` : ""}</span></div>
+      {d?.current ? (
+        <>
+          <CurveChart current={d.current} ghost={d.ghost} />
+          <div className="rdout mut">
+            2s10s {fmtChg(spread(d.current, 2, 10), 0)}bp · 10s30s {fmtChg(spread(d.current, 10, 30), 0)}bp
+            {d.ghost && <> · vs {ago} ago: 2s10s {fmtChg((spread(d.current, 2, 10) ?? 0) - (spread(d.ghost, 2, 10) ?? 0), 0)}bp</>} · {d.current.source}
+          </div>
+        </>
+      ) : <div className="empty" style={{ minHeight: 190 }}>{err ?? "no curve yet"}</div>}
+    </div>
+  );
+  return <div className="cgrid two">{one("US TREASURY CURVE", us.data, us.error)}{one("JGB CURVE", jp.data, jp.error)}</div>;
 }
 
 export function MarketView({ tick }: { tick: number }) {
   const table = useApi<{ rows: TableRow[]; asOf: string }>("table", undefined, tick);
   const [period, setPeriod] = useState<ChartPeriod>("12M");
+  const [twoSigma, setTwoSigma] = useState(false);
   const rows = table.data?.rows ?? [];
-  const periodChips = (
-    <span className="chips" style={{ margin: 0 }}>
+  const by = (g: string) => rows.filter((r) => r.group === g).sort((a, b) => a.order - b.order);
+  const selector = (
+    <div className="chips" style={{ margin: "0 0 6px" }}>
       <span className="lbl">Period</span>
       {CHART_PERIODS.map((p) => <span key={p} className={`chip-sm${p === period ? " on" : ""}`} onClick={() => setPeriod(p)}>{p}</span>)}
-    </span>
-  );
-  const legend = (
-    <div className="legend">
-      <span><span className="sw" style={{ background: "var(--s1m)" }} />1M σ (21d)</span>
-      <span><span className="sw" style={{ background: "var(--s12m)" }} />12M σ (252d)</span>
-      <span><span className="sw" style={{ background: "var(--s36m)" }} />36M σ (756d)</span>
-      <span className="mut">rolling mean ± 1σ</span>
+      <span className="lbl" style={{ marginLeft: 14 }}>Bands</span>
+      <span className="chip-sm on" title="Rolling mean ± 1σ over 21 / 252 / 756 trading days">±1σ</span>
+      <span className={`chip-sm${twoSigma ? " on" : ""}`} onClick={() => setTwoSigma(!twoSigma)} title="Also draw ±2σ (dashed)">±2σ</span>
+      <span className="legend" style={{ padding: 0, marginLeft: 14 }}>
+        <span><span className="sw" style={{ background: "var(--s1m)" }} />1M</span>
+        <span><span className="sw" style={{ background: "var(--s12m)" }} />12M</span>
+        <span><span className="sw" style={{ background: "var(--s36m)" }} />36M</span>
+      </span>
     </div>
   );
   return (
     <>
-      <Panel no="01" title="MARKETS" aux={table.data ? <>as of {fmtStampSafe(table.data.asOf)} · Yahoo Finance, Treasury, MOF</> : table.error ? <span className="warn">{table.error}</span> : "loading…"}>
+      <Panel no="01" title="MARKETS" aux={table.data ? <>as of {fmtStampSafe(table.data.asOf)} · Yahoo Finance, US Treasury, MOF{DEV_MOCK && <span className="badge est">MOCK</span>}</> : table.error ? <span className="warn">{table.error}</span> : "loading…"}>
         {rows.length ? <MarketsTable rows={rows} /> : <Empty title="Awaiting the data feed">{table.error ?? "The market table fills once the Monitor backend is deployed and its first daily history run has completed."}</Empty>}
-        <div className="hint2">Closes are the last session on or before each window start (1W = 7 calendar days, 1M/3M/12M/36M = calendar months). % = change from that close to the last print. Delayed feeds carry a badge.</div>
+        <div className="hint2">Closes are the last session on or before each window start (1W = 7 calendar days, 1M/3M/12M/36M = calendar months). % = change from that close to the last print; yields show the change in bp. Delayed feeds carry a badge; hover a row for the source time.</div>
       </Panel>
-      <Panel no="02" title="EQUITIES" span={12} aux={periodChips}>
-        {legend}
-        <Empty title="Chart panels">One panel per equity index and future, {period} window, rolling σ bands. Rendered once the history endpoint is live.</Empty>
-      </Panel>
-      <Panel no="03" title="RATES" span={6} aux={periodChips}>
-        <Empty title="Yields, policy rates and the curve">UST and JGB yields with σ bands, policy-rate table, and the yield curve with a translucent curve from the selected period ago.</Empty>
-      </Panel>
-      <Panel no="04" title="CURRENCY" span={6} aux={periodChips}>
-        <Empty title="FX pairs">USD/JPY, EUR/USD, GBP/USD, AUD/USD, USD/CNH, USD/KRW, USD/SGD, EUR/JPY and DXY with σ bands.</Empty>
-      </Panel>
+      <div className="c12">{selector}</div>
+      <ChartGroup no="02" title="EQUITIES" rows={by("equity")} period={period} tick={tick} twoSigma={twoSigma} />
+      <ChartGroup no="03" title="RATES" rows={by("rates")} period={period} tick={tick} twoSigma={twoSigma}>
+        <div className="minih">Yield curves · today vs {period === "1D" || period === "1W" ? "1M" : period} ago</div>
+        <CurvePanel period={period} tick={tick} />
+        <div className="minih" style={{ marginTop: 8 }}>Yields</div>
+      </ChartGroup>
+      <ChartGroup no="04" title="CURRENCY" rows={by("fx")} period={period} tick={tick} twoSigma={twoSigma} />
+      <ChartGroup no="05" title="COMMODITIES" rows={by("cmdty")} period={period} tick={tick} twoSigma={twoSigma} />
     </>
   );
 }
