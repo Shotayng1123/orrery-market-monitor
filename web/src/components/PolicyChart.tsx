@@ -15,7 +15,7 @@ export function PolicyChart({ steps, height = 260 }: { steps: PolicyStep[]; heig
     // union of all change dates plus today; each bank's value carried forward (step)
     const from = Date.now() / 1000 - 30 * 365.25 * 86400;
     const ts = [...new Set(steps.map((s) => Date.parse(s.d) / 1000))].filter((t) => t >= from - 400 * 86400).sort((a, b) => a - b);
-    ts.push(Math.floor(Date.now() / 86400) * 86400);
+    ts.push(Math.floor(Date.now() / 1000 / 86400) * 86400);   // today, in seconds
     const cols: Array<Array<number | null>> = [ts];
     for (const b of banks) {
       const own = steps.filter((s) => s.bank === b).map((s) => ({ t: Date.parse(s.d) / 1000, v: s.rate })).sort((a, c) => a.t - c.t);

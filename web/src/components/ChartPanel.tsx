@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { DN, FLAT, SigmaChart, UP } from "./SigmaChart";
+import { DN, FLAT, SigmaChart, UP, type SigmaWindow } from "./SigmaChart";
 import { useApi, DEV_MOCK } from "../lib/useApi";
 import type { Series, TableRow } from "../lib/types";
 import { fmtChg, fmtNum, fmtPct, signCls } from "../lib/fmt";
@@ -25,9 +25,10 @@ function sessionWindow(points: Array<{ t: number }>): number {
 
 /** One instrument in the Analytics tile grammar: name row with the session tag and stamp, the price under
  *  the name, the period change under the price, then the chart. `shape` sets the tile proportions. */
-export function ChartPanel({ row, period, tick, twoSigma, shape = "wide", axes = false }: { row: TableRow; period: ChartPeriod; tick: number; twoSigma: boolean; shape?: "wide" | "square" | "large"; axes?: boolean }) {
+const WIN_LABEL: Record<SigmaWindow, string> = { m1: "1M", m12: "12M", m36: "36M" };
+export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wide", axes = false }: { row: TableRow; period: ChartPeriod; tick: number; sigmaWindow?: SigmaWindow; shape?: "wide" | "square" | "large"; axes?: boolean }) {
   const s = useApi<Series>("series", { symbol: row.symbol, range: period }, tick);
-  const [rd, setRd] = useState<{ t: number; v: number; z1: number | null; z12: number | null; z36: number | null } | null>(null);
+  const [rd, setRd] = useState<{ t: number; v: number; z: number | null } | null>(null);
   const [pan, setPan] = useState(0);
   const k = PERIOD_KEY[period];
   const isRate = row.group === "rates";
@@ -52,10 +53,10 @@ export function ChartPanel({ row, period, tick, twoSigma, shape = "wide", axes =
       <div className="vl">{fmtNum(row.last, row.decimals)}{isRate && row.last != null ? "%" : ""}</div>
       <div className={`ch ${signCls(chg)}`}>{isRate ? fmtChg(chg, 3, true) : fmtPct(chg)} <span className="mut">{period}{row.closes[k] != null ? ` · from ${fmtNum(row.closes[k], row.decimals)}` : ""}</span></div>
       {points.length
-        ? <SigmaChart points={points} windowSec={windowSec} intraday={intraday} decimals={row.decimals} showTwoSigma={twoSigma} onReadout={setRd} onPan={setPan} color={color} fill={shape !== "wide"} height={shape === "wide" ? 150 : undefined} axes={axes} />
+        ? <SigmaChart points={points} windowSec={windowSec} intraday={intraday} decimals={row.decimals} sigmaWindow={sigmaWindow} onReadout={setRd} onPan={setPan} color={color} fill={shape !== "wide"} height={shape === "wide" ? 150 : undefined} axes={axes} />
         : <div className="chartbox empty" style={shape === "wide" ? { height: 150 } : undefined}>{s.error ?? (s.loading ? "loading…" : "no history yet")}</div>}
       <div className="rdout mut" title="Click, hold and drag the chart to move back in time; double-click to return to the latest">
-        {rd ? (intraday ? <>{fmtStamp(rd.t * 1000, SGT)} · {fmtNum(rd.v, row.decimals)}</> : <>{new Date(rd.t * 1000).toISOString().slice(0, 10)} · {fmtNum(rd.v, row.decimals)} · 1M {z(rd.z1)} · 12M {z(rd.z12)} · 36M {z(rd.z36)}</>)
+        {rd ? (intraday ? <>{fmtStamp(rd.t * 1000, SGT)} · {fmtNum(rd.v, row.decimals)}</> : <>{new Date(rd.t * 1000).toISOString().slice(0, 10)} · {fmtNum(rd.v, row.decimals)} · {WIN_LABEL[sigmaWindow]} {z(rd.z)}</>)
           : <span style={{ opacity: .6 }}>{panLabel || (period === "1D" ? "1-minute bars · drag to pan" : intraday ? "hourly bars · drag to pan" : "daily closes · σ corridors · drag to pan")}</span>}
       </div>
     </div>

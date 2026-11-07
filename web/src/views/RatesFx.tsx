@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Empty, Panel } from "../components/Panel";
 import { ChartPanel, type ChartPeriod } from "../components/ChartPanel";
 import { PeriodBar } from "../components/PeriodBar";
+import type { SigmaWindow } from "../components/SigmaChart";
 import { CurveChart, spread } from "../components/CurveChart";
 import { PolicyChart, type PolicyStep } from "../components/PolicyChart";
 import { useApi } from "../lib/useApi";
@@ -81,23 +82,23 @@ function PolicyTable({ tick }: { tick: number }) {
 
 export function RatesFxView({ tick }: { sub: string; onSub: (s: string) => void; tick: number }) {
   const [period, setPeriod] = useState<ChartPeriod>("12M");
-  const [twoSigma, setTwoSigma] = useState(false);
+  const [sigmaWindow, setSigmaWindow] = useState<SigmaWindow>("m12");
   const table = useApi<{ rows: TableRow[]; asOf: string }>("table", undefined, tick);
   const fx = (table.data?.rows ?? []).filter((r) => r.group === "fx").sort((a, b) => a.order - b.order);
   const rates = (table.data?.rows ?? []).filter((r) => r.group === "rates").sort((a, b) => a.order - b.order);
   return (
     <>
-      <div className="c12"><PeriodBar period={period} onPeriod={setPeriod} twoSigma={twoSigma} onTwoSigma={setTwoSigma} /></div>
+      <div className="c12"><PeriodBar period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} /></div>
       <Panel no="01" title="FOREX" span={12} aux={table.data ? <>as of {fmtStampSafe(table.data.asOf)} · Yahoo Finance</> : ""}>
         {fx.length ? <FxTable rows={fx} /> : <Empty title="Awaiting the data feed">{table.error ?? "Pairs load with the market table."}</Empty>}
       </Panel>
       <Panel no="02" title="PAIRS" span={12} aux={`${fx.length} panels · ${period}`}>
-        {fx.length ? <div className="cgrid">{fx.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} twoSigma={twoSigma} />)}</div> : <Empty title="No pairs yet" />}
+        {fx.length ? <div className="cgrid">{fx.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} />)}</div> : <Empty title="No pairs yet" />}
       </Panel>
       <CurvesGrid ago={period} tick={tick} />
       <PolicyTable tick={tick} />
       <Panel no="11" title="YIELDS" span={12} aux={`${rates.length} panels · ${period}`}>
-        {rates.length ? <div className="cgrid">{rates.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} twoSigma={twoSigma} />)}</div> : <Empty title="No yields yet" />}
+        {rates.length ? <div className="cgrid">{rates.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} />)}</div> : <Empty title="No yields yet" />}
       </Panel>
     </>
   );

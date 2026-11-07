@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Empty, Panel } from "../components/Panel";
-import { ChartPanel, CHART_PERIODS, type ChartPeriod } from "../components/ChartPanel";
+import { ChartPanel, type ChartPeriod } from "../components/ChartPanel";
+import { PeriodBar } from "../components/PeriodBar";
+import type { SigmaWindow } from "../components/SigmaChart";
 import { CurveChart, spread } from "../components/CurveChart";
 import { useApi, DEV_MOCK } from "../lib/useApi";
 import { fmtNum, fmtPct, fmtChg, fmtStampSafe, signCls } from "./shared";
@@ -86,11 +88,11 @@ function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
   );
 }
 
-function ChartGroup({ no, title, rows, period, tick, twoSigma, children }: { no: string; title: string; rows: TableRow[]; period: ChartPeriod; tick: number; twoSigma: boolean; children?: React.ReactNode }) {
+function ChartGroup({ no, title, rows, period, tick, sigmaWindow, children }: { no: string; title: string; rows: TableRow[]; period: ChartPeriod; tick: number; sigmaWindow: SigmaWindow; children?: React.ReactNode }) {
   return (
     <Panel no={no} title={title} span={12} aux={`${rows.length} panels · ${period}`}>
       {children}
-      {rows.length ? <div className="cgrid">{rows.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} twoSigma={twoSigma} />)}</div> : <Empty title="No instruments in this group yet" />}
+      {rows.length ? <div className="cgrid">{rows.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} />)}</div> : <Empty title="No instruments in this group yet" />}
     </Panel>
   );
 }
@@ -122,23 +124,10 @@ function CurvePanel({ period, tick }: { period: ChartPeriod; tick: number }) {
 export function MarketView({ tick }: { tick: number }) {
   const table = useApi<{ rows: TableRow[]; asOf: string }>("table", undefined, tick);
   const [period, setPeriod] = useState<ChartPeriod>("12M");
-  const [twoSigma, setTwoSigma] = useState(false);
+  const [sigmaWindow, setSigmaWindow] = useState<SigmaWindow>("m12");
   const rows = table.data?.rows ?? [];
   const by = (g: string) => rows.filter((r) => r.group === g).sort((a, b) => a.order - b.order);
-  const selector = (
-    <div className="chips" style={{ margin: "0 0 6px" }}>
-      <span className="lbl">Period</span>
-      {CHART_PERIODS.map((p) => <span key={p} className={`chip-sm${p === period ? " on" : ""}`} onClick={() => setPeriod(p)}>{p}</span>)}
-      <span className="lbl" style={{ marginLeft: 14 }}>Bands</span>
-      <span className="chip-sm on" title="Rolling mean ± 1σ over 21 / 252 / 756 trading days">±1σ</span>
-      <span className={`chip-sm${twoSigma ? " on" : ""}`} onClick={() => setTwoSigma(!twoSigma)} title="Also draw ±2σ (dashed)">±2σ</span>
-      <span className="legend" style={{ padding: 0, marginLeft: 14 }}>
-        <span><span className="sw" style={{ background: "var(--s1m)" }} />1M</span>
-        <span><span className="sw" style={{ background: "var(--s12m)" }} />12M</span>
-        <span><span className="sw" style={{ background: "var(--s36m)" }} />36M</span>
-      </span>
-    </div>
-  );
+  const selector = <PeriodBar period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} />;
   return (
     <>
       <Panel no="01" title="MARKETS" aux={table.data ? <>as of {fmtStampSafe(table.data.asOf)} · Yahoo Finance, US Treasury, MOF{DEV_MOCK && <span className="badge est">MOCK</span>}</> : table.error ? <span className="warn">{table.error}</span> : "loading…"}>
@@ -146,14 +135,14 @@ export function MarketView({ tick }: { tick: number }) {
         <div className="hint2">Closes are the last session on or before each window start (1W = 7 calendar days, 1M/3M/12M/36M = calendar months). % = change from that close to the last print; yields show the change in bp. After a market closes its closing level and day change are held until the next session&apos;s first print. Rows of open markets are highlighted; delayed feeds carry a badge; hover a row for the source time.</div>
       </Panel>
       <div className="c12">{selector}</div>
-      <ChartGroup no="02" title="EQUITIES" rows={by("equity")} period={period} tick={tick} twoSigma={twoSigma} />
-      <ChartGroup no="03" title="RATES" rows={by("rates")} period={period} tick={tick} twoSigma={twoSigma}>
+      <ChartGroup no="02" title="EQUITIES" rows={by("equity")} period={period} tick={tick} sigmaWindow={sigmaWindow} />
+      <ChartGroup no="03" title="RATES" rows={by("rates")} period={period} tick={tick} sigmaWindow={sigmaWindow}>
         <div className="minih">Yield curves · today vs {period === "1D" || period === "1W" ? "1M" : period} ago</div>
         <CurvePanel period={period} tick={tick} />
         <div className="minih" style={{ marginTop: 8 }}>Yields</div>
       </ChartGroup>
-      <ChartGroup no="04" title="CURRENCY" rows={by("fx")} period={period} tick={tick} twoSigma={twoSigma} />
-      <ChartGroup no="05" title="COMMODITIES" rows={by("cmdty")} period={period} tick={tick} twoSigma={twoSigma} />
+      <ChartGroup no="04" title="CURRENCY" rows={by("fx")} period={period} tick={tick} sigmaWindow={sigmaWindow} />
+      <ChartGroup no="05" title="COMMODITIES" rows={by("cmdty")} period={period} tick={tick} sigmaWindow={sigmaWindow} />
     </>
   );
 }

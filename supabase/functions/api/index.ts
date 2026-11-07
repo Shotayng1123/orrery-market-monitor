@@ -48,6 +48,7 @@ Deno.serve(async (req) => {
         return json(req, { report: { id: data.id, kind: data.kind, title: data.title, summary: data.summary, md: data.md, publishedAt: data.published_at } });
       }
       case "index_stats": return json(req, await indexStats(q("idx") ?? "SP500"));
+      case "breadth_history": return json(req, await breadthHistory(q("idx") ?? "SP500", Math.min(1200, Number(q("days") ?? 400))));
       case "alerts": {
         const { data } = await db.from("alerts").select("id,at,upd,d,symbol,name,kind,pct,price,market,msg").order("upd", { ascending: false }).limit(Math.min(50, Number(q("n") ?? 20)));
         return json(req, { rows: (data ?? []).map((a) => ({ id: a.id, at: a.upd, first: a.at, d: a.d, symbol: a.symbol, name: a.name, kind: a.kind, pct: a.pct, price: a.price, market: a.market, msg: a.msg })) });
@@ -181,9 +182,9 @@ async function curve(country: string, ago: string | null) {
 }
 
 // ---------- index statistics (EQUITIES pages) ----------
-interface StatRow { symbol: string; name: string; sector: string | null; weight: number | null; d: string; close: number; prev: number | null; pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct12m: number | null; dma50: number | null; dma200: number | null; hi52: number | null; lo52: number | null }
+interface StatRow { symbol: string; name: string; sector: string | null; weight: number | null; d: string; close: number; prev: number | null; pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct12m: number | null; dma50: number | null; dma200: number | null; hi52: number | null; lo52: number | null; mcap: number | null; volume: number | null; adv3m: number | null; turnover: number | null; adv_turnover: number | null; quote_at: string | null }
 async function indexStats(idx: string) {
-  const rows = await selectAll<StatRow>(() => db.from("constituent_stats").select("symbol,name,sector,weight,d,close,prev,pct1d,pct1w,pct1m,pct3m,pct12m,dma50,dma200,hi52,lo52").eq("idx", idx).order("symbol"));
+  const rows = await selectAll<StatRow>(() => db.from("constituent_stats").select("symbol,name,sector,weight,d,close,prev,pct1d,pct1w,pct1m,pct3m,pct12m,dma50,dma200,hi52,lo52,mcap,volume,adv3m,turnover,adv_turnover,quote_at").eq("idx", idx).order("symbol"));
   if (!rows.length) return { idx, asOf: null, rows: [], breadth: null, sectors: [], movers: { top: [], bottom: [] }, shorts: null };
   const asOf = rows.map((r) => r.d).sort().pop() ?? null;
   const n = rows.length;
@@ -197,7 +198,14 @@ async function indexStats(idx: string) {
   const bySector = new Map<string, StatRow[]>();
   for (const r of rows) { const k = r.sector ?? "Other"; bySector.set(k, [...(bySector.get(k) ?? []), r]); }
   const wavg = (xs: StatRow[], f: (r: StatRow) => number | null) => { let s = 0, w = 0; for (const r of xs) { const v = f(r); if (v == null) continue; const ww = r.weight ?? 1; s += v * ww; w += ww; } return w ? s / w : null; };
-  const sectors = [...bySector.entries()].map(([sector, xs]) => ({ sector, n: xs.length, weight: xs.some((r) => r.weight != null) ? xs.reduce((a, r) => a + (r.weight ?? 0), 0) : null, pct1d: wavg(xs, (r) => r.pct1d), pct1w: wavg(xs, (r) => r.pct1w), pct1m: wavg(xs, (r) => r.pct1m), pct3m: wavg(xs, (r) => r.pct3m), pct12m: wavg(xs, (r) => r.pct12m), above200: xs.filter((r) => r.dma200 != null && r.close > r.dma200).length })).sort((a, b) => (b.pct1d ?? -1e9) - (a.pct1d ?? -1e9));
+  const totalTurn = rows.reduce((a, r) => a + (r.turnover ?? 0), 0), totalMcap = rows.reduce((a, r) => a + (r.mcap ?? 0), 0);
+  const sectors = [...bySector.entries()].map(([sector, xs]) => {
+    const turnover = xs.reduce((a, r) => a + (r.turnover ?? 0), 0), advT = xs.reduce((a, r) => a + (r.adv_turnover ?? 0), 0), mcap = xs.reduce((a, r) => a + (r.mcap ?? 0), 0);
+    return { sector, n: xs.length, weight: xs.some((r) => r.weight != null) ? xs.reduce((a, r) => a + (r.weight ?? 0), 0) : null, mcapShare: totalMcap ? (mcap / totalMcap) * 100 : null,
+      pct1d: wavg(xs, (r) => r.pct1d), pct1w: wavg(xs, (r) => r.pct1w), pct1m: wavg(xs, (r) => r.pct1m), pct3m: wavg(xs, (r) => r.pct3m), pct12m: wavg(xs, (r) => r.pct12m), above200: xs.filter((r) => r.dma200 != null && r.close > r.dma200).length,
+      turnover, turnoverShare: totalTurn ? (turnover / totalTurn) * 100 : null, flow: advT ? turnover / advT : null };   // flow = today's traded value vs the 3-month average
+  }).sort((a, b) => (b.pct1d ?? -1e9) - (a.pct1d ?? -1e9));
+  const quoteAt = rows.map((r) => r.quote_at).filter(Boolean).sort().pop() ?? null;
   const sorted = [...rows].filter((r) => r.pct1d != null).sort((a, b) => b.pct1d! - a.pct1d!);
   // short-volume ratio (US indices): latest day per symbol
   let shorts: { d: string; avgRatio: number; top: Array<{ symbol: string; name: string; ratio: number }> } | null = null;
@@ -211,7 +219,12 @@ async function indexStats(idx: string) {
       for (const r of rows as Array<StatRow & { shortRatio?: number | null }>) r.shortRatio = byS.get(r.symbol) ?? null;
     }
   }
-  return { idx, asOf, breadth, sectors, movers: { top: sorted.slice(0, 15), bottom: sorted.slice(-15).reverse() }, shorts, rows };
+  return { idx, asOf, quoteAt, breadth, sectors, movers: { top: sorted.slice(0, 15), bottom: sorted.slice(-15).reverse() }, shorts, rows };
+}
+async function breadthHistory(idx: string, days: number) {
+  const from = new Date(Date.now() - days * 86400e3).toISOString().slice(0, 10);
+  const rows = await selectAll<{ d: string; n: number; adv: number; dec: number; above50: number; above200: number; new_hi: number; new_lo: number }>(() => db.from("breadth_history").select("d,n,adv,dec,above50,above200,new_hi,new_lo").eq("idx", idx).gte("d", from).order("d"));
+  return { idx, rows };
 }
 
 // ---------- calendar & news ----------

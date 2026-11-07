@@ -12,7 +12,7 @@ import { loadHolidays, saveTableSnapshot } from "../_shared/table.ts";
 import { chart, spark } from "../_shared/yahoo.ts";
 import { fetchNikkei225, fetchSp500 } from "../_shared/constituents.ts";
 import { fetchBoc, fetchBoe, fetchBundesbank, fetchEcb } from "../_shared/curves.ts";
-import { computeIndexStats, loadShortVolume } from "../_shared/istats.ts";
+import { computeIndexStats, loadShortVolume, refreshQuotes } from "../_shared/istats.ts";
 import { fetchNasdaq100 } from "../_shared/constituents.ts";
 
 Deno.serve(async (req) => {
@@ -28,7 +28,8 @@ Deno.serve(async (req) => {
       case "constituents": detail = await constituents(); break;
       case "stats": { const idx = (url.searchParams.get("idx") ?? "SP500") as "SP500" | "NK225" | "NDX"; detail = await computeIndexStats(idx); break; }
       case "shorts": detail = await loadShortVolume(); break;
-      case "policy": detail = await policy(url.searchParams.get("full") === "1"); break;
+      case "flow": { const idx = (url.searchParams.get("idx") ?? "SP500") as "SP500" | "NK225" | "NDX"; detail = await refreshQuotes(idx); break; }
+      case "policy": detail = await policy(url.searchParams.get("full") === "1", url.searchParams.get("bank")); break;
       case "curves": detail = await curves(url.searchParams.get("country") ?? "US", url.searchParams.get("full") === "1"); break;
       case "calendar": detail = await calendar(); break;
       case "news": detail = await news(); break;
@@ -284,8 +285,9 @@ async function fred(): Promise<string> {
 }
 
 // ---------- policy rates from official feeds (Fed comes from the fred GitHub job) ----------
-async function policy(full: boolean): Promise<string> {
+async function policy(full: boolean, only: string | null = null): Promise<string> {   // bank=… runs one bank (full loads are heavy)
   const parts: string[] = [];
+  const want = (b: string) => !only || only === b;
   const set = async (bank: string, rate: number, asOf: string, lastChange: string | null, note: string) => {
     const { error } = await db.from("policy_rates").update({ rate, as_of: asOf, last_change: lastChange, source_note: note, updated_at: new Date().toISOString() }).eq("bank", bank);
     if (error) throw new Error(error.message);
@@ -301,7 +303,7 @@ async function policy(full: boolean): Promise<string> {
   };
   const lastChangeOf = (obs: Array<{ d: string; v: number }>) => { const last = obs[obs.length - 1]; let lc = last.d; for (let k = obs.length - 2; k >= 0; k--) { if (obs[k].v !== last.v) break; lc = obs[k].d; } return lc; };
   // ECB deposit facility rate: the series only has rows on change dates
-  try {
+  if (want("ECB")) try {
     const t = await fetchText(`https://data-api.ecb.europa.eu/service/data/FM/B.U2.EUR.4F.KR.DFR.LEV?format=csvdata${full ? "" : "&lastNObservations=3"}`, { headers: { accept: "text/csv" } }, 60000);
     const lines = t.split(/\r?\n/).filter(Boolean); const head = lines[0].split(","); const iT = head.indexOf("TIME_PERIOD"), iV = head.indexOf("OBS_VALUE");
     const obs = lines.slice(1).map((l) => l.split(",")).map((c) => ({ d: c[iT], v: Number(c[iV]) })).filter((o) => /^\d{4}-\d{2}-\d{2}$/.test(o.d) && Number.isFinite(o.v)).sort((a, b) => a.d.localeCompare(b.d));
@@ -313,7 +315,7 @@ async function policy(full: boolean): Promise<string> {
     parts.push(`ECB ${last.v} (${n} hist)`); await sourceOk("ecb");
   } catch (e) { parts.push(`ECB ERR ${e instanceof Error ? e.message : e}`); await sourceErr("ecb", e); }
   // Bank of England Bank Rate: daily series IUDBEDR (from 1975)
-  try {
+  if (want("BOE")) try {
     const t = await fetchText(`https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp?csv.x=yes&Datefrom=${full ? "01/Jan/1975" : "01/Jan/2024"}&Dateto=now&SeriesCodes=IUDBEDR&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N`, {}, 90000);
     const obs = t.split(/\r?\n/).map((l) => l.split(",")).filter((c) => c.length >= 2 && /^\d{2} \w{3} \d{4}$/.test(c[0]) && Number.isFinite(Number(c[1]))).map((c) => ({ d: new Date(c[0] + " UTC").toISOString().slice(0, 10), v: Number(c[1]) }));
     const last = obs[obs.length - 1];
@@ -323,24 +325,51 @@ async function policy(full: boolean): Promise<string> {
     const n = await history("BOE", obs, src);
     parts.push(`BOE ${last.v} (${n} hist)`); await sourceOk("boe");
   } catch (e) { parts.push(`BOE ERR ${e instanceof Error ? e.message : e}`); await sourceErr("boe", e); }
-  // HKMA base rate: daily monetary statistics API (paged when loading history)
-  try {
-    const recs: Array<{ end_of_date: string; disc_win_base_rate: number }> = [];
-    for (let offset = 0; offset < (full ? 20000 : 60); offset += 1000) {
-      const j = await fetchJson<{ result: { records: Array<{ end_of_date: string; disc_win_base_rate: number }> } }>(`https://api.hkma.gov.hk/public/market-data-and-statistics/daily-monetary-statistics/daily-figures-interbank-liquidity?pagesize=${full ? 1000 : 60}&offset=${offset}&sortby=end_of_date&sortorder=desc`, 60000);
-      const page = (j.result?.records ?? []).filter((r) => Number.isFinite(r.disc_win_base_rate));
-      recs.push(...page);
-      if (!full || page.length < 1000) break;
-    }
-    const obs = recs.map((r) => ({ d: r.end_of_date, v: r.disc_win_base_rate })).sort((a, b) => a.d.localeCompare(b.d));
+  // HKMA base rate today: daily monetary statistics API (history comes from the BIS below)
+  if (want("HKMA")) try {
+    const j = await fetchJson<{ result: { records: Array<{ end_of_date: string; disc_win_base_rate: number }> } }>("https://api.hkma.gov.hk/public/market-data-and-statistics/daily-monetary-statistics/daily-figures-interbank-liquidity?pagesize=60&sortby=end_of_date&sortorder=desc", 60000);
+    const obs = (j.result?.records ?? []).filter((r) => Number.isFinite(r.disc_win_base_rate)).map((r) => ({ d: r.end_of_date, v: r.disc_win_base_rate })).sort((a, b) => a.d.localeCompare(b.d));
     const last = obs[obs.length - 1];
     if (!last) throw new Error("no records");
-    const src = "HKMA daily monetary statistics API, discount window base rate";
-    await set("HKMA", last.v, last.d, lastChangeOf(obs), src);
-    const n = await history("HKMA", obs, src);
-    parts.push(`HKMA ${last.v} (${n} hist)`); await sourceOk("hkma");
+    await set("HKMA", last.v, last.d, lastChangeOf(obs), "HKMA daily monetary statistics API, discount window base rate");
+    parts.push(`HKMA ${last.v}`); await sourceOk("hkma");
   } catch (e) { parts.push(`HKMA ERR ${e instanceof Error ? e.message : e}`); await sourceErr("hkma", e); }
+  // BIS central bank policy rates (daily): the banks without a direct feed, plus the HKMA history
+  const BIS: Array<[string, string, string, boolean]> = [
+    ["BOJ", "JP", "Bank of Japan uncollateralised overnight call rate target (BIS WS_CBPOL)", true],
+    ["RBA", "AU", "Reserve Bank of Australia cash rate target (BIS WS_CBPOL)", true],
+    ["BOK", "KR", "Bank of Korea base rate (BIS WS_CBPOL)", true],
+    ["PBOC", "CN", "People's Bank of China 1-year loan prime rate (BIS WS_CBPOL)", true],
+    ["HKMA", "HK", "HKMA base rate (BIS WS_CBPOL)", false],
+  ];
+  for (const [bank, area, src, setCurrent] of BIS) {
+    if (!want(bank)) continue;
+    try {
+      const t = await fetchText(`https://stats.bis.org/api/v2/data/dataflow/BIS/WS_CBPOL/1.0/D.${area}?format=csv&detail=dataonly${full ? "" : "&lastNObservations=40"}`, { headers: { accept: "text/csv" } }, 90000);
+      const lines = t.split(/\r?\n/).filter(Boolean);
+      const head = csvLine(lines[0]); const iT = head.indexOf("TIME_PERIOD"), iV = head.indexOf("OBS_VALUE");
+      if (iT < 0 || iV < 0) throw new Error("unexpected columns");
+      const obs = lines.slice(1).map(csvLine).map((c) => ({ d: c[iT], v: Number(c[iV]) })).filter((o) => /^\d{4}-\d{2}-\d{2}$/.test(o.d) && Number.isFinite(o.v)).sort((a, b) => a.d.localeCompare(b.d));
+      const last = obs[obs.length - 1];
+      if (!last) throw new Error("no observations");
+      if (setCurrent) await set(bank, last.v, last.d, lastChangeOf(obs), src);
+      const n = await history(bank, obs, src);
+      parts.push(`${bank} ${last.v} (${n} hist, BIS)`); await sourceOk("bis");
+    } catch (e) { parts.push(`${bank} ERR ${e instanceof Error ? e.message : e}`); await sourceErr("bis", e); }
+  }
   return parts.join("; ");
+}
+
+/** One CSV line with quoted fields ("" escapes a quote). */
+function csvLine(line: string): string[] {
+  const out: string[] = []; let cur = "", q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (q) { if (ch === '"') { if (line[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+    else if (ch === '"') q = true; else if (ch === ",") { out.push(cur); cur = ""; } else cur += ch;
+  }
+  out.push(cur);
+  return out;
 }
 
 // ---------- prune ----------

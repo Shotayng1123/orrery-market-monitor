@@ -1,19 +1,20 @@
 import { CHART_PERIODS, type ChartPeriod } from "./ChartPanel";
+import type { SigmaWindow } from "./SigmaChart";
 
-/** The shared period selector with the σ-band controls and legend, used by every tab that draws charts. */
-export function PeriodBar({ period, onPeriod, twoSigma, onTwoSigma, extra }: { period: ChartPeriod; onPeriod: (p: ChartPeriod) => void; twoSigma: boolean; onTwoSigma: (v: boolean) => void; extra?: React.ReactNode }) {
+const WINDOWS: Array<{ k: SigmaWindow; label: string; days: number }> = [{ k: "m1", label: "1M", days: 21 }, { k: "m12", label: "12M", days: 252 }, { k: "m36", label: "36M", days: 756 }];
+
+/** The shared period selector with the σ-window selector and legend, used by every tab that draws charts. */
+export function PeriodBar({ period, onPeriod, sigmaWindow, onSigmaWindow, extra }: { period: ChartPeriod; onPeriod: (p: ChartPeriod) => void; sigmaWindow: SigmaWindow; onSigmaWindow: (w: SigmaWindow) => void; extra?: React.ReactNode }) {
   return (
     <div className="chips" style={{ margin: "0 0 6px" }}>
       <span className="lbl">Period</span>
       {CHART_PERIODS.map((p) => <span key={p} className={`chip-sm${p === period ? " on" : ""}`} onClick={() => onPeriod(p)}>{p}</span>)}
-      <span className="lbl" style={{ marginLeft: 14 }}>Bands</span>
-      <span className="chip-sm on" title="Rolling mean ± 1σ over 21 / 252 / 756 trading days">±1σ</span>
-      <span className={`chip-sm${twoSigma ? " on" : ""}`} onClick={() => onTwoSigma(!twoSigma)} title="Also draw ±2σ (fainter)">±2σ</span>
-      <span className="legend" style={{ padding: 0, marginLeft: 14 }} title="Rolling mean and ±σ over 21 / 252 / 756 trading days; line style = window">
+      <span className="lbl" style={{ marginLeft: 14 }}>σ window</span>
+      {WINDOWS.map((w) => <span key={w.k} className={`chip-sm${w.k === sigmaWindow ? " on" : ""}`} onClick={() => onSigmaWindow(w.k)} title={`rolling ${w.days} trading days`}>{w.label}</span>)}
+      <span className="legend" style={{ padding: 0, marginLeft: 14 }} title="Rolling mean, ±1σ and ±2σ of daily closes over the selected window">
+        <span><span className="sw mean" />mean</span>
         <span><span className="sw s1" />±1σ</span>
         <span><span className="sw s2" />±2σ</span>
-        <span><span className="sw mean" />mean</span>
-        <span className="mut" style={{ marginLeft: 6 }}>1M ──  12M ╌╌  36M ····</span>
       </span>
       {extra}
     </div>

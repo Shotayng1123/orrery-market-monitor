@@ -287,12 +287,10 @@ body.term #alerts .alrt{padding:1px 6px;font-size:10px;max-width:320px}
 /* EQUITIES: breadth bars, heat map, screener */
 .bbar{display:inline-block;width:100%;height:8px;background:#15161a;border-radius:2px;overflow:hidden;vertical-align:middle}
 .bbar span{display:block;height:100%}
-.heat{display:flex;flex-direction:column;gap:6px}
-.hsec .hname{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:0 0 3px}
-.htiles{display:flex;flex-wrap:wrap;gap:2px}
-.htile{display:inline-flex;flex-direction:column;justify-content:center;height:34px;padding:0 4px;border-radius:2px;border:1px solid #1a1b1e;overflow:hidden;cursor:default}
-.htile b{font-size:9.5px;color:var(--txt);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.htile i{font-style:normal;font-size:9px;font-variant-numeric:tabular-nums}
+.heat{display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:2px}
+.htile{display:flex;flex-direction:column;justify-content:center;align-items:center;height:36px;border-radius:2px;overflow:hidden;cursor:default;color:#fff}
+.htile b{font-size:10px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.htile i{font-style:normal;font-size:9.5px;color:#fff;font-variant-numeric:tabular-nums}
 .searchrow{display:flex;gap:10px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
 .searchrow .cnt{color:var(--mut);font-size:11px;margin-left:auto}
 
@@ -302,3 +300,15 @@ body.term #alerts .alrt{padding:1px 6px;font-size:10px;max-width:320px}
 table.mkt{table-layout:fixed}
 table.mkt col.cls{width:7%} table.mkt col.nm{width:15%} table.mkt col.n{width:6%}
 table.mkt td,table.mkt th{overflow:hidden;text-overflow:ellipsis}
+
+/* EQUITIES: market-cap treemap (sector groups, no gaps, white text) and flow bars */
+.tmap{position:relative;width:100%;overflow:hidden;background:#111214;border-radius:2px}
+.tgrp{position:absolute;overflow:hidden;box-sizing:border-box;border:1px solid #0c0d0f}
+.tleaf{position:absolute;display:flex;flex-direction:column;justify-content:center;align-items:center;overflow:hidden;box-sizing:border-box;border:1px solid rgba(12,13,15,.9);color:#fff;cursor:default;line-height:1.15}
+.tleaf b{font-weight:700;color:#fff;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;padding:0 2px}
+.tleaf i{font-style:normal;font-size:9px;color:#fff;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tglabel{position:absolute;left:0;top:0;font-size:8.5px;letter-spacing:.05em;text-transform:uppercase;color:#fff;background:rgba(0,0,0,.55);padding:1px 5px;border-radius:0 0 2px 0;pointer-events:none;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.flowT .bbar{position:relative}
+.flowT .bbar .mark{position:absolute;top:-2px;width:1px;height:12px;background:#e8e5de;opacity:.85}
+.secT tr.tot td{border-top:1px solid var(--bord2);font-weight:600}
+.secT td.nm{max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

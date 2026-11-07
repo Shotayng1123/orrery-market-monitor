@@ -33,13 +33,7 @@ const lastChange = (obs: Obs[]) => { const last = obs[obs.length - 1]; let lc = 
   const upper = await series("DFEDTARU"), single = await series("DFEDTAR");
   const firstUpper = upper[0]?.d ?? "2008-12-16";
   await store("FED", [...single.filter((o) => o.d < firstUpper), ...upper], "FRED DFEDTAR (to 2008) + DFEDTARU (upper bound of the target range)", "FRED DFEDTARU (upper bound of the target range), via GitHub Actions");
-  // monthly OECD proxies
-  for (const [bank, id, label] of [["BOJ", "IRSTCB01JPM156N", "overnight call rate"], ["RBA", "IRSTCB01AUM156N", "cash rate"], ["BOK", "IRSTCB01KRM156N", "call rate"]] as const) {
-    try {
-      const obs = await series(id);
-      await store(bank, obs, `FRED ${id} (OECD MEI immediate rate, monthly average; proxy for the policy rate)`, `monthly average ${label} (OECD via FRED ${id}); official policy rate feed not wired`);
-    } catch (e) { out.push(`${bank} ERR ${e instanceof Error ? e.message : e}`); }
-  }
+  // (BoJ, RBA, BoK and PBoC come from the BIS policy-rate dataset in the daily `policy` job)
   await sb.from("source_status").upsert({ name: "fred", last_ok: new Date().toISOString(), last_error: null, last_error_at: null }, { onConflict: "name" });
   await sb.from("job_runs").insert({ job: "actions:fred", ok: true, detail: out.join("; ").slice(0, 2000), ms: 0 });
   console.log(out.join("\n"));
