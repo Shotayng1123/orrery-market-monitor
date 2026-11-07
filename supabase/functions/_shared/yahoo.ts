@@ -85,3 +85,26 @@ export function lastPrint(s: { timestamp: number[]; close: Array<number | null> 
   for (let i = s.close.length - 1; i >= 0; i--) { const v = s.close[i]; if (v != null && Number.isFinite(v)) return { price: v, t: s.timestamp[i] }; }
   return null;
 }
+
+// ---- company profiles: sector and industry (Yahoo's Morningstar-based classification) ----
+export interface Profile { sector: string | null; industry: string | null }
+/** Asset profiles, one request per symbol with a small concurrency; symbols Yahoo does not know are absent. */
+export async function profiles(symbols: string[], concurrency = 4): Promise<Record<string, Profile>> {
+  const out: Record<string, Profile> = {};
+  const { cookie, crumb: cr } = await crumb();
+  const any = { "user-agent": headers["user-agent"], accept: "*/*", cookie };
+  const work = [...symbols];
+  await Promise.all(Array.from({ length: concurrency }, async () => {
+    for (;;) {
+      const s = work.shift(); if (!s) return;
+      try {
+        const r = await fetch(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(s)}?modules=assetProfile&crumb=${encodeURIComponent(cr)}`, { headers: any, signal: AbortSignal.timeout(20000) });
+        if (!r.ok) { if (r.status === 404) out[s] = { sector: null, industry: null }; continue; }
+        const j = (await r.json()) as { quoteSummary?: { result?: Array<{ assetProfile?: { sector?: string; industry?: string } }> } };
+        const p = j.quoteSummary?.result?.[0]?.assetProfile;
+        out[s] = { sector: p?.sector || null, industry: p?.industry || null };
+      } catch { /* left absent: retried on the next run */ }
+    }
+  }));
+  return out;
+}

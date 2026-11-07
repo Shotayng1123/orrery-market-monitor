@@ -8,7 +8,7 @@ import { fetchText } from "./http.ts";
 import { chart, quotes, spark } from "./yahoo.ts";
 import type { IndexId } from "./constituents.ts";
 
-interface Constituent { idx: string; symbol: string; name: string; sector: string | null; weight: number | null }
+interface Constituent { idx: string; symbol: string; name: string; name_en: string | null; sector: string | null; gics_industry: string | null; weight: number | null }
 
 const pct = (a: number | null, b: number | null) => (a == null || b == null || a === 0 ? null : (b / a - 1) * 100);
 
@@ -36,7 +36,7 @@ async function keyRows(idx: string): Promise<Array<{ symbol: string; name: strin
 }
 
 export async function computeIndexStats(idx: IndexId, log: (s: string) => void = () => {}): Promise<string> {
-  const list = await selectAll<Constituent>(() => db.from("constituents").select("idx,symbol,name,sector,weight").eq("idx", idx).order("symbol"));
+  const list = await selectAll<Constituent>(() => db.from("constituents").select("idx,symbol,name,name_en,sector,gics_industry,weight").eq("idx", idx).order("symbol"));
   if (!list.length) return `${idx}: no constituents loaded`;
   const series = await spark(list.map((c) => c.symbol), "5y", "1d");
   const rows: Array<Record<string, unknown>> = [];
@@ -53,7 +53,7 @@ export async function computeIndexStats(idx: IndexId, log: (s: string) => void =
     const back = (k: number) => (n - 1 - k >= 0 ? vals[n - 1 - k] : null);
     const m50 = rollingMean(vals, 50), m200 = rollingMean(vals, 200), ex = rollingExtrema(vals, 252);
     rows.push({
-      idx, symbol: c.symbol, name: c.name, sector: c.sector, weight: c.weight, d: closes[n - 1].d,
+      idx, symbol: c.symbol, name: c.name_en ?? c.name, sector: c.sector, industry: c.gics_industry, weight: c.weight, d: closes[n - 1].d,
       close: last, prev: back(1), pct1d: pct(back(1), last), pct1w: pct(back(5), last), pct1m: pct(back(21), last), pct3m: pct(back(63), last), pct6m: pct(back(126), last),
       pct12m: pct(back(252) ?? (n >= 200 ? vals[0] : null), last), pct36m: pct(back(756) ?? (n >= 600 ? vals[0] : null), last),
       dma50: m50[n - 1], dma200: m200[n - 1], hi52: ex.hi[n - 1] ?? Math.max(...vals.slice(-252)), lo52: ex.lo[n - 1] ?? Math.min(...vals.slice(-252)), updated_at: new Date().toISOString(),

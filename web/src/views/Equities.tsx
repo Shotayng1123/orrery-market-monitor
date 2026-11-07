@@ -26,7 +26,7 @@ export type IndexId = (typeof INDICES)[number]["id"];
 interface StatRow {
   symbol: string; name: string; sector: string | null; weight: number | null; d: string; close: number; prev: number | null;
   pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct6m?: number | null; pct12m: number | null; pct36m?: number | null;
-  dma50: number | null; dma200: number | null; hi52: number | null; lo52: number | null; shortRatio?: number | null; shortHolders?: number | null;
+  industry?: string | null; dma50: number | null; dma200: number | null; hi52: number | null; lo52: number | null; shortRatio?: number | null; shortHolders?: number | null;
   mcap?: number | null; volume?: number | null; adv3m?: number | null; turnover?: number | null; adv_turnover?: number | null; mf_up?: number | null; mf_down?: number | null; mf_net?: number | null; mf_d?: string | null;
 }
 interface SectorRow { sector: string; n: number; weight: number | null; mcapShare?: number | null; pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct12m: number | null; above200: number; turnover?: number | null; turnoverShare?: number | null; flow?: number | null; mfUp?: number | null; mfDown?: number | null; mfNet?: number | null }
@@ -49,6 +49,8 @@ const shade = (v: number | null | undefined, full = 6) => (v == null || v === 0 
 const flowShade = (v: number | null | undefined, full = 3) => (v == null || v === 0 ? undefined : v > 0 ? `rgba(31,209,193,${(Math.min(1, v / full) * 0.5).toFixed(3)})` : `rgba(138,135,126,${(Math.min(1, -v / full) * 0.4).toFixed(3)})`);
 const pos52 = (r: StatRow) => (r.hi52 != null && r.lo52 != null && r.hi52 > r.lo52 ? ((r.close - r.lo52) / (r.hi52 - r.lo52)) * 100 : null);
 const vs = (close: number, dma: number | null) => (dma == null || dma === 0 ? null : (close / dma - 1) * 100);
+/** A tile-sized company name: drops legal suffixes and keeps the first words. */
+const shortName = (n: string) => n.replace(/[,.]?\s*(Corporation|Corp\.?|Co\.,? Ltd\.?|Co\.?|Company|Holdings?|Hldgs\.?|Group|Inc\.?|Incorporated|Ltd\.?|Limited|plc|PLC|AG|SE|NV|N\.V\.|S\.A\.|SA|KK|K\.K\.|株式会社|ホールディングス)\s*$/i, "").replace(/[,.]?\s*(Corporation|Corp\.?|Co\.,? Ltd\.?|Holdings?|Inc\.?|Ltd\.?|Limited)\s*$/i, "").trim().slice(0, 18);
 const signed = (v: number | null | undefined) => (v == null ? "–" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${money(Math.abs(v))}`);
 
 const Name = ({ r, sub }: { r: { symbol: string; name: string }; sub?: boolean }) => <span className="lnk" onMouseEnter={(e) => showCard(r.symbol, e)} onMouseLeave={hideCard} onClick={() => openAsset(r.symbol)}>{r.name}{sub && <span className="mut lnk-sub"> {r.symbol}</span>}</span>;
@@ -158,9 +160,9 @@ function HeatMap({ s }: { s: IndexStats }) {
     const size = (r: StatRow) => (hasM ? (r.mcap && r.mcap > 0 ? r.mcap : minM) : hasW ? (r.weight && r.weight > 0 ? r.weight : 0.01) : 1);
     const by = new Map<string, StatRow[]>();
     for (const r of s.rows) { const k = r.sector ?? "Other"; by.set(k, [...(by.get(k) ?? []), r]); }
-    return [...by.entries()].map(([sector, rs]) => ({ id: sector, label: sector, leaves: rs.map((r) => ({ id: r.symbol, label: r.symbol.replace(/\.(T|KS|HK|SS)$/, ""), value: size(r), pct: r.pct1d, title: r.name })) }));
+    return [...by.entries()].map(([sector, rs]) => ({ id: sector, label: sector, leaves: rs.map((r) => ({ id: r.symbol, label: r.symbol.replace(/\.(T|KS|HK|SS)$/, ""), name: shortName(r.name), value: size(r), pct: r.pct1d, title: r.name })) }));
   }, [s]);
-  return <Treemap groups={groups} height={540} onEnter={(id, e) => showCard(id, e)} onLeave={hideCard} onClick={openAsset} />;
+  return <Treemap groups={groups} height={Math.max(640, Math.min(900, Math.round(window.innerWidth * 0.42)))} onEnter={(id, e) => showCard(id, e)} onLeave={hideCard} onClick={openAsset} />;
 }
 
 // ---- Japan short selling (JPX) ----
@@ -246,7 +248,7 @@ function Screener({ s }: { s: IndexStats }) {
       <div style={{ maxHeight: 520, overflow: "auto" }}>
         <table className="secT">
           <thead><tr>{th("symbol", "Symbol", true)}{th("name", "Name", true)}{th("sector", "Sector", true)}{th("close", "Last")}{th("pct1d", "1D")}{th("pct1w", "1W")}{th("pct1m", "1M")}{th("pct3m", "3M")}{th("pct12m", "12M")}{th("vs50", "vs 50d")}{th("vs200", "vs 200d")}{th("pos52", "52w pos")}{hasM && th("mcap", "Mcap")}{hasT && th("turnover", "Turnover")}{hasT && th("volRel", "Vol / 3M avg")}{hasF && th("mf_net", "Net flow")}{hasShort && th("shortRatio", jp ? "Short pos %" : "Short vol %")}</tr></thead>
-          <tbody>{rows.map((r) => <tr key={r.symbol}><td className="l"><b className="lnk" onMouseEnter={(e) => showCard(r.symbol, e)} onMouseLeave={hideCard} onClick={() => openAsset(r.symbol)}>{r.symbol}</b></td><td className="l nm"><Name r={r} /></td><td className="l mut">{r.sector ?? ""}</td><td className="num">{fmtNum(r.close, r.close >= 1000 ? 0 : 2)}</td>{cell(r.pct1d, 4)}{cell(r.pct1w, 8)}{cell(r.pct1m, 12)}{cell(r.pct3m, 20)}{cell(r.pct12m, 50)}{cell(vs(r.close, r.dma50), 10)}{cell(vs(r.close, r.dma200), 20)}<td className="num mut">{pos52(r) == null ? "–" : `${Math.round(pos52(r)!)}%`}</td>{hasM && <td className="num mut">{money(r.mcap)}</td>}{hasT && <td className="num mut">{money(r.turnover)}</td>}{hasT && <td className="num" style={{ background: flowShade(volRel(r) == null ? null : (volRel(r)! - 100) / 50, 3) }}>{volRel(r) == null ? "–" : `${Math.round(volRel(r)!)}%`}</td>}{hasF && <td className={`num ${signCls(r.mf_net)}`}>{signed(r.mf_net)}</td>}{hasShort && <td className="num mut">{r.shortRatio == null ? "–" : `${(r.shortRatio * 100).toFixed(jp ? 2 : 0)}%`}</td>}</tr>)}</tbody>
+          <tbody>{rows.map((r) => <tr key={r.symbol}><td className="l"><b className="lnk" onMouseEnter={(e) => showCard(r.symbol, e)} onMouseLeave={hideCard} onClick={() => openAsset(r.symbol)}>{r.symbol}</b></td><td className="l nm"><Name r={r} /></td><td className="l mut" title={r.industry ?? ""}>{r.sector ?? ""}{r.industry ? <span className="mut"> · {r.industry}</span> : null}</td><td className="num">{fmtNum(r.close, r.close >= 1000 ? 0 : 2)}</td>{cell(r.pct1d, 4)}{cell(r.pct1w, 8)}{cell(r.pct1m, 12)}{cell(r.pct3m, 20)}{cell(r.pct12m, 50)}{cell(vs(r.close, r.dma50), 10)}{cell(vs(r.close, r.dma200), 20)}<td className="num mut">{pos52(r) == null ? "–" : `${Math.round(pos52(r)!)}%`}</td>{hasM && <td className="num mut">{money(r.mcap)}</td>}{hasT && <td className="num mut">{money(r.turnover)}</td>}{hasT && <td className="num" style={{ background: flowShade(volRel(r) == null ? null : (volRel(r)! - 100) / 50, 3) }}>{volRel(r) == null ? "–" : `${Math.round(volRel(r)!)}%`}</td>}{hasF && <td className={`num ${signCls(r.mf_net)}`}>{signed(r.mf_net)}</td>}{hasShort && <td className="num mut">{r.shortRatio == null ? "–" : `${(r.shortRatio * 100).toFixed(jp ? 2 : 0)}%`}</td>}</tr>)}</tbody>
         </table>
       </div>
     </>
@@ -289,7 +291,7 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
       </Panel>
       <Panel no="03" title="MARKET BREADTH" span={6} aux={statsAux}>{s ? <BreadthTable s={s} hist={bh.data?.rows ?? []} /> : noStats}</Panel>
       <Panel no="04" title="FLOW BY SECTOR" span={6} aux={s ? <>{s.idx} · {ccy}{s.quoteAt ? ` · turnover ${fmtStamp(s.quoteAt)}` : ""}{s.mfD ? ` · net flow ${s.mfD}` : ""}{standIn}</> : ""}>{s ? <SectorFlow s={s} onSector={setDrawer} /> : noStats}</Panel>
-      <Panel no="05" title="SECTOR PERFORMANCE" span={6} aux={statsAux}>{s ? <Sectors s={s} onSector={setDrawer} /> : noStats}</Panel>
+      <Panel no="05" title="SECTOR PERFORMANCE" span={6} aux={<>{statsAux} · <span title={ix.stats === "SP500" ? "Official GICS sectors from the S&P 500 constituent list" : "GICS sector names; classification from Yahoo Finance (official GICS where the name is in the S&P 500)"}>GICS sectors</span></>}>{s ? <Sectors s={s} onSector={setDrawer} /> : noStats}</Panel>
       <Panel no="06" title="SHORT INTEREST" span={6} aux={jp ? "JPX 空売り集計 · 空売り残高報告 · 信用取引現在高" : s?.shorts ? <>FINRA consolidated short-sale volume · {s.shorts.d}</> : ""}>
         {jp ? <JpShortPanel idx={ix.stats} /> : s?.shorts ? (
           <>
@@ -307,8 +309,8 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
           </>
         ) : <Empty title={us ? "No short-volume data" : "No short data for this market"}>{us ? "The FINRA job runs after the US close." : "Public per-name short data is not available for this exchange."}</Empty>}
       </Panel>
-      <Panel no="07" title="MOVERS" span={6} aux={statsAux}>{s ? <div className="msg2"><div><Movers rows={s.movers.top} title="Top 15 · 1D" /></div><div><Movers rows={s.movers.bottom} title="Bottom 15 · 1D" /></div></div> : noStats}</Panel>
-      <Panel no="08" title="HEAT MAP" span={6} aux={s ? <>{statsAux} · colour = 1D % · size = {hasMcap ? "market cap" : s.rows.some((r) => r.weight != null) ? "index weight" : "equal"}</> : ""}>{s ? <HeatMap s={s} /> : noStats}</Panel>
+      <Panel no="08" title="MOVERS" span={12} aux={statsAux}>{s ? <div className="msg2"><div><Movers rows={s.movers.top} title="Top 15 · 1D" /></div><div><Movers rows={s.movers.bottom} title="Bottom 15 · 1D" /></div></div> : noStats}</Panel>
+      <Panel no="07" title="HEAT MAP" span={12} aux={s ? <>{statsAux} · GICS sectors · colour = 1D % · size = {hasMcap ? "market cap" : s.rows.some((r) => r.weight != null) ? "index weight" : "equal"}</> : ""}>{s ? <HeatMap s={s} /> : noStats}</Panel>
       <Panel no="09" title="SCREENER" span={12} aux={statsAux}>{s ? <Screener s={s} /> : noStats}</Panel>
       {drawer && s && <SectorDrawer title={ix.label} sector={drawer} rows={drawerRows} ccy={ccy} onClose={() => setDrawer(null)} />}
     </>

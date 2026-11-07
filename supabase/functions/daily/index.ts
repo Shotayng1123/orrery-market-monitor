@@ -9,7 +9,7 @@ import { chunk, db, logRun, selectAll, sourceErr, sourceOk, type InstrumentRow }
 import { fetchJson, fetchText, isCron, json } from "../_shared/http.ts";
 import { localDate, marketById, marketState, partsIn } from "../_shared/sessions.ts";
 import { loadHolidays, saveTableSnapshot } from "../_shared/table.ts";
-import { chart, spark } from "../_shared/yahoo.ts";
+import { chart, profiles, quotes, spark, type Profile, type QuoteRow } from "../_shared/yahoo.ts";
 import { fetchHsi, fetchKospi200, fetchNikkei225, fetchSp500, fetchSse180, fetchTopix, type IndexId } from "../_shared/constituents.ts";
 import { fetchBoc, fetchBoe, fetchBundesbank, fetchEcb } from "../_shared/curves.ts";
 import { computeIndexStats, computeMoneyFlow, loadShortVolume, refreshQuotes } from "../_shared/istats.ts";
@@ -29,6 +29,7 @@ Deno.serve(async (req) => {
       case "q15": detail = await intradayBars("15m", url.searchParams.get("all") === "1"); break;
       case "bars1m": detail = await intradayBars("1m", true); break;
       case "constituents": detail = await constituents(req.url); break;
+      case "sectors": detail = await sectorsJob(Number(url.searchParams.get("limit") ?? 400), url.searchParams.get("idx")); break;
       case "stats": { const idx = (url.searchParams.get("idx") ?? "SP500") as IndexId; detail = await computeIndexStats(idx); break; }
       case "mflow": { const idx = (url.searchParams.get("idx") ?? "SP500") as IndexId; detail = await computeMoneyFlow(idx); break; }
       case "jpx": { const part = url.searchParams.get("part") ?? "positions"; detail = part === "ratio" ? await loadShortRatio() : part === "margin" ? await loadMarginTotals() : await loadShortPositions(); break; }
@@ -88,15 +89,21 @@ async function history(): Promise<string> {
 // ---------- constituents (alert scan, breadth, movers) ----------
 async function constituents(reqUrl: string): Promise<string> {
   const parts: string[] = [];
-  const { data: spRows } = await db.from("constituents").select("symbol,sector").eq("idx", "SP500");
-  const spSector = new Map((spRows ?? []).map((r) => [r.symbol, r.sector as string | null]));
-  const ndx = () => fetchNasdaq100((sym) => spSector.get(sym) ?? null);
+  const { data: spRows } = await db.from("constituents").select("symbol,gics_sector").eq("idx", "SP500");
+  const spSector = new Map((spRows ?? []).map((r) => [r.symbol, r.gics_sector as string | null]));
+  const ndx = () => fetchNasdaq100(() => null);
   const only = new URL(reqUrl).searchParams.get("idx");
   const all = [["SP500", fetchSp500], ["NK225", fetchNikkei225], ["NDX", ndx], ["TOPIX", fetchTopix], ["KOSPI200", fetchKospi200], ["HSI", fetchHsi], ["SSE180", fetchSse180]] as const;
   for (const [name, fn] of all.filter(([n]) => !only || n === only)) {
     try {
       const rows = [...new Map((await fn()).map((r) => [r.symbol, r])).values()];   // one row per symbol (lists can repeat a code)
-      for (const part of chunk(rows, 500)) { const { error } = await db.from("constituents").upsert(part, { onConflict: "idx,symbol" }); if (error) throw new Error(error.message); }
+      // the source scheme goes to sector_local; `sector` is written only where it is official GICS (S&P 500, and
+      // Nasdaq-100 names the S&P 500 covers) so the Yahoo-derived GICS sector of the other names survives the refresh
+      const payload = rows.map((r) => {
+        const official = name === "SP500" ? r.sector : name === "NDX" ? spSector.get(r.symbol) ?? null : null;
+        return { idx: r.idx, symbol: r.symbol, name: r.name, weight: r.weight, as_of: r.as_of, sector_local: r.sector, ...(official ? { sector: official, gics_sector: official, gics_source: "GICS (S&P 500 list)" } : {}) };
+      });
+      for (const part of chunk(payload, 500)) { const { error } = await db.from("constituents").upsert(part, { onConflict: "idx,symbol" }); if (error) throw new Error(error.message); }
       // drop names that left the index
       const keep = rows.map((r) => r.symbol);
       const existing = await selectAll<{ symbol: string }>(() => db.from("constituents").select("symbol").eq("idx", name).order("symbol"));
@@ -108,6 +115,45 @@ async function constituents(reqUrl: string): Promise<string> {
     } catch (e) { parts.push(`${name} ERR ${e instanceof Error ? e.message : e}`); await sourceErr(`constituents:${name}`, e); }
   }
   return parts.join("; ");
+}
+
+// ---------- GICS sectors and English names (Yahoo) for constituents that lack them ----------
+/** Yahoo's (Morningstar) sectors mapped to the 11 GICS sector names. */
+const GICS_MAP: Record<string, string> = {
+  "Technology": "Information Technology", "Financial Services": "Financials", "Healthcare": "Health Care", "Consumer Cyclical": "Consumer Discretionary",
+  "Consumer Defensive": "Consumer Staples", "Basic Materials": "Materials", "Industrials": "Industrials", "Energy": "Energy", "Utilities": "Utilities",
+  "Real Estate": "Real Estate", "Communication Services": "Communication Services",
+};
+async function sectorsJob(limit: number, only: string | null): Promise<string> {
+  let q = db.from("constituents").select("idx,symbol,name,gics_sector,name_en").or("gics_sector.is.null,name_en.is.null").order("idx").order("symbol").limit(Math.min(800, Math.max(1, limit)));
+  if (only) q = q.eq("idx", only);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []) as Array<{ idx: string; symbol: string; name: string; gics_sector: string | null; name_en: string | null }>;
+  if (!rows.length) return "all constituents have a sector and an English name";
+  const needSector = [...new Set(rows.filter((r) => r.gics_sector == null).map((r) => r.symbol))];
+  const needName = [...new Set(rows.filter((r) => r.name_en == null).map((r) => r.symbol))];
+  const empty = <T,>(): Record<string, T> => ({});
+  const [prof, qs]: [Record<string, Profile>, Record<string, QuoteRow>] = await Promise.all([needSector.length ? profiles(needSector) : Promise.resolve(empty<Profile>()), needName.length ? quotes(needName).catch(() => empty<QuoteRow>()) : Promise.resolve(empty<QuoteRow>())]);
+  let sectored = 0, named = 0, i = 0;
+  await Promise.all(Array.from({ length: 6 }, async () => {
+    for (;;) {
+      const r = rows[i++]; if (!r) return;
+      const upd: Record<string, unknown> = {};
+      if (r.gics_sector == null && prof[r.symbol]) {
+        const pr = prof[r.symbol]; const gs = pr.sector ? (GICS_MAP[pr.sector] ?? pr.sector) : null;
+        Object.assign(upd, { gics_sector: gs ?? "", gics_industry: pr.industry, gics_source: gs ? "Yahoo classification mapped to GICS sector names" : "not classified" });
+        if (gs && r.idx !== "SP500") upd.sector = gs;
+        sectored++;
+      }
+      if (r.name_en == null && qs[r.symbol]?.name) { upd.name_en = qs[r.symbol].name; named++; }
+      if (!Object.keys(upd).length) continue;
+      const { error: ue } = await db.from("constituents").update(upd).match({ idx: r.idx, symbol: r.symbol });
+      if (ue) throw new Error("constituents: " + ue.message);
+    }
+  }));
+  const { data: n } = await db.rpc("fn_sync_sectors");
+  return `${rows.length} rows checked: ${sectored} sectors, ${named} names set; ${n ?? 0} statistics rows synced`;
 }
 
 // ---------- 15-minute bars (1W charts) and the minute-bar backfill (1D charts after a weekend) ----------
@@ -265,12 +311,22 @@ async function calendar(): Promise<string> {
 }
 
 // ---------- news ----------
-const FEEDS: Array<{ source: string; url: string; lang?: string }> = [
+const GN = (q: string) => `https://news.google.com/rss/search?q=${encodeURIComponent(q)}+when:2d&hl=en-US&gl=US&ceid=US:en`;
+const FEEDS: Array<{ source: string; url: string; lang?: string; cat?: string }> = [
   { source: "WSJ Markets", url: "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain" },
   { source: "CNBC Markets", url: "https://www.cnbc.com/id/10000664/device/rss/rss.html" },
   { source: "CNBC World", url: "https://www.cnbc.com/id/100727362/device/rss/rss.html" },
   { source: "Nikkei Asia", url: "https://asia.nikkei.com/rss/feed/nar" },          // RSS 1.0 without dates: first-seen time is used
   { source: "MarketWatch", url: "https://feeds.content.dowjones.io/public/rss/mw_topstories" },
+  // Google News searches (headline + link to the publisher), one per desk, tagged with the desk when no rule matches
+  { source: "Google News", url: GN("Nikkei OR TOPIX OR \"Tokyo stocks\" OR \"Japanese stocks\""), cat: "JP Equities" },
+  { source: "Google News", url: GN("\"Hang Seng\" OR Kospi OR \"Shanghai Composite\" OR \"Asian stocks\""), cat: "Asia Equities" },
+  { source: "Google News", url: GN("\"Wall Street\" OR \"S&P 500\" OR Nasdaq stocks"), cat: "US Equities" },
+  { source: "Google News", url: GN("\"Treasury yields\" OR \"Federal Reserve\" OR \"Bank of Japan\" OR JGB OR ECB rates"), cat: "DM Rates" },
+  { source: "Google News", url: GN("yen OR \"dollar index\" OR \"currency markets\" OR yuan"), cat: "Currency" },
+  { source: "Google News", url: GN("\"Bank of Korea\" OR PBOC OR \"loan prime rate\" OR \"emerging market bonds\""), cat: "EM Rates" },
+  { source: "Google News", url: GN("crude oil OR Brent OR gold price OR copper price"), cat: "Commodities" },
+  { source: "Google News", url: GN("inflation OR payrolls OR GDP OR tariffs OR PMI economy"), cat: "Macro" },
 ];
 const RULES: Array<[string, RegExp]> = [
   ["JP Equities", /\b(nikkei|topix|tokyo stocks?|japan(ese)? (stocks?|shares|equit)|toyota|sony|softbank|hitachi|keyence|fast retailing|jpx)\b/i],
@@ -282,7 +338,7 @@ const RULES: Array<[string, RegExp]> = [
   ["Commodities", /\b(oil|crude|brent|wti|opec|gold|silver|copper|natural gas|lng|commodit(y|ies)|iron ore|wheat)\b/i],
   ["Macro", /\b(inflation|cpi|ppi|gdp|payrolls|jobs report|unemployment|pmi|ism\b|tariffs?|trade (war|deal)|recession|consumer (confidence|sentiment)|retail sales|housing starts)\b/i],
 ];
-function categorise(title: string): string { for (const [cat, re] of RULES) if (re.test(title)) return cat; return "Macro"; }
+function categorise(title: string, fallback = "Macro"): string { for (const [cat, re] of RULES) if (re.test(title)) return cat; return fallback; }
 const unesc = (s: string) => s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/<[^>]+>/g, "").trim();
 function parseRss(xml: string): Array<{ title: string; link: string; pubDate: string }> {
   const items: Array<{ title: string; link: string; pubDate: string }> = [];
@@ -307,7 +363,9 @@ async function news(): Promise<string> {
       for (const it of items) {
         const t = it.pubDate ? Date.parse(it.pubDate) : Date.now();   // feeds without dates (RSS 1.0) are stamped when first seen
         if (!Number.isFinite(t) || t < since) continue;
-        rows.push({ url: it.link.slice(0, 1000), published_at: new Date(t).toISOString(), source: f.source, title: it.title.slice(0, 400), category: categorise(it.title), tagged_by: "rules" });
+        const gm = f.source === "Google News" ? it.title.match(/^(.*)s+-s+([^-]{2,40})$/) : null;
+        if (gm) it.title = gm[1].trim();
+        rows.push({ url: it.link.slice(0, 1000), published_at: new Date(t).toISOString(), source: gm ? gm[2].trim() : f.source, title: it.title.slice(0, 400), category: categorise(it.title, f.cat ?? "Macro"), tagged_by: f.cat ? "rules+feed" : "rules" });
         n++;
       }
       report.push(`${f.source} ${n}`);

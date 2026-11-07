@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
+import { SGT } from "../lib/time";
+const dayOf = (t: string) => new Date(t).toLocaleDateString("en-CA", { timeZone: SGT });
+const dayLabel = (t: string) => new Date(t).toLocaleDateString("en-GB", { timeZone: SGT, weekday: "long", day: "numeric", month: "short" });
 import { Empty, Panel } from "../components/Panel";
 import { Md } from "../components/Md";
 import { useApi } from "../lib/useApi";
@@ -55,7 +58,28 @@ export function NewsView({ tick }: { tick: number }) {
           <Empty title="No morning note yet">The note is written each weekday around 07:00 SGT: the overnight US session, movers above 5% with their reasons, the Japan outlook and the day&apos;s strategy. Every number comes from the Monitor&apos;s own data and every claim links to its source.</Empty>
         )}
       </Panel>
-      <Panel no="02" title="OVERNIGHT & REVIEWS" span={5} aux={pack ? "from the note's data pack" : ""}>
+      <Panel no="02" title="NEWS" span={5} aux={<span className="chips" style={{ margin: 0 }}>{NEWS_CATEGORIES.map((c) => <span key={c} className={`chip-sm${c === cat ? " on" : ""}`} onClick={() => setCat(c)}>{c}</span>)}</span>}>
+        {news.data?.rows.length ? <div className="nwlist">{news.data.rows.map((it) => (
+          <div className="nwrow" key={it.id}>
+            <span className="nwt">{fmtStampSafe(it.publishedAt)}</span>
+            <span className="nwc cat">{it.category}</span>
+            <span className="nwh"><a href={it.url} target="_blank" rel="noreferrer">{it.title}</a></span>
+            <span className="nwsrc">{it.source}</span>
+          </div>
+        ))}</div> : <Empty title="No headlines">{news.error ?? "Headlines from WSJ Markets, CNBC, Nikkei Asia and ticker feeds, tagged by category, appear here once the news job runs."}</Empty>}
+      </Panel>
+      <Panel no="03" title="ECONOMIC CALENDAR" span={12} aux={cal.data ? <>times in SGT · ForexFactory feed{cal.data.rows.some((e) => Date.parse(e.at) > Date.now()) ? "" : " · next week's file is published by the feed on Sunday"}</> : cal.error ? <span className="warn">{cal.error}</span> : ""}>
+        {cal.data?.rows.length ? (
+          <table className="mini">
+            <thead><tr><th className="l">When (SGT)</th><th className="l">Ccy</th><th className="l">Event</th><th className="l">Impact</th><th>Forecast</th><th>Previous</th><th>Actual</th></tr></thead>
+            <tbody>{cal.data.rows.map((e, i, arr) => (
+              <Fragment key={e.id}>{(i === 0 || dayOf(e.at) !== dayOf(arr[i - 1].at)) && <tr className="cls"><td colSpan={7}>{dayLabel(e.at)}</td></tr>}
+              <tr className={`ecrow${Date.parse(e.at) < Date.now() ? " past" : ""}`}><td className="l num">{fmtStampSafe(e.at)}</td><td className="l">{e.country}</td><td className="l">{e.title}</td><td className="l"><span className={`imp ${e.impact[0].toLowerCase()}`} /> {e.impact}</td><td>{e.forecast ?? "–"}</td><td>{e.previous ?? "–"}</td><td>{e.actual ?? "–"}</td></tr></Fragment>
+            ))}</tbody>
+          </table>
+        ) : <Empty title="No calendar loaded">{cal.error ?? "The week's releases appear here once the calendar sync has run."}</Empty>}
+      </Panel>
+      {pack && <Panel no="04" title="OVERNIGHT & REVIEWS" span={12} aux="from the note's data pack">
         {pack ? (
           <>
             <div className="minih">US overnight · indices</div>
@@ -86,27 +110,7 @@ export function NewsView({ tick }: { tick: number }) {
             <Empty title="Awaiting the first note">Nikkei 225, TOPIX, sector moves and the Nikkei 225 movers.</Empty>
           </>
         )}
-      </Panel>
-      <Panel no="03" title="ECONOMIC CALENDAR" span={12} aux={cal.data ? "times in SGT · forecast and previous from the calendar feed; actuals follow in a later version" : cal.error ? <span className="warn">{cal.error}</span> : ""}>
-        {cal.data?.rows.length ? (
-          <table className="mini">
-            <thead><tr><th className="l">When (SGT)</th><th className="l">Ccy</th><th className="l">Event</th><th className="l">Impact</th><th>Forecast</th><th>Previous</th><th>Actual</th></tr></thead>
-            <tbody>{cal.data.rows.map((e) => (
-              <tr key={e.id} className="ecrow"><td className="l num">{fmtStampSafe(e.at)}</td><td className="l">{e.country}</td><td className="l">{e.title}</td><td className="l"><span className={`imp ${e.impact[0].toLowerCase()}`} /> {e.impact}</td><td>{e.forecast ?? "–"}</td><td>{e.previous ?? "–"}</td><td>{e.actual ?? "–"}</td></tr>
-            ))}</tbody>
-          </table>
-        ) : <Empty title="No calendar loaded">{cal.error ?? "The week's releases appear here once the calendar sync has run."}</Empty>}
-      </Panel>
-      <Panel no="04" title="NEWS" span={12} aux={<span className="chips" style={{ margin: 0 }}>{NEWS_CATEGORIES.map((c) => <span key={c} className={`chip-sm${c === cat ? " on" : ""}`} onClick={() => setCat(c)}>{c}</span>)}</span>}>
-        {news.data?.rows.length ? news.data.rows.map((it) => (
-          <div className="nwrow" key={it.id}>
-            <span className="nwt">{fmtStampSafe(it.publishedAt)}</span>
-            <span className="nwc cat">{it.category}</span>
-            <span className="nwh"><a href={it.url} target="_blank" rel="noreferrer">{it.title}</a></span>
-            <span className="nwsrc">{it.source}</span>
-          </div>
-        )) : <Empty title="No headlines">{news.error ?? "Headlines from WSJ Markets, CNBC, Nikkei Asia and ticker feeds, tagged by category, appear here once the news job runs."}</Empty>}
-      </Panel>
+      </Panel>}
     </>
   );
 }

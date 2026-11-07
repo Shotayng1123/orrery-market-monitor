@@ -201,9 +201,9 @@ async function curve(country: string, ago: string | null) {
 }
 
 // ---------- index statistics (EQUITIES pages) ----------
-interface StatRow { symbol: string; name: string; sector: string | null; weight: number | null; d: string; close: number; prev: number | null; pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct12m: number | null; dma50: number | null; dma200: number | null; hi52: number | null; lo52: number | null; mcap: number | null; volume: number | null; adv3m: number | null; turnover: number | null; adv_turnover: number | null; quote_at: string | null; pct6m: number | null; pct36m: number | null; mf_up: number | null; mf_down: number | null; mf_net: number | null; mf_d: string | null; mf_at: string | null }
+interface StatRow { symbol: string; name: string; sector: string | null; weight: number | null; d: string; close: number; prev: number | null; pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct12m: number | null; dma50: number | null; dma200: number | null; hi52: number | null; lo52: number | null; mcap: number | null; volume: number | null; adv3m: number | null; turnover: number | null; adv_turnover: number | null; quote_at: string | null; pct6m: number | null; pct36m: number | null; industry: string | null; mf_up: number | null; mf_down: number | null; mf_net: number | null; mf_d: string | null; mf_at: string | null }
 async function indexStats(idx: string) {
-  const rows = await selectAll<StatRow>(() => db.from("constituent_stats").select("symbol,name,sector,weight,d,close,prev,pct1d,pct1w,pct1m,pct3m,pct6m,pct12m,pct36m,dma50,dma200,hi52,lo52,mcap,volume,adv3m,turnover,adv_turnover,quote_at,mf_up,mf_down,mf_net,mf_d,mf_at").eq("idx", idx).order("symbol"));
+  const rows = await selectAll<StatRow>(() => db.from("constituent_stats").select("symbol,name,sector,industry,weight,d,close,prev,pct1d,pct1w,pct1m,pct3m,pct6m,pct12m,pct36m,dma50,dma200,hi52,lo52,mcap,volume,adv3m,turnover,adv_turnover,quote_at,mf_up,mf_down,mf_net,mf_d,mf_at").eq("idx", idx).order("symbol"));
   if (!rows.length) return { idx, asOf: null, rows: [], breadth: null, sectors: [], movers: { top: [], bottom: [] }, shorts: null };
   const asOf = rows.map((r) => r.d).sort().pop() ?? null;
   const n = rows.length;
@@ -257,7 +257,7 @@ async function breadthHistory(idx: string, days: number) {
 
 // ---------- calendar & news ----------
 async function calendar() {
-  const from = new Date(Date.now() - 12 * 3600e3).toISOString(), to = new Date(Date.now() + 8 * 86400e3).toISOString();
+  const from = new Date(Date.now() - 5 * 86400e3).toISOString(), to = new Date(Date.now() + 8 * 86400e3).toISOString();   // the week so far (for the record) and the week ahead
   const { data } = await db.from("econ_events").select("id,at,country,title,impact,forecast,previous,actual").gte("at", from).lte("at", to).order("at").limit(400);
   return { rows: data ?? [] };
 }
@@ -281,8 +281,8 @@ async function jpShorts(idx: string) {
   const mk = (market ?? []).map((r) => ({ d: r.d, ratio: ratio(r), restricted: r.total ? (r.short_restricted ?? 0) / r.total * 100 : null, total: r.total }));
   const secD = sectorsAll?.[0]?.d ?? null;
   const sectors = (sectorsAll ?? []).filter((r) => r.d === secD).map((r) => ({ sector: r.name, ratio: ratio(r), total: r.total })).sort((a, b) => (b.ratio ?? 0) - (a.ratio ?? 0));
-  const { data: cons } = await db.from("constituents").select("symbol,name,sector").eq("idx", idx);
-  const inIdx = new Map((cons ?? []).map((c) => [c.symbol.replace(/\.T$/, ""), c]));
+  const cons = await selectAll<{ symbol: string; name: string; name_en: string | null; sector: string | null }>(() => db.from("constituents").select("symbol,name,name_en,sector").eq("idx", idx).order("symbol"));
+  const inIdx = new Map(cons.map((c) => [c.symbol.replace(/\.T$/, ""), { ...c, name: c.name_en ?? c.name }]));
   const pos = ((latest ?? []) as Array<{ code: string; name: string; holders: number; total_ratio: number; latest: string }>).filter((x) => inIdx.has(x.code)).map((x) => ({ symbol: x.code + ".T", name: inIdx.get(x.code)!.name, sector: inIdx.get(x.code)!.sector, holders: x.holders, ratio: x.total_ratio, d: x.latest })).sort((a, b) => b.ratio - a.ratio);
   const mg = (margin ?? []).map((r) => ({ d: r.d, sellShares: r.actual, sellValue: r.short_restricted, buyShares: r.short_free, buyValue: r.total }));
   const { data: agg } = await db.from("short_agg").select("d,metric,value,n").eq("idx", idx).in("metric", ["jpx_positions_avg", "jpx_positions_names"]).gte("d", new Date(Date.now() - 95 * 86400e3).toISOString().slice(0, 10)).order("d");
@@ -296,6 +296,8 @@ async function asset(symbol: string, range: string, lite: boolean) {
   if (!symbol) throw new Error("symbol required");
   const q = await quoteFor(symbol);
   const home = homeIndex(symbol);
+  const { data: con } = await db.from("constituents").select("idx,sector,gics_industry,gics_source").eq("symbol", symbol).limit(5);
+  const member = (con ?? []).find((c) => c.sector) ?? (con ?? [])[0] ?? null;
   const idxSeries = (await series(home.symbol, "12M")).points;
   const [rel, statements, ser] = await Promise.all([
     relativeLine(symbol, idxSeries).catch(() => []),
@@ -318,7 +320,7 @@ async function asset(symbol: string, range: string, lite: boolean) {
     }
   }
   const pct = q.price != null && q.prevClose ? (q.price / q.prevClose - 1) * 100 : null;
-  return { symbol, name: q.name ?? symbol, exchange: q.exchange, currency: q.currency, quoteType: q.quoteType, price: q.price, prevClose: q.prevClose, pct, mcap: q.marketCap, volume: q.volume, adv3m: q.adv3m, adv10d: q.adv10d, asOf: q.time ? new Date(q.time * 1000).toISOString() : null, home, rel, statements, short, series: ser };
+  return { symbol, name: q.name ?? symbol, exchange: q.exchange, currency: q.currency, quoteType: q.quoteType, sector: member?.sector ?? null, industry: member?.gics_industry ?? null, sectorSource: member?.gics_source ?? null, indices: (con ?? []).map((c) => c.idx), price: q.price, prevClose: q.prevClose, pct, mcap: q.marketCap, volume: q.volume, adv3m: q.adv3m, adv10d: q.adv10d, asOf: q.time ? new Date(q.time * 1000).toISOString() : null, home, rel, statements, short, series: ser };
 }
 
 // ---------- search: table instruments, constituents, then Yahoo ----------
@@ -328,12 +330,12 @@ async function search(qs: string) {
   const like = "%" + term.replace(/[%_]/g, "") + "%";
   const [{ data: inst }, { data: cons }] = await Promise.all([
     db.from("instruments").select("symbol,name,cls").or("symbol.ilike." + like + ",name.ilike." + like).limit(8),
-    db.from("constituents").select("symbol,name,sector,idx").or("symbol.ilike." + like + ",name.ilike." + like).limit(12),
+    db.from("constituents").select("symbol,name,name_en,sector,idx").or("symbol.ilike." + like + ",name.ilike." + like + ",name_en.ilike." + like).limit(12),
   ]);
   const rows: Array<{ symbol: string; name: string; kind: string; note: string }> = [];
   const seen = new Set<string>();
   for (const r of inst ?? []) if (!seen.has(r.symbol)) { seen.add(r.symbol); rows.push({ symbol: r.symbol, name: r.name, kind: String(r.cls), note: "Monitor instrument" }); }
-  for (const r of cons ?? []) if (!seen.has(r.symbol)) { seen.add(r.symbol); rows.push({ symbol: r.symbol, name: r.name, kind: "Equity", note: r.idx + (r.sector ? " · " + r.sector : "") }); }
+  for (const r of cons ?? []) if (!seen.has(r.symbol)) { seen.add(r.symbol); rows.push({ symbol: r.symbol, name: r.name_en ?? r.name, kind: "Equity", note: r.idx + (r.sector ? " · " + r.sector : "") }); }
   try {
     const t = await fetchText("https://query2.finance.yahoo.com/v1/finance/search?q=" + encodeURIComponent(term) + "&quotesCount=8&newsCount=0&listsCount=0", { headers: { "user-agent": "Mozilla/5.0", accept: "application/json" } }, 15000);
     const j = JSON.parse(t) as { quotes?: Array<{ symbol: string; shortname?: string; longname?: string; exchDisp?: string; typeDisp?: string; sector?: string }> };

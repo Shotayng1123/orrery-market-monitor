@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 // Squarified treemap (Bruls, Huizing, van Wijk) in two levels: sectors, then names. Tiles fill the box with
 // no gaps; each tile's area is its market-cap share. Solid white text; the shade deepens with the day's move.
-export interface TreeLeaf { id: string; label: string; value: number; pct: number | null; title: string }
+export interface TreeLeaf { id: string; label: string; name?: string; value: number; pct: number | null; title: string }
 export interface TreeGroup { id: string; label: string; leaves: TreeLeaf[] }
 interface Rect { x: number; y: number; w: number; h: number }
 
@@ -52,12 +52,14 @@ export function Treemap({ groups, height = 560, onEnter, onLeave, onClick }: { g
       {placed.map(({ item: g, rect }) => (
         <div className="tgrp" key={g.id} style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}>
           {squarify(g.leaves, { x: 0, y: 0, w: rect.w, h: rect.h }).map(({ item: l, rect: r }) => {
-            const big = r.w > 44 && r.h > 26, mid = r.w > 30 && r.h > 16;
+            const fs = Math.max(8.5, Math.min(15, Math.sqrt(r.w * r.h) / 5.2));
+            const big = r.w > 44 && r.h > 26, mid = r.w > 26 && r.h > 14;
+            const text = l.name && r.w > fs * 0.62 * Math.min(l.name.length, 14) + 6 ? l.name : l.label;   // the company name when it fits, the code otherwise
             return (
               <span className={`tleaf${onClick ? " clk" : ""}`} key={l.id} style={{ left: r.x, top: r.y, width: r.w, height: r.h, background: bg(l.pct) }} title={onEnter ? undefined : l.title}
                 onMouseEnter={onEnter ? (e) => onEnter(l.id, e) : undefined} onMouseLeave={onLeave} onClick={onClick ? () => onClick(l.id) : undefined}>
-                {mid && <b style={{ fontSize: big ? 10.5 : 8.5 }}>{l.label}</b>}
-                {big && <i>{fmtP(l.pct)}</i>}
+                {mid && <b style={{ fontSize: fs }}>{text}</b>}
+                {big && <i style={{ fontSize: Math.max(8, fs - 2) }}>{fmtP(l.pct)}</i>}
               </span>
             );
           })}

@@ -8,7 +8,7 @@ import { fmtStamp } from "../lib/time";
 // per symbol and keeps it for the session.
 
 export interface AssetLite {
-  symbol: string; name: string; exchange: string | null; currency: string | null; quoteType: string | null;
+  symbol: string; name: string; exchange: string | null; currency: string | null; quoteType: string | null; sector?: string | null; industry?: string | null;
   price: number | null; prevClose: number | null; pct: number | null; mcap: number | null; volume: number | null; adv3m: number | null; asOf: string | null;
   home: { symbol: string; name: string }; rel: Array<{ t: number; v: number }>;
   statements: Statements | null;
@@ -79,6 +79,7 @@ function CardBody({ symbol }: { symbol: string }) {
     <>
       <div className="ccard-h">
         <div><b>{d.name}</b><span className="mut"> {d.symbol}{d.exchange ? ` · ${d.exchange}` : ""}</span></div>
+        {(d.sector || d.industry) && <div className="mut" style={{ fontSize: 10 }}>{[d.sector, d.industry].filter(Boolean).join(" · ")}</div>}
         <div className="ccard-px"><b>{fmtNum(d.price, d.price != null && d.price >= 1000 ? 0 : 2)}</b> <span className={signCls(d.pct)}>{fmtPct(d.pct, 2)}</span>{d.asOf && <span className="mut"> · {fmtStamp(d.asOf)}</span>}</div>
       </div>
       <div className="krow" style={{ padding: "2px 0 4px" }}>

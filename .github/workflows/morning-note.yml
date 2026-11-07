@@ -4,6 +4,9 @@ on:
   schedule:
     # 23:00 UTC Sunday–Thursday = 07:00 SGT Monday–Friday (GitHub cron can run some minutes late)
     - cron: "0 23 * * 0-4"
+    # one-off first run on Saturday 7 Nov 2026 (remove after it has run)
+    - cron: "15 12 * * 6"
+    - cron: "40 12 * * 6"
   workflow_dispatch:
     inputs:
       date:

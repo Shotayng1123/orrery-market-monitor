@@ -366,3 +366,6 @@ table.mvT td.nm{max-width:none;overflow:hidden;text-overflow:ellipsis}
 .barsbox{width:100%}
 .barsbox svg{display:block}
 .barsax{display:flex;justify-content:space-between;color:var(--mut);font-size:9.5px;margin-top:-10px}
+
+.nwlist{max-height:640px;overflow:auto}
+tr.ecrow.past td{opacity:.55}
