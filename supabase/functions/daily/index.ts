@@ -12,6 +12,8 @@ import { loadHolidays, saveTableSnapshot } from "../_shared/table.ts";
 import { chart, spark } from "../_shared/yahoo.ts";
 import { fetchNikkei225, fetchSp500 } from "../_shared/constituents.ts";
 import { fetchBoc, fetchBoe, fetchBundesbank, fetchEcb } from "../_shared/curves.ts";
+import { computeIndexStats, loadShortVolume } from "../_shared/istats.ts";
+import { fetchNasdaq100 } from "../_shared/constituents.ts";
 
 Deno.serve(async (req) => {
   if (!isCron(req)) return json(req, { error: "forbidden" }, 403);
@@ -24,6 +26,9 @@ Deno.serve(async (req) => {
       case "history": detail = await history(); break;
       case "hourly": detail = await hourly(); break;
       case "constituents": detail = await constituents(); break;
+      case "stats": { const idx = (url.searchParams.get("idx") ?? "SP500") as "SP500" | "NK225" | "NDX"; detail = await computeIndexStats(idx); break; }
+      case "shorts": detail = await loadShortVolume(); break;
+      case "policy": detail = await policy(); break;
       case "curves": detail = await curves(url.searchParams.get("country") ?? "US", url.searchParams.get("full") === "1"); break;
       case "calendar": detail = await calendar(); break;
       case "news": detail = await news(); break;
@@ -77,7 +82,10 @@ async function history(): Promise<string> {
 // ---------- constituents (alert scan, breadth, movers) ----------
 async function constituents(): Promise<string> {
   const parts: string[] = [];
-  for (const [name, fn] of [["SP500", fetchSp500], ["NK225", fetchNikkei225]] as const) {
+  const { data: spRows } = await db.from("constituents").select("symbol,sector").eq("idx", "SP500");
+  const spSector = new Map((spRows ?? []).map((r) => [r.symbol, r.sector as string | null]));
+  const ndx = () => fetchNasdaq100((sym) => spSector.get(sym) ?? null);
+  for (const [name, fn] of [["SP500", fetchSp500], ["NK225", fetchNikkei225], ["NDX", ndx]] as const) {
     try {
       const rows = await fn();
       for (const part of chunk(rows, 500)) { const { error } = await db.from("constituents").upsert(part, { onConflict: "idx,symbol" }); if (error) throw new Error(error.message); }
@@ -273,6 +281,46 @@ async function fred(): Promise<string> {
   const { error } = await db.from("policy_rates").update({ rate: last.v, as_of: last.d, last_change: lastChange, updated_at: new Date().toISOString(), source_note: "FRED DFEDTARU (upper bound of the target range)" }).eq("bank", "FED");
   if (error) throw new Error(error.message);
   return `FED ${last.v}% as of ${last.d} (since ${lastChange})`;
+}
+
+// ---------- policy rates from official feeds (Fed comes from the fred GitHub job) ----------
+async function policy(): Promise<string> {
+  const parts: string[] = [];
+  const set = async (bank: string, rate: number, asOf: string, lastChange: string | null, note: string) => {
+    const { error } = await db.from("policy_rates").update({ rate, as_of: asOf, last_change: lastChange, source_note: note, updated_at: new Date().toISOString() }).eq("bank", bank);
+    if (error) throw new Error(error.message);
+  };
+  // ECB deposit facility rate: the series only has rows on change dates
+  try {
+    const t = await fetchText("https://data-api.ecb.europa.eu/service/data/FM/B.U2.EUR.4F.KR.DFR.LEV?format=csvdata&lastNObservations=3", { headers: { accept: "text/csv" } }, 60000);
+    const lines = t.split(/\r?\n/).filter(Boolean); const head = lines[0].split(","); const iT = head.indexOf("TIME_PERIOD"), iV = head.indexOf("OBS_VALUE");
+    const obs = lines.slice(1).map((l) => l.split(",")).map((c) => ({ d: c[iT], v: Number(c[iV]) })).filter((o) => /^\d{4}-\d{2}-\d{2}$/.test(o.d) && Number.isFinite(o.v));
+    const last = obs[obs.length - 1];
+    if (!last) throw new Error("no observations");
+    await set("ECB", last.v, last.d, last.d, "ECB Data Portal FM.B.U2.EUR.4F.KR.DFR.LEV (rows on change dates)");
+    parts.push(`ECB ${last.v}`); await sourceOk("ecb");
+  } catch (e) { parts.push(`ECB ERR ${e instanceof Error ? e.message : e}`); await sourceErr("ecb", e); }
+  // Bank of England Bank Rate: daily series IUDBEDR
+  try {
+    const t = await fetchText("https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp?csv.x=yes&Datefrom=01/Jan/2024&Dateto=now&SeriesCodes=IUDBEDR&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N", {}, 60000);
+    const obs = t.split(/\r?\n/).map((l) => l.split(",")).filter((c) => c.length >= 2 && /^\d{2} \w{3} \d{4}$/.test(c[0]) && Number.isFinite(Number(c[1]))).map((c) => ({ d: new Date(c[0] + " UTC").toISOString().slice(0, 10), v: Number(c[1]) }));
+    const last = obs[obs.length - 1];
+    if (!last) throw new Error("no observations");
+    let lastChange = last.d; for (let k = obs.length - 2; k >= 0; k--) { if (obs[k].v !== last.v) break; lastChange = obs[k].d; }
+    await set("BOE", last.v, last.d, lastChange, "Bank of England IADB series IUDBEDR");
+    parts.push(`BOE ${last.v}`); await sourceOk("boe");
+  } catch (e) { parts.push(`BOE ERR ${e instanceof Error ? e.message : e}`); await sourceErr("boe", e); }
+  // HKMA base rate: daily monetary statistics API
+  try {
+    const j = await fetchJson<{ result: { records: Array<{ end_of_date: string; disc_win_base_rate: number }> } }>("https://api.hkma.gov.hk/public/market-data-and-statistics/daily-monetary-statistics/daily-figures-interbank-liquidity?pagesize=60&sortby=end_of_date&sortorder=desc", 60000);
+    const recs = (j.result?.records ?? []).filter((r) => Number.isFinite(r.disc_win_base_rate));
+    const last = recs[0];
+    if (!last) throw new Error("no records");
+    let lastChange = last.end_of_date; for (let k = 1; k < recs.length; k++) { if (recs[k].disc_win_base_rate !== last.disc_win_base_rate) break; lastChange = recs[k].end_of_date; }
+    await set("HKMA", last.disc_win_base_rate, last.end_of_date, lastChange, "HKMA daily monetary statistics API, discount window base rate");
+    parts.push(`HKMA ${last.disc_win_base_rate}`); await sourceOk("hkma");
+  } catch (e) { parts.push(`HKMA ERR ${e instanceof Error ? e.message : e}`); await sourceErr("hkma", e); }
+  return parts.join("; ");
 }
 
 // ---------- prune ----------

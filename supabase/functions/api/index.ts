@@ -47,6 +47,7 @@ Deno.serve(async (req) => {
         if (!data) return json(req, { error: "not found" }, 404);
         return json(req, { report: { id: data.id, kind: data.kind, title: data.title, summary: data.summary, md: data.md, publishedAt: data.published_at } });
       }
+      case "index_stats": return json(req, await indexStats(q("idx") ?? "SP500"));
       case "alerts": {
         const { data } = await db.from("alerts").select("id,at,upd,d,symbol,name,kind,pct,price,market,msg").order("upd", { ascending: false }).limit(Math.min(50, Number(q("n") ?? 20)));
         return json(req, { rows: (data ?? []).map((a) => ({ id: a.id, at: a.upd, first: a.at, d: a.d, symbol: a.symbol, name: a.name, kind: a.kind, pct: a.pct, price: a.price, market: a.market, msg: a.msg })) });
@@ -168,6 +169,40 @@ async function curve(country: string, ago: string | null) {
     if (gd) ghost = await pick(gd.d);
   }
   return { country, current, ghost };
+}
+
+// ---------- index statistics (EQUITIES pages) ----------
+interface StatRow { symbol: string; name: string; sector: string | null; weight: number | null; d: string; close: number; prev: number | null; pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct12m: number | null; dma50: number | null; dma200: number | null; hi52: number | null; lo52: number | null }
+async function indexStats(idx: string) {
+  const rows = await selectAll<StatRow>(() => db.from("constituent_stats").select("symbol,name,sector,weight,d,close,prev,pct1d,pct1w,pct1m,pct3m,pct12m,dma50,dma200,hi52,lo52").eq("idx", idx).order("symbol"));
+  if (!rows.length) return { idx, asOf: null, rows: [], breadth: null, sectors: [], movers: { top: [], bottom: [] }, shorts: null };
+  const asOf = rows.map((r) => r.d).sort().pop() ?? null;
+  const n = rows.length;
+  const cnt = (f: (r: StatRow) => boolean) => rows.filter(f).length;
+  const breadth = {
+    n, adv: cnt((r) => (r.pct1d ?? 0) > 0), dec: cnt((r) => (r.pct1d ?? 0) < 0),
+    above50: cnt((r) => r.dma50 != null && r.close > r.dma50), above200: cnt((r) => r.dma200 != null && r.close > r.dma200),
+    newHi: cnt((r) => r.hi52 != null && r.close >= r.hi52 * 0.999), newLo: cnt((r) => r.lo52 != null && r.close <= r.lo52 * 1.001),
+    over2: cnt((r) => (r.pct1d ?? 0) >= 2), under2: cnt((r) => (r.pct1d ?? 0) <= -2),
+  };
+  const bySector = new Map<string, StatRow[]>();
+  for (const r of rows) { const k = r.sector ?? "Other"; bySector.set(k, [...(bySector.get(k) ?? []), r]); }
+  const wavg = (xs: StatRow[], f: (r: StatRow) => number | null) => { let s = 0, w = 0; for (const r of xs) { const v = f(r); if (v == null) continue; const ww = r.weight ?? 1; s += v * ww; w += ww; } return w ? s / w : null; };
+  const sectors = [...bySector.entries()].map(([sector, xs]) => ({ sector, n: xs.length, weight: xs.some((r) => r.weight != null) ? xs.reduce((a, r) => a + (r.weight ?? 0), 0) : null, pct1d: wavg(xs, (r) => r.pct1d), pct1w: wavg(xs, (r) => r.pct1w), pct1m: wavg(xs, (r) => r.pct1m), pct3m: wavg(xs, (r) => r.pct3m), pct12m: wavg(xs, (r) => r.pct12m), above200: xs.filter((r) => r.dma200 != null && r.close > r.dma200).length })).sort((a, b) => (b.pct1d ?? -1e9) - (a.pct1d ?? -1e9));
+  const sorted = [...rows].filter((r) => r.pct1d != null).sort((a, b) => b.pct1d! - a.pct1d!);
+  // short-volume ratio (US indices): latest day per symbol
+  let shorts: { d: string; avgRatio: number; top: Array<{ symbol: string; name: string; ratio: number }> } | null = null;
+  if (idx === "SP500" || idx === "NDX") {
+    const { data: lastD } = await db.from("short_volume").select("d").order("d", { ascending: false }).limit(1).maybeSingle();
+    if (lastD) {
+      const sv = await selectAll<{ symbol: string; ratio: number }>(() => db.from("short_volume").select("symbol,ratio").eq("d", lastD.d));
+      const byS = new Map(sv.map((x) => [x.symbol, x.ratio]));
+      const inIdx = rows.filter((r) => byS.has(r.symbol)).map((r) => ({ symbol: r.symbol, name: r.name, ratio: byS.get(r.symbol)! }));
+      if (inIdx.length) shorts = { d: lastD.d, avgRatio: inIdx.reduce((a, x) => a + x.ratio, 0) / inIdx.length, top: [...inIdx].sort((a, b) => b.ratio - a.ratio).slice(0, 15) };
+      for (const r of rows as Array<StatRow & { shortRatio?: number | null }>) r.shortRatio = byS.get(r.symbol) ?? null;
+    }
+  }
+  return { idx, asOf, breadth, sectors, movers: { top: sorted.slice(0, 15), bottom: sorted.slice(-15).reverse() }, shorts, rows };
 }
 
 // ---------- calendar & news ----------

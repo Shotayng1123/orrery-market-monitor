@@ -21,7 +21,7 @@ const setHash = (view: ViewId, sub = "") => { location.hash = sub ? `${view}/${s
 // Dev-only preview without a backend: `VITE_DEV_BYPASS=1 npm run dev`. Never set in production builds.
 const DEV_BYPASS = import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS === "1";
 
-const OPEN_INTERVAL = 60, CLOSED_INTERVAL = 600;
+const OPEN_INTERVAL = 60, CLOSED_INTERVAL = 60;   // one minute always (Shota): FX is open most of the week and the check is cheap
 
 export default function App() {
   const [route, setRoute] = useState<Route>(parseHash);

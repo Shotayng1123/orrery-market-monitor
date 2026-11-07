@@ -283,3 +283,22 @@ tbody tr.live:hover td{background:rgba(63,208,126,.09)}
 body.term #alerts .alrt{padding:1px 6px;font-size:10px;max-width:320px}
 @media (max-width:720px){#alerts{width:100%;margin-left:0}#alerts .alrt{max-width:100%}.aldrop{min-width:0;width:94vw}}
 .ctip{position:absolute;pointer-events:none;z-index:5;background:rgba(17,18,20,.94);border:1px solid var(--bord2);border-radius:2px;padding:2px 6px;font-size:10px;color:var(--txt);white-space:pre;font-variant-numeric:tabular-nums}
+
+/* EQUITIES: breadth bars, heat map, screener */
+.bbar{display:inline-block;width:100%;height:8px;background:#15161a;border-radius:2px;overflow:hidden;vertical-align:middle}
+.bbar span{display:block;height:100%}
+.heat{display:flex;flex-direction:column;gap:6px}
+.hsec .hname{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:0 0 3px}
+.htiles{display:flex;flex-wrap:wrap;gap:2px}
+.htile{display:inline-flex;flex-direction:column;justify-content:center;height:34px;padding:0 4px;border-radius:2px;border:1px solid #1a1b1e;overflow:hidden;cursor:default}
+.htile b{font-size:9.5px;color:var(--txt);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.htile i{font-style:normal;font-size:9px;font-variant-numeric:tabular-nums}
+.searchrow{display:flex;gap:10px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+.searchrow .cnt{color:var(--mut);font-size:11px;margin-left:auto}
+
+.legend .sw.s1{border-top:2px solid rgba(90,167,255,.9)}
+.legend .sw.s2{border-top:2px solid rgba(255,197,61,.9)}
+.legend .sw.mean{border-top:2px solid rgba(232,229,222,.7)}
+table.mkt{table-layout:fixed}
+table.mkt col.cls{width:7%} table.mkt col.nm{width:15%} table.mkt col.n{width:6%}
+table.mkt td,table.mkt th{overflow:hidden;text-overflow:ellipsis}

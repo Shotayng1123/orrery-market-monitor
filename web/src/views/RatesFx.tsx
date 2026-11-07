@@ -7,6 +7,7 @@ import { useApi } from "../lib/useApi";
 import type { Curve, TableRow } from "../lib/types";
 import { fmtChg, fmtNum, fmtPct, fmtStampSafe, signCls } from "./shared";
 import { PERIODS } from "../lib/types";
+import { filterCurve, type TenorSet } from "../lib/curveTenors";
 
 
 interface PolicyRow { bank: string; name: string; rateLabel: string; rate: number | null; asOf: string | null; lastChange: string | null; nextMeeting: string | null; sourceUrl: string | null; sourceNote: string | null }
@@ -21,30 +22,35 @@ function FxTable({ rows }: { rows: TableRow[] }) {
 }
 
 const CURVE_ORDER = ["US", "JP", "DE", "EA", "EB", "GB", "CA"];
-const CURVE_TITLES: Record<string, string> = { US: "US TREASURY CURVE", JP: "JGB CURVE", DE: "GERMANY BUND CURVE", EA: "EURO AREA AAA CURVE", EB: "EURO AREA ALL-RATINGS CURVE", GB: "UK GILT CURVE", CA: "CANADA CURVE" };
+const CURVE_TITLES: Record<string, string> = { USB: "US T-BILLS (1Y AND UNDER)", US: "US TREASURY CURVE", JP: "JGB CURVE", DE: "GERMANY BUND CURVE", EA: "EURO AREA AAA CURVE", EB: "EURO AREA ALL-RATINGS CURVE", GB: "UK GILT CURVE", CA: "CANADA CURVE" };
 
 function CurvesGrid({ ago, tick }: { ago: ChartPeriod; tick: number }) {
   const list = useApi<{ rows: Array<{ country: string; label: string; latest: string; tenors: number }> }>("curves", undefined, tick);
   const have = new Set((list.data?.rows ?? []).map((r) => r.country));
   const codes = CURVE_ORDER.filter((c) => have.has(c) || c === "US" || c === "JP");
-  return <>{codes.map((c, i) => <CurveBlock key={c} country={c} label={CURVE_TITLES[c] ?? c} ago={ago} tick={tick} no={String(i + 3).padStart(2, "0")} span={i < 2 ? 6 : 4} />)}</>;
+  return (
+    <>
+      {codes.map((c, i) => <CurveBlock key={c} country={c} label={CURVE_TITLES[c] ?? c} ago={ago} tick={tick} no={String(i + 3).padStart(2, "0")} span={i < 2 ? 6 : 4} />)}
+      <CurveBlock key="USB" country="US" set="bills" label={CURVE_TITLES.USB} ago={ago} tick={tick} no={String(codes.length + 3).padStart(2, "0")} span={4} />
+    </>
+  );
 }
 
-function CurveBlock({ country, label, ago, tick, no, span }: { country: string; label: string; ago: ChartPeriod; tick: number; no: string; span: 4 | 6 }) {
+function CurveBlock({ country, label, ago, tick, no, span, set = "std" }: { country: string; label: string; ago: ChartPeriod; tick: number; no: string; span: 4 | 6; set?: TenorSet }) {
   const a = ago === "1D" || ago === "1W" ? "1M" : ago;
   const d = useApi<{ current: Curve | null; ghost: Curve | null }>("curve", { country, ago: a }, tick);
-  const c = d.data?.current ?? null, g = d.data?.ghost ?? null;
+  const c = filterCurve(d.data?.current ?? null, set), g = filterCurve(d.data?.ghost ?? null, set);
   const row = (t: string, v: number | null, gv: number | null) => <tr key={t}><td className="l">{t}</td><td className="num">{v == null ? "–" : v.toFixed(3)}</td><td className="num mut">{gv == null ? "–" : gv.toFixed(3)}</td><td className={`num ${signCls(v != null && gv != null ? v - gv : null)}`}>{v != null && gv != null ? fmtChg(v - gv, 1, true) : "–"}</td></tr>;
   return (
     <Panel no={no} title={label} span={span} aux={c ? <>{c.date} · ghost {g?.date ?? "–"} ({a} ago) · {c.source}</> : d.error ? <span className="warn">{d.error}</span> : ""}>
       {c ? (
         <>
           <CurveChart current={c} ghost={g} height={230} />
-          <div className="krow" style={{ marginTop: 6 }}>
+          {set === "std" && <div className="krow" style={{ marginTop: 6 }}>
             <span><span className="k">2s10s</span><span className={`v ${signCls(spread(c, 2, 10))}`}>{fmtChg(spread(c, 2, 10), 0)}bp</span></span>
             <span><span className="k">10s30s</span><span className={`v ${signCls(spread(c, 10, 30))}`}>{fmtChg(spread(c, 10, 30), 0)}bp</span></span>
             {g && <span><span className="k">2s10s vs {a} ago</span><span className="v">{fmtChg((spread(c, 2, 10) ?? 0) - (spread(g, 2, 10) ?? 0), 0)}bp</span></span>}
-          </div>
+          </div>}
           <table className="mini"><thead><tr><th className="l">Tenor</th><th>Today</th><th>{a} ago</th><th>Change</th></tr></thead>
             <tbody>{c.points.map((p) => row(p.tenor, p.yield, g?.points.find((q) => q.tenor === p.tenor)?.yield ?? null))}</tbody></table>
         </>

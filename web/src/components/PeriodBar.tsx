@@ -9,10 +9,11 @@ export function PeriodBar({ period, onPeriod, twoSigma, onTwoSigma, extra }: { p
       <span className="lbl" style={{ marginLeft: 14 }}>Bands</span>
       <span className="chip-sm on" title="Rolling mean ± 1σ over 21 / 252 / 756 trading days">±1σ</span>
       <span className={`chip-sm${twoSigma ? " on" : ""}`} onClick={() => onTwoSigma(!twoSigma)} title="Also draw ±2σ (fainter)">±2σ</span>
-      <span className="legend" style={{ padding: 0, marginLeft: 14 }} title="Rolling mean ± 1σ over 21 / 252 / 756 trading days">
-        <span><span className="sw solid" />1M mean ±1σ</span>
-        <span><span className="sw dashed" />12M</span>
-        <span><span className="sw dotted" />36M</span>
+      <span className="legend" style={{ padding: 0, marginLeft: 14 }} title="Rolling mean and ±σ over 21 / 252 / 756 trading days; line style = window">
+        <span><span className="sw s1" />±1σ</span>
+        <span><span className="sw s2" />±2σ</span>
+        <span><span className="sw mean" />mean</span>
+        <span className="mut" style={{ marginLeft: 6 }}>1M ──  12M ╌╌  36M ····</span>
       </span>
       {extra}
     </div>

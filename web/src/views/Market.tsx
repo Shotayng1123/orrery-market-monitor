@@ -6,6 +6,7 @@ import { useApi, DEV_MOCK } from "../lib/useApi";
 import { fmtNum, fmtPct, fmtChg, fmtStampSafe, signCls } from "./shared";
 import { PERIODS, type Curve, type TableRow } from "../lib/types";
 import { marketById } from "../lib/sessions";
+import { filterCurve } from "../lib/curveTenors";
 
 function Badges({ r }: { r: TableRow }) {
   const m = marketById(r.market);
@@ -18,11 +19,15 @@ function Badges({ r }: { r: TableRow }) {
   );
 }
 
+/** Levels in the table: one decimal from 100 up, two between 10 and 100, the instrument's own below 10 (FX crosses). */
+const lvlDec = (v: number | null | undefined, d: number) => (v == null ? d : Math.abs(v) >= 100 ? Math.min(d, 1) : Math.abs(v) >= 10 ? Math.min(d, 2) : d);
+
 function MarketsTable({ rows }: { rows: TableRow[] }) {
   const groups = new Map<string, TableRow[]>();
   for (const r of [...rows].sort((a, b) => a.order - b.order)) groups.set(r.cls, [...(groups.get(r.cls) ?? []), r]);
   return (
     <table className="mkt">
+      <colgroup><col className="cls" /><col className="nm" />{Array.from({ length: 1 + PERIODS.length * 2 }, (_, i) => <col key={i} className="n" />)}</colgroup>
       <thead>
         <tr>
           <th className="l">Asset class</th><th className="l">Name</th><th>Last</th>
@@ -67,8 +72,8 @@ function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
           <tr key={r.symbol} className={r.live ? "live" : undefined} title={`${r.symbol} · last ${fmtStampSafe(r.lastAt)}${r.live ? " · market open" : ""} · level shading: red = lowest of the row's levels, green = highest`}>
             <td className="l mut">{r.cls}</td>
             <td className="l">{r.name}<Badges r={r} /></td>
-            <td className="num" style={{ background: levelShade(r.last, lo, hi) }}><b>{fmtNum(r.last, r.decimals)}</b></td>
-            {PERIODS.map((p) => <td key={p.key} className={`num${p.key === "d1" ? " grp" : ""}`} style={{ background: levelShade(r.closes[p.key], lo, hi) }} title={r.closeDates[p.key] ?? ""}>{fmtNum(r.closes[p.key], r.decimals)}</td>)}
+            <td className="num" style={{ background: levelShade(r.last, lo, hi) }}><b>{fmtNum(r.last, lvlDec(r.last, r.decimals))}</b></td>
+            {PERIODS.map((p) => <td key={p.key} className={`num${p.key === "d1" ? " grp" : ""}`} style={{ background: levelShade(r.closes[p.key], lo, hi) }} title={r.closeDates[p.key] ?? ""}>{fmtNum(r.closes[p.key], lvlDec(r.closes[p.key], r.decimals))}</td>)}
             {PERIODS.map((p) => {
               const c = r.closes[p.key];
               const v = isRate ? (c != null && r.last != null ? r.last - c : null) : r.pct[p.key];
@@ -94,7 +99,9 @@ function CurvePanel({ period, tick }: { period: ChartPeriod; tick: number }) {
   const ago = period === "1D" || period === "1W" ? "1M" : period;
   const us = useApi<{ current: Curve | null; ghost: Curve | null }>("curve", { country: "US", ago }, tick);
   const jp = useApi<{ current: Curve | null; ghost: Curve | null }>("curve", { country: "JP", ago }, tick);
-  const one = (label: string, d: { current: Curve | null; ghost: Curve | null } | null, err: string | null) => (
+  const one = (label: string, raw: { current: Curve | null; ghost: Curve | null } | null, err: string | null) => {
+    const d = raw ? { current: filterCurve(raw.current, "std"), ghost: filterCurve(raw.ghost, "std") } : null;
+    return (
     <div className="mtile cp">
       <div className="lb"><span className="lbtxt">{label}</span><span className="asof">{d?.current ? `${d.current.date} · ghost ${d.ghost?.date ?? "–"} (${ago} ago)` : ""}</span></div>
       {d?.current ? (
@@ -107,7 +114,8 @@ function CurvePanel({ period, tick }: { period: ChartPeriod; tick: number }) {
         </>
       ) : <div className="empty" style={{ minHeight: 190 }}>{err ?? "no curve yet"}</div>}
     </div>
-  );
+    );
+  };
   return <div className="cgrid two">{one("US TREASURY CURVE", us.data, us.error)}{one("JGB CURVE", jp.data, jp.error)}</div>;
 }
 

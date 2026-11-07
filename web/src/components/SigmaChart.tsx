@@ -11,7 +11,8 @@ import { fmtStamp, SGT } from "../lib/time";
 // a short break at each session boundary), as on the Analytics tiles. Click-hold-drag pans the window back
 // through the loaded history; double-click returns to the latest.
 export const UP = "#3fd07e", DN = "#ff4d42", FLAT = "#b3afa4";
-const SIG: Record<"m1" | "m12" | "m36", { stroke: string; dash?: number[] }> = { m1: { stroke: "rgba(232,229,222,0.30)" }, m12: { stroke: "rgba(232,229,222,0.24)", dash: [5, 4] }, m36: { stroke: "rgba(232,229,222,0.20)", dash: [1.5, 3] } };
+const SIG: Record<"m1" | "m12" | "m36", { dash?: number[] }> = { m1: {}, m12: { dash: [5, 4] }, m36: { dash: [1.5, 3] } };
+const S1 = "rgba(90,167,255,0.80)", S2 = "rgba(255,197,61,0.75)", MEAN = "rgba(232,229,222,0.60)";   // ±1σ blue, ±2σ yellow (Shota)
 const AXIS = { stroke: "#8a877e", grid: { stroke: "#141518", width: 1 }, ticks: { stroke: "#26272b", width: 1 }, font: "9.5px 'IBM Plex Mono', ui-monospace, monospace" };
 
 export interface SigmaChartProps {
@@ -74,12 +75,12 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
     if (!intraday) {
       for (const w of SIGMA_WINDOWS) {
         const s = SIG[w.key];
-        const d1 = s.dash ? [...s.dash] : undefined, d2 = s.dash ? [...s.dash] : [8, 4];
-        series.push({ label: `${w.label}+1`, stroke: s.stroke, width: 0.8, dash: d1, points: { show: false } });
-        series.push({ label: `${w.label}-1`, stroke: s.stroke, width: 0.8, dash: d1, points: { show: false } });
-        series.push({ label: `${w.label}+2`, stroke: s.stroke, width: 0.6, dash: d2, points: { show: false }, show: showTwoSigma });
-        series.push({ label: `${w.label}-2`, stroke: s.stroke, width: 0.6, dash: d2, points: { show: false }, show: showTwoSigma });
-        series.push({ label: `${w.label} mean`, stroke: "rgba(232,229,222,0.55)", width: 1, dash: d1, points: { show: false } });
+        const d1 = s.dash ? [...s.dash] : undefined, d2 = s.dash ? [...s.dash] : undefined;
+        series.push({ label: `${w.label}+1`, stroke: S1, width: 0.9, dash: d1, points: { show: false } });
+        series.push({ label: `${w.label}-1`, stroke: S1, width: 0.9, dash: d1, points: { show: false } });
+        series.push({ label: `${w.label}+2`, stroke: S2, width: 0.9, dash: d2, points: { show: false }, show: showTwoSigma });
+        series.push({ label: `${w.label}-2`, stroke: S2, width: 0.9, dash: d2, points: { show: false }, show: showTwoSigma });
+        series.push({ label: `${w.label} mean`, stroke: MEAN, width: 1, dash: d1, points: { show: false } });
         series.push({ label: `${w.label} sd`, show: false });
       }
     }
