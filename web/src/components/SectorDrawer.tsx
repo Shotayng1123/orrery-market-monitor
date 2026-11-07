@@ -27,7 +27,7 @@ export function SectorDrawer({ title, sector, rows, ccy, onClose }: { title: str
             <tbody>
               {list.map((r) => (
                 <tr key={r.symbol}>
-                  <td className="l"><span className="lnk" onMouseEnter={(e) => showCard(r.symbol, e)} onMouseLeave={hideCard} onClick={() => openAsset(r.symbol)}>{r.name}</span><span className="mut"> {r.symbol}</span></td>
+                  <td className="l"><span className="lnk" title={r.symbol} onMouseEnter={(e) => showCard(r.symbol, e)} onMouseLeave={hideCard} onClick={() => openAsset(r.symbol)}>{r.name}</span></td>
                   <td className="l mut nm">{r.industry ?? ""}</td>
                   <td className="num">{fmtNum(r.close, r.close >= 1000 ? 0 : 2)}</td>
                   {cell(r.pct1d, 4)}{cell(r.pct1w, 8)}{cell(r.pct1m, 12)}{cell(r.pct3m, 20)}{cell(r.pct12m, 50)}

@@ -36,8 +36,13 @@ Deno.serve(async (req) => {
       }
       case "calendar": return json(req, await calendar());
       case "news": return json(req, await news(q("category"), Number(q("n") ?? 120)));
+      case "notes": {
+        const { data } = await db.from("notes").select("id,d,title,generated_at").lte("d", new Date().toISOString().slice(0, 10)).order("d", { ascending: false }).limit(30);
+        return json(req, { rows: (data ?? []).map((r) => ({ id: r.id, d: r.d, title: r.title, generatedAt: r.generated_at })) });
+      }
       case "note": {
-        const { data } = await db.from("notes").select("id,d,title,generated_at,model,sections,sources,pack").lte("d", new Date().toISOString().slice(0, 10)).order("d", { ascending: false }).limit(1).maybeSingle();
+        const want = q("d");
+        const { data } = await (want ? db.from("notes").select("id,d,title,generated_at,model,sections,sources,pack").eq("d", want) : db.from("notes").select("id,d,title,generated_at,model,sections,sources,pack").lte("d", new Date().toISOString().slice(0, 10))).order("d", { ascending: false }).limit(1).maybeSingle();
         return json(req, { note: data ? { id: data.id, d: data.d, title: data.title, generatedAt: data.generated_at, model: data.model, sections: data.sections, sources: data.sources, pack: data.pack } : null });
       }
       case "reports": {
@@ -258,7 +263,7 @@ async function breadthHistory(idx: string, days: number) {
 // ---------- calendar & news ----------
 async function calendar() {
   const from = new Date(Date.now() - 5 * 86400e3).toISOString(), to = new Date(Date.now() + 8 * 86400e3).toISOString();   // the week so far (for the record) and the week ahead
-  const { data } = await db.from("econ_events").select("id,at,country,title,impact,forecast,previous,actual").gte("at", from).lte("at", to).order("at").limit(400);
+  const { data } = await db.from("econ_events").select("id,at,country,currency,title,impact,forecast,previous,actual,better,kind,source").gte("at", from).lte("at", to).order("at").limit(1500);
   return { rows: data ?? [] };
 }
 async function news(category: string | null, n: number) {

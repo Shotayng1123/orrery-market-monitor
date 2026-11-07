@@ -52,9 +52,10 @@ export function Treemap({ groups, height = 560, onEnter, onLeave, onClick }: { g
       {placed.map(({ item: g, rect }) => (
         <div className="tgrp" key={g.id} style={{ left: rect.x, top: rect.y, width: rect.w, height: rect.h }}>
           {squarify(g.leaves, { x: 0, y: 0, w: rect.w, h: rect.h }).map(({ item: l, rect: r }) => {
-            const fs = Math.max(8.5, Math.min(15, Math.sqrt(r.w * r.h) / 5.2));
-            const big = r.w > 44 && r.h > 26, mid = r.w > 26 && r.h > 14;
-            const text = l.name && r.w > fs * 0.62 * Math.min(l.name.length, 14) + 6 ? l.name : l.label;   // the company name when it fits, the code otherwise
+            const text = l.name ?? l.label;
+            const fit = Math.min(15, (r.w - 6) / (0.58 * Math.max(4, Math.min(text.length, 11))), r.h / 2.6);   // shrink until the name fits on at most two lines
+            const fs = Math.max(7, Math.min(15, Math.sqrt(r.w * r.h) / 5.2, fit));
+            const mid = r.w >= 24 && r.h >= 13, big = r.h >= fs * 2.6 + 6 && r.w >= 36;
             return (
               <span className={`tleaf${onClick ? " clk" : ""}`} key={l.id} style={{ left: r.x, top: r.y, width: r.w, height: r.h, background: bg(l.pct) }} title={onEnter ? undefined : l.title}
                 onMouseEnter={onEnter ? (e) => onEnter(l.id, e) : undefined} onMouseLeave={onLeave} onClick={onClick ? () => onClick(l.id) : undefined}>

@@ -290,7 +290,42 @@ async function curves(country: string, full: boolean): Promise<string> {
 // ---------- calendar ----------
 interface FfEvent { title: string; country: string; date: string; impact: string; forecast?: string; previous?: string }
 async function sha1(s: string): Promise<string> { const h = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(s)); return Array.from(new Uint8Array(h)).map((b) => b.toString(16).padStart(2, "0")).join(""); }
+interface FxEvent { id: string; dateUtc: string; name: string; countryCode: string; currencyCode?: string; volatility?: string; consensus?: number | string | null; previous?: number | string | null; actual?: number | string | null; revised?: number | string | null; unit?: string | null; isBetterThanExpected?: boolean | null; isSpeech?: boolean; isReport?: boolean; isAllDay?: boolean }
+const FX_IMPACT: Record<string, string> = { HIGH: "High", MEDIUM: "Medium", LOW: "Low", NONE: "Low" };
+const fxNum = (v: number | string | null | undefined, unit: string | null | undefined): string | null => {
+  if (v == null || v === "") return null;
+  const n = typeof v === "number" ? v : Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  const abs = Math.abs(n), txt = abs >= 1000 ? n.toLocaleString("en-US", { maximumFractionDigits: 1 }) : String(Math.round(n * 1000) / 1000);
+  const u = unit ?? "";
+  return u === "%" ? txt + "%" : u === "$" || u === "€" || u === "£" || u === "¥" ? u + txt : u && u !== "null" ? txt + " " + u : txt;
+};
+/** FXStreet's calendar API: every country, consensus / previous / actual, "better than expected" flag. */
+async function calendarFx(): Promise<string> {
+  const from = new Date(Date.now() - 7 * 86400e3).toISOString().slice(0, 10) + "T00:00:00Z", to = new Date(Date.now() + 15 * 86400e3).toISOString().slice(0, 10) + "T00:00:00Z";
+  const text = await fetchText(`https://calendar-api.fxstreet.com/en/api/v1/eventDates/${from}/${to}`, { headers: { accept: "application/json", referer: "https://www.fxstreet.com/", origin: "https://www.fxstreet.com" } }, 40000);
+  const ev = JSON.parse(text) as FxEvent[];
+  if (!Array.isArray(ev) || ev.length < 50) throw new Error(`FXStreet: ${Array.isArray(ev) ? ev.length : "no"} events`);
+  const rows: Array<Record<string, unknown>> = [];
+  for (const e of ev) {
+    const at = new Date(e.dateUtc); if (Number.isNaN(at.getTime()) || !e.name) continue;
+    rows.push({
+      ext_key: "fx:" + e.id, at: at.toISOString(), country: e.countryCode === "EMU" ? "EUR" : e.countryCode, currency: e.currencyCode ?? null, title: e.name,
+      impact: FX_IMPACT[e.volatility ?? "LOW"] ?? "Low", forecast: fxNum(e.consensus, e.unit), previous: fxNum(e.revised ?? e.previous, e.unit), actual: fxNum(e.actual, e.unit),
+      better: e.isBetterThanExpected ?? null, kind: e.isSpeech ? "speech" : e.isReport ? "report" : e.isAllDay ? "allday" : "release", source: "fxstreet", updated_at: new Date().toISOString(),
+    });
+  }
+  for (const part of chunk(rows, 500)) { const { error } = await db.from("econ_events").upsert(part, { onConflict: "ext_key" }); if (error) throw new Error("econ_events: " + error.message); }
+  // the ForexFactory rows of the same window are superseded
+  await db.from("econ_events").delete().eq("source", "forexfactory").gte("at", from).lte("at", to);
+  await sourceOk("fxstreet");
+  return `${rows.length} events (FXStreet, ${from.slice(0, 10)} to ${to.slice(0, 10)})`;
+}
 async function calendar(): Promise<string> {
+  try { return await calendarFx(); } catch (e) { await sourceErr("fxstreet", e); }
+  return calendarFf();
+}
+async function calendarFf(): Promise<string> {
   const rows: Array<Record<string, unknown>> = [];
   let got = 0, failed = 0;
   for (const week of ["thisweek", "nextweek"]) {

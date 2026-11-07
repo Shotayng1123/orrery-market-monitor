@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Topbar, VIEWS, type ViewId } from "./components/Topbar";
 import { Gate } from "./auth/Gate";
 import { api, apiConfigured, clearToken, getToken, tokenId } from "./lib/api";
+import { DEV_MOCK } from "./lib/useApi";
 import { anyOpen, setHolidays } from "./lib/sessions";
 import { applyPrefs, loadPrefs, savePrefs, type Prefs } from "./lib/prefs";
 import type { Health } from "./lib/types";
@@ -91,6 +92,7 @@ export default function App() {
   const { view, sub } = route;
   return (
     <>
+      {DEV_MOCK && <div id="mockbar">MOCK PREVIEW — synthetic data for layout checks only. Nothing here is real. The live Monitor is at https://shotayng1123.github.io/orrery-market-monitor/</div>}
       <CardLayer />
       <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={userId} onSignOut={signOut} updatedAt={updatedAt} nextIn={nextIn} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={setFull} />
       <div id="fsx" onClick={() => setFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–5 TABS · ESC</span><span>&#9974;</span></div>

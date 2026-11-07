@@ -1,14 +1,15 @@
-import { Fragment, useState } from "react";
-import { SGT } from "../lib/time";
-const dayOf = (t: string) => new Date(t).toLocaleDateString("en-CA", { timeZone: SGT });
-const dayLabel = (t: string) => new Date(t).toLocaleDateString("en-GB", { timeZone: SGT, weekday: "long", day: "numeric", month: "short" });
+import { Fragment, useMemo, useState } from "react";
 import { Empty, Panel } from "../components/Panel";
 import { Md } from "../components/Md";
 import { useApi } from "../lib/useApi";
 import type { EconEvent, NewsItem, Note } from "../lib/types";
+import { SGT } from "../lib/time";
 import { fmtNum, fmtPct, fmtStampSafe, signCls } from "./shared";
 
 export const NEWS_CATEGORIES = ["All", "US Equities", "JP Equities", "Asia Equities", "DM Rates", "EM Rates", "Currency", "Macro", "Commodities"] as const;
+const dayOf = (t: string) => new Date(t).toLocaleDateString("en-CA", { timeZone: SGT });
+const dayLabel = (t: string) => new Date(t).toLocaleDateString("en-GB", { timeZone: SGT, weekday: "long", day: "numeric", month: "short" });
+const MAJOR = new Set(["US", "JP", "EUR", "DE", "FR", "UK", "CN", "HK", "KR", "TW", "AU", "CA", "CH", "IN", "SG"]);   // major markets only (Shota); everything else behind the All chip
 
 interface Move { symbol: string; name: string; last: number; prev: number; pct: number; sector?: string }
 interface SectorMove { sector: string; pct: number; n: number; weighted: boolean }
@@ -23,7 +24,7 @@ function MovesTable({ rows, title }: { rows: Move[]; title: string }) {
   return (
     <>
       <div className="minih">{title}</div>
-      <table className="secT"><tbody>{rows.map((m) => <tr key={m.symbol}><td className="l">{m.name}<span className="mut"> {m.symbol}</span></td><td className="num">{fmtNum(m.last, m.last >= 100 ? 1 : 2)}</td><td className={`num ${signCls(m.pct)}`}>{fmtPct(m.pct)}</td></tr>)}</tbody></table>
+      <table className="secT"><tbody>{rows.map((m) => <tr key={m.symbol}><td className="l">{m.name}</td><td className="num">{fmtNum(m.last, m.last >= 100 ? 1 : 2)}</td><td className={`num ${signCls(m.pct)}`}>{fmtPct(m.pct)}</td></tr>)}</tbody></table>
     </>
   );
 }
@@ -37,80 +38,97 @@ function SectorsTable({ rows, title }: { rows: SectorMove[]; title: string }) {
 }
 const breadthLine = (b: Breadth | null) => (b ? `${b.up} up / ${b.down} down of ${b.n} · ≥+2% ${b.over2} · ≤−2% ${b.under2} · ≥+5% ${b.over5} · ≤−5% ${b.under5}` : "");
 
-export function NewsView({ tick }: { tick: number }) {
-  const note = useApi<{ note: (Note & { pack?: Pack }) | null }>("note", undefined, tick);
-  const cal = useApi<{ rows: EconEvent[] }>("calendar", undefined, tick);
-  const [cat, setCat] = useState<(typeof NEWS_CATEGORIES)[number]>("All");
-  const news = useApi<{ rows: NewsItem[] }>("news", { category: cat === "All" ? undefined : cat, n: 120 }, tick);
-  const n = note.data?.note ?? null;
-  const pack = n?.pack;
-  const macro = pack?.table.filter((r) => ["Fixed income", "Currency", "Commodities", "Volatility"].includes(r.cls)) ?? [];
+/** The overnight and previous-session tables that belong to one day's note (its data pack). */
+function Overnight({ pack }: { pack: Pack }) {
+  const macro = pack.table.filter((r) => ["Fixed income", "Currency", "Commodities", "Volatility"].includes(r.cls));
   return (
     <>
-      <Panel no="01" title="MORNING NOTES" span={7} aux={n ? <>{n.d} · generated {fmtStampSafe(n.generatedAt)} · {n.model}</> : note.error ? <span className="warn">{note.error}</span> : ""}>
+      <div className="minih">US overnight · indices</div>
+      <table className="secT"><tbody>{pack.us.indices.map((m) => <tr key={m.symbol}><td className="l">{m.name}</td><td className="num">{fmtNum(m.last, 2)}</td><td className={`num ${signCls(m.pct)}`}>{fmtPct(m.pct)}</td></tr>)}</tbody></table>
+      {pack.us.breadth && <div className="mut" style={{ fontSize: 10.5, margin: "2px 0 6px" }}>{breadthLine(pack.us.breadth)}</div>}
+      <div className="msg2">
+        <div><SectorsTable rows={pack.us.sectorsEtf.map((m) => ({ sector: m.name, pct: m.pct, n: 0, weighted: true }))} title="US sectors (SPDR ETFs)" /></div>
+        <div><MovesTable rows={[...pack.us.top.slice(0, 5), ...pack.us.bottom.slice(0, 5)]} title="S&P 500 top 5 / bottom 5" /></div>
+      </div>
+      <div className="minih" style={{ marginTop: 10 }}>Japan · previous session</div>
+      <table className="secT"><tbody>{pack.jp.indices.map((m) => <tr key={m.symbol}><td className="l">{m.name}</td><td className="num">{fmtNum(m.last, 2)}</td><td className={`num ${signCls(m.pct)}`}>{fmtPct(m.pct)}</td></tr>)}
+        {pack.jp.impliedOpenPct != null && <tr><td className="l" title={pack.jp.impliedNote}>Implied open (CME future vs cash) <span className="e">(E)</span></td><td /><td className={`num ${signCls(pack.jp.impliedOpenPct)}`}>{fmtPct(pack.jp.impliedOpenPct)}</td></tr>}
+      </tbody></table>
+      {pack.jp.breadth && <div className="mut" style={{ fontSize: 10.5, margin: "2px 0 6px" }}>{breadthLine(pack.jp.breadth)}</div>}
+      <div className="msg2">
+        <div><SectorsTable rows={pack.jp.sectors} title="Nikkei 225 sectors (weight-averaged)" /></div>
+        <div><MovesTable rows={[...pack.jp.top.slice(0, 5), ...pack.jp.bottom.slice(0, 5)]} title="Nikkei 225 top 5 / bottom 5" /></div>
+      </div>
+      {macro.length > 0 && (
+        <>
+          <div className="minih" style={{ marginTop: 10 }}>Other macro · 1D</div>
+          <table className="secT"><tbody>{macro.map((r) => <tr key={r.symbol}><td className="l">{r.name}</td><td className="num">{fmtNum(r.last, r.unit === "bp" ? 3 : 2)}</td><td className={`num ${signCls(r.unit === "bp" ? r.d1Chg : r.d1Pct)}`}>{r.unit === "bp" ? (r.d1Chg == null ? "–" : `${r.d1Chg > 0 ? "+" : ""}${(r.d1Chg * 100).toFixed(0)}bp`) : fmtPct(r.d1Pct)}</td></tr>)}</tbody></table>
+        </>
+      )}
+      <div className="mut" style={{ fontSize: 10, marginTop: 6 }}>{pack.us.source} · {pack.jp.source}</div>
+    </>
+  );
+}
+
+export function NewsView({ tick }: { tick: number }) {
+  const list = useApi<{ rows: Array<{ id: number; d: string; title: string; generatedAt: string }> }>("notes", undefined, Math.floor(tick / 10));
+  const [day, setDay] = useState<string | null>(null);
+  const note = useApi<{ note: (Note & { pack?: Pack }) | null }>("note", { d: day ?? undefined }, tick);
+  const cal = useApi<{ rows: EconEvent[] }>("calendar", undefined, tick);
+  const [cat, setCat] = useState<(typeof NEWS_CATEGORIES)[number]>("All");
+  const [imp, setImp] = useState<"high" | "hm" | "all">("hm");
+  const [scope, setScope] = useState<"major" | "all">("major");
+  const news = useApi<{ rows: NewsItem[] }>("news", { category: cat === "All" ? undefined : cat, n: 150 }, tick);
+  const n = note.data?.note ?? null;
+  const pack = n?.pack;
+  const events = useMemo(() => (cal.data?.rows ?? []).filter((e) => (imp === "all" || e.impact === "High" || (imp === "hm" && e.impact === "Medium")) && (scope === "all" || MAJOR.has(e.country))), [cal.data, imp, scope]);
+  const upcoming = events.some((e) => Date.parse(e.at) > Date.now());
+  const chip = (on: boolean, label: string, f: () => void, key?: string) => <span key={key ?? label} className={`chip-sm${on ? " on" : ""}`} onClick={f}>{label}</span>;
+  return (
+    <>
+      <Panel no="01" title="MORNING NOTES" span={12} aux={<span className="chips" style={{ margin: 0 }}>{(list.data?.rows ?? []).slice(0, 10).map((r) => chip((day ?? list.data?.rows[0]?.d) === r.d, r.d.slice(5), () => setDay(r.d), r.d))}{n && <span className="mut" style={{ marginLeft: 8 }}>generated {fmtStampSafe(n.generatedAt)} · {n.model}</span>}</span>}>
         {n ? (
-          <div className="brnar">
-            <p><b>{n.title}</b></p>
-            {n.sections.map((s) => <div key={s.heading}><h4>{s.heading}</h4><Md text={s.md} sources={n.sources} /></div>)}
-            {n.sources.length > 0 && <div className="src">Sources: {n.sources.map((s) => <span key={s.n}>[{s.n}] <a href={s.url} target="_blank" rel="noreferrer">{s.title}</a> · </span>)}</div>}
+          <div className="msg2 notegrid">
+            <div className="brnar">
+              <p><b>{n.title}</b></p>
+              {n.sections.map((s) => <div key={s.heading}><h4>{s.heading}</h4><Md text={s.md} sources={n.sources} /></div>)}
+              {n.sources.length > 0 && <div className="src">Sources: {n.sources.map((s) => <span key={s.n}>[{s.n}] <a href={s.url} target="_blank" rel="noreferrer">{s.title}</a> · </span>)}</div>}
+            </div>
+            <div>{pack ? <Overnight pack={pack} /> : <Empty title="No data pack with this note" />}</div>
           </div>
         ) : (
-          <Empty title="No morning note yet">The note is written each weekday around 07:00 SGT: the overnight US session, movers above 5% with their reasons, the Japan outlook and the day&apos;s strategy. Every number comes from the Monitor&apos;s own data and every claim links to its source.</Empty>
+          <Empty title="No morning note yet">{note.error ?? "The note is written each weekday around 07:00 SGT with the overnight US session, movers above 5% and their reasons, the Japan outlook and the day's strategy."}</Empty>
         )}
       </Panel>
-      <Panel no="02" title="NEWS" span={5} aux={<span className="chips" style={{ margin: 0 }}>{NEWS_CATEGORIES.map((c) => <span key={c} className={`chip-sm${c === cat ? " on" : ""}`} onClick={() => setCat(c)}>{c}</span>)}</span>}>
-        {news.data?.rows.length ? <div className="nwlist">{news.data.rows.map((it) => (
+      <Panel no="02" title="ECONOMIC CALENDAR" span={12} aux={<span className="chips" style={{ margin: 0 }}><span className="lbl">Impact</span>{chip(imp === "high", "High", () => setImp("high"))}{chip(imp === "hm", "High + Medium", () => setImp("hm"))}{chip(imp === "all", "All", () => setImp("all"))}<span className="lbl" style={{ marginLeft: 10 }}>Countries</span>{chip(scope === "major", "Major", () => setScope("major"))}{chip(scope === "all", "All", () => setScope("all"))}<span className="mut" style={{ marginLeft: 10 }}>times in SGT{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""}</span></span>}>
+        {events.length ? (
+          <table className="mini calT">
+            <thead><tr><th className="l">When (SGT)</th><th className="l">Ccy</th><th className="l">Event</th><th className="l">Impact</th><th>Consensus</th><th>Previous</th><th>Actual</th></tr></thead>
+            <tbody>{events.map((e, i, arr) => (
+              <Fragment key={e.id}>
+                {(i === 0 || dayOf(e.at) !== dayOf(arr[i - 1].at)) && <tr className="cls"><td colSpan={7}>{dayLabel(e.at)}</td></tr>}
+                <tr className={`ecrow${Date.parse(e.at) < Date.now() ? " past" : ""}`}>
+                  <td className="l num">{fmtStampSafe(e.at)}</td><td className="l">{e.currency ?? e.country}</td>
+                  <td className="l">{e.title}{e.kind === "speech" ? <span className="mut"> · speech</span> : e.kind === "report" ? <span className="mut"> · report</span> : null}</td>
+                  <td className="l"><span className={`imp ${e.impact[0].toLowerCase()}`} /> {e.impact}</td>
+                  <td>{e.forecast ?? "–"}</td><td className="mut">{e.previous ?? "–"}</td>
+                  <td className={e.better === true ? "up" : e.better === false ? "dn" : ""}><b>{e.actual ?? (Date.parse(e.at) < Date.now() ? "–" : "")}</b></td>
+                </tr>
+              </Fragment>
+            ))}</tbody>
+          </table>
+        ) : <Empty title="No calendar loaded">{cal.error ?? "The calendar sync runs every hour."}</Empty>}
+      </Panel>
+      <Panel no="03" title="NEWS" span={12} aux={<span className="chips" style={{ margin: 0 }}>{NEWS_CATEGORIES.map((c) => <span key={c} className={`chip-sm${c === cat ? " on" : ""}`} onClick={() => setCat(c)}>{c}</span>)}</span>}>
+        {news.data?.rows.length ? news.data.rows.map((it) => (
           <div className="nwrow" key={it.id}>
             <span className="nwt">{fmtStampSafe(it.publishedAt)}</span>
             <span className="nwc cat">{it.category}</span>
             <span className="nwh"><a href={it.url} target="_blank" rel="noreferrer">{it.title}</a></span>
             <span className="nwsrc">{it.source}</span>
           </div>
-        ))}</div> : <Empty title="No headlines">{news.error ?? "Headlines from WSJ Markets, CNBC, Nikkei Asia and ticker feeds, tagged by category, appear here once the news job runs."}</Empty>}
+        )) : <Empty title="No headlines">{news.error ?? "The news job runs every ten minutes."}</Empty>}
       </Panel>
-      <Panel no="03" title="ECONOMIC CALENDAR" span={12} aux={cal.data ? <>times in SGT · ForexFactory feed{cal.data.rows.some((e) => Date.parse(e.at) > Date.now()) ? "" : " · next week's file is published by the feed on Sunday"}</> : cal.error ? <span className="warn">{cal.error}</span> : ""}>
-        {cal.data?.rows.length ? (
-          <table className="mini">
-            <thead><tr><th className="l">When (SGT)</th><th className="l">Ccy</th><th className="l">Event</th><th className="l">Impact</th><th>Forecast</th><th>Previous</th><th>Actual</th></tr></thead>
-            <tbody>{cal.data.rows.map((e, i, arr) => (
-              <Fragment key={e.id}>{(i === 0 || dayOf(e.at) !== dayOf(arr[i - 1].at)) && <tr className="cls"><td colSpan={7}>{dayLabel(e.at)}</td></tr>}
-              <tr className={`ecrow${Date.parse(e.at) < Date.now() ? " past" : ""}`}><td className="l num">{fmtStampSafe(e.at)}</td><td className="l">{e.country}</td><td className="l">{e.title}</td><td className="l"><span className={`imp ${e.impact[0].toLowerCase()}`} /> {e.impact}</td><td>{e.forecast ?? "–"}</td><td>{e.previous ?? "–"}</td><td>{e.actual ?? "–"}</td></tr></Fragment>
-            ))}</tbody>
-          </table>
-        ) : <Empty title="No calendar loaded">{cal.error ?? "The week's releases appear here once the calendar sync has run."}</Empty>}
-      </Panel>
-      {pack && <Panel no="04" title="OVERNIGHT & REVIEWS" span={12} aux="from the note's data pack">
-        {pack ? (
-          <>
-            <div className="minih">US overnight · indices</div>
-            <table className="secT"><tbody>{pack.us.indices.map((m) => <tr key={m.symbol}><td className="l">{m.name}</td><td className="num">{fmtNum(m.last, 2)}</td><td className={`num ${signCls(m.pct)}`}>{fmtPct(m.pct)}</td></tr>)}</tbody></table>
-            <div className="hint2" style={{ marginTop: 2 }}>{breadthLine(pack.us.breadth)}</div>
-            <div className="msg2" style={{ marginTop: 8 }}>
-              <div><SectorsTable rows={pack.us.sectorsEtf.map((m) => ({ sector: m.name, pct: m.pct, n: 0, weighted: true }))} title="US sectors (SPDR ETFs)" /></div>
-              <div><MovesTable rows={[...pack.us.top.slice(0, 5), ...pack.us.bottom.slice(0, 5)]} title="S&P 500 top 5 / bottom 5" /></div>
-            </div>
-            <div className="minih" style={{ marginTop: 10 }}>Japan · previous session</div>
-            <table className="secT"><tbody>{pack.jp.indices.map((m) => <tr key={m.symbol}><td className="l">{m.name}</td><td className="num">{fmtNum(m.last, 2)}</td><td className={`num ${signCls(m.pct)}`}>{fmtPct(m.pct)}</td></tr>)}
-              {pack.jp.impliedOpenPct != null && <tr><td className="l" title={pack.jp.impliedNote}>Implied open (CME future vs cash) <span className="e">(E)</span></td><td /><td className={`num ${signCls(pack.jp.impliedOpenPct)}`}>{fmtPct(pack.jp.impliedOpenPct)}</td></tr>}
-            </tbody></table>
-            <div className="hint2" style={{ marginTop: 2 }}>{breadthLine(pack.jp.breadth)}</div>
-            <div className="msg2" style={{ marginTop: 8 }}>
-              <div><SectorsTable rows={pack.jp.sectors} title="Nikkei 225 sectors (weight-averaged)" /></div>
-              <div><MovesTable rows={[...pack.jp.top.slice(0, 5), ...pack.jp.bottom.slice(0, 5)]} title="Nikkei 225 top 5 / bottom 5" /></div>
-            </div>
-            <div className="minih" style={{ marginTop: 10 }}>Other macro · 1D</div>
-            <table className="secT"><tbody>{macro.map((r) => <tr key={r.symbol}><td className="l">{r.name}</td><td className="num">{fmtNum(r.last, r.unit === "bp" ? 3 : 2)}</td><td className={`num ${signCls(r.unit === "bp" ? r.d1Chg : r.d1Pct)}`}>{r.unit === "bp" ? (r.d1Chg == null ? "–" : `${r.d1Chg > 0 ? "+" : ""}${(r.d1Chg * 100).toFixed(1)}bp`) : fmtPct(r.d1Pct)}</td></tr>)}</tbody></table>
-            <div className="hint2">{pack.us.source} · {pack.jp.source}</div>
-          </>
-        ) : (
-          <>
-            <div className="minih">US overnight · sector breakdown and movers</div>
-            <Empty title="Awaiting the first note">Index moves, sector ETFs and the top and bottom S&amp;P 500 movers, with a one-line read such as &quot;broad sell-off, centred on Tech&quot;.</Empty>
-            <div className="minih" style={{ marginTop: 10 }}>Japan · yesterday</div>
-            <Empty title="Awaiting the first note">Nikkei 225, TOPIX, sector moves and the Nikkei 225 movers.</Empty>
-          </>
-        )}
-      </Panel>}
     </>
   );
 }

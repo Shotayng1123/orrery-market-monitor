@@ -11,6 +11,7 @@ import { useApi } from "../lib/useApi";
 import type { TableRow } from "../lib/types";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtStamp } from "../lib/time";
+import { mergeClasses } from "../lib/classes";
 
 export const INDICES = [
   { id: "topix", label: "TOPIX", symbol: "1306.T", stats: "TOPIX", statsNote: "", support: ["^N225", "NKD=F", "USDJPY=X", "JGB10Y"] },
@@ -53,7 +54,7 @@ const vs = (close: number, dma: number | null) => (dma == null || dma === 0 ? nu
 const shortName = (n: string) => n.replace(/[,.]?\s*(Corporation|Corp\.?|Co\.,? Ltd\.?|Co\.?|Company|Holdings?|Hldgs\.?|Group|Inc\.?|Incorporated|Ltd\.?|Limited|plc|PLC|AG|SE|NV|N\.V\.|S\.A\.|SA|KK|K\.K\.|株式会社|ホールディングス)\s*$/i, "").replace(/[,.]?\s*(Corporation|Corp\.?|Co\.,? Ltd\.?|Holdings?|Inc\.?|Ltd\.?|Limited)\s*$/i, "").trim().slice(0, 18);
 const signed = (v: number | null | undefined) => (v == null ? "–" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${money(Math.abs(v))}`);
 
-const Name = ({ r, sub }: { r: { symbol: string; name: string }; sub?: boolean }) => <span className="lnk" onMouseEnter={(e) => showCard(r.symbol, e)} onMouseLeave={hideCard} onClick={() => openAsset(r.symbol)}>{r.name}{sub && <span className="mut lnk-sub"> {r.symbol}</span>}</span>;
+const Name = ({ r }: { r: { symbol: string; name: string }; sub?: boolean }) => <span className="lnk" title={r.symbol} onMouseEnter={(e) => showCard(r.symbol, e)} onMouseLeave={hideCard} onClick={() => openAsset(r.symbol)}>{r.name}</span>;
 
 // ---- market breadth as a table by period ----
 const PERIODS = [["1D", "pct1d", 1], ["1W", "pct1w", 7], ["1M", "pct1m", 31], ["3M", "pct3m", 92], ["6M", "pct6m", 183], ["12M", "pct12m", 366], ["36M", "pct36m", 1096]] as const;
@@ -147,21 +148,21 @@ function Movers({ rows, title }: { rows: StatRow[]; title: string }) {
   return (
     <>
       <div className="minih">{title}</div>
-      <table className="secT mvT"><colgroup><col style={{ width: "40%" }} /><col style={{ width: "26%" }} /><col style={{ width: "13%" }} /><col style={{ width: "10.5%" }} /><col style={{ width: "10.5%" }} /></colgroup><tbody>{rows.map((r) => <tr key={r.symbol}><td className="l nm" title={`${r.name} (${r.symbol})`}><Name r={r} sub /></td><td className="l mut nm" title={r.sector ?? ""}>{r.sector ?? ""}</td><td className="num">{fmtNum(r.close, r.close >= 1000 ? 0 : 2)}</td><td className={`num ${signCls(r.pct1d)}`}>{fmtPct(r.pct1d, 1)}</td><td className={`num ${signCls(r.pct1w)}`}>{fmtPct(r.pct1w, 1)}</td></tr>)}</tbody></table>
+      <table className="secT mvT"><colgroup><col style={{ width: "40%" }} /><col style={{ width: "26%" }} /><col style={{ width: "13%" }} /><col style={{ width: "10.5%" }} /><col style={{ width: "10.5%" }} /></colgroup><tbody>{rows.map((r) => <tr key={r.symbol}><td className="l nm" title={`${r.name} (${r.symbol})`}><Name r={r} /></td><td className="l mut nm" title={r.sector ?? ""}>{r.sector ?? ""}</td><td className="num">{fmtNum(r.close, r.close >= 1000 ? 0 : 2)}</td><td className={`num ${signCls(r.pct1d)}`}>{fmtPct(r.pct1d, 1)}</td><td className={`num ${signCls(r.pct1w)}`}>{fmtPct(r.pct1w, 1)}</td></tr>)}</tbody></table>
     </>
   );
 }
 
 /** Market-cap-weighted treemap: names grouped by sector, no gaps, solid white text. Hover = company card, click = asset page. */
-function HeatMap({ s }: { s: IndexStats }) {
+function HeatMap({ s, rows }: { s: IndexStats; rows: StatRow[] }) {
   const groups = useMemo<TreeGroup[]>(() => {
-    const hasM = s.rows.some((r) => r.mcap != null && r.mcap > 0), hasW = s.rows.some((r) => r.weight != null && r.weight > 0);
-    const minM = hasM ? Math.min(...s.rows.filter((r) => r.mcap != null && r.mcap > 0).map((r) => r.mcap!)) : 1;
+    const hasM = rows.some((r) => r.mcap != null && r.mcap > 0), hasW = rows.some((r) => r.weight != null && r.weight > 0);
+    const minM = hasM ? Math.min(...rows.filter((r) => r.mcap != null && r.mcap > 0).map((r) => r.mcap!)) : 1;
     const size = (r: StatRow) => (hasM ? (r.mcap && r.mcap > 0 ? r.mcap : minM) : hasW ? (r.weight && r.weight > 0 ? r.weight : 0.01) : 1);
     const by = new Map<string, StatRow[]>();
-    for (const r of s.rows) { const k = r.sector ?? "Other"; by.set(k, [...(by.get(k) ?? []), r]); }
-    return [...by.entries()].map(([sector, rs]) => ({ id: sector, label: sector, leaves: rs.map((r) => ({ id: r.symbol, label: r.symbol.replace(/\.(T|KS|HK|SS)$/, ""), name: shortName(r.name), value: size(r), pct: r.pct1d, title: r.name })) }));
-  }, [s]);
+    for (const r of rows) { const k = r.sector ?? "Other"; by.set(k, [...(by.get(k) ?? []), r]); }
+    return [...by.entries()].map(([sector, rs]) => ({ id: sector, label: sector, leaves: rs.map((r) => ({ id: r.symbol, label: shortName(r.name), name: shortName(r.name), value: size(r), pct: r.pct1d, title: r.name })) }));
+  }, [rows, s.idx]);
   return <Treemap groups={groups} height={Math.max(640, Math.min(900, Math.round(window.innerWidth * 0.42)))} onEnter={(id, e) => showCard(id, e)} onLeave={hideCard} onClick={openAsset} />;
 }
 
@@ -194,7 +195,7 @@ function JpShortPanel({ idx }: { idx: string }) {
       <div className="msg2">
         <div>
           <div className="minih">Largest reported short positions (sum of holders ≥0.5%)</div>
-          <table className="secT"><tbody>{d.positions.top.slice(0, 12).map((p) => <tr key={p.symbol}><td className="l nm"><Name r={p} sub /></td><td className="l mut nm">{p.sector ?? ""}</td><td className="num mut">{p.holders}</td><td className="num">{(p.ratio * 100).toFixed(2)}%</td></tr>)}</tbody></table>
+          <table className="secT"><tbody>{d.positions.top.slice(0, 12).map((p) => <tr key={p.symbol}><td className="l nm"><Name r={p} /></td><td className="l mut nm">{p.sector ?? ""}</td><td className="num mut">{p.holders}</td><td className="num">{(p.ratio * 100).toFixed(2)}%</td></tr>)}</tbody></table>
         </div>
         <div>
           <div className="minih">Short selling share by sector · {d.sectorsAsOf ?? "–"}</div>
@@ -279,7 +280,9 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
   const statsAux = s ? <>{s.idx} constituents · closes of {s.asOf}{standIn}</> : "";
   const noStats = <Empty title="Statistics not computed yet">{st.error ?? "The daily statistics job runs after each close."}</Empty>;
   const hasMcap = !!s?.rows.some((r) => r.mcap != null);
-  const drawerRows = s && drawer ? s.rows.filter((r) => (r.sector ?? "Other") === drawer) : [];
+  const merged = useMemo(() => (s ? mergeClasses(s.rows) : []), [s]);
+  const movers = useMemo(() => { const xs = merged.filter((r) => r.pct1d != null).sort((a, b) => b.pct1d! - a.pct1d!); return { top: xs.slice(0, 15), bottom: xs.slice(-15).reverse() }; }, [merged]);
+  const drawerRows = s && drawer ? merged.filter((r) => (r.sector ?? "Other") === drawer) : [];
   return (
     <>
       <div className="c12">{toggle}<PeriodBar period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} /></div>
@@ -303,14 +306,14 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
               </div>
               <div>
                 <div className="minih">Highest short-volume share</div>
-                <table className="secT"><tbody>{s.shorts.top.slice(0, 10).map((x) => <tr key={x.symbol}><td className="l"><Name r={x} sub /></td><td className="num">{(x.ratio * 100).toFixed(0)}%</td></tr>)}</tbody></table>
+                <table className="secT"><tbody>{s.shorts.top.slice(0, 10).map((x) => <tr key={x.symbol}><td className="l"><Name r={x} /></td><td className="num">{(x.ratio * 100).toFixed(0)}%</td></tr>)}</tbody></table>
               </div>
             </div>
           </>
         ) : <Empty title={us ? "No short-volume data" : "No short data for this market"}>{us ? "The FINRA job runs after the US close." : "Public per-name short data is not available for this exchange."}</Empty>}
       </Panel>
-      <Panel no="08" title="MOVERS" span={12} aux={statsAux}>{s ? <div className="msg2"><div><Movers rows={s.movers.top} title="Top 15 · 1D" /></div><div><Movers rows={s.movers.bottom} title="Bottom 15 · 1D" /></div></div> : noStats}</Panel>
-      <Panel no="07" title="HEAT MAP" span={12} aux={s ? <>{statsAux} · GICS sectors · colour = 1D % · size = {hasMcap ? "market cap" : s.rows.some((r) => r.weight != null) ? "index weight" : "equal"}</> : ""}>{s ? <HeatMap s={s} /> : noStats}</Panel>
+      <Panel no="08" title="MOVERS" span={12} aux={statsAux}>{s ? <div className="msg2"><div><Movers rows={movers.top} title="Top 15 · 1D" /></div><div><Movers rows={movers.bottom} title="Bottom 15 · 1D" /></div></div> : noStats}</Panel>
+      <Panel no="07" title="HEAT MAP" span={12} aux={s ? <>{statsAux} · GICS sectors · colour = 1D % · size = {hasMcap ? "market cap" : s.rows.some((r) => r.weight != null) ? "index weight" : "equal"}</> : ""}>{s ? <HeatMap s={s} rows={merged} /> : noStats}</Panel>
       <Panel no="09" title="SCREENER" span={12} aux={statsAux}>{s ? <Screener s={s} /> : noStats}</Panel>
       {drawer && s && <SectorDrawer title={ix.label} sector={drawer} rows={drawerRows} ccy={ccy} onClose={() => setDrawer(null)} />}
     </>
