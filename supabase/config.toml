@@ -1,0 +1,13 @@
+# Supabase CLI configuration for the Orrery Monitor project.
+# The Monitor uses its own sign-in (shared password + HMAC token), so the platform JWT check is off on the
+# functions; `api` verifies the Monitor token itself, `tick` and `daily` require the cron secret.
+project_id = "orrery-monitor"
+
+[functions.api]
+verify_jwt = false
+
+[functions.tick]
+verify_jwt = false
+
+[functions.daily]
+verify_jwt = false

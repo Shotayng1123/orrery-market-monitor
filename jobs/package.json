@@ -1,0 +1,19 @@
+{
+  "name": "orrery-monitor-jobs",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Batch jobs for the Orrery Monitor (history backfill, constituents, Morning Notes). Run locally or in GitHub Actions.",
+  "scripts": {
+    "backfill": "tsx backfill.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
