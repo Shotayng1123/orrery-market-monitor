@@ -11,7 +11,7 @@ export const CHART_PERIODS: ChartPeriod[] = ["1D", "1W", "1M", "3M", "12M", "36M
 const PERIOD_KEY: Record<ChartPeriod, keyof TableRow["pct"]> = { "1D": "d1", "1W": "w1", "1M": "m1", "3M": "m3", "12M": "m12", "36M": "m36" };
 
 /** One instrument: chart left, exact last price and the period change on the side, σ read-out on hover. */
-export function ChartPanel({ row, period, tick, twoSigma }: { row: TableRow; period: ChartPeriod; tick: number; twoSigma: boolean }) {
+export function ChartPanel({ row, period, tick, twoSigma, height = 190 }: { row: TableRow; period: ChartPeriod; tick: number; twoSigma: boolean; height?: number }) {
   const s = useApi<Series & { shownFrom?: string }>("series", { symbol: row.symbol, range: period }, tick);
   const [rd, setRd] = useState<{ t: number; v: number; z1: number | null; z12: number | null; z36: number | null } | null>(null);
   const k = PERIOD_KEY[period];
@@ -28,7 +28,7 @@ export function ChartPanel({ row, period, tick, twoSigma }: { row: TableRow; per
       </div>
       <div className="cpanel">
         <div>
-          {points.length ? <SigmaChart points={points} shownFrom={shownFrom} intraday={period === "1D"} decimals={row.decimals} showTwoSigma={twoSigma} onReadout={setRd} /> : <div className="empty" style={{ minHeight: 190 }}>{s.error ?? (s.loading ? "loading…" : "no history yet")}</div>}
+          {points.length ? <SigmaChart points={points} shownFrom={shownFrom} intraday={period === "1D"} decimals={row.decimals} showTwoSigma={twoSigma} onReadout={setRd} height={height} /> : <div className="empty" style={{ minHeight: height }}>{s.error ?? (s.loading ? "loading…" : "no history yet")}</div>}
           <div className="rdout mut">
             {rd ? <>{new Date(rd.t * 1000).toISOString().slice(0, 10)} · {fmtNum(rd.v, row.decimals)} · 1M {z(rd.z1)} · 12M {z(rd.z12)} · 36M {z(rd.z36)}</> : <>&nbsp;</>}
           </div>

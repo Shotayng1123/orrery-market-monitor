@@ -243,3 +243,4 @@ body.term .empty{padding:8px 4px;font-size:11px}
 @media (max-width:720px){.cgrid{grid-template-columns:minmax(0,1fr)}}
 .curvex{position:relative;height:14px;font-size:10px;color:var(--mut)}
 .curvex span{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap}
+.cgrid.one{grid-template-columns:minmax(0,1fr)}

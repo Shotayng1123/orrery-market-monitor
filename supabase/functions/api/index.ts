@@ -30,8 +30,8 @@ Deno.serve(async (req) => {
       case "calendar": return json(req, await calendar());
       case "news": return json(req, await news(q("category"), Number(q("n") ?? 120)));
       case "note": {
-        const { data } = await db.from("notes").select("id,d,title,generated_at,model,sections,sources").lte("d", new Date().toISOString().slice(0, 10)).order("d", { ascending: false }).limit(1).maybeSingle();
-        return json(req, { note: data ? { id: data.id, d: data.d, title: data.title, generatedAt: data.generated_at, model: data.model, sections: data.sections, sources: data.sources } : null });
+        const { data } = await db.from("notes").select("id,d,title,generated_at,model,sections,sources,pack").lte("d", new Date().toISOString().slice(0, 10)).order("d", { ascending: false }).limit(1).maybeSingle();
+        return json(req, { note: data ? { id: data.id, d: data.d, title: data.title, generatedAt: data.generated_at, model: data.model, sections: data.sections, sources: data.sources, pack: data.pack } : null });
       }
       case "reports": {
         const { data } = await db.from("reports").select("id,kind,title,summary,published_at").order("published_at", { ascending: false }).limit(Math.min(200, Number(q("n") ?? 100)));
@@ -41,6 +41,10 @@ Deno.serve(async (req) => {
         const { data } = await db.from("reports").select("*").eq("id", Number(q("id"))).maybeSingle();
         if (!data) return json(req, { error: "not found" }, 404);
         return json(req, { report: { id: data.id, kind: data.kind, title: data.title, summary: data.summary, md: data.md, publishedAt: data.published_at } });
+      }
+      case "policy": {
+        const { data } = await db.from("policy_rates").select("bank,name,rate_label,rate,as_of,last_change,next_meeting,source_url,source_note,updated_at").order("bank");
+        return json(req, { rows: (data ?? []).map((r) => ({ bank: r.bank, name: r.name, rateLabel: r.rate_label, rate: r.rate, asOf: r.as_of, lastChange: r.last_change, nextMeeting: r.next_meeting, sourceUrl: r.source_url, sourceNote: r.source_note, updatedAt: r.updated_at })) });
       }
       case "instruments": {
         const { data } = await db.from("instruments").select("*").eq("active", true).order("ord");

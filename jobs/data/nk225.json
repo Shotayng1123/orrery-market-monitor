@@ -1,0 +1,1357 @@
+{
+ "index": "NK225",
+ "asOf": "2026-10-30",
+ "source": "Nikkei Inc. constituent weights CSV",
+ "rows": [
+  {
+   "symbol": "1332.T",
+   "name": "NISSUI CORP.",
+   "sector": "Consumer Goods",
+   "weight": 0.0592
+  },
+  {
+   "symbol": "1605.T",
+   "name": "INPEX CORP.",
+   "sector": "Materials",
+   "weight": 0.0866
+  },
+  {
+   "symbol": "1721.T",
+   "name": "COMSYS HOLDINGS CORP.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.296
+  },
+  {
+   "symbol": "1801.T",
+   "name": "TAISEI CORP.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.1187
+  },
+  {
+   "symbol": "1802.T",
+   "name": "OBAYASHI CORP.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.1583
+  },
+  {
+   "symbol": "1803.T",
+   "name": "SHIMIZU CORP.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.1095
+  },
+  {
+   "symbol": "1808.T",
+   "name": "HASEKO CORP.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.0283
+  },
+  {
+   "symbol": "1812.T",
+   "name": "KAJIMA CORP.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.1259
+  },
+  {
+   "symbol": "1925.T",
+   "name": "DAIWA HOUSE IND. CO., LTD.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.2431
+  },
+  {
+   "symbol": "1928.T",
+   "name": "SEKISUI HOUSE, LTD.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.1855
+  },
+  {
+   "symbol": "1963.T",
+   "name": "JGC HOLDINGS CORP.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.1126
+  },
+  {
+   "symbol": "2002.T",
+   "name": "NISSHIN SEIFUN GROUP INC.",
+   "sector": "Consumer Goods",
+   "weight": 0.1191
+  },
+  {
+   "symbol": "2269.T",
+   "name": "MEIJI HOLDINGS CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.0918
+  },
+  {
+   "symbol": "2282.T",
+   "name": "NH FOODS LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.1649
+  },
+  {
+   "symbol": "2413.T",
+   "name": "M3, INC.",
+   "sector": "Consumer Goods",
+   "weight": 0.2353
+  },
+  {
+   "symbol": "2432.T",
+   "name": "DENA CO., LTD.",
+   "sector": "Information and Communications",
+   "weight": 0.0408
+  },
+  {
+   "symbol": "2501.T",
+   "name": "SAPPORO BREWERIES LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.1048
+  },
+  {
+   "symbol": "2502.T",
+   "name": "ASAHI GROUP HOLDINGS, LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.2637
+  },
+  {
+   "symbol": "2503.T",
+   "name": "KIRIN HOLDINGS CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.154
+  },
+  {
+   "symbol": "2768.T",
+   "name": "SOJITZ CORP.",
+   "sector": "Materials",
+   "weight": 0.0273
+  },
+  {
+   "symbol": "2801.T",
+   "name": "KIKKOMAN CORP.",
+   "sector": "Consumer Goods",
+   "weight": 0.4802
+  },
+  {
+   "symbol": "2802.T",
+   "name": "AJINOMOTO CO., INC.",
+   "sector": "Consumer Goods",
+   "weight": 0.5452
+  },
+  {
+   "symbol": "285A.T",
+   "name": "KIOXIA HOLDINGS CORP.",
+   "sector": "Technology",
+   "weight": 1.5067
+  },
+  {
+   "symbol": "2871.T",
+   "name": "NICHIREI CORP.",
+   "sector": "Consumer Goods",
+   "weight": 0.1144
+  },
+  {
+   "symbol": "2914.T",
+   "name": "JAPAN TOBACCO INC.",
+   "sector": "Consumer Goods",
+   "weight": 0.386
+  },
+  {
+   "symbol": "3086.T",
+   "name": "J.FRONT RETAILING CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.0765
+  },
+  {
+   "symbol": "3092.T",
+   "name": "ZOZO, INC.",
+   "sector": "Consumer Goods",
+   "weight": 0.1854
+  },
+  {
+   "symbol": "3099.T",
+   "name": "ISETAN MITSUKOSHI HOLDINGS LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.1919
+  },
+  {
+   "symbol": "3289.T",
+   "name": "TOKYU FUDOSAN HOLDINGS CORP.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.0655
+  },
+  {
+   "symbol": "3382.T",
+   "name": "SEVEN & I HOLDINGS CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.34
+  },
+  {
+   "symbol": "3401.T",
+   "name": "TEIJIN LTD.",
+   "sector": "Materials",
+   "weight": 0.0171
+  },
+  {
+   "symbol": "3402.T",
+   "name": "TORAY INDUSTRIES, INC.",
+   "sector": "Materials",
+   "weight": 0.0628
+  },
+  {
+   "symbol": "3405.T",
+   "name": "KURARAY CO., LTD.",
+   "sector": "Materials",
+   "weight": 0.0984
+  },
+  {
+   "symbol": "3407.T",
+   "name": "ASAHI KASEI CORP.",
+   "sector": "Materials",
+   "weight": 0.0855
+  },
+  {
+   "symbol": "3436.T",
+   "name": "SUMCO CORP.",
+   "sector": "Materials",
+   "weight": 0.0124
+  },
+  {
+   "symbol": "3659.T",
+   "name": "NEXON CO., LTD.",
+   "sector": "Information and Communications",
+   "weight": 0.2939
+  },
+  {
+   "symbol": "3697.T",
+   "name": "SHIFT INC.",
+   "sector": "Information and Communications",
+   "weight": 0.0598
+  },
+  {
+   "symbol": "3861.T",
+   "name": "OJI HOLDINGS CORP.",
+   "sector": "Materials",
+   "weight": 0.0436
+  },
+  {
+   "symbol": "4004.T",
+   "name": "RESONAC HOLDINGS CORP.",
+   "sector": "Materials",
+   "weight": 0.0695
+  },
+  {
+   "symbol": "4005.T",
+   "name": "SUMITOMO CHEMICAL CO., LTD.",
+   "sector": "Materials",
+   "weight": 0.0301
+  },
+  {
+   "symbol": "4021.T",
+   "name": "NISSAN CHEMICAL CORP.",
+   "sector": "Materials",
+   "weight": 0.4156
+  },
+  {
+   "symbol": "4042.T",
+   "name": "TOSOH CORP.",
+   "sector": "Materials",
+   "weight": 0.0676
+  },
+  {
+   "symbol": "4043.T",
+   "name": "TOKUYAMA CORP.",
+   "sector": "Materials",
+   "weight": 0.0419
+  },
+  {
+   "symbol": "4061.T",
+   "name": "DENKA CO., LTD.",
+   "sector": "Materials",
+   "weight": 0.0325
+  },
+  {
+   "symbol": "4062.T",
+   "name": "IBIDEN CO., LTD.",
+   "sector": "Technology",
+   "weight": 1.7809
+  },
+  {
+   "symbol": "4063.T",
+   "name": "SHIN-ETSU CHEMICAL CO., LTD.",
+   "sector": "Materials",
+   "weight": 1.5888
+  },
+  {
+   "symbol": "4151.T",
+   "name": "KYOWA KIRIN CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.1312
+  },
+  {
+   "symbol": "4183.T",
+   "name": "MITSUI CHEMICALS, INC.",
+   "sector": "Materials",
+   "weight": 0.0444
+  },
+  {
+   "symbol": "4188.T",
+   "name": "MITSUBISHI CHEMICAL GROUP CORP.",
+   "sector": "Materials",
+   "weight": 0.0312
+  },
+  {
+   "symbol": "4208.T",
+   "name": "UBE CORP.",
+   "sector": "Materials",
+   "weight": 0.0173
+  },
+  {
+   "symbol": "4307.T",
+   "name": "NOMURA RESEARCH INSTITUTE, LTD.",
+   "sector": "Information and Communications",
+   "weight": 0.3319
+  },
+  {
+   "symbol": "4324.T",
+   "name": "DENTSU GROUP INC.",
+   "sector": "Consumer Goods",
+   "weight": 0.2018
+  },
+  {
+   "symbol": "4385.T",
+   "name": "MERCARI, INC.",
+   "sector": "Information and Communications",
+   "weight": 0.1903
+  },
+  {
+   "symbol": "4452.T",
+   "name": "KAO CORP.",
+   "sector": "Materials",
+   "weight": 0.3992
+  },
+  {
+   "symbol": "4502.T",
+   "name": "TAKEDA PHARMACEUTICAL CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.3543
+  },
+  {
+   "symbol": "4503.T",
+   "name": "ASTELLAS PHARMA INC.",
+   "sector": "Consumer Goods",
+   "weight": 0.6847
+  },
+  {
+   "symbol": "4506.T",
+   "name": "SUMITOMO PHARMA CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.1004
+  },
+  {
+   "symbol": "4507.T",
+   "name": "SHIONOGI & CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.4813
+  },
+  {
+   "symbol": "4519.T",
+   "name": "CHUGAI PHARMACEUTICAL CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 1.0901
+  },
+  {
+   "symbol": "4523.T",
+   "name": "EISAI CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.2691
+  },
+  {
+   "symbol": "4543.T",
+   "name": "TERUMO CORP.",
+   "sector": "Technology",
+   "weight": 1.0246
+  },
+  {
+   "symbol": "4568.T",
+   "name": "DAIICHI SANKYO CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.4401
+  },
+  {
+   "symbol": "4578.T",
+   "name": "OTSUKA HOLDINGS CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.64
+  },
+  {
+   "symbol": "4661.T",
+   "name": "ORIENTAL LAND CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.1831
+  },
+  {
+   "symbol": "4689.T",
+   "name": "LY CORP.",
+   "sector": "Information and Communications",
+   "weight": 0.0107
+  },
+  {
+   "symbol": "4704.T",
+   "name": "TREND MICRO INC.",
+   "sector": "Information and Communications",
+   "weight": 0.3894
+  },
+  {
+   "symbol": "4751.T",
+   "name": "CYBERAGENT, INC.",
+   "sector": "Consumer Goods",
+   "weight": 0.0541
+  },
+  {
+   "symbol": "4755.T",
+   "name": "RAKUTEN GROUP, INC.",
+   "sector": "Consumer Goods",
+   "weight": 0.0335
+  },
+  {
+   "symbol": "4901.T",
+   "name": "FUJIFILM HOLDINGS CORP.",
+   "sector": "Materials",
+   "weight": 0.5597
+  },
+  {
+   "symbol": "4911.T",
+   "name": "SHISEIDO CO., LTD.",
+   "sector": "Materials",
+   "weight": 0.2037
+  },
+  {
+   "symbol": "5016.T",
+   "name": "JX ADVANCED METALS CORP.",
+   "sector": "Materials",
+   "weight": 0.1574
+  },
+  {
+   "symbol": "5019.T",
+   "name": "IDEMITSU KOSAN CO., LTD.",
+   "sector": "Materials",
+   "weight": 0.1614
+  },
+  {
+   "symbol": "5020.T",
+   "name": "ENEOS HOLDINGS, INC.",
+   "sector": "Materials",
+   "weight": 0.076
+  },
+  {
+   "symbol": "5101.T",
+   "name": "THE YOKOHAMA RUBBER CO., LTD.",
+   "sector": "Materials",
+   "weight": 0.1672
+  },
+  {
+   "symbol": "5108.T",
+   "name": "BRIDGESTONE CORP.",
+   "sector": "Materials",
+   "weight": 0.4247
+  },
+  {
+   "symbol": "5201.T",
+   "name": "AGC INC.",
+   "sector": "Materials",
+   "weight": 0.0577
+  },
+  {
+   "symbol": "5214.T",
+   "name": "NIPPON ELECTRIC GLASS CO., LTD.",
+   "sector": "Materials",
+   "weight": 0.0796
+  },
+  {
+   "symbol": "5233.T",
+   "name": "TAIHEIYO CEMENT CORP.",
+   "sector": "Materials",
+   "weight": 0.0225
+  },
+  {
+   "symbol": "5301.T",
+   "name": "TOKAI CARBON CO., LTD.",
+   "sector": "Materials",
+   "weight": 0.1026
+  },
+  {
+   "symbol": "5332.T",
+   "name": "TOTO LTD.",
+   "sector": "Materials",
+   "weight": 0.153
+  },
+  {
+   "symbol": "5333.T",
+   "name": "NGK CORP.",
+   "sector": "Materials",
+   "weight": 0.2457
+  },
+  {
+   "symbol": "5401.T",
+   "name": "NIPPON STEEL CORP.",
+   "sector": "Materials",
+   "weight": 0.0175
+  },
+  {
+   "symbol": "5406.T",
+   "name": "KOBE STEEL, LTD.",
+   "sector": "Materials",
+   "weight": 0.0107
+  },
+  {
+   "symbol": "5411.T",
+   "name": "JFE HOLDINGS, INC.",
+   "sector": "Materials",
+   "weight": 0.0094
+  },
+  {
+   "symbol": "5631.T",
+   "name": "THE JAPAN STEEL WORKS, LTD.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.0627
+  },
+  {
+   "symbol": "5706.T",
+   "name": "MITSUI KINZOKU CO., LTD.",
+   "sector": "Materials",
+   "weight": 0.1075
+  },
+  {
+   "symbol": "5711.T",
+   "name": "MITSUBISHI MATERIALS CORP.",
+   "sector": "Materials",
+   "weight": 0.0231
+  },
+  {
+   "symbol": "5713.T",
+   "name": "SUMITOMO METAL MINING CO., LTD.",
+   "sector": "Materials",
+   "weight": 0.2165
+  },
+  {
+   "symbol": "5714.T",
+   "name": "DOWA HOLDINGS CO., LTD.",
+   "sector": "Materials",
+   "weight": 0.0846
+  },
+  {
+   "symbol": "5801.T",
+   "name": "FURUKAWA ELECTRIC CO., LTD.",
+   "sector": "Materials",
+   "weight": 0.1495
+  },
+  {
+   "symbol": "5802.T",
+   "name": "SUMITOMO ELECTRIC IND., LTD.",
+   "sector": "Materials",
+   "weight": 0.3771
+  },
+  {
+   "symbol": "5803.T",
+   "name": "FUJIKURA LTD.",
+   "sector": "Materials",
+   "weight": 1.2521
+  },
+  {
+   "symbol": "5831.T",
+   "name": "SHIZUOKA FINANCIAL GROUP, INC.",
+   "sector": "Financials",
+   "weight": 0.1631
+  },
+  {
+   "symbol": "6098.T",
+   "name": "RECRUIT HOLDINGS CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 3.068
+  },
+  {
+   "symbol": "6103.T",
+   "name": "OKUMA CORP.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.0963
+  },
+  {
+   "symbol": "6113.T",
+   "name": "AMADA CO., LTD.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.1283
+  },
+  {
+   "symbol": "6146.T",
+   "name": "DISCO CORP.",
+   "sector": "Technology",
+   "weight": 0.5277
+  },
+  {
+   "symbol": "6178.T",
+   "name": "JAPAN POST HOLDINGS CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.1274
+  },
+  {
+   "symbol": "6273.T",
+   "name": "SMC CORP.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.3391
+  },
+  {
+   "symbol": "6301.T",
+   "name": "KOMATSU LTD.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.3293
+  },
+  {
+   "symbol": "6302.T",
+   "name": "SUMITOMO HEAVY IND., LTD.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.0562
+  },
+  {
+   "symbol": "6305.T",
+   "name": "HITACHI CONST. MACH. CO., LTD.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.2756
+  },
+  {
+   "symbol": "6326.T",
+   "name": "KUBOTA CORP.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.1391
+  },
+  {
+   "symbol": "6361.T",
+   "name": "EBARA CORP.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.1998
+  },
+  {
+   "symbol": "6367.T",
+   "name": "DAIKIN INDUSTRIES, LTD.",
+   "sector": "Capital Goods/Others",
+   "weight": 1.1217
+  },
+  {
+   "symbol": "6471.T",
+   "name": "NSK LTD.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.0534
+  },
+  {
+   "symbol": "6472.T",
+   "name": "NTN CORP.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.0191
+  },
+  {
+   "symbol": "6473.T",
+   "name": "JTEKT CORP.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.1056
+  },
+  {
+   "symbol": "6479.T",
+   "name": "MINEBEA MITSUMI INC.",
+   "sector": "Technology",
+   "weight": 0.1661
+  },
+  {
+   "symbol": "6501.T",
+   "name": "HITACHI, LTD.",
+   "sector": "Technology",
+   "weight": 0.2713
+  },
+  {
+   "symbol": "6503.T",
+   "name": "MITSUBISHI ELECTRIC CORP.",
+   "sector": "Technology",
+   "weight": 0.2471
+  },
+  {
+   "symbol": "6504.T",
+   "name": "FUJI ELECTRIC CO., LTD.",
+   "sector": "Technology",
+   "weight": 0.1316
+  },
+  {
+   "symbol": "6506.T",
+   "name": "YASKAWA ELECTRIC CORP.",
+   "sector": "Technology",
+   "weight": 0.2126
+  },
+  {
+   "symbol": "6525.T",
+   "name": "KOKUSAI ELECTRIC CORP.",
+   "sector": "Technology",
+   "weight": 0.3685
+  },
+  {
+   "symbol": "6526.T",
+   "name": "SOCIONEXT INC.",
+   "sector": "Technology",
+   "weight": 0.0972
+  },
+  {
+   "symbol": "6532.T",
+   "name": "BAYCURRENT, INC.",
+   "sector": "Consumer Goods",
+   "weight": 0.6298
+  },
+  {
+   "symbol": "6645.T",
+   "name": "OMRON CORP.",
+   "sector": "Technology",
+   "weight": 0.2806
+  },
+  {
+   "symbol": "6701.T",
+   "name": "NEC CORP.",
+   "sector": "Technology",
+   "weight": 0.1292
+  },
+  {
+   "symbol": "6702.T",
+   "name": "FUJITSU LTD.",
+   "sector": "Technology",
+   "weight": 0.1929
+  },
+  {
+   "symbol": "6723.T",
+   "name": "RENESAS ELECTRONICS CORP.",
+   "sector": "Technology",
+   "weight": 0.1526
+  },
+  {
+   "symbol": "6724.T",
+   "name": "SEIKO EPSON CORP.",
+   "sector": "Technology",
+   "weight": 0.3444
+  },
+  {
+   "symbol": "6752.T",
+   "name": "PANASONIC HOLDINGS CORP.",
+   "sector": "Technology",
+   "weight": 0.189
+  },
+  {
+   "symbol": "6753.T",
+   "name": "SHARP CORP.",
+   "sector": "Technology",
+   "weight": 0.0287
+  },
+  {
+   "symbol": "6758.T",
+   "name": "SONY GROUP CORP.",
+   "sector": "Technology",
+   "weight": 1.0541
+  },
+  {
+   "symbol": "6762.T",
+   "name": "TDK CORP.",
+   "sector": "Technology",
+   "weight": 2.0549
+  },
+  {
+   "symbol": "6770.T",
+   "name": "ALPS ALPINE CO., LTD.",
+   "sector": "Technology",
+   "weight": 0.1111
+  },
+  {
+   "symbol": "6841.T",
+   "name": "YOKOGAWA ELECTRIC CORP.",
+   "sector": "Technology",
+   "weight": 0.2435
+  },
+  {
+   "symbol": "6857.T",
+   "name": "ADVANTEST CORP.",
+   "sector": "Technology",
+   "weight": 11.8833
+  },
+  {
+   "symbol": "6861.T",
+   "name": "KEYENCE CORP.",
+   "sector": "Technology",
+   "weight": 0.4155
+  },
+  {
+   "symbol": "6902.T",
+   "name": "DENSO CORP.",
+   "sector": "Technology",
+   "weight": 0.3968
+  },
+  {
+   "symbol": "6920.T",
+   "name": "LASERTEC CORP.",
+   "sector": "Technology",
+   "weight": 0.8032
+  },
+  {
+   "symbol": "6954.T",
+   "name": "FANUC CORP.",
+   "sector": "Technology",
+   "weight": 1.5191
+  },
+  {
+   "symbol": "6963.T",
+   "name": "ROHM CO., LTD.",
+   "sector": "Technology",
+   "weight": 0.19
+  },
+  {
+   "symbol": "6971.T",
+   "name": "KYOCERA CORP.",
+   "sector": "Technology",
+   "weight": 1.4615
+  },
+  {
+   "symbol": "6976.T",
+   "name": "TAIYO YUDEN CO., LTD.",
+   "sector": "Technology",
+   "weight": 0.4556
+  },
+  {
+   "symbol": "6981.T",
+   "name": "MURATA MANUFACTURING CO., LTD.",
+   "sector": "Technology",
+   "weight": 0.8128
+  },
+  {
+   "symbol": "6988.T",
+   "name": "NITTO DENKO CORP.",
+   "sector": "Materials",
+   "weight": 0.9033
+  },
+  {
+   "symbol": "7011.T",
+   "name": "MITSUBISHI HEAVY IND., LTD.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.1818
+  },
+  {
+   "symbol": "7012.T",
+   "name": "KAWASAKI HEAVY IND., LTD.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.0563
+  },
+  {
+   "symbol": "7013.T",
+   "name": "IHI CORP.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.0869
+  },
+  {
+   "symbol": "7186.T",
+   "name": "YOKOHAMA FINANCIAL GROUP, INC.",
+   "sector": "Financials",
+   "weight": 0.0893
+  },
+  {
+   "symbol": "7201.T",
+   "name": "NISSAN MOTOR CO., LTD.",
+   "sector": "Technology",
+   "weight": 0.0142
+  },
+  {
+   "symbol": "7202.T",
+   "name": "ISUZU MOTORS LTD.",
+   "sector": "Technology",
+   "weight": 0.0547
+  },
+  {
+   "symbol": "7203.T",
+   "name": "TOYOTA MOTOR CORP.",
+   "sector": "Technology",
+   "weight": 0.8176
+  },
+  {
+   "symbol": "7211.T",
+   "name": "MITSUBISHI MOTORS CORP.",
+   "sector": "Technology",
+   "weight": 0.0018
+  },
+  {
+   "symbol": "7261.T",
+   "name": "MAZDA MOTOR CORP.",
+   "sector": "Technology",
+   "weight": 0.0115
+  },
+  {
+   "symbol": "7267.T",
+   "name": "HONDA MOTOR CO., LTD.",
+   "sector": "Technology",
+   "weight": 0.5709
+  },
+  {
+   "symbol": "7269.T",
+   "name": "SUZUKI MOTOR CORP.",
+   "sector": "Technology",
+   "weight": 0.4463
+  },
+  {
+   "symbol": "7270.T",
+   "name": "SUBARU CORP.",
+   "sector": "Technology",
+   "weight": 0.1418
+  },
+  {
+   "symbol": "7272.T",
+   "name": "YAMAHA MOTOR CO., LTD.",
+   "sector": "Technology",
+   "weight": 0.2763
+  },
+  {
+   "symbol": "7453.T",
+   "name": "RYOHIN KEIKAKU CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.5152
+  },
+  {
+   "symbol": "7532.T",
+   "name": "PAN PACIFIC INTERNATIONAL HOLDINGS CORP.",
+   "sector": "Consumer Goods",
+   "weight": 0.0393
+  },
+  {
+   "symbol": "7731.T",
+   "name": "NIKON CORP.",
+   "sector": "Technology",
+   "weight": 0.087
+  },
+  {
+   "symbol": "7733.T",
+   "name": "OLYMPUS CORP.",
+   "sector": "Technology",
+   "weight": 0.3711
+  },
+  {
+   "symbol": "7735.T",
+   "name": "SCREEN HOLDINGS CO., LTD.",
+   "sector": "Technology",
+   "weight": 0.4847
+  },
+  {
+   "symbol": "7741.T",
+   "name": "HOYA CORP.",
+   "sector": "Technology",
+   "weight": 0.698
+  },
+  {
+   "symbol": "7751.T",
+   "name": "CANON INC.",
+   "sector": "Technology",
+   "weight": 0.379
+  },
+  {
+   "symbol": "7752.T",
+   "name": "RICOH CO., LTD.",
+   "sector": "Technology",
+   "weight": 0.0965
+  },
+  {
+   "symbol": "7832.T",
+   "name": "BANDAI NAMCO HOLDINGS INC.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.9925
+  },
+  {
+   "symbol": "7911.T",
+   "name": "TOPPAN HOLDINGS INC.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.1133
+  },
+  {
+   "symbol": "7912.T",
+   "name": "DAI NIPPON PRINTING CO., LTD.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.1503
+  },
+  {
+   "symbol": "7951.T",
+   "name": "YAMAHA CORP.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.1945
+  },
+  {
+   "symbol": "7974.T",
+   "name": "NINTENDO CO., LTD.",
+   "sector": "Information and Communications",
+   "weight": 0.4415
+  },
+  {
+   "symbol": "8001.T",
+   "name": "ITOCHU CORP.",
+   "sector": "Materials",
+   "weight": 0.6196
+  },
+  {
+   "symbol": "8002.T",
+   "name": "MARUBENI CORP.",
+   "sector": "Materials",
+   "weight": 0.2625
+  },
+  {
+   "symbol": "8015.T",
+   "name": "TOYOTA TSUSHO CORP.",
+   "sector": "Materials",
+   "weight": 1.0821
+  },
+  {
+   "symbol": "8031.T",
+   "name": "MITSUI & CO., LTD.",
+   "sector": "Materials",
+   "weight": 0.5333
+  },
+  {
+   "symbol": "8035.T",
+   "name": "TOKYO ELECTRON LTD.",
+   "sector": "Technology",
+   "weight": 7.6012
+  },
+  {
+   "symbol": "8053.T",
+   "name": "SUMITOMO CORP.",
+   "sector": "Materials",
+   "weight": 0.3588
+  },
+  {
+   "symbol": "8058.T",
+   "name": "MITSUBISHI CORP.",
+   "sector": "Materials",
+   "weight": 0.7678
+  },
+  {
+   "symbol": "8233.T",
+   "name": "TAKASHIMAYA CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.1149
+  },
+  {
+   "symbol": "8252.T",
+   "name": "MARUI GROUP CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.1489
+  },
+  {
+   "symbol": "8253.T",
+   "name": "CREDIT SAISON CO., LTD.",
+   "sector": "Financials",
+   "weight": 0.2205
+  },
+  {
+   "symbol": "8267.T",
+   "name": "AEON CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.1918
+  },
+  {
+   "symbol": "8304.T",
+   "name": "AOZORA BANK, LTD.",
+   "sector": "Financials",
+   "weight": 0.0161
+  },
+  {
+   "symbol": "8306.T",
+   "name": "MITSUBISHI UFJ FINANCIAL GROUP, INC.",
+   "sector": "Financials",
+   "weight": 0.1836
+  },
+  {
+   "symbol": "8308.T",
+   "name": "RESONA HOLDINGS, INC.",
+   "sector": "Financials",
+   "weight": 0.012
+  },
+  {
+   "symbol": "8309.T",
+   "name": "SUMITOMO MITSUI TRUST GROUP, INC.",
+   "sector": "Financials",
+   "weight": 0.0704
+  },
+  {
+   "symbol": "8316.T",
+   "name": "SUMITOMO MITSUI FINANCIAL GROUP, INC.",
+   "sector": "Financials",
+   "weight": 0.1032
+  },
+  {
+   "symbol": "8331.T",
+   "name": "THE CHIBA BANK, LTD.",
+   "sector": "Financials",
+   "weight": 0.1334
+  },
+  {
+   "symbol": "8354.T",
+   "name": "FUKUOKA FINANCIAL GROUP, INC.",
+   "sector": "Financials",
+   "weight": 0.0741
+  },
+  {
+   "symbol": "8411.T",
+   "name": "MIZUHO FINANCIAL GROUP, INC.",
+   "sector": "Financials",
+   "weight": 0.0413
+  },
+  {
+   "symbol": "8591.T",
+   "name": "ORIX CORP.",
+   "sector": "Financials",
+   "weight": 0.3114
+  },
+  {
+   "symbol": "8601.T",
+   "name": "DAIWA SECURITIES GROUP INC.",
+   "sector": "Financials",
+   "weight": 0.0905
+  },
+  {
+   "symbol": "8604.T",
+   "name": "NOMURA HOLDINGS, INC.",
+   "sector": "Financials",
+   "weight": 0.0797
+  },
+  {
+   "symbol": "8630.T",
+   "name": "SOMPO HOLDINGS, INC.",
+   "sector": "Financials",
+   "weight": 0.2268
+  },
+  {
+   "symbol": "8697.T",
+   "name": "JAPAN EXCHANGE GROUP, INC.",
+   "sector": "Financials",
+   "weight": 0.2255
+  },
+  {
+   "symbol": "8725.T",
+   "name": "MS&AD INSURANCE GROUP HOLDINGS, INC.",
+   "sector": "Financials",
+   "weight": 0.2521
+  },
+  {
+   "symbol": "8750.T",
+   "name": "DAIICHI LIFE GROUP, INC.",
+   "sector": "Financials",
+   "weight": 0.0384
+  },
+  {
+   "symbol": "8766.T",
+   "name": "TOKIO MARINE HOLDINGS, INC.",
+   "sector": "Financials",
+   "weight": 0.6944
+  },
+  {
+   "symbol": "8795.T",
+   "name": "T&D HOLDINGS, INC.",
+   "sector": "Financials",
+   "weight": 0.0519
+  },
+  {
+   "symbol": "8801.T",
+   "name": "MITSUI FUDOSAN CO., LTD.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.2526
+  },
+  {
+   "symbol": "8802.T",
+   "name": "MITSUBISHI ESTATE CO., LTD.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.2034
+  },
+  {
+   "symbol": "8804.T",
+   "name": "TOKYO TATEMONO CO., LTD.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.0876
+  },
+  {
+   "symbol": "8830.T",
+   "name": "SUMITOMO REALTY & DEVELOPMENT CO., LTD.",
+   "sector": "Capital Goods/Others",
+   "weight": 0.3463
+  },
+  {
+   "symbol": "9001.T",
+   "name": "TOBU RAILWAY CO., LTD.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.0312
+  },
+  {
+   "symbol": "9005.T",
+   "name": "TOKYU CORP.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.0428
+  },
+  {
+   "symbol": "9007.T",
+   "name": "ODAKYU ELECTRIC RAILWAY CO., LTD.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.0466
+  },
+  {
+   "symbol": "9008.T",
+   "name": "KEIO CORP.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.0409
+  },
+  {
+   "symbol": "9009.T",
+   "name": "KEISEI ELECTRIC RAILWAY CO., LTD.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.1132
+  },
+  {
+   "symbol": "9020.T",
+   "name": "EAST JAPAN RAILWAY CO.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.0581
+  },
+  {
+   "symbol": "9021.T",
+   "name": "WEST JAPAN RAILWAY CO.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.0329
+  },
+  {
+   "symbol": "9022.T",
+   "name": "CENTRAL JAPAN RAILWAY CO., LTD.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.1052
+  },
+  {
+   "symbol": "9064.T",
+   "name": "YAMATO HOLDINGS CO., LTD.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.1049
+  },
+  {
+   "symbol": "9101.T",
+   "name": "NIPPON YUSEN K.K.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.1206
+  },
+  {
+   "symbol": "9104.T",
+   "name": "MITSUI O.S.K.LINES, LTD.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.1226
+  },
+  {
+   "symbol": "9107.T",
+   "name": "KAWASAKI KISEN KAISHA, LTD.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.1687
+  },
+  {
+   "symbol": "9147.T",
+   "name": "NIPPON EXPRESS HOLDINGS, INC.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.0949
+  },
+  {
+   "symbol": "9201.T",
+   "name": "JAPAN AIRLINES CO., LTD.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.1646
+  },
+  {
+   "symbol": "9202.T",
+   "name": "ANA HOLDINGS INC.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.0162
+  },
+  {
+   "symbol": "9432.T",
+   "name": "NTT, INC.",
+   "sector": "Information and Communications",
+   "weight": 0.0923
+  },
+  {
+   "symbol": "9433.T",
+   "name": "KDDI CORP.",
+   "sector": "Information and Communications",
+   "weight": 1.813
+  },
+  {
+   "symbol": "9434.T",
+   "name": "SOFTBANK CORP.",
+   "sector": "Information and Communications",
+   "weight": 0.1247
+  },
+  {
+   "symbol": "9501.T",
+   "name": "TOKYO ELECTRIC POWER COMPANY HOLDINGS, I",
+   "sector": "Transportation and Utilities",
+   "weight": 0.0025
+  },
+  {
+   "symbol": "9502.T",
+   "name": "CHUBU ELECTRIC POWER CO., INC.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.0133
+  },
+  {
+   "symbol": "9503.T",
+   "name": "THE KANSAI ELECTRIC POWER CO., INC.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.0139
+  },
+  {
+   "symbol": "9531.T",
+   "name": "TOKYO GAS CO., LTD.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.0694
+  },
+  {
+   "symbol": "9532.T",
+   "name": "OSAKA GAS CO., LTD.",
+   "sector": "Transportation and Utilities",
+   "weight": 0.0628
+  },
+  {
+   "symbol": "9602.T",
+   "name": "TOHO CO., LTD",
+   "sector": "Information and Communications",
+   "weight": 0.045
+  },
+  {
+   "symbol": "9697.T",
+   "name": "CAPCOM CO., LTD.",
+   "sector": "Information and Communications",
+   "weight": 0.2108
+  },
+  {
+   "symbol": "9735.T",
+   "name": "SECOM CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.7245
+  },
+  {
+   "symbol": "9766.T",
+   "name": "KONAMI GROUP CORP.",
+   "sector": "Information and Communications",
+   "weight": 1.4054
+  },
+  {
+   "symbol": "9843.T",
+   "name": "NITORI HOLDINGS CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 0.4531
+  },
+  {
+   "symbol": "9983.T",
+   "name": "FAST RETAILING CO., LTD.",
+   "sector": "Consumer Goods",
+   "weight": 9.6309
+  },
+  {
+   "symbol": "9984.T",
+   "name": "SOFTBANK GROUP CORP.",
+   "sector": "Information and Communications",
+   "weight": 5.7282
+  }
+ ]
+}

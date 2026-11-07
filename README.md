@@ -55,3 +55,7 @@ Backend deployment steps are in `supabase/README.md`.
 | Constituents | Wikipedia lists (S&P 500, Nikkei 225), checked monthly |
 
 TOPIX has no Yahoo ticker: the `1306.T` ETF stands in for the live level (badge PROXY) and the official JPX close is used for daily figures.
+
+## Morning Notes
+
+`jobs/morning_note.ts` runs each weekday at 07:00 SGT (`.github/workflows/morning-note.yml`, cron 23:00 UTC Sun–Thu; also by hand with a date and a dry-run option). It first builds a numbers pack from the Monitor's own data (market table, daily history for technicals, today's calendar, recent headlines) plus Yahoo daily closes for the S&P 500 and Nikkei 225 constituents (lists: Wikipedia and Nikkei's constituent CSV, cached in `jobs/data/`) and the US sector ETFs. Claude (`claude-opus-5-5`, web search) drafts the note strictly from that pack, citing every external claim; a second call structures it; a check refuses any number that is not in the draft. The note, its sources and the pack are stored in `notes` and shown on the NEWS tab; the review tables on the right come from the same pack. GitHub secrets: `ANTHROPIC_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.

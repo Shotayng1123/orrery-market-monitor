@@ -83,6 +83,26 @@ export function mockCurve(country: string, ago: string | null): { country: strin
   return { country, current: mk(0, new Date().toISOString().slice(0, 10)), ghost: ago ? mk(ago === "36M" ? -0.9 : ago === "12M" ? -0.35 : 0.12, "earlier") : null };
 }
 
+function mockNote() {
+  const mv = (symbol: string, name: string, pct: number, last: number, sector?: string) => ({ symbol, name, last, prev: last / (1 + pct / 100), pct, sector });
+  const sec = (sector: string, pct: number, n: number) => ({ sector, pct, n, weighted: true });
+  return {
+    id: 1, d: new Date().toISOString().slice(0, 10), title: "Chip rout meets Toyota surge; Nikkei futures point lower (MOCK)", generatedAt: new Date().toISOString(), model: "mock",
+    sections: [
+      { heading: "Overnight: US", md: "S&P 500 **-1.84%**, NASDAQ -2.40%, SOX -4.11%; VIX 25.6. Breadth 92 up / 408 down of 500. Broad sell-off, centred on Tech [1]." },
+      { heading: "Big movers and why", md: "- **MU -9.8%**: guided below consensus on HBM pricing [2].\n- **LLY +6.1%**: reason not found." },
+      { heading: "Japan outlook and daily strategy", md: "Nikkei 225 closed -1.1% yesterday; the CME future implies a -2.3% open (E). Index sits 1.2σ below its 1M mean and 2.1% under the 200-day average. Expect the semis-led weakness to carry into Tokyo but fade by the afternoon (E). Hedge: buy Nikkei VI exposure into the open (E)." },
+      { heading: "Other macro", md: "UST 10Y 4.86% (+2bp), USD/JPY 158.4, WTI 90.8. Calendar: 21:30 SGT US payrolls." },
+    ],
+    sources: [{ n: 1, title: "Stocks slide as chip names tumble (mock)", url: "https://example.com/1" }, { n: 2, title: "Micron guidance (mock)", url: "https://example.com/2" }],
+    pack: {
+      us: { indices: [mv("^GSPC", "S&P 500", -1.84, 7376.86), mv("^IXIC", "NASDAQ Composite", -2.4, 24579.42), mv("^SOX", "SOX", -4.11, 9390.25), mv("^VIX", "VIX", 12.3, 25.64)], sectorsEtf: [mv("XLU", "Utilities", 0.6, 80), mv("XLP", "Consumer Staples", 0.2, 82), mv("XLF", "Financials", -0.9, 57), mv("XLK", "Technology", -3.4, 164)], sectorsConstituents: [], top: [mv("LLY", "Eli Lilly", 6.1, 1417.99), mv("KO", "Coca-Cola", 1.2, 95.8)], bottom: [mv("MU", "Micron", -9.8, 795.23), mv("AMD", "AMD", -6.2, 488.78)], big: [], breadth: { n: 500, up: 92, down: 408, over2: 14, under2: 171, over5: 3, under5: 22 }, source: "Wikipedia list (mock); Yahoo closes" },
+      jp: { indices: [mv("^N225", "Nikkei 225", -1.1, 57434.77), mv("1306.T", "TOPIX (1306.T proxy)", -0.7, 388.6)], sectors: [sec("Technology", -2.9, 40), sec("Financials", 0.4, 22), sec("Consumer Goods", -0.6, 35)], top: [mv("7203.T", "Toyota Motor", 16.7, 3533), mv("8306.T", "MUFG", 2.0, 2040)], bottom: [mv("6857.T", "Advantest", -8.1, 11000), mv("8035.T", "Tokyo Electron", -6.4, 32000)], big: [], breadth: { n: 225, up: 60, down: 160, over2: 9, under2: 70, over5: 2, under5: 11 }, impliedOpenPct: -2.3, impliedNote: "CME Nikkei future vs cash close (E)", source: "Nikkei CSV (mock); Yahoo closes" },
+      table: [{ symbol: "^TNX", name: "UST 10Y yield", cls: "Fixed income", last: 4.859, d1Pct: null, d1Chg: 0.02, unit: "bp" }, { symbol: "USDJPY=X", name: "USD/JPY", cls: "Currency", last: 158.425, d1Pct: -0.2, d1Chg: null, unit: "pct" }, { symbol: "CL=F", name: "WTI crude", cls: "Commodities", last: 90.83, d1Pct: 0.9, d1Chg: null, unit: "pct" }],
+    },
+  };
+}
+
 export const mockHealth = (): Health => ({ ok: true, at: new Date().toISOString(), tick: { lastAt: new Date().toISOString(), ageMin: 1, ok: true, note: "mock" }, daily: { lastAt: new Date().toISOString(), ok: true, note: "mock" }, sources: [{ name: "mock", lastOk: new Date().toISOString(), lastError: null }], holidays: {}, holidaysVerified: false });
 
 export function mockAction(action: string, params: Record<string, string | number | boolean | undefined> | undefined): unknown {
@@ -91,10 +111,15 @@ export function mockAction(action: string, params: Record<string, string | numbe
     case "series": return mockSeries(String(params?.symbol ?? "^N225"), String(params?.range ?? "12M"));
     case "curve": return mockCurve(String(params?.country ?? "US"), params?.ago ? String(params.ago) : null);
     case "health": return mockHealth();
-    case "note": return { note: null };
+    case "note": return { note: mockNote() };
     case "calendar": return { rows: [] };
     case "news": return { rows: [] };
     case "reports": return { rows: [] };
+    case "policy": return { rows: [
+      { bank: "FED", name: "Federal Reserve", rateLabel: "Fed funds target range, upper bound", rate: 4.0, asOf: "2026-11-06", lastChange: "2026-10-29", nextMeeting: null, sourceUrl: "https://www.federalreserve.gov/monetarypolicy/openmarket.htm", sourceNote: "FRED DFEDTARU (mock)" },
+      { bank: "BOJ", name: "Bank of Japan", rateLabel: "Uncollateralised overnight call rate", rate: null, asOf: null, lastChange: null, nextMeeting: null, sourceUrl: "https://www.boj.or.jp/en/mopo/mpmdeci/index.htm", sourceNote: null },
+      { bank: "ECB", name: "European Central Bank", rateLabel: "Deposit facility rate", rate: null, asOf: null, lastChange: null, nextMeeting: null, sourceUrl: "https://www.ecb.europa.eu/stats/policy_and_exchange_rates/key_ecb_interest_rates/html/index.en.html", sourceNote: null },
+    ] };
     default: return { rows: [] };
   }
 }

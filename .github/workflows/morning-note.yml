@@ -1,0 +1,49 @@
+name: morning-note
+
+on:
+  schedule:
+    # 23:00 UTC Sunday–Thursday = 07:00 SGT Monday–Friday (GitHub cron can run some minutes late)
+    - cron: "0 23 * * 0-4"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Note date (YYYY-MM-DD, SGT). Empty = today"
+        required: false
+        default: ""
+      dry:
+        description: "Dry run (print only)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: morning-note
+  cancel-in-progress: false
+
+jobs:
+  write:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: jobs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: jobs/package-lock.json
+      - run: npm ci
+      - name: Write the note
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.date }}" ]; then ARGS="$ARGS --date ${{ github.event.inputs.date }}"; fi
+          if [ "${{ github.event.inputs.dry }}" = "true" ]; then ARGS="$ARGS --dry"; fi
+          npx tsx morning_note.ts $ARGS
