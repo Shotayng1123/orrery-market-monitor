@@ -23,15 +23,17 @@ Hard rules:
 4. For each stock in the pack that moved 5% or more, search for the reason (earnings beat or miss with the reported figures, guidance, deal, downgrade). State what you found with a citation; if you find nothing reliable, say "reason not found".
 5. Dates and times: the pack is as of the generatedAt timestamp; today is dateSgt (Singapore). Refer to sessions by their date.
 
+Depth: this is read by portfolio managers before the open; aim for 800 to 1,200 words of dense content, no padding. Prefer precise figures from the pack over adjectives. Every paragraph should carry at least one number.
+
 Structure (markdown, H2 headings exactly as written):
 ## Overnight: US
-Index moves (S&P 500, NASDAQ, SOX, Dow, Russell, VIX), one line on breadth, sector breakdown with one explicit sentence such as "broad sell-off, centred on Tech" or "narrow rally led by semis".
+Every index in the pack with level and % (S&P 500, NASDAQ, SOX, Dow, Russell, VIX). Breadth with the counts (advancers / decliners, names beyond ±2% and ±5%). The sector picture: the three best and three worst SPDR sectors with their %, then the constituent-average sectors where they tell a different story. Finish with one explicit characterisation such as "broad sell-off, centred on Tech" or "narrow rally led by semis", and say what drove it only with a citation.
 ## Big movers and why
-The 5%+ movers with reasons and citations; then the top and bottom names briefly.
+Every name that moved 5% or more: the move, then the reason found by search (earnings beat or miss with the figures and the guidance, deals, downgrades, regulatory news) with a citation; "reason not found" when nothing reliable was found. Then the top five and bottom five S&P 500 names with their % in one line each.
 ## Japan outlook and daily strategy
-Yesterday's Tokyo session (indices, sectors, breadth), the implied open from the CME future (marked (E)), then the day's strategy: fundamental view, technicals from the pack (distance to the 200-day average, 1M and 12M sigma positions), flow (only if sourced), and what to do about it, including a hedging idea when volatility is rising, each with the reason. Mark the strategy sentences (E).
+Yesterday's Tokyo session in detail: Nikkei 225 and TOPIX levels and %, breadth counts, the three strongest and weakest Nikkei sectors with %, the big movers with reasons if found. The read-across from the US session to Japan: which Japanese sectors are exposed to what moved overnight (semis to SOX, autos and exporters to USD/JPY, banks and insurers to JGB and UST yields, China-linked names to Hang Seng and CNH), each with the relevant overnight number. The implied open from the CME future, marked (E). Technicals from the pack for Nikkei 225, TOPIX, USD/JPY and UST 10Y: level against the 20-, 50- and 200-day averages and the 1M and 12M sigma positions, with the actual average levels as support and resistance. Then the strategy, every sentence marked (E): a base case and an alternative with what would confirm each, what to buy, trim or avoid at sector level with the reason, how to handle the open (fade or follow the gap, and why), positioning or flow only if sourced, and hedging: when volatility is rising name the instrument (Nikkei VI, Nikkei futures or puts, USD/JPY, JGB futures) and the reason.
 ## Other macro
-Rates (bp), FX, commodities, today's calendar items with times in SGT.
+Rates: UST 2Y, 10Y, 30Y levels and bp changes, the 2s10s read, JGB 10Y; policy expectations only with a citation. FX: USD/JPY, DXY, EUR/USD, USD/CNH, USD/KRW with % and what it means for exporters. Commodities: WTI, Brent, gold, copper, natural gas. Volatility: VIX level and change. Today's calendar: every High and Medium item with its time in SGT, the forecast and the previous value, and one line on why it matters to the Tokyo session.
 ## Sources`;
 
 const NoteSchema = z.object({
@@ -54,12 +56,12 @@ async function main() {
   const packJson = JSON.stringify({ ...pack, headlines: pack.headlines.slice(0, 30) });
   const stream = client.beta.messages.stream({
     model: MODEL,
-    max_tokens: 20000,
+    max_tokens: 24000,
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
     output_config: { effort: "high" },
     system: [{ type: "text", text: RULES, cache_control: { type: "ephemeral" } }],
-    tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 12 }],
+    tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 18 }],
     messages: [{ role: "user", content: `NUMBERS PACK (JSON):\n${packJson}\n\nWrite today's Morning Notes.` }],
   });
   const draftMsg = await stream.finalMessage();

@@ -9,7 +9,8 @@ import { chunk, db, logRun, sourceErr, sourceOk, type InstrumentRow } from "../_
 import { fetchJson, fetchText, isCron, json } from "../_shared/http.ts";
 import { localDate, marketById, marketState, partsIn } from "../_shared/sessions.ts";
 import { loadHolidays, saveTableSnapshot } from "../_shared/table.ts";
-import { spark } from "../_shared/yahoo.ts";
+import { chart, spark } from "../_shared/yahoo.ts";
+import { fetchNikkei225, fetchSp500 } from "../_shared/constituents.ts";
 
 Deno.serve(async (req) => {
   if (!isCron(req)) return json(req, { error: "forbidden" }, 403);
@@ -20,6 +21,8 @@ Deno.serve(async (req) => {
     let detail = "";
     switch (job) {
       case "history": detail = await history(); break;
+      case "hourly": detail = await hourly(); break;
+      case "constituents": detail = await constituents(); break;
       case "curves": detail = await curves(url.searchParams.get("country") ?? "US", url.searchParams.get("full") === "1"); break;
       case "calendar": detail = await calendar(); break;
       case "news": detail = await news(); break;
@@ -68,6 +71,49 @@ async function history(): Promise<string> {
   }
   const n = await saveTableSnapshot(now);
   return `${rows.length} closes for ${inst.length - missing.length} instruments${missing.length ? `, missing: ${missing.join(" ")}` : ""}; table ${n} rows`;
+}
+
+// ---------- constituents (alert scan, breadth, movers) ----------
+async function constituents(): Promise<string> {
+  const parts: string[] = [];
+  for (const [name, fn] of [["SP500", fetchSp500], ["NK225", fetchNikkei225]] as const) {
+    try {
+      const rows = await fn();
+      for (const part of chunk(rows, 500)) { const { error } = await db.from("constituents").upsert(part, { onConflict: "idx,symbol" }); if (error) throw new Error(error.message); }
+      // drop names that left the index
+      const keep = rows.map((r) => r.symbol);
+      const { data: existing } = await db.from("constituents").select("symbol").eq("idx", name);
+      const gone = (existing ?? []).map((e) => e.symbol).filter((s) => !keep.includes(s));
+      if (gone.length) await db.from("constituents").delete().eq("idx", name).in("symbol", gone);
+      parts.push(`${name} ${rows.length} (as of ${rows[0]?.as_of}${gone.length ? `, ${gone.length} removed` : ""})`);
+      await sourceOk(`constituents:${name}`);
+    } catch (e) { parts.push(`${name} ERR ${e instanceof Error ? e.message : e}`); await sourceErr(`constituents:${name}`, e); }
+  }
+  return parts.join("; ");
+}
+
+// ---------- hourly bars (1W and 1M charts) ----------
+async function hourly(): Promise<string> {
+  const now = new Date();
+  const { data, error } = await db.from("instruments").select("*").eq("active", true).eq("provider", "yahoo");
+  if (error) throw new Error(error.message);
+  const inst = data as InstrumentRow[];
+  const rows: Array<Record<string, unknown>> = [];
+  const failed: string[] = [];
+  let i = 0;
+  await Promise.all(Array.from({ length: 5 }, async () => {
+    for (;;) {
+      const k = i++; if (k >= inst.length) return;
+      const ins = inst[k];
+      try {
+        const c = await chart(ins.symbol, "3mo", "1h");   // two months shown at most (1M window plus one to pan into); three fetched for safety
+        for (let j = 0; j < c.timestamp.length; j++) { const v = c.close[j]; if (v != null && Number.isFinite(v)) rows.push({ symbol: ins.symbol, t: new Date(c.timestamp[j] * 1000).toISOString(), close: v }); }
+      } catch { failed.push(ins.symbol); }
+    }
+  }));
+  for (const part of chunk(rows, 1000)) { const { error: ue } = await db.from("bars_hourly").upsert(part, { onConflict: "symbol,t" }); if (ue) throw new Error("bars_hourly: " + ue.message); }
+  if (failed.length < inst.length) await sourceOk("yahoo"); else await sourceErr("yahoo", "hourly: every chart call failed");
+  return `${rows.length} hourly bars for ${inst.length - failed.length} instruments${failed.length ? `, failed: ${failed.join(" ")}` : ""} (${Math.round((Date.now() - now.getTime()) / 1000)} s)`;
 }
 
 // ---------- curves ----------
@@ -224,10 +270,11 @@ async function fred(): Promise<string> {
 // ---------- prune ----------
 async function prune(): Promise<string> {
   const ago = (days: number) => new Date(Date.now() - days * 86400e3).toISOString();
-  const r1 = await db.from("bars_intraday").delete({ count: "exact" }).lt("t", ago(10));
+  const r1 = await db.from("bars_intraday").delete({ count: "exact" }).lt("t", ago(3));
+  const r5 = await db.from("bars_hourly").delete({ count: "exact" }).lt("t", ago(60));
   const r2 = await db.from("login_attempts").delete({ count: "exact" }).lt("at", ago(2));
   const r3 = await db.from("job_runs").delete({ count: "exact" }).lt("at", ago(30));
   const r4 = await db.from("news_items").delete({ count: "exact" }).lt("published_at", ago(90));
-  for (const r of [r1, r2, r3, r4]) if (r.error) throw new Error(r.error.message);
-  return `bars ${r1.count ?? 0}, attempts ${r2.count ?? 0}, runs ${r3.count ?? 0}, news ${r4.count ?? 0}`;
+  for (const r of [r1, r5, r2, r3, r4]) if (r.error) throw new Error(r.error.message);
+  return `1m bars ${r1.count ?? 0}, hourly bars ${r5.count ?? 0}, attempts ${r2.count ?? 0}, runs ${r3.count ?? 0}, news ${r4.count ?? 0}`;
 }

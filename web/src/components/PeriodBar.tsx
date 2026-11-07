@@ -8,11 +8,11 @@ export function PeriodBar({ period, onPeriod, twoSigma, onTwoSigma, extra }: { p
       {CHART_PERIODS.map((p) => <span key={p} className={`chip-sm${p === period ? " on" : ""}`} onClick={() => onPeriod(p)}>{p}</span>)}
       <span className="lbl" style={{ marginLeft: 14 }}>Bands</span>
       <span className="chip-sm on" title="Rolling mean ± 1σ over 21 / 252 / 756 trading days">±1σ</span>
-      <span className={`chip-sm${twoSigma ? " on" : ""}`} onClick={() => onTwoSigma(!twoSigma)} title="Also draw ±2σ (dashed)">±2σ</span>
-      <span className="legend" style={{ padding: 0, marginLeft: 14 }}>
-        <span><span className="sw" style={{ background: "var(--s1m)" }} />1M</span>
-        <span><span className="sw" style={{ background: "var(--s12m)" }} />12M</span>
-        <span><span className="sw" style={{ background: "var(--s36m)" }} />36M</span>
+      <span className={`chip-sm${twoSigma ? " on" : ""}`} onClick={() => onTwoSigma(!twoSigma)} title="Also draw ±2σ (fainter)">±2σ</span>
+      <span className="legend" style={{ padding: 0, marginLeft: 14 }} title="Rolling mean ± 1σ over 21 / 252 / 756 trading days">
+        <span><span className="sw solid" />1M mean ±1σ</span>
+        <span><span className="sw dashed" />12M</span>
+        <span><span className="sw dotted" />36M</span>
       </span>
       {extra}
     </div>

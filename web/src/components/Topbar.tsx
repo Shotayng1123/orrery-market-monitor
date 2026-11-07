@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Logo } from "./Logo";
+import { Alerts } from "./Alerts";
 import { allStatuses, haveHolidays, type MarketId } from "../lib/sessions";
 import { fmtClock, fmtStamp, SGT, TZ_ABBR } from "../lib/time";
 import { SIZES, type Prefs, type SizeKey } from "../lib/prefs";
@@ -12,6 +13,7 @@ const CHIP_MARKETS: MarketId[] = ["TSE", "HKEX", "SSE", "KRX", "SGX", "LSE", "NY
 
 export interface TopbarProps {
   view: ViewId;
+  tick: number;                   // refresh counter; the alert line reloads with it
   onNav: (v: ViewId) => void;
   userId: string | null;
   onSignOut: () => void;
@@ -37,6 +39,7 @@ export function Topbar(p: TopbarProps) {
       <nav id="nav">
         {VIEWS.map((v) => <a key={v.id} href={`#${v.id}`} className={v.id === p.view ? "on" : ""} onClick={(e) => { e.preventDefault(); p.onNav(v.id); }}>{v.label}</a>)}
       </nav>
+      <Alerts tick={p.tick} />
       <span className="bmq">
         <span id="mktstat" title={`Regular sessions, each in its exchange's local time${hol}`}>
           {statuses.map((s) => (

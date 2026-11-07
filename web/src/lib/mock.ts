@@ -1,6 +1,6 @@
 // Dev-only mock feed: `VITE_DEV_MOCK=1 npm run dev` serves synthetic data so the panels can be laid out and
-// checked before the backend exists. Deterministic random walks, clearly labelled MOCK in the UI.
-// Never active in production builds (gated on import.meta.env.DEV in useApi).
+// checked before the backend exists. Deterministic random walks with realistic volatility scaling, labelled
+// MOCK in the UI. Never active in production builds (gated on import.meta.env.DEV in useApi).
 import type { TableRow, Health, Curve, Series } from "./types";
 
 const MASTER: Array<Pick<TableRow, "symbol" | "name" | "cls" | "group" | "market" | "currency" | "decimals" | "order"> & { base: number; vol: number; proxyFor?: string }> = [
@@ -28,51 +28,66 @@ function rng(seed: number): () => number {
   let s = seed >>> 0 || 1;
   return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return (s % 100000) / 100000; };
 }
+/** Approximately normal(0,1) from twelve uniforms. */
+const gauss = (r: () => number) => { let x = 0; for (let i = 0; i < 12; i++) x += r(); return x - 6; };
 const seedOf = (s: string) => Array.from(s).reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
-
 const DAY = 86400;
-function dailySeries(symbol: string, n: number): Array<{ t: number; v: number }> {
-  const m = MASTER.find((x) => x.symbol === symbol) ?? MASTER[0];
-  const r = rng(seedOf(symbol));
-  const today = Math.floor(Date.now() / 1000 / DAY) * DAY;
-  const pts: Array<{ t: number; v: number }> = [];
-  let v = m.base * (0.75 + r() * 0.2);
-  // walk forward over weekdays only, ending near the base
-  const days: number[] = [];
-  for (let d = today - n * DAY * 1.45; d <= today - DAY; d += DAY) { const wd = new Date(d * 1000).getUTCDay(); if (wd !== 0 && wd !== 6) days.push(d); }
-  const drift = Math.log(m.base / v) / days.length;
-  for (const t of days) { v = v * Math.exp(drift + (r() - 0.5) * 2 * m.vol); pts.push({ t, v }); }
-  return pts.slice(-n);
+const master = (symbol: string) => MASTER.find((x) => x.symbol === symbol) ?? MASTER[0];
+
+/** A geometric random walk ending at `endValue`, built backwards so the latest print equals the live price. */
+function walkBack(times: number[], endValue: number, stepVol: number, seed: number): Array<{ t: number; v: number }> {
+  const r = rng(seed);
+  const out = new Array<{ t: number; v: number }>(times.length);
+  let v = endValue;
+  for (let i = times.length - 1; i >= 0; i--) { out[i] = { t: times[i], v }; v = v / Math.exp(gauss(r) * stepVol); }
+  return out;
 }
+
+/** Daily closes: weekdays, `n` points ending yesterday, daily vol as declared. */
+function dailySeries(symbol: string, n: number): Array<{ t: number; v: number }> {
+  const m = master(symbol);
+  const today = Math.floor(Date.now() / 1000 / DAY) * DAY;
+  const days: number[] = [];
+  for (let d = today - DAY; days.length < n; d -= DAY) { const wd = new Date(d * 1000).getUTCDay(); if (wd !== 0 && wd !== 6) days.unshift(d); }
+  return walkBack(days, m.base, m.vol, seedOf(symbol));
+}
+/** One-minute bars for the last five weekdays, 09:00–15:30 SGT; minute vol = daily vol / sqrt(390). */
 function intradaySeries(symbol: string): Array<{ t: number; v: number }> {
-  const m = MASTER.find((x) => x.symbol === symbol) ?? MASTER[0];
-  const r = rng(seedOf(symbol) + 1);
-  const start = Math.floor(Date.now() / 1000 / DAY) * DAY + 1 * 3600;   // 09:00 SGT
-  const pts: Array<{ t: number; v: number }> = [];
-  let v = m.base;
-  for (let k = 0; k < 90; k++) { v = v * Math.exp((r() - 0.5) * m.vol * 0.25); pts.push({ t: start + k * 300, v }); }
-  return pts;
+  const m = master(symbol);
+  const today = Math.floor(Date.now() / 1000 / DAY) * DAY;
+  const times: number[] = [];
+  for (let d = 6; d >= 0; d--) { const day = today - d * DAY; const wd = new Date(day * 1000).getUTCDay(); if (wd === 0 || wd === 6) continue; for (let k = 0; k < 390; k++) times.push(day + 3600 + k * 60); }
+  return walkBack(times, m.base, m.vol / Math.sqrt(390), seedOf(symbol) + 1);
+}
+/** Hourly bars on weekdays for `days` calendar days; hourly vol = daily vol / sqrt(7). */
+function hourlySeries(symbol: string, days: number): Array<{ t: number; v: number }> {
+  const m = master(symbol);
+  const end = Math.floor(Date.now() / 3600) * 3600;
+  const times: number[] = [];
+  for (let t = end - days * DAY; t <= end; t += 3600) { const d = new Date(t * 1000); const wd = d.getUTCDay(), h = d.getUTCHours(); if (wd === 0 || wd === 6 || h < 1 || h > 8) continue; times.push(t); }
+  return walkBack(times, m.base, m.vol / Math.sqrt(7), seedOf(symbol) + 2);
 }
 
 export function mockTable(): { rows: TableRow[]; asOf: string } {
   const rows: TableRow[] = MASTER.map((m) => {
     const s = dailySeries(m.symbol, 800);
-    const last = s[s.length - 1].v;
+    const last = m.base;
     const at = (daysBack: number) => s[Math.max(0, s.length - 1 - daysBack)];
     const a = { d1: at(1), w1: at(5), m1: at(21), m3: at(63), m12: at(252), m36: at(756) };
     const closes: TableRow["closes"] = {}, closeDates: TableRow["closeDates"] = {}, pct: TableRow["pct"] = {};
     for (const [k, p] of Object.entries(a) as Array<[keyof typeof a, { t: number; v: number }]>) { closes[k] = p.v; closeDates[k] = new Date(p.t * 1000).toISOString().slice(0, 10); pct[k] = (last / p.v - 1) * 100; }
-    return { ...m, proxyFor: m.proxyFor, last, lastAt: new Date().toISOString(), live: m.market === "FX", closes, closeDates, pct };
+    return { ...m, proxyFor: m.proxyFor, last, lastAt: new Date().toISOString(), live: m.market === "FX" || m.market === "CME", closes, closeDates, pct };
   });
   return { rows, asOf: new Date().toISOString() };
 }
 
-export function mockSeries(symbol: string, range: string): Series & { shownFrom?: string } {
-  if (range === "1D") return { symbol, res: "5m", points: intradaySeries(symbol), asOf: new Date().toISOString() };
-  const days: Record<string, number> = { "1W": 7, "1M": 31, "3M": 93, "12M": 366, "36M": 1096 };
-  const n = Math.round(((days[range] ?? 366) + 1120) * 0.69);
+export function mockSeries(symbol: string, range: string): Series {
+  if (range === "1D") return { symbol, res: "1m", points: intradaySeries(symbol), asOf: new Date().toISOString() };
+  if (range === "1W" || range === "1M") return { symbol, res: "1h", points: hourlySeries(symbol, range === "1W" ? 31 : 62), asOf: new Date().toISOString() };
+  const days: Record<string, number> = { "3M": 93, "12M": 366, "36M": 1096 };
+  const n = Math.round(((days[range] ?? 366) * 2 + 1120) * 0.69);
   const pts = dailySeries(symbol, n);
-  return { symbol, res: "1d", points: pts, asOf: new Date(pts[pts.length - 1].t * 1000).toISOString().slice(0, 10), shownFrom: new Date(Date.now() - (days[range] ?? 366) * DAY * 1000).toISOString().slice(0, 10) };
+  return { symbol, res: "1d", points: pts, asOf: new Date(pts[pts.length - 1].t * 1000).toISOString().slice(0, 10) };
 }
 
 export function mockCurve(country: string, ago: string | null): { country: string; current: Curve | null; ghost: Curve | null } {
@@ -115,6 +130,11 @@ export function mockAction(action: string, params: Record<string, string | numbe
     case "calendar": return { rows: [] };
     case "news": return { rows: [] };
     case "reports": return { rows: [] };
+    case "alerts": {
+      const now = Date.now();
+      const mk = (id: number, minAgo: number, symbol: string, name: string, kind: "stock" | "index", pct: number, price: number, market: string) => ({ id, at: new Date(now - minAgo * 60e3).toISOString(), d: new Date(now - minAgo * 60e3).toISOString().slice(0, 10), symbol, name, kind, pct, price, market, msg: `${name} ${pct >= 0 ? "up" : "down"} ${Math.abs(pct) >= 10 ? Math.round(Math.abs(pct)) : Math.round(Math.abs(pct) * 10) / 10}%${kind === "stock" ? " intraday" : ""}` });
+      return { rows: [mk(5, 3, "285A.T", "KIOXIA HOLDINGS CORP.", "stock", -11.2, 2840, "TSE"), mk(4, 41, "^SOX", "PHLX Semiconductor (SOX)", "index", -4.11, 9390.25, "NYSE"), mk(3, 95, "MU", "Micron Technology", "stock", -9.8, 795.23, "NYSE"), mk(2, 310, "7203.T", "TOYOTA MOTOR CORP.", "stock", 16.7, 3533, "TSE"), mk(1, 1500, "^N225", "Nikkei 225", "index", -3.4, 57434.77, "TSE")] };
+    }
     case "policy": return { rows: [
       { bank: "FED", name: "Federal Reserve", rateLabel: "Fed funds target range, upper bound", rate: 4.0, asOf: "2026-11-06", lastChange: "2026-10-29", nextMeeting: null, sourceUrl: "https://www.federalreserve.gov/monetarypolicy/openmarket.htm", sourceNote: "FRED DFEDTARU (mock)" },
       { bank: "BOJ", name: "Bank of Japan", rateLabel: "Uncollateralised overnight call rate", rate: null, asOf: null, lastChange: null, nextMeeting: null, sourceUrl: "https://www.boj.or.jp/en/mopo/mpmdeci/index.htm", sourceNote: null },

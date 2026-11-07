@@ -20,6 +20,8 @@ end $$;
 
 -- every minute: quotes for whichever markets are open (the function itself skips closed ones)
 select cron.schedule('monitor-tick', '* * * * *', $$select monitor_call('tick')$$);
+-- hourly bars for the 1W and 1M charts, refreshed at five past every hour
+select cron.schedule('monitor-hourly', '5 * * * *', $$select monitor_call('daily', 'job=hourly')$$);
 -- news every 10 minutes
 select cron.schedule('monitor-news', '*/10 * * * *', $$select monitor_call('daily', 'job=news')$$);
 -- daily history after the main closes: Tokyo 15:30 JST = 06:30 UTC, Europe 17:30 CET = 16:30 UTC, New York 16:00 ET = 21:00 UTC (22:00 in winter)
@@ -29,6 +31,8 @@ select cron.schedule('monitor-history-us',     '35 22 * * 1-5', $$select monitor
 -- curves: MOF publishes after the Tokyo close (run 08:30 UTC), Treasury after the US close (run 23:30 UTC)
 select cron.schedule('monitor-curves-jp', '30 8 * * 1-5',  $$select monitor_call('daily', 'job=curves&country=JP')$$);
 select cron.schedule('monitor-curves-us', '30 23 * * 1-5', $$select monitor_call('daily', 'job=curves&country=US')$$);
+-- index constituents daily (alert scan, breadth, movers)
+select cron.schedule('monitor-constituents', '40 0 * * *', $$select monitor_call('daily', 'job=constituents')$$);
 -- calendar hourly, FRED daily, prune daily
 select cron.schedule('monitor-calendar', '15 * * * *',  $$select monitor_call('daily', 'job=calendar')$$);
 select cron.schedule('monitor-fred',     '45 23 * * *', $$select monitor_call('daily', 'job=fred')$$);

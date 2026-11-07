@@ -54,3 +54,9 @@ intraday prices, yield curves, calendar, news, notes, reports and sign-ins; pg_c
 - Yahoo's chart and spark endpoints are unofficial. The code keeps nulls as gaps, never fills them, and rotates hosts on failure. If Yahoo breaks, `source_status.yahoo` records the error and the page shows stale stamps rather than wrong numbers.
 - TOPIX has no Yahoo ticker. `1306.T` is the live proxy; the official JPX daily index close is a planned addition.
 - `fn_table_anchors()` computes the 1D/1W/1M/3M/12M/36M anchors in SQL; the table is rebuilt once per minute, not per visitor.
+
+## Added 2026-11-07 evening
+
+- Chart frequencies: `tick` now stores one-minute bars (`bars_intraday`, three-day retention) from per-symbol chart calls (a few in parallel, spark as fallback); `daily?job=hourly` keeps `bars_hourly` (three months fetched, sixty days kept) for the 1W and 1M charts; 3M and longer use daily closes. `api?action=series` returns extra history behind each window so the page can pan.
+- Alerts: `alerts` table and `api?action=alerts`. The tick records indices beyond ±3% every minute and, every fifth minute, constituents beyond ±7% intraday (spark, one request per 20 names) for the indices whose market is open. `daily?job=constituents` refreshes the S&P 500 (Wikipedia) and Nikkei 225 (Nikkei CSV) lists into `constituents`.
+- Closing levels are held until the next session's first print: the quote is used only while its exchange-local date is newer than the last booked close.

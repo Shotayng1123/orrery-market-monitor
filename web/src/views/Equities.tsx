@@ -23,7 +23,7 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
   const table = useApi<{ rows: TableRow[]; asOf: string }>("table", undefined, tick);
   const rows = table.data?.rows ?? [];
   const main = rows.find((r) => r.symbol === ix.symbol);
-  const support = ix.support.map((s) => rows.find((r) => r.symbol === s)).filter((r): r is TableRow => !!r);
+  const support = ix.support.map((s) => rows.find((r) => r.symbol === s)).filter((r): r is TableRow => !!r).slice(0, 4);
   const toggle = (
     <div className="chips">
       <span className="lbl">Index</span>
@@ -35,10 +35,10 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
     <>
       <div className="c12">{toggle}<PeriodBar period={period} onPeriod={setPeriod} twoSigma={twoSigma} onTwoSigma={setTwoSigma} /></div>
       <Panel no="01" title={ix.label} span={8} aux={<>{ix.symbol}{main?.proxyFor && <span className="badge proxy" title="1306.T ETF stands in for the index intraday; official JPX close for daily figures">PROXY</span>}</>}>
-        {main ? <ChartPanel row={main} period={period} tick={tick} twoSigma={twoSigma} height={340} /> : <Empty title="Awaiting the data feed">{table.error ?? "The index chart loads with the market table."}</Empty>}
+        {main ? <div className="bigwrap"><ChartPanel row={main} period={period} tick={tick} twoSigma={twoSigma} shape="large" axes /></div> : <Empty title="Awaiting the data feed">{table.error ?? "The index chart loads with the market table."}</Empty>}
       </Panel>
-      <Panel no="02" title="SUPPORTING" span={4} aux={`${support.length} panels`}>
-        {support.length ? <div className="cgrid one">{support.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} twoSigma={twoSigma} height={120} />)}</div> : <Empty title="Supporting charts">Futures, FX, rates and volatility that drive this index.</Empty>}
+      <Panel no="02" title="SUPPORTING" span={4} aux={`${support.length} of 4`}>
+        {support.length ? <div className="sqgrid">{support.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} twoSigma={twoSigma} shape="square" />)}</div> : <Empty title="Supporting charts">Futures, FX, rates and volatility that drive this index.</Empty>}
       </Panel>
       <Panel no="03" title="MARKET BREADTH" span={4} aux={draft}><Empty title="Breadth">Advance/decline, % of constituents above the 50- and 200-day averages, new highs and lows. From the daily constituents job.</Empty></Panel>
       <Panel no="04" title="SHORT INTEREST" span={4} aux={draft}><Empty title="Short interest">JPX short-selling ratio for Japan; FINRA short interest for US names. Sources to be wired.</Empty></Panel>

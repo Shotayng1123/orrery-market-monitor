@@ -42,6 +42,10 @@ Deno.serve(async (req) => {
         if (!data) return json(req, { error: "not found" }, 404);
         return json(req, { report: { id: data.id, kind: data.kind, title: data.title, summary: data.summary, md: data.md, publishedAt: data.published_at } });
       }
+      case "alerts": {
+        const { data } = await db.from("alerts").select("id,at,upd,d,symbol,name,kind,pct,price,market,msg").order("upd", { ascending: false }).limit(Math.min(50, Number(q("n") ?? 20)));
+        return json(req, { rows: (data ?? []).map((a) => ({ id: a.id, at: a.upd, first: a.at, d: a.d, symbol: a.symbol, name: a.name, kind: a.kind, pct: a.pct, price: a.price, market: a.market, msg: a.msg })) });
+      }
       case "policy": {
         const { data } = await db.from("policy_rates").select("bank,name,rate_label,rate,as_of,last_change,next_meeting,source_url,source_note,updated_at").order("bank");
         return json(req, { rows: (data ?? []).map((r) => ({ bank: r.bank, name: r.name, rateLabel: r.rate_label, rate: r.rate, asOf: r.as_of, lastChange: r.last_change, nextMeeting: r.next_meeting, sourceUrl: r.source_url, sourceNote: r.source_note, updatedAt: r.updated_at })) });
@@ -121,15 +125,23 @@ async function health() {
 }
 
 // ---------- series ----------
+// Frequencies (Shota): 1D one-minute bars of the latest session, 1W / 1M hourly bars, 3M and longer daily closes.
 async function series(symbol: string, range: string) {
   if (!symbol) throw new Error("symbol required");
+  // Each range returns more history than it shows, so the page can pan back: 1D sends the three days kept in
+  // bars_intraday (the page shows the latest session), 1W a month of hourly bars, 1M two months.
   if (range === "1D") {
-    const since = new Date(Date.now() - 36 * 3600e3).toISOString();
+    const since = new Date(Date.now() - 3 * 86400e3).toISOString();
     const rows = await selectAll<{ t: string; close: number }>(() => db.from("bars_intraday").select("t,close").eq("symbol", symbol).gte("t", since).order("t"));
-    return { symbol, res: "5m", points: rows.map((r) => ({ t: Date.parse(r.t) / 1000, v: r.close })), asOf: rows.length ? rows[rows.length - 1].t : null };
+    return { symbol, res: "1m", points: rows.map((r) => ({ t: Date.parse(r.t) / 1000, v: r.close })), asOf: rows.length ? rows[rows.length - 1].t : null };
+  }
+  if (range === "1W" || range === "1M") {
+    const since = new Date(Date.now() - (range === "1W" ? 31 : 62) * 86400e3).toISOString();
+    const rows = await selectAll<{ t: string; close: number }>(() => db.from("bars_hourly").select("t,close").eq("symbol", symbol).gte("t", since).order("t"));
+    return { symbol, res: "1h", points: rows.map((r) => ({ t: Date.parse(r.t) / 1000, v: r.close })), asOf: rows.length ? rows[rows.length - 1].t : null };
   }
   const days = RANGES[range] ?? RANGES["12M"];
-  const from = new Date(Date.now() - (days + SIGMA_LOOKBACK_DAYS) * 86400e3).toISOString().slice(0, 10);
+  const from = new Date(Date.now() - (days * 2 + SIGMA_LOOKBACK_DAYS) * 86400e3).toISOString().slice(0, 10);   // one extra window of history to pan into
   const rows = await selectAll<{ d: string; close: number }>(() => db.from("prices_daily").select("d,close").eq("symbol", symbol).gte("d", from).order("d"));
   return { symbol, res: "1d", shownFrom: new Date(Date.now() - days * 86400e3).toISOString().slice(0, 10), points: rows.map((r) => ({ t: Date.parse(r.d + "T00:00:00Z") / 1000, v: r.close })), asOf: rows.length ? rows[rows.length - 1].d : null };
 }

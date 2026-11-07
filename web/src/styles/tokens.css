@@ -73,7 +73,7 @@ tbody tr.sel{background:var(--sel)}
 tbody tr.click{cursor:pointer}
 td .sub{color:var(--txt2);font-size:11px}
 td.grp,th.grp{border-left:1px solid var(--bord2)}
-tr.cls td{color:var(--mut);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;background:#0a0b0d;text-align:left;padding-top:6px}
+tr.cls td{color:var(--amber);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;background:linear-gradient(180deg,#1b1c20,#141518);text-align:left;padding:5px 8px;border-top:1px solid var(--bord);border-bottom:1px solid var(--bord)}
 table.mini{font-size:11.5px}
 table.mini td,table.mini th{padding:3px 6px}
 table.secT{width:100%;font-size:11px;border-collapse:collapse}
@@ -232,15 +232,54 @@ body.term .empty{padding:8px 4px;font-size:11px}
   .cpanel .side{border-left:0;padding-left:0;flex-direction:row;gap:12px}
 }
 
-/* chart panel grids (MARKET tab) */
-.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(430px,1fr));gap:8px}
+/* chart tiles (Analytics grammar): label row, price, change, line */
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px}
 .cgrid.two{grid-template-columns:repeat(auto-fill,minmax(430px,1fr))}
-.mtile.cp{padding:6px 8px 4px}
-.mtile.cp .lb{margin-bottom:4px}
-.rdout{font-size:10px;min-height:14px;padding:2px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.cgrid.one{grid-template-columns:minmax(0,1fr)}
+.mtile.cp{padding:6px 8px 4px;display:flex;flex-direction:column;min-width:0}
+.mtile.cp .lb{margin-bottom:2px}
+.mtile.cp .lb .badge{margin-left:4px}
+.mtile.cp .asof .st{font-size:8.5px;border:1px solid var(--bord2);border-radius:2px;padding:0 4px;color:var(--txt2);letter-spacing:.06em;margin-right:4px}
+.mtile.cp .asof .st.live{color:var(--up);border-color:#1d5c3a}
+.mtile.cp .vl{font-size:13.5px;font-weight:600;margin-top:1px;font-variant-numeric:tabular-nums;line-height:1.2}
+.mtile.cp .ch{font-size:11px;margin:1px 0 2px;font-variant-numeric:tabular-nums}
+.mtile.cp .ch .mut{font-size:9.5px}
+.mtile.cp.square{aspect-ratio:1/1}
+.mtile.cp.large{aspect-ratio:2/1;min-height:260px}
+.mtile.cp.large .vl{font-size:16px}
+.chartbox{position:relative;width:100%;min-width:0}
+.chartbox.fill{flex:1 1 auto;min-height:60px}
+.chartbox.empty{display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:11px;padding:0}
+.chartbox .uplot{font-family:var(--mono)}
+.sqgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.bigwrap{display:flex;flex-direction:column}
+.rdout{font-size:9.5px;min-height:13px;padding:1px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 .uplot,.uplot *{box-sizing:border-box}
 .u-legend{display:none}
-@media (max-width:720px){.cgrid{grid-template-columns:minmax(0,1fr)}}
+.legend .sw{width:16px;height:0;border-top:1px solid rgba(232,229,222,.55);background:none}
+.legend .sw.dashed{border-top-style:dashed}
+.legend .sw.dotted{border-top-style:dotted;border-top-width:2px}
+@media (max-width:720px){.cgrid{grid-template-columns:minmax(0,1fr)}.sqgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .curvex{position:relative;height:14px;font-size:10px;color:var(--mut)}
 .curvex span{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap}
 .cgrid.one{grid-template-columns:minmax(0,1fr)}
+
+/* open-market highlight: rows and tiles whose market is trading now */
+tbody tr.live td{background:rgba(63,208,126,.045)}
+tbody tr.live td:first-child{box-shadow:inset 2px 0 0 var(--up)}
+tbody tr.live:hover td{background:rgba(63,208,126,.09)}
+.mtile.cp.live{border-color:#1d5c3a;box-shadow:inset 2px 0 0 var(--up)}
+
+/* alerts: the latest excessive move next to the tabs; click for the last twenty */
+#alerts{position:relative;margin-left:8px;min-width:0}
+#alerts .alrt{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--bord2);border-radius:3px;padding:3px 9px;font-size:11px;cursor:pointer;white-space:nowrap;max-width:420px;overflow:hidden;text-overflow:ellipsis;background:var(--panel2)}
+#alerts .alrt:hover{border-color:var(--amber)}
+#alerts .alrt .k{color:var(--amber);font-size:9.5px;letter-spacing:.12em;font-weight:700}
+#alerts .alrt .t{color:var(--mut);font-size:9.5px}
+#alerts .alrt.fresh{border-color:var(--amber-dim);background:rgba(255,111,97,.08)}
+#alerts .alrt.none{color:var(--mut)}
+.aldrop{position:absolute;top:calc(100% + 6px);left:0;z-index:60;width:max-content;min-width:420px;max-width:min(680px,90vw);max-height:60vh;overflow:auto;background:var(--panel2);border:1px solid var(--bord2);box-shadow:0 10px 28px rgba(0,0,0,.6);padding:8px 10px;border-radius:4px}
+.aldrop table.secT td{white-space:nowrap}
+body.term #alerts .alrt{padding:1px 6px;font-size:10px;max-width:320px}
+@media (max-width:720px){#alerts{width:100%;margin-left:0}#alerts .alrt{max-width:100%}.aldrop{min-width:0;width:94vw}}
+.ctip{position:absolute;pointer-events:none;z-index:5;background:rgba(17,18,20,.94);border:1px solid var(--bord2);border-radius:2px;padding:2px 6px;font-size:10px;color:var(--txt);white-space:pre;font-variant-numeric:tabular-nums}
