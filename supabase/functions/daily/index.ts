@@ -202,8 +202,8 @@ const FEEDS: Array<{ source: string; url: string; lang?: string }> = [
   { source: "WSJ Markets", url: "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain" },
   { source: "CNBC Markets", url: "https://www.cnbc.com/id/10000664/device/rss/rss.html" },
   { source: "CNBC World", url: "https://www.cnbc.com/id/100727362/device/rss/rss.html" },
-  { source: "Nikkei Asia", url: "https://asia.nikkei.com/rss/feed/nar" },
-  { source: "Yahoo Finance", url: "https://finance.yahoo.com/news/rssindex" },
+  { source: "Nikkei Asia", url: "https://asia.nikkei.com/rss/feed/nar" },          // RSS 1.0 without dates: first-seen time is used
+  { source: "MarketWatch", url: "https://feeds.content.dowjones.io/public/rss/mw_topstories" },
 ];
 const RULES: Array<[string, RegExp]> = [
   ["JP Equities", /\b(nikkei|topix|tokyo stocks?|japan(ese)? (stocks?|shares|equit)|toyota|sony|softbank|hitachi|keyence|fast retailing|jpx)\b/i],
@@ -238,7 +238,7 @@ async function news(): Promise<string> {
       const items = parseRss(xml);
       let n = 0;
       for (const it of items) {
-        const t = Date.parse(it.pubDate);
+        const t = it.pubDate ? Date.parse(it.pubDate) : Date.now();   // feeds without dates (RSS 1.0) are stamped when first seen
         if (!Number.isFinite(t) || t < since) continue;
         rows.push({ url: it.link.slice(0, 1000), published_at: new Date(t).toISOString(), source: f.source, title: it.title.slice(0, 400), category: categorise(it.title), tagged_by: "rules" });
         n++;

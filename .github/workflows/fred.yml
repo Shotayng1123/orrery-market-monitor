@@ -1,0 +1,29 @@
+name: fred
+
+on:
+  schedule:
+    - cron: "50 23 * * 1-5"   # 07:50 SGT, after the US close
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fred:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: jobs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: jobs/package-lock.json
+      - run: npm ci
+      - run: npx tsx fred.ts
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
