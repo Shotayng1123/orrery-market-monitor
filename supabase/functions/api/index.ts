@@ -4,6 +4,7 @@ import { db, selectAll } from "../_shared/db.ts";
 import { bearer, signToken, verifyToken } from "../_shared/auth.ts";
 import { clientIp, corsHeaders, json, timingSafeEqual } from "../_shared/http.ts";
 import { computeTable } from "../_shared/table.ts";
+import { CURVE_LABELS } from "../_shared/curves.ts";
 
 const RANGES: Record<string, number> = { "1W": 7, "1M": 31, "3M": 93, "12M": 366, "36M": 1096 };
 const SIGMA_LOOKBACK_DAYS = 1120;   // 756 trading days ≈ 1,100 calendar days, so the 36M band is defined from the first point shown
@@ -27,6 +28,10 @@ Deno.serve(async (req) => {
       }
       case "series": return json(req, await series(q("symbol") ?? "", q("range") ?? "12M"));
       case "curve": return json(req, await curve(q("country") ?? "US", q("ago")));
+      case "curves": {
+        const { data } = await db.rpc("fn_curve_latest");
+        return json(req, { rows: ((data ?? []) as Array<{ country: string; d: string; n: number }>).map((r) => ({ country: r.country, label: CURVE_LABELS[r.country] ?? r.country, latest: r.d, tenors: r.n })) });
+      }
       case "calendar": return json(req, await calendar());
       case "news": return json(req, await news(q("category"), Number(q("n") ?? 120)));
       case "note": {

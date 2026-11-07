@@ -11,6 +11,7 @@ import { localDate, marketById, marketState, partsIn } from "../_shared/sessions
 import { loadHolidays, saveTableSnapshot } from "../_shared/table.ts";
 import { chart, spark } from "../_shared/yahoo.ts";
 import { fetchNikkei225, fetchSp500 } from "../_shared/constituents.ts";
+import { fetchBoc, fetchBoe, fetchBundesbank, fetchEcb } from "../_shared/curves.ts";
 
 Deno.serve(async (req) => {
   if (!isCron(req)) return json(req, { error: "forbidden" }, 403);
@@ -167,7 +168,14 @@ async function curves(country: string, full: boolean): Promise<string> {
         if (tenor === "10Y") priceRows.push({ symbol: "JGB10Y", d, close: v, source: "mof", updated_at: now });
       }
     }
-  } else throw new Error("country must be US or JP");
+  } else if (country === "DE" || country === "EA" || country === "EB" || country === "GB" || country === "CA") {
+    const srcName = { DE: "bundesbank", EA: "ecb", EB: "ecb", GB: "boe", CA: "boc" }[country];
+    try {
+      const rows = country === "DE" ? await fetchBundesbank(full) : country === "EA" || country === "EB" ? await fetchEcb(country, full) : country === "GB" ? await fetchBoe() : await fetchBoc(full);
+      for (const r of rows) curveRows.push({ ...r });   // a loop: the full Bundesbank history is ~200,000 rows, too many to spread
+      await sourceOk(srcName);
+    } catch (e) { await sourceErr(srcName, e); throw e; }
+  } else throw new Error("country must be one of US JP DE EA EB GB CA");
   for (const part of chunk(curveRows, 1000)) { const { error } = await db.from("curves").upsert(part, { onConflict: "country,d,tenor" }); if (error) throw new Error("curves: " + error.message); }
   for (const part of chunk(priceRows, 1000)) { const { error } = await db.from("prices_daily").upsert(part, { onConflict: "symbol,d" }); if (error) throw new Error("prices_daily: " + error.message); }
   const n = await saveTableSnapshot();

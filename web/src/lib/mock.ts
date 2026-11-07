@@ -93,8 +93,11 @@ export function mockSeries(symbol: string, range: string): Series {
 export function mockCurve(country: string, ago: string | null): { country: string; current: Curve | null; ghost: Curve | null } {
   const us: Array<[string, number, number]> = [["1 Mo", 1 / 12, 4.02], ["3 Mo", 0.25, 4.19], ["6 Mo", 0.5, 4.23], ["1 Yr", 1, 4.33], ["2 Yr", 2, 4.51], ["3 Yr", 3, 4.59], ["5 Yr", 5, 4.64], ["7 Yr", 7, 4.74], ["10 Yr", 10, 4.86], ["20 Yr", 20, 5.29], ["30 Yr", 30, 5.26]];
   const jp: Array<[string, number, number]> = [["1Y", 1, 1.671], ["2Y", 2, 1.88], ["3Y", 3, 1.982], ["5Y", 5, 2.243], ["7Y", 7, 2.429], ["10Y", 10, 2.817], ["15Y", 15, 3.362], ["20Y", 20, 3.669], ["30Y", 30, 3.94], ["40Y", 40, 3.96]];
-  const src = country === "JP" ? jp : us;
-  const mk = (shift: number, d: string): Curve => ({ country: country as "US" | "JP", date: d, source: country === "JP" ? "MOF (mock)" : "treasury.gov (mock)", points: src.map(([tenor, years, y]) => ({ tenor, years, yield: y + shift * (1 - years / 40) })) });
+  const de: Array<[string, number, number]> = Array.from({ length: 30 }, (_, i) => [`${i + 1}Y`, i + 1, 2.3 + Math.log(i + 1) * 0.42]);
+  const gb: Array<[string, number, number]> = [["6M", 0.5, 4.05], ["1Y", 1, 4.0], ["2Y", 2, 3.95], ["3Y", 3, 3.98], ["5Y", 5, 4.1], ["7Y", 7, 4.25], ["10Y", 10, 4.45], ["15Y", 15, 4.9], ["20Y", 20, 5.15], ["25Y", 25, 5.2], ["30Y", 30, 5.2], ["40Y", 40, 5.0]];
+  const ca: Array<[string, number, number]> = [["2Y", 2, 3.17], ["3Y", 3, 3.26], ["5Y", 5, 3.39], ["7Y", 7, 3.48], ["10Y", 10, 3.67], ["30Y", 30, 4.02]];
+  const src = country === "JP" ? jp : country === "DE" ? de : country === "EA" || country === "EB" ? de.filter(([, y]) => [1, 2, 3, 5, 7, 10, 15, 20, 30].includes(y)).map(([t, y, v]) => [t, y, v + (country === "EB" ? 0.35 : 0)] as [string, number, number]) : country === "GB" ? gb : country === "CA" ? ca : us;
+  const mk = (shift: number, d: string): Curve => ({ country, date: d, source: country === "JP" ? "MOF (mock)" : "treasury.gov (mock)", points: src.map(([tenor, years, y]) => ({ tenor, years, yield: y + shift * (1 - years / 40) })) });
   return { country, current: mk(0, new Date().toISOString().slice(0, 10)), ghost: ago ? mk(ago === "36M" ? -0.9 : ago === "12M" ? -0.35 : 0.12, "earlier") : null };
 }
 
@@ -135,6 +138,7 @@ export function mockAction(action: string, params: Record<string, string | numbe
       const mk = (id: number, minAgo: number, symbol: string, name: string, kind: "stock" | "index", pct: number, price: number, market: string) => ({ id, at: new Date(now - minAgo * 60e3).toISOString(), d: new Date(now - minAgo * 60e3).toISOString().slice(0, 10), symbol, name, kind, pct, price, market, msg: `${name} ${pct >= 0 ? "up" : "down"} ${Math.abs(pct) >= 10 ? Math.round(Math.abs(pct)) : Math.round(Math.abs(pct) * 10) / 10}%${kind === "stock" ? " intraday" : ""}` });
       return { rows: [mk(5, 3, "285A.T", "KIOXIA HOLDINGS CORP.", "stock", -11.2, 2840, "TSE"), mk(4, 41, "^SOX", "PHLX Semiconductor (SOX)", "index", -4.11, 9390.25, "NYSE"), mk(3, 95, "MU", "Micron Technology", "stock", -9.8, 795.23, "NYSE"), mk(2, 310, "7203.T", "TOYOTA MOTOR CORP.", "stock", 16.7, 3533, "TSE"), mk(1, 1500, "^N225", "Nikkei 225", "index", -3.4, 57434.77, "TSE")] };
     }
+    case "curves": return { rows: ["US", "JP", "DE", "EA", "EB", "GB", "CA"].map((c) => ({ country: c, label: c, latest: new Date().toISOString().slice(0, 10), tenors: 10 })) };
     case "policy": return { rows: [
       { bank: "FED", name: "Federal Reserve", rateLabel: "Fed funds target range, upper bound", rate: 4.0, asOf: "2026-11-06", lastChange: "2026-10-29", nextMeeting: null, sourceUrl: "https://www.federalreserve.gov/monetarypolicy/openmarket.htm", sourceNote: "FRED DFEDTARU (mock)" },
       { bank: "BOJ", name: "Bank of Japan", rateLabel: "Uncollateralised overnight call rate", rate: null, asOf: null, lastChange: null, nextMeeting: null, sourceUrl: "https://www.boj.or.jp/en/mopo/mpmdeci/index.htm", sourceNote: null },

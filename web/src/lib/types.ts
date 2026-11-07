@@ -36,7 +36,7 @@ export interface Series { symbol: string; res: "1m" | "5m" | "1h" | "1d"; points
 export interface Alert { id: number; at: string; d: string; symbol: string; name: string; kind: "stock" | "index"; pct: number; price: number | null; market: string; msg: string }
 
 export interface CurvePoint { tenor: string; years: number; yield: number }
-export interface Curve { country: "US" | "JP"; date: string; points: CurvePoint[]; source: string }
+export interface Curve { country: string; date: string; points: CurvePoint[]; source: string }
 
 export interface Health {
   ok: boolean;

@@ -20,13 +20,23 @@ function FxTable({ rows }: { rows: TableRow[] }) {
   );
 }
 
-function CurveBlock({ country, label, ago, tick }: { country: "US" | "JP"; label: string; ago: ChartPeriod; tick: number }) {
+const CURVE_ORDER = ["US", "JP", "DE", "EA", "EB", "GB", "CA"];
+const CURVE_TITLES: Record<string, string> = { US: "US TREASURY CURVE", JP: "JGB CURVE", DE: "GERMANY BUND CURVE", EA: "EURO AREA AAA CURVE", EB: "EURO AREA ALL-RATINGS CURVE", GB: "UK GILT CURVE", CA: "CANADA CURVE" };
+
+function CurvesGrid({ ago, tick }: { ago: ChartPeriod; tick: number }) {
+  const list = useApi<{ rows: Array<{ country: string; label: string; latest: string; tenors: number }> }>("curves", undefined, tick);
+  const have = new Set((list.data?.rows ?? []).map((r) => r.country));
+  const codes = CURVE_ORDER.filter((c) => have.has(c) || c === "US" || c === "JP");
+  return <>{codes.map((c, i) => <CurveBlock key={c} country={c} label={CURVE_TITLES[c] ?? c} ago={ago} tick={tick} no={String(i + 3).padStart(2, "0")} span={i < 2 ? 6 : 4} />)}</>;
+}
+
+function CurveBlock({ country, label, ago, tick, no, span }: { country: string; label: string; ago: ChartPeriod; tick: number; no: string; span: 4 | 6 }) {
   const a = ago === "1D" || ago === "1W" ? "1M" : ago;
   const d = useApi<{ current: Curve | null; ghost: Curve | null }>("curve", { country, ago: a }, tick);
   const c = d.data?.current ?? null, g = d.data?.ghost ?? null;
   const row = (t: string, v: number | null, gv: number | null) => <tr key={t}><td className="l">{t}</td><td className="num">{v == null ? "–" : v.toFixed(3)}</td><td className="num mut">{gv == null ? "–" : gv.toFixed(3)}</td><td className={`num ${signCls(v != null && gv != null ? v - gv : null)}`}>{v != null && gv != null ? fmtChg(v - gv, 1, true) : "–"}</td></tr>;
   return (
-    <Panel no={country === "US" ? "03" : "04"} title={label} span={6} aux={c ? <>{c.date} · ghost {g?.date ?? "–"} ({a} ago) · {c.source}</> : d.error ? <span className="warn">{d.error}</span> : ""}>
+    <Panel no={no} title={label} span={span} aux={c ? <>{c.date} · ghost {g?.date ?? "–"} ({a} ago) · {c.source}</> : d.error ? <span className="warn">{d.error}</span> : ""}>
       {c ? (
         <>
           <CurveChart current={c} ghost={g} height={230} />
@@ -47,7 +57,7 @@ function PolicyTable({ tick }: { tick: number }) {
   const p = useApi<{ rows: PolicyRow[] }>("policy", undefined, tick);
   const rows = p.data?.rows ?? [];
   return (
-    <Panel no="05" title="POLICY RATES" span={12} aux="values only when a job or a person has filled them from the source; blanks are blanks">
+    <Panel no="10" title="POLICY RATES" span={12} aux="values only when a job or a person has filled them from the source; blanks are blanks">
       {rows.length ? (
         <table className="mini">
           <thead><tr><th className="l">Central bank</th><th className="l">Rate</th><th>Level</th><th className="l">As of</th><th className="l">Last change</th><th className="l">Next meeting</th><th className="l">Source</th></tr></thead>
@@ -73,10 +83,9 @@ export function RatesFxView({ tick }: { sub: string; onSub: (s: string) => void;
       <Panel no="02" title="PAIRS" span={12} aux={`${fx.length} panels · ${period}`}>
         {fx.length ? <div className="cgrid">{fx.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} twoSigma={twoSigma} />)}</div> : <Empty title="No pairs yet" />}
       </Panel>
-      <CurveBlock country="US" label="US TREASURY CURVE" ago={period} tick={tick} />
-      <CurveBlock country="JP" label="JGB CURVE" ago={period} tick={tick} />
+      <CurvesGrid ago={period} tick={tick} />
       <PolicyTable tick={tick} />
-      <Panel no="06" title="YIELDS" span={12} aux={`${rates.length} panels · ${period}`}>
+      <Panel no="11" title="YIELDS" span={12} aux={`${rates.length} panels · ${period}`}>
         {rates.length ? <div className="cgrid">{rates.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} twoSigma={twoSigma} />)}</div> : <Empty title="No yields yet" />}
       </Panel>
     </>
