@@ -294,7 +294,7 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
       </Panel>
       <Panel no="03" title="MARKET BREADTH" span={6} aux={statsAux}>{s ? <BreadthTable s={s} hist={bh.data?.rows ?? []} /> : noStats}</Panel>
       <Panel no="04" title="FLOW BY SECTOR" span={6} aux={s ? <>{s.idx} · {ccy}{s.quoteAt ? ` · turnover ${fmtStamp(s.quoteAt)}` : ""}{s.mfD ? ` · net flow ${s.mfD}` : ""}{standIn}</> : ""}>{s ? <SectorFlow s={s} onSector={setDrawer} /> : noStats}</Panel>
-      <Panel no="05" title="SECTOR PERFORMANCE" span={6} aux={<>{statsAux} · <span title={ix.stats === "SP500" ? "Official GICS sectors from the S&P 500 constituent list" : "GICS sector names; classification from Yahoo Finance (official GICS where the name is in the S&P 500)"}>GICS sectors</span></>}>{s ? <Sectors s={s} onSector={setDrawer} /> : noStats}</Panel>
+      <Panel no="05" title="SECTOR PERFORMANCE" span={6} aux={<>{statsAux} · <span title={(ix.stats === "SP500" ? "Official GICS sectors from the S&P 500 constituent list. " : "GICS sector names; classification from Yahoo Finance (official GICS where the name is in the S&P 500). ") + "Sector moves are weighted by the published index weight where there is one, otherwise by market cap."}>GICS sectors · cap-weighted</span></>}>{s ? <Sectors s={s} onSector={setDrawer} /> : noStats}</Panel>
       <Panel no="06" title="SHORT INTEREST" span={6} aux={jp ? "JPX 空売り集計 · 空売り残高報告 · 信用取引現在高" : s?.shorts ? <>FINRA consolidated short-sale volume · {s.shorts.d}</> : ""}>
         {jp ? <JpShortPanel idx={ix.stats} /> : s?.shorts ? (
           <>

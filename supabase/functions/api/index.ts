@@ -221,7 +221,9 @@ async function indexStats(idx: string) {
   };
   const bySector = new Map<string, StatRow[]>();
   for (const r of rows) { const k = r.sector ?? "Other"; bySector.set(k, [...(bySector.get(k) ?? []), r]); }
-  const wavg = (xs: StatRow[], f: (r: StatRow) => number | null) => { let s = 0, w = 0; for (const r of xs) { const v = f(r); if (v == null) continue; const ww = r.weight ?? 1; s += v * ww; w += ww; } return w ? s / w : null; };
+  // sector moves weighted by the published index weight where there is one (Nikkei 225, Nasdaq-100), otherwise by
+  // market cap, so the sector figure matches what a cap-weighted sector index would show; equal weight only as a last resort
+  const wavg = (xs: StatRow[], f: (r: StatRow) => number | null) => { let s = 0, w = 0; for (const r of xs) { const v = f(r); if (v == null) continue; const ww = r.weight ?? r.mcap ?? 1; s += v * ww; w += ww; } return w ? s / w : null; };
   const totalTurn = rows.reduce((a, r) => a + (r.turnover ?? 0), 0), totalMcap = rows.reduce((a, r) => a + (r.mcap ?? 0), 0);
   const sectors = [...bySector.entries()].map(([sector, xs]) => {
     const turnover = xs.reduce((a, r) => a + (r.turnover ?? 0), 0), advT = xs.reduce((a, r) => a + (r.adv_turnover ?? 0), 0), mcap = xs.reduce((a, r) => a + (r.mcap ?? 0), 0);
