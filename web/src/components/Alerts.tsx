@@ -18,7 +18,7 @@ export function Alerts({ tick }: { tick: number }) {
   }, [open]);
   const rows = a.data?.rows ?? [];
   const latest = rows[0];
-  const fresh = latest ? Date.now() - Date.parse(latest.at) < 15 * 60e3 : false;
+  const fresh = latest ? Date.now() - Date.parse(latest.upd ?? latest.at) < 15 * 60e3 : false;   // shown time = when the alert was first raised; freshness = last confirmation
   return (
     <div id="alerts" ref={box}>
       <span className={`alrt${latest ? (fresh ? " fresh" : "") : " none"}`} onClick={() => setOpen(!open)} title="Excessive moves: single stock beyond ±7% intraday, index beyond ±3%. Click for the last twenty">
