@@ -144,7 +144,7 @@ export function NewsView({ tick }: { tick: number }) {
       <Panel no="02" title="ECONOMIC CALENDAR" span={6} aux={<span className="chips" style={{ margin: 0 }}><span className="lbl">Impact</span>{chip(imp === "high", "High", () => setImp("high"))}{chip(imp === "hm", "High + Medium", () => setImp("hm"))}{chip(imp === "all", "All", () => setImp("all"))}<span className="lbl" style={{ marginLeft: 10 }}>Countries</span>{chip(scope === "major", "Major", () => setScope("major"))}{chip(scope === "all", "All", () => setScope("all"))}<span className="mut" style={{ marginLeft: 10 }}>times in SGT{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""}</span></span>}>
         {events.length ? (
           <table className="mini calT">
-            <thead><tr><th className="l">When (SGT)</th><th className="l">Ccy</th><th className="l">Event</th><th className="l" title="High, medium or low impact">Imp</th><th>Consensus</th><th>Previous</th><th>Actual</th></tr></thead>
+            <thead><tr><th className="l">When (SGT)</th><th className="l">Ccy</th><th className="l">Event</th><th className="l" title="Impact: red high, amber medium, grey low" aria-label="Impact"></th><th>Actual</th><th>Consensus</th><th>Previous</th></tr></thead>
             <tbody>{events.map((e, i, arr) => (
               <Fragment key={e.id}>
                 {(i === 0 || dayOf(e.at) !== dayOf(arr[i - 1].at)) && <tr className="cls"><td colSpan={7}>{dayLabel(e.at)}</td></tr>}
@@ -152,8 +152,8 @@ export function NewsView({ tick }: { tick: number }) {
                   <td className="l num">{fmtStampSafe(e.at)}</td><td className="l">{e.currency ?? e.country}</td>
                   <td className="l">{e.title}{e.kind === "speech" ? <span className="mut"> · speech</span> : e.kind === "report" ? <span className="mut"> · report</span> : null}</td>
                   <td className="l" title={e.impact}><span className={`imp ${e.impact[0].toLowerCase()}`} /></td>
-                  <td>{e.forecast ?? "–"}</td><td className="mut">{e.previous ?? "–"}</td>
                   <td className={e.better === true ? "up" : e.better === false ? "dn" : ""}><b>{e.actual ?? (Date.parse(e.at) < Date.now() ? "–" : "")}</b></td>
+                  <td>{e.forecast ?? "–"}</td><td className="mut">{e.previous ?? "–"}</td>
                 </tr>
               </Fragment>
             ))}</tbody>
