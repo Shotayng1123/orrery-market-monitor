@@ -128,7 +128,8 @@ export function MarketView({ tick }: { tick: number }) {
   const [sigmaWindow, setSigmaWindow] = useState<SigmaWindow>("m12");
   const all = table.data?.rows ?? [];
   const rows = all.filter((r) => r.marketTab !== false);   // the curated table; every instrument keeps a chart below
-  const by = (g: string) => all.filter((r) => r.group === g && r.chart !== false).sort((a, b) => a.order - b.order);
+  const compact = typeof document !== "undefined" && document.body.classList.contains("term");   // one screen: charts for the table set only
+  const by = (g: string) => (compact ? rows : all).filter((r) => r.group === g && r.chart !== false).sort((a, b) => a.order - b.order);
   const selector = <PeriodBar period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} />;
   return (
     <>
@@ -138,9 +139,11 @@ export function MarketView({ tick }: { tick: number }) {
       <div className="c12">{selector}</div>
       <ChartGroup no="02" title="EQUITIES" rows={by("equity")} period={period} tick={tick} sigmaWindow={sigmaWindow} />
       <ChartGroup no="03" title="RATES" rows={by("rates")} period={period} tick={tick} sigmaWindow={sigmaWindow}>
-        <div className="minih">Yield curves · today vs {period === "1D" || period === "1W" ? "1M" : period} ago</div>
-        <CurvePanel period={period} tick={tick} />
-        <div className="minih" style={{ marginTop: 8 }}>Yields</div>
+        <div className="mkt-curves">
+          <div className="minih">Yield curves · today vs {period === "1D" || period === "1W" ? "1M" : period} ago</div>
+          <CurvePanel period={period} tick={tick} />
+          <div className="minih" style={{ marginTop: 8 }}>Yields</div>
+        </div>
       </ChartGroup>
       <ChartGroup no="04" title="CURRENCY" rows={by("fx")} period={period} tick={tick} sigmaWindow={sigmaWindow} />
       <ChartGroup no="05" title="COMMODITIES" rows={by("cmdty")} period={period} tick={tick} sigmaWindow={sigmaWindow} />

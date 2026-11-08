@@ -189,7 +189,9 @@ body.cmp .nwrow{padding:1px 5px}
 /* TERMINAL: COMPACT on a desktop. One screen per tab sized to the window; only lists scroll. */
 /* COMPACT = one page per tab (Shota): every panel on screen, bodies scroll inside, charts fill their panel */
 body.term{font-size:11px;line-height:1.28;height:calc(100vh / var(--z,1));overflow:hidden;display:flex;flex-direction:column}
-body.term #topbar{padding:2px 8px;gap:8px;min-height:0}
+body.term #topbar{padding:2px 8px;gap:8px;flex:0 0 auto;position:static}   /* never shrinks: a shrunk bar drew its second line over the panels */
+body.term #mktstat{display:none}
+body.term #upd{display:none}
 body.term #topbar .brand{font-size:15.5px;font-weight:700;letter-spacing:.05em;gap:6px}
 body.term #topbar .brand .mark{width:15px;height:15px}
 body.term #topbar .bmq{gap:7px;font-size:10.5px}
@@ -473,3 +475,9 @@ body.term #grid[data-view="rates"] .panel[data-no="10"],body.term #grid[data-vie
 body.term #grid[data-view="asset"] .panel[data-no="01"]{grid-column:span 8;grid-row:span 2}
 body.term #grid[data-view="asset"] .panel[data-no="02"]{grid-column:span 4;grid-row:span 2}
 body.term #grid[data-view="asset"] .panel[data-no="03"]{grid-column:span 12;grid-row:span 1}
+
+/* compact chart tiles: name, price, chart; the stamps and badges do not fit a 130px tile */
+body.term .mtile .asof,body.term .mtile .badge{display:none}
+body.term .mtile .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.term .mkt-curves{display:none}
+body.term .cpanel .side{display:none}
