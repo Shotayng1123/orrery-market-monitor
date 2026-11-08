@@ -5,7 +5,7 @@
 import { BROWSER_UA } from "./http.ts";
 
 export interface SparkSeries { symbol: string; timestamp: number[]; close: Array<number | null>; previousClose: number | null; chartPreviousClose: number | null; granularity: number }
-export interface ChartSeries { symbol: string; tz: string; timestamp: number[]; open: Array<number | null>; high: Array<number | null>; low: Array<number | null>; close: Array<number | null>; volume: Array<number | null>; regularMarketPrice: number | null; regularMarketTime: number | null }
+export interface ChartSeries { symbol: string; tz: string; timestamp: number[]; open: Array<number | null>; high: Array<number | null>; low: Array<number | null>; close: Array<number | null>; volume: Array<number | null>; prevClose: number | null; regularMarketPrice: number | null; regularMarketTime: number | null }
 
 const HOSTS = ["https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com"];
 const headers = { "user-agent": BROWSER_UA, accept: "application/json" };
@@ -39,14 +39,14 @@ export async function spark(symbols: string[], range: string, interval: string):
 
 export async function chart(symbol: string, range: string, interval: string): Promise<ChartSeries> {
   const j = (await getJson(`/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`, 40000)) as {
-    chart: { result: Array<{ meta: { exchangeTimezoneName: string; regularMarketPrice?: number; regularMarketTime?: number }; timestamp?: number[]; indicators: { quote: Array<{ open?: Array<number | null>; high?: Array<number | null>; low?: Array<number | null>; close?: Array<number | null>; volume?: Array<number | null> }> } }> | null; error: { description?: string } | null };
+    chart: { result: Array<{ meta: { exchangeTimezoneName: string; regularMarketPrice?: number; regularMarketTime?: number; chartPreviousClose?: number; previousClose?: number }; timestamp?: number[]; indicators: { quote: Array<{ open?: Array<number | null>; high?: Array<number | null>; low?: Array<number | null>; close?: Array<number | null>; volume?: Array<number | null> }> } }> | null; error: { description?: string } | null };
   };
   const res = j.chart.result?.[0];
   if (!res) throw new Error(j.chart.error?.description ?? "no result");
   const q = res.indicators.quote[0] ?? {};
   const n = res.timestamp?.length ?? 0;
   const arr = (a?: Array<number | null>) => (a && a.length === n ? a : new Array(n).fill(null));
-  return { symbol, tz: res.meta.exchangeTimezoneName, timestamp: res.timestamp ?? [], open: arr(q.open), high: arr(q.high), low: arr(q.low), close: arr(q.close), volume: arr(q.volume), regularMarketPrice: res.meta.regularMarketPrice ?? null, regularMarketTime: res.meta.regularMarketTime ?? null };
+  return { symbol, tz: res.meta.exchangeTimezoneName, timestamp: res.timestamp ?? [], open: arr(q.open), high: arr(q.high), low: arr(q.low), close: arr(q.close), volume: arr(q.volume), prevClose: res.meta.chartPreviousClose ?? res.meta.previousClose ?? null, regularMarketPrice: res.meta.regularMarketPrice ?? null, regularMarketTime: res.meta.regularMarketTime ?? null };
 }
 
 // ---- quotes (market cap, volume, average volume): the v7 endpoint needs a session cookie and a crumb ----

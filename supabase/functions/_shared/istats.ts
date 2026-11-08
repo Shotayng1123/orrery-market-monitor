@@ -122,13 +122,13 @@ export async function computeMoneyFlow(idx: IndexId, log: (s: string) => void = 
     for (;;) {
       const r = work.shift(); if (!r) return;
       try {
-        // five days of minute bars: the previous session's last close seeds the direction of the opening bar, so an
-        // overnight gap (and the opening auction volume that trades on it) counts; the tick rule alone misses it
-        const c = await chart(r.symbol, "5d", "1m");
+        // the previous session's close (chart metadata) seeds the direction of the opening bar, so an overnight gap
+        // and the opening auction volume that trades on it count; the tick rule alone misses them
+        const c = await chart(r.symbol, "1d", "1m");
         const dayOf = (t: number) => new Date(t * 1000).toLocaleDateString("en-CA", { timeZone: c.tz || "UTC" });
         let session = "";
         for (let i = c.timestamp.length - 1; i >= 0; i--) if (c.close[i] != null) { session = dayOf(c.timestamp[i]); break; }
-        let up = 0, down = 0, dir = 0, prev: number | null = null, lastT = 0;
+        let up = 0, down = 0, dir = 0, prev: number | null = c.prevClose, lastT = 0;
         for (let i = 0; i < c.timestamp.length; i++) {
           const px = c.close[i], vol = c.volume[i];
           if (px == null || !Number.isFinite(px)) continue;

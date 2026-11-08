@@ -100,42 +100,75 @@ async function pdfLines(bytes: Uint8Array): Promise<PdfLine[]> {
   }
   return lines;
 }
+/** Collects the daily PDF links (YYMMDD-m.pdf market, -g.pdf sectors) from one JPX page. */
+export function ratioLinks(page: string): Map<string, { m?: string; g?: string }> {
+  const files = new Map<string, { m?: string; g?: string }>();
+  for (const m of page.matchAll(/href="([^"]*\/(\d{6})-([mg])\.pdf)"/g)) { const e = files.get(m[2]) ?? {}; e[m[3] as "m" | "g"] = m[1]; files.set(m[2], e); }
+  return files;
+}
+/** Parses one day's market and sector PDFs into jp_short_ratio rows. */
+export async function ratioRows(d: string, f: { m?: string; g?: string }): Promise<Array<Record<string, unknown>>> {
+  const out: Array<Record<string, unknown>> = [];
+  const parse = (lines: PdfLine[], scope: "market" | "sector") => {
+    for (const l of lines) {
+      // rows: name | actual | % | restricted | % | free | % | total   (the market file has a date as the name)
+      const nums = l.map((c) => c.replace(/[,%]/g, "")).map((c) => (/^-?\d+(\.\d+)?$/.test(c) ? Number(c) : null));
+      const numeric = nums.filter((v): v is number => v != null);
+      if (numeric.length < 7) continue;
+      const name = l[0] ?? "";
+      if (scope === "market" && !/\d{4}年\d{1,2}月\d{1,2}日/.test(name)) continue;
+      if (scope === "sector" && (/\d{4}年/.test(name) || /合計|売買代金|比率/.test(name))) continue;
+      const [actual, , restricted, , free, , total] = numeric.slice(-7);
+      out.push({ d, scope, name: scope === "market" ? "TSE" : name, actual, short_restricted: restricted, short_free: free, total });
+    }
+  };
+  if (f.m) parse(await pdfLines(await fetchBytes(BASE + f.m)), "market");
+  if (f.g) parse(await pdfLines(await fetchBytes(BASE + f.g)), "sector");
+  return out;
+}
+export const tagToDate = (tag: string) => `20${tag.slice(0, 2)}-${tag.slice(2, 4)}-${tag.slice(4, 6)}`;
 /** Loads the market and sector short-selling PDFs for the dates linked on the index page that are not loaded yet. */
 export async function loadShortRatio(maxDays = 3): Promise<string> {
   const page = await fetchText(`${BASE}/markets/statistics-equities/short-selling/index.html`, { headers: UA }, 30000);
-  const files = new Map<string, { m?: string; g?: string }>();
-  for (const m of page.matchAll(/href="([^"]*\/(\d{6})-([mg])\.pdf)"/g)) { const e = files.get(m[2]) ?? {}; e[m[3] as "m" | "g"] = m[1]; files.set(m[2], e); }
+  const files = ratioLinks(page);
   const days = [...files.keys()].sort().reverse();
   if (!days.length) throw new Error("JPX ratio: no PDF links on the page");
-  const { data: have } = await db.from("jp_short_ratio").select("d").order("d", { ascending: false }).limit(1);
+  const { data: have } = await db.from("jp_short_ratio").select("d").eq("scope", "market").order("d", { ascending: false }).limit(1);
   const latest = have?.[0]?.d as string | undefined;
   const parts: string[] = [];
   let done = 0;
   for (const tag of days) {
     if (done >= maxDays) break;
-    const d = `20${tag.slice(0, 2)}-${tag.slice(2, 4)}-${tag.slice(4, 6)}`;
+    const d = tagToDate(tag);
     if (latest && d <= latest) break;
-    const f = files.get(tag)!;
-    const out: Array<Record<string, unknown>> = [];
-    const parse = (lines: PdfLine[], scope: "market" | "sector") => {
-      for (const l of lines) {
-        // rows: name | actual | % | restricted | % | free | % | total   (the market file has a date as the name)
-        const nums = l.map((c) => c.replace(/[,%]/g, "")).map((c) => (/^-?\d+(\.\d+)?$/.test(c) ? Number(c) : null));
-        const numeric = nums.filter((v): v is number => v != null);
-        if (numeric.length < 7) continue;
-        const name = l[0] ?? "";
-        if (scope === "market" && !/\d{4}年\d{1,2}月\d{1,2}日/.test(name)) continue;
-        if (scope === "sector" && (/\d{4}年/.test(name) || /合計|売買代金|比率/.test(name))) continue;
-        const [actual, , restricted, , free, , total] = numeric.slice(-7);
-        out.push({ d, scope, name: scope === "market" ? "TSE" : name, actual, short_restricted: restricted, short_free: free, total });
-      }
-    };
-    if (f.m) parse(await pdfLines(await fetchBytes(BASE + f.m)), "market");
-    if (f.g) parse(await pdfLines(await fetchBytes(BASE + f.g)), "sector");
+    const out = await ratioRows(d, files.get(tag)!);
     for (const part of chunk(out, 500)) { const { error } = await db.from("jp_short_ratio").upsert(part, { onConflict: "d,scope,name" }); if (error) throw new Error("jp_short_ratio: " + error.message); }
     parts.push(`${d}: ${out.length} rows`); done++;
   }
   return parts.length ? parts.join("; ") : `up to date (${latest})`;
+}
+/** Backfill from JPX's monthly archive pages (00-archives-01.html = last month … -12 = a year ago). */
+export async function backfillShortRatio(months = 12, log: (s: string) => void = () => {}): Promise<string> {
+  const have = new Set((await (await import("./db.ts")).selectAll<{ d: string }>(() => db.from("jp_short_ratio").select("d").eq("scope", "market").order("d"))).map((r) => r.d));
+  const files = new Map<string, { m?: string; g?: string }>();
+  for (const n of [0, ...Array.from({ length: months }, (_, k) => k + 1)]) {
+    const url = n === 0 ? `${BASE}/markets/statistics-equities/short-selling/index.html` : `${BASE}/markets/statistics-equities/short-selling/00-archives-${String(n).padStart(2, "0")}.html`;
+    try { for (const [tag, f] of ratioLinks(await fetchText(url, { headers: UA }, 30000))) if (!files.has(tag)) files.set(tag, f); } catch (e) { log(`${url}: ${e instanceof Error ? e.message : e}`); }
+  }
+  const todo = [...files.keys()].filter((tag) => !have.has(tagToDate(tag))).sort();
+  log(`${files.size} days linked, ${todo.length} to load`);
+  let loaded = 0, failed = 0, i = 0;
+  await Promise.all(Array.from({ length: 3 }, async () => {
+    for (;;) {
+      const tag = todo[i++]; if (!tag) return;
+      try {
+        const out = await ratioRows(tagToDate(tag), files.get(tag)!);
+        for (const part of chunk(out, 500)) { const { error } = await db.from("jp_short_ratio").upsert(part, { onConflict: "d,scope,name" }); if (error) throw new Error(error.message); }
+        loaded++; if (loaded % 20 === 0) log(`  ${loaded}/${todo.length}`);
+      } catch (e) { failed++; log(`${tag}: ${e instanceof Error ? e.message : e}`); }
+    }
+  }));
+  return `${loaded} days loaded, ${failed} failed, ${files.size} linked`;
 }
 
 // ---------- weekly margin balances (market total) ----------
