@@ -110,7 +110,7 @@ function SectorFlow({ s, onSector }: { s: IndexStats; onSector: (sector: string)
   const maxMf = Math.max(1, ...rows.map((r) => Math.abs(r.mfNet ?? 0)));
   return (
     <table className="secT flowT">
-      <thead><tr><th className="l">Sector</th><th>Turnover</th><th className="l" style={{ width: "16%" }}>Share</th><th>Share %</th><th>Avg %</th><th>Δ pp</th><th>Day / avg</th>{hasMf && <th title="Net money flow: the day's turnover split by where the last price sits in the day's range (Chaikin accumulation / distribution): a close at the low is all outflow, at the high all inflow">Net flow</th>}{hasMf && <th className="l" style={{ width: "14%" }} />}<th>1D %</th></tr></thead>
+      <thead><tr><th className="l">Sector</th><th>Turnover</th><th className="l" style={{ width: "16%" }}>Share</th><th>Share %</th><th>Avg %</th><th>Δ pp</th><th>Day / avg</th>{hasMf && <th title="Net money flow: the day's turnover signed by the move from the previous close and scaled by the day's range, capped at ±1. A move as large as the range counts the whole turnover as in- or outflow; a flat day counts nothing.">Net flow</th>}{hasMf && <th className="l" style={{ width: "14%" }} />}<th>1D %</th></tr></thead>
       <tbody>
         {rows.map((r) => (
           <tr key={r.sector}>

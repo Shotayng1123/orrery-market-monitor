@@ -30,14 +30,14 @@ function rollingMean(vals: number[], win: number): Array<number | null> {
   return out;
 }
 
-/** Net money flow for the session from the quote: turnover split by where the close sits in the day's range
- *  (Chaikin accumulation / distribution). up = turnover × (close − low) / (high − low), down = the rest, net = up − down.
- *  A close at the low is all outflow, at the high all inflow. Independent of minute bars, so the opening and
- *  closing auctions (absent from Yahoo's minute data) are covered, and it refreshes with every quote pull. */
+/** Net money flow for the session from the quote: the day's turnover signed by the move from the previous close,
+ *  scaled by the day's range and capped at ±1 (k = (last − previous close) / (high − low)): a move the size of the
+ *  range counts the whole turnover as in- or outflow, a flat day counts nothing. Includes the overnight gap and the
+ *  auctions (absent from Yahoo's minute bars), and refreshes with every quote pull. up = turnover × (1 + k) / 2. */
 function flowFromQuote(x: QuoteRow, px: number): { mf_up: number | null; mf_down: number | null; mf_net: number | null; mf_d: string | null } {
-  if (x.volume == null || x.high == null || x.low == null || !(x.high > x.low)) return { mf_up: null, mf_down: null, mf_net: null, mf_d: null };
-  const turnover = x.volume * px, k = Math.min(1, Math.max(0, (px - x.low) / (x.high - x.low)));
-  const up = turnover * k, down = turnover - up;
+  if (x.volume == null || x.high == null || x.low == null || x.prevClose == null || !(x.high > x.low)) return { mf_up: null, mf_down: null, mf_net: null, mf_d: null };
+  const turnover = x.volume * px, k = Math.min(1, Math.max(-1, (px - x.prevClose) / (x.high - x.low)));
+  const up = turnover * (1 + k) / 2, down = turnover - up;
   const d = x.time ? new Date(x.time * 1000).toLocaleDateString("en-CA", { timeZone: tzOf(x.symbol) }) : null;
   return { mf_up: up, mf_down: down, mf_net: up - down, mf_d: d };
 }
