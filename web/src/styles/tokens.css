@@ -481,3 +481,7 @@ body.term .mtile .asof,body.term .mtile .badge{display:none}
 body.term .mtile .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 body.term .mkt-curves{display:none}
 body.term .cpanel .side{display:none}
+body.term .mtile .lb{overflow:hidden;min-width:0}
+body.term .mtile .lbtxt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+body.term .mtile .ch{font-size:9.5px}
+body.term .mtile .ch .mut{display:none}
