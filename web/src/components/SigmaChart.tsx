@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import uPlot from "uplot";
+import { AXIS as SHARED_AXIS, zoomMove } from "../lib/chart";
 import "uplot/dist/uPlot.min.css";
 import { rollingBands } from "../lib/stats";
 import type { SeriesPoint } from "../lib/types";
@@ -14,7 +15,7 @@ export const UP = "#3fd07e", DN = "#ff4d42", FLAT = "#b3afa4";
 export type SigmaWindow = "m1" | "m12" | "m36";
 const WIN_DAYS: Record<SigmaWindow, number> = { m1: 21, m12: 252, m36: 756 };
 const S1 = "rgba(90,167,255,0.85)", S2 = "rgba(255,197,61,0.80)", MEAN = "rgba(232,229,222,0.65)";   // ±1σ blue, ±2σ yellow, mean grey
-const AXIS = { stroke: "#8a877e", grid: { stroke: "#141518", width: 1 }, ticks: { stroke: "#26272b", width: 1 }, font: "9.5px 'IBM Plex Mono', ui-monospace, monospace" };
+const AXIS = SHARED_AXIS;
 
 export interface SigmaChartProps {
   points: SeriesPoint[];          // full series including history behind the window (for bands and panning)
@@ -102,7 +103,7 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
         : [{ show: false }, { show: false }],
       series,
       legend: { show: false },
-      cursor: { drag: { x: false, y: false }, points: { show: false } },   // no cross-panel sync: only the panel under the pointer responds
+      cursor: { drag: { x: false, y: false }, points: { show: false }, move: zoomMove },   // no cross-panel sync: only the panel under the pointer responds
       hooks: {
         setCursor: [(u) => {
           const i = u.cursor.idx;

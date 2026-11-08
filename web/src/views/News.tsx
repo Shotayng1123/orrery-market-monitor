@@ -14,7 +14,16 @@ const MAJOR = new Set(["US", "JP", "EUR", "DE", "FR", "UK", "CN", "HK", "KR", "T
 interface Move { symbol: string; name: string; last: number; prev: number; pct: number; sector?: string }
 interface SectorMove { sector: string; pct: number; n: number; weighted: boolean }
 interface Breadth { n: number; up: number; down: number; over2: number; under2: number; over5: number; under5: number }
+interface WeeklyPack {
+  kind: "weekly"; weekStart: string; weekEnd: string;
+  table: Array<{ symbol: string; name: string; cls: string; last: number | null; w1Pct: number | null; w1Chg: number | null; unit: "pct" | "bp" }>;
+  us: { sectors: SectorMove[]; top: Move[]; bottom: Move[]; breadth: { n: number; up: number; down: number } | null };
+  jp: { sectors: SectorMove[]; top: Move[]; bottom: Move[]; breadth: { n: number; up: number; down: number } | null };
+  actuals: Array<{ atSgt: string; country: string; title: string; actual: string | null; forecast: string | null; previous: string | null; better: boolean | null }>;
+  weekAhead: Array<{ atSgt: string; country: string; title: string; forecast: string | null; previous: string | null }>;
+}
 interface Pack {
+  kind?: "daily";
   us: { indices: Move[]; sectorsEtf: Move[]; sectorsConstituents: SectorMove[]; top: Move[]; bottom: Move[]; big: Move[]; breadth: Breadth | null; source: string };
   jp: { indices: Move[]; sectors: SectorMove[]; top: Move[]; bottom: Move[]; big: Move[]; breadth: Breadth | null; impliedOpenPct: number | null; impliedNote: string; source: string };
   table: Array<{ symbol: string; name: string; cls: string; last: number | null; d1Pct: number | null; d1Chg: number | null; unit: "pct" | "bp" }>;
@@ -37,6 +46,38 @@ function SectorsTable({ rows, title }: { rows: SectorMove[]; title: string }) {
   );
 }
 const breadthLine = (b: Breadth | null) => (b ? `${b.up} up / ${b.down} down of ${b.n} · ≥+2% ${b.over2} · ≤−2% ${b.under2} · ≥+5% ${b.over5} · ≤−5% ${b.under5}` : "");
+
+/** The weekly tables that belong to the Sunday wrap-up. */
+function WeeklyTables({ pack }: { pack: WeeklyPack }) {
+  const eq = pack.table.filter((r) => ["Equities", "Volatility", "Futures"].includes(r.cls) && r.w1Pct != null);
+  const rates = pack.table.filter((r) => r.unit === "bp" && r.w1Chg != null), fx = pack.table.filter((r) => ["Currency", "Crypto", "Commodities"].includes(r.cls) && r.w1Pct != null);
+  const wk = (r: WeeklyPack["table"][number]) => r.unit === "bp" ? (r.w1Chg == null ? "–" : `${r.w1Chg > 0 ? "+" : ""}${(r.w1Chg * 100).toFixed(0)}bp`) : fmtPct(r.w1Pct);
+  const sign = (r: WeeklyPack["table"][number]) => signCls(r.unit === "bp" ? r.w1Chg : r.w1Pct);
+  return (
+    <>
+      <div className="minih">Week {pack.weekStart} to {pack.weekEnd} · equity indices</div>
+      <table className="secT"><tbody>{eq.map((r) => <tr key={r.symbol}><td className="l">{r.name}</td><td className="num">{fmtNum(r.last, r.last != null && r.last >= 1000 ? 0 : 2)}</td><td className={`num ${sign(r)}`}>{wk(r)}</td></tr>)}</tbody></table>
+      <div className="msg2" style={{ marginTop: 8 }}>
+        <div><SectorsTable rows={pack.us.sectors} title="S&P 500 sectors · week" /></div>
+        <div><SectorsTable rows={pack.jp.sectors} title="Nikkei 225 sectors · week (weight-averaged)" /></div>
+      </div>
+      <div className="msg2" style={{ marginTop: 8 }}>
+        <div><MovesTable rows={[...pack.us.top.slice(0, 5), ...pack.us.bottom.slice(0, 5)]} title="S&P 500 top 5 / bottom 5 · week" /></div>
+        <div><MovesTable rows={[...pack.jp.top.slice(0, 5), ...pack.jp.bottom.slice(0, 5)]} title="Nikkei 225 top 5 / bottom 5 · week" /></div>
+      </div>
+      <div className="msg2" style={{ marginTop: 8 }}>
+        <div><div className="minih">Yields · week</div><table className="secT"><tbody>{rates.map((r) => <tr key={r.symbol}><td className="l">{r.name}</td><td className="num">{fmtNum(r.last, 3)}</td><td className={`num ${sign(r)}`}>{wk(r)}</td></tr>)}</tbody></table></div>
+        <div><div className="minih">Currencies, commodities, crypto · week</div><table className="secT"><tbody>{fx.map((r) => <tr key={r.symbol}><td className="l">{r.name}</td><td className="num">{fmtNum(r.last, r.last != null && r.last >= 1000 ? 0 : 2)}</td><td className={`num ${sign(r)}`}>{wk(r)}</td></tr>)}</tbody></table></div>
+      </div>
+      {pack.actuals.length > 0 && (
+        <>
+          <div className="minih" style={{ marginTop: 8 }}>High-impact releases of the week · actual vs consensus</div>
+          <table className="secT"><tbody>{pack.actuals.map((e, i) => <tr key={i}><td className="l mut">{e.atSgt}</td><td className="l">{e.country}</td><td className="l">{e.title}</td><td className={`num ${e.better === true ? "up" : e.better === false ? "dn" : ""}`}><b>{e.actual ?? "–"}</b></td><td className="num mut">{e.forecast ?? "–"}</td><td className="num mut">{e.previous ?? "–"}</td></tr>)}</tbody></table>
+        </>
+      )}
+    </>
+  );
+}
 
 /** The overnight and previous-session tables that belong to one day's note (its data pack). */
 function Overnight({ pack }: { pack: Pack }) {
@@ -71,9 +112,9 @@ function Overnight({ pack }: { pack: Pack }) {
 }
 
 export function NewsView({ tick }: { tick: number }) {
-  const list = useApi<{ rows: Array<{ id: number; d: string; title: string; generatedAt: string }> }>("notes", undefined, Math.floor(tick / 10));
+  const list = useApi<{ rows: Array<{ id: number; d: string; title: string; generatedAt: string; kind?: string }> }>("notes", undefined, Math.floor(tick / 10));
   const [day, setDay] = useState<string | null>(null);
-  const note = useApi<{ note: (Note & { pack?: Pack }) | null }>("note", { d: day ?? undefined }, tick);
+  const note = useApi<{ note: (Note & { pack?: Pack | WeeklyPack }) | null }>("note", { d: day ?? undefined }, tick);
   const cal = useApi<{ rows: EconEvent[] }>("calendar", undefined, tick);
   const [cat, setCat] = useState<(typeof NEWS_CATEGORIES)[number]>("All");
   const [imp, setImp] = useState<"high" | "hm" | "all">("hm");
@@ -86,7 +127,7 @@ export function NewsView({ tick }: { tick: number }) {
   const chip = (on: boolean, label: string, f: () => void, key?: string) => <span key={key ?? label} className={`chip-sm${on ? " on" : ""}`} onClick={f}>{label}</span>;
   return (
     <>
-      <Panel no="01" title="MORNING NOTES" span={12} aux={<span className="chips" style={{ margin: 0 }}>{(list.data?.rows ?? []).slice(0, 10).map((r) => chip((day ?? list.data?.rows[0]?.d) === r.d, r.d.slice(5), () => setDay(r.d), r.d))}{n && <span className="mut" style={{ marginLeft: 8 }}>generated {fmtStampSafe(n.generatedAt)} · {n.model}</span>}</span>}>
+      <Panel no="01" title={n?.kind === "weekly" ? "WEEKLY WRAP-UP" : "MORNING NOTES"} span={12} aux={<span className="chips" style={{ margin: 0 }}>{(list.data?.rows ?? []).slice(0, 10).map((r) => chip((day ?? list.data?.rows[0]?.d) === r.d, r.kind === "weekly" ? `${r.d.slice(5)} W` : r.d.slice(5), () => setDay(r.d), r.d))}{n && <span className="mut" style={{ marginLeft: 8 }}>generated {fmtStampSafe(n.generatedAt)} · {n.model}</span>}</span>}>
         {n ? (
           <div className="msg2 notegrid">
             <div className="brnar">
@@ -94,10 +135,10 @@ export function NewsView({ tick }: { tick: number }) {
               {n.sections.map((s) => <div key={s.heading}><h4>{s.heading}</h4><Md text={s.md} sources={n.sources} /></div>)}
               {n.sources.length > 0 && <div className="src">Sources: {n.sources.map((s) => <span key={s.n}>[{s.n}] <a href={s.url} target="_blank" rel="noreferrer">{s.title}</a> · </span>)}</div>}
             </div>
-            <div>{pack ? <Overnight pack={pack} /> : <Empty title="No data pack with this note" />}</div>
+            <div>{pack ? (pack.kind === "weekly" ? <WeeklyTables pack={pack} /> : <Overnight pack={pack} />) : <Empty title="No data pack with this note" />}</div>
           </div>
         ) : (
-          <Empty title="No morning note yet">{note.error ?? "The note is written each weekday around 07:00 SGT with the overnight US session, movers above 5% and their reasons, the Japan outlook and the day's strategy."}</Empty>
+          <Empty title="No morning note yet">{note.error ?? "The note is written every day around 07:00 SGT: the overnight US session, movers above 5% and their reasons, the Japan outlook and the day's strategy; on Sundays the weekly wrap-up."}</Empty>
         )}
       </Panel>
       <Panel no="02" title="ECONOMIC CALENDAR" span={7} aux={<span className="chips" style={{ margin: 0 }}><span className="lbl">Impact</span>{chip(imp === "high", "High", () => setImp("high"))}{chip(imp === "hm", "High + Medium", () => setImp("hm"))}{chip(imp === "all", "All", () => setImp("all"))}<span className="lbl" style={{ marginLeft: 10 }}>Countries</span>{chip(scope === "major", "Major", () => setScope("major"))}{chip(scope === "all", "All", () => setScope("all"))}<span className="mut" style={{ marginLeft: 10 }}>times in SGT{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""}</span></span>}>

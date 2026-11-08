@@ -6,8 +6,17 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "noEmit": true
   },
-  "include": ["*.ts", "lib/**/*.ts"]
+  "include": [
+    "*.ts",
+    "lib/**/*.ts"
+  ],
+  "exclude": [
+    "stats_deno.ts",
+    "node_modules"
+  ]
 }

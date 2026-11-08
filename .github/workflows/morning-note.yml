@@ -2,8 +2,8 @@ name: morning-note
 
 on:
   schedule:
-    # 23:00 UTC Sunday–Thursday = 07:00 SGT Monday–Friday (GitHub cron can run some minutes late)
-    - cron: "0 23 * * 0-4"
+    # 23:00 UTC every day = 07:00 SGT every day: weekday and Saturday notes, the weekly wrap-up on Sunday (GitHub cron can run some minutes late)
+    - cron: "0 23 * * *"
   workflow_dispatch:
     inputs:
       date:

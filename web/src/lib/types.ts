@@ -55,5 +55,5 @@ export interface Health {
 
 export interface NewsItem { id: number; publishedAt: string; source: string; title: string; url: string; category: string; tickers: string[] }
 export interface EconEvent { id: number; at: string; country: string; currency?: string | null; title: string; impact: "High" | "Medium" | "Low" | "Holiday"; forecast: string | null; previous: string | null; actual: string | null; better?: boolean | null; kind?: string | null; source?: string }
-export interface Note { id: number; d: string; title: string; generatedAt: string; sections: Array<{ heading: string; md: string }>; sources: Array<{ n: number; title: string; url: string }>; model: string }
+export interface Note { id: number; d: string; title: string; generatedAt: string; sections: Array<{ heading: string; md: string }>; sources: Array<{ n: number; title: string; url: string }>; model: string; kind?: "daily" | "weekly" }
 export interface Report { id: number; kind: string; title: string; publishedAt: string; summary: string; md: string }

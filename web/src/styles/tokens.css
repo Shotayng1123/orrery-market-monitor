@@ -88,7 +88,7 @@ table.secT tbody tr:hover{background:#101318}
 .hint2{color:var(--mut);font-size:10.5px;margin-top:7px}
 .empty{color:var(--mut);padding:14px 6px;font-size:11.5px;line-height:1.5}
 .empty b{color:var(--txt2);font-weight:600}
-.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--txt2);padding:2px 2px 6px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--txt2);padding:2px 2px 6px}
 .legend .sw{display:inline-block;width:12px;height:3px;vertical-align:middle;margin-right:5px}
 .krow{display:flex;gap:18px;flex-wrap:wrap;padding:4px 2px 8px;font-size:11.5px}
 .krow .k{color:var(--mut);text-transform:uppercase;font-size:9.5px;letter-spacing:.08em;display:block}
@@ -98,7 +98,7 @@ table.secT tbody tr:hover{background:#101318}
 .mtile:hover{border-color:var(--amber)}
 .mtile .lb{font-size:9px;color:var(--mut);letter-spacing:.06em;white-space:nowrap;display:flex;align-items:baseline;gap:5px}
 .mtile .lbtxt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
-.mtile .asof{flex:0 0 auto;font-size:8.5px;letter-spacing:.02em;color:var(--mut);opacity:.72;font-variant-numeric:tabular-nums}
+.mtile .asof{flex:0 0 auto;font-size:10px;letter-spacing:.02em;color:var(--mut);opacity:.72;font-variant-numeric:tabular-nums}
 .mtile .asof.old{color:var(--warn);opacity:1}
 .mtile .vl{font-size:13.5px;font-weight:600;margin-top:1px;font-variant-numeric:tabular-nums}
 .mtile .ch{font-size:11px;margin-top:1px}
@@ -109,7 +109,7 @@ table.secT tbody tr:hover{background:#101318}
 .cpanel .side{display:flex;flex-direction:column;gap:2px;justify-content:center;border-left:1px solid var(--bord);padding-left:8px}
 .cpanel .side .px{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
 .cpanel .side .pc{font-size:12px;font-weight:600}
-.cpanel .side .k{color:var(--mut);font-size:9px;letter-spacing:.08em;text-transform:uppercase}
+.cpanel .side .k{color:var(--mut);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
 
 /* chips */
 .chip-sm{border:1px solid var(--bord2);padding:1px 8px;border-radius:2px;cursor:pointer;margin-left:5px;font-size:10px;color:var(--txt2);letter-spacing:.05em;user-select:none;white-space:nowrap;display:inline-block;line-height:1.6}
@@ -304,7 +304,9 @@ body.term #alerts .alrt{padding:1px 6px;font-size:10px;max-width:320px}
 .legend .sw.s2{border-top:2px solid rgba(255,197,61,.9)}
 .legend .sw.mean{border-top:2px solid rgba(232,229,222,.7)}
 table.mkt{table-layout:fixed}
-table.mkt col.cls{width:7%} table.mkt col.nm{width:15%} table.mkt col.n{width:6%}
+table.mkt col.nm{width:26%} table.mkt col.lv{width:11%} table.mkt col.n{width:7%}
+.mkt2{gap:10px;align-items:start}
+@media (max-width:1100px){.mkt2{grid-template-columns:minmax(0,1fr)}}
 table.mkt td,table.mkt th{overflow:hidden;text-overflow:ellipsis}
 
 /* EQUITIES: market-cap treemap (sector groups, no gaps, white text) and flow bars */
@@ -392,3 +394,8 @@ body.term #grid[data-view="market"] .panel[data-no="01"]{grid-row:span 2}
 body.term #grid[data-view="news"] .panel[data-no="01"]{grid-row:span 2}
 body.term #grid[data-view="asset"] .panel[data-no="01"],body.term #grid[data-view="asset"] .panel[data-no="02"]{grid-row:span 2}
 body.term .c12 .chips,body.term .c12 .pbar{margin:0}
+
+/* chart text (Shota: axis letters too small) */
+.curvex{font-size:11.5px}
+.ctip{font-size:11.5px}
+.uplot .u-legend{font-size:11.5px}

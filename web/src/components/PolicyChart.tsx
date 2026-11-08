@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import uPlot from "uplot";
+import { AXIS as SHARED_AXIS, zoomMove } from "../lib/chart";
 
 export interface PolicyStep { bank: string; d: string; rate: number }
 const COLORS: Record<string, string> = { FED: "#e8e5de", ECB: "#5aa7ff", BOE: "#ff6f61", BOJ: "#3fd07e", HKMA: "#b08cff", RBA: "#ffc53d", BOK: "#1fd1c1", PBOC: "#ff9f43", MAS: "#9aa8b8" };
 const ORDER = ["FED", "ECB", "BOJ", "BOE", "RBA", "BOK", "HKMA", "PBOC"];
-const AXIS = { stroke: "#8a877e", grid: { stroke: "#141518", width: 1 }, ticks: { stroke: "#26272b", width: 1 }, font: "9.5px 'IBM Plex Mono', ui-monospace, monospace" };
+const AXIS = SHARED_AXIS;
 
 /** Thirty years of policy rates as step lines, one per central bank; click a legend chip to hide or show a bank. */
 export function PolicyChart({ steps, height = 260 }: { steps: PolicyStep[]; height?: number }) {
@@ -39,7 +40,7 @@ export function PolicyChart({ steps, height = 260 }: { steps: PolicyStep[]; heig
       axes: [{ ...AXIS, space: 70 }, { ...AXIS, size: 42, values: (_u, vals) => vals.map((v) => v.toFixed(1)) }],
       series: [{ value: (_u, v) => (v == null ? "" : new Date(v * 1000).toISOString().slice(0, 10)) }, ...banks.map((b) => ({ label: b, stroke: COLORS[b] ?? "#9aa8b8", width: b === "FED" ? 1.6 : 1.2, points: { show: false }, paths: uPlot.paths.stepped!({ align: 1 }), show: !hidden.has(b) }))],
       legend: { show: false },
-      cursor: { drag: { x: false, y: false }, points: { show: false } },
+      cursor: { drag: { x: false, y: false }, points: { show: false }, move: zoomMove },
     };
     const u = new uPlot(opts, data.cols, box);
     const tip = document.createElement("div"); tip.className = "ctip"; tip.style.display = "none"; u.over.appendChild(tip);

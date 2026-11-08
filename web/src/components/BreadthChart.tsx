@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
 import uPlot from "uplot";
+import { AXIS as SHARED_AXIS, zoomMove } from "../lib/chart";
 
 export interface BreadthRow { d: string; n: number; adv: number; dec: number; above50: number; above200: number; new_hi: number; new_lo: number }
-const AXIS = { stroke: "#8a877e", grid: { stroke: "#141518", width: 1 }, ticks: { stroke: "#26272b", width: 1 }, font: "9.5px 'IBM Plex Mono', ui-monospace, monospace" };
+const AXIS = SHARED_AXIS;
 
 /** Breadth over time: % of names above the 50- and 200-day averages and the advancers' share, 0–100. */
 export function BreadthChart({ rows, height = 170 }: { rows: BreadthRow[]; height?: number }) {
@@ -27,7 +28,7 @@ export function BreadthChart({ rows, height = 170 }: { rows: BreadthRow[]; heigh
         { label: "advancers 10d", stroke: "rgba(232,229,222,0.55)", width: 0.9, points: { show: false } },
       ],
       legend: { show: false },
-      cursor: { drag: { x: false, y: false }, points: { show: false } },
+      cursor: { drag: { x: false, y: false }, points: { show: false }, move: zoomMove },
     };
     const u = new uPlot(opts, data, box);
     const tip = document.createElement("div"); tip.className = "ctip"; tip.style.display = "none"; u.over.appendChild(tip);

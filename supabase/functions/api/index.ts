@@ -37,13 +37,13 @@ Deno.serve(async (req) => {
       case "calendar": return json(req, await calendar());
       case "news": return json(req, await news(q("category"), Number(q("n") ?? 120)));
       case "notes": {
-        const { data } = await db.from("notes").select("id,d,title,generated_at").lte("d", new Date().toISOString().slice(0, 10)).order("d", { ascending: false }).limit(30);
-        return json(req, { rows: (data ?? []).map((r) => ({ id: r.id, d: r.d, title: r.title, generatedAt: r.generated_at })) });
+        const { data } = await db.from("notes").select("id,d,title,generated_at,kind").lte("d", new Date().toISOString().slice(0, 10)).order("d", { ascending: false }).limit(30);
+        return json(req, { rows: (data ?? []).map((r) => ({ id: r.id, d: r.d, title: r.title, generatedAt: r.generated_at, kind: r.kind ?? "daily" })) });
       }
       case "note": {
         const want = q("d");
-        const { data } = await (want ? db.from("notes").select("id,d,title,generated_at,model,sections,sources,pack").eq("d", want) : db.from("notes").select("id,d,title,generated_at,model,sections,sources,pack").lte("d", new Date().toISOString().slice(0, 10))).order("d", { ascending: false }).limit(1).maybeSingle();
-        return json(req, { note: data ? { id: data.id, d: data.d, title: data.title, generatedAt: data.generated_at, model: data.model, sections: data.sections, sources: data.sources, pack: data.pack } : null });
+        const { data } = await (want ? db.from("notes").select("id,d,title,generated_at,model,sections,sources,pack,kind").eq("d", want) : db.from("notes").select("id,d,title,generated_at,model,sections,sources,pack,kind").lte("d", new Date().toISOString().slice(0, 10))).order("d", { ascending: false }).limit(1).maybeSingle();
+        return json(req, { note: data ? { id: data.id, d: data.d, title: data.title, generatedAt: data.generated_at, model: data.model, sections: data.sections, sources: data.sources, pack: data.pack, kind: data.kind ?? "daily" } : null });
       }
       case "reports": {
         const { data } = await db.from("reports").select("id,kind,title,summary,published_at").order("published_at", { ascending: false }).limit(Math.min(200, Number(q("n") ?? 100)));

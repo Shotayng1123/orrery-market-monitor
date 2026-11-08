@@ -24,25 +24,28 @@ function Badges({ r }: { r: TableRow }) {
 /** Levels in the table: one decimal from 100 up, two between 10 and 100, the instrument's own below 10 (FX crosses). */
 const lvlDec = (v: number | null | undefined, d: number) => (v == null ? d : Math.abs(v) >= 100 ? Math.min(d, 1) : Math.abs(v) >= 10 ? Math.min(d, 2) : d);
 
+const LEFT = new Set(["Equities", "Volatility", "Futures"]);
+/** Two tables side by side (Shota): the level only as of now, every window as a % change, then σ 1M, 52-week
+ *  position and distance to the 200-day average. The asset class is the section bar, not a column. */
 function MarketsTable({ rows }: { rows: TableRow[] }) {
+  const sorted = [...rows].sort((a, b) => a.order - b.order);
+  const half = (left: boolean) => sorted.filter((r) => LEFT.has(r.cls) === left);
+  return <div className="msg2 mkt2"><OneTable rows={half(true)} /><OneTable rows={half(false)} /></div>;
+}
+function OneTable({ rows }: { rows: TableRow[] }) {
   const groups = new Map<string, TableRow[]>();
-  for (const r of [...rows].sort((a, b) => a.order - b.order)) groups.set(r.cls, [...(groups.get(r.cls) ?? []), r]);
+  for (const r of rows) groups.set(r.cls, [...(groups.get(r.cls) ?? []), r]);
   return (
     <table className="mkt">
-      <colgroup><col className="cls" /><col className="nm" />{Array.from({ length: 4 + PERIODS.length * 2 }, (_, i) => <col key={i} className="n" />)}</colgroup>
+      <colgroup><col className="nm" /><col className="lv" />{PERIODS.map((p) => <col key={p.key} className="n" />)}<col className="n" /><col className="n" /><col className="n" /></colgroup>
       <thead>
         <tr>
-          <th className="l">Asset class</th><th className="l">Name</th><th>Last</th>
-          {PERIODS.map((p) => <th key={p.key} className={p.key === "d1" ? "grp" : ""} title={`Close at the start of the ${p.label} window`}>{p.label} close</th>)}
-          {PERIODS.map((p) => <th key={p.key} className={p.key === "d1" ? "grp" : ""} title={`Change from the ${p.label} close to the last print (bp for yields)`}>{p.label} %</th>)}
-          <th className="grp" title="Last print against the 21-session mean, in standard deviations">σ 1M</th><th title="Where the last print sits in the 52-week range (0 = low, 100 = high)">52w pos</th><th title="Last print against the 200-day average (% for prices, percentage points for yields)">vs 200d</th>
+          <th className="l">Name</th><th>Last</th>
+          {PERIODS.map((p) => <th key={p.key} className={p.key === "d1" ? "grp" : ""} title={`Change from the close at the start of the ${p.label} window to the last print (bp for yields)`}>{p.label}</th>)}
+          <th className="grp" title="Last print against the 21-session mean, in standard deviations">σ 1M</th><th title="Where the last print sits in the 52-week range (0 = low, 100 = high)">52w</th><th title="Last print against the 200-day average (% for prices, percentage points for yields)">vs 200d</th>
         </tr>
       </thead>
-      <tbody>
-        {[...groups.entries()].map(([cls, rs]) => (
-          <GroupRows key={cls} cls={cls} rs={rs} />
-        ))}
-      </tbody>
+      <tbody>{[...groups.entries()].map(([cls, rs]) => <GroupRows key={cls} cls={cls} rs={rs} />)}</tbody>
     </table>
   );
 }
@@ -66,21 +69,17 @@ function changeShade(v: number | null | undefined, full: number): string | undef
 function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
   return (
     <>
-      <tr className="cls"><td colSpan={6 + PERIODS.length * 2}>{cls}</td></tr>
+      <tr className="cls"><td colSpan={5 + PERIODS.length}>{cls}</td></tr>
       {rs.map((r) => {
         const isRate = r.group === "rates";
-        const levels = [r.last, ...PERIODS.map((p) => r.closes[p.key])].filter((x): x is number => x != null);
-        const lo = Math.min(...levels), hi = Math.max(...levels);
         return (
-          <tr key={r.symbol} className={r.live ? "live" : undefined} title={`${r.symbol} · last ${fmtStampSafe(r.lastAt)}${r.live ? " · market open" : ""} · level shading: red = lowest of the row's levels, green = highest`}>
-            <td className="l mut">{r.cls}</td>
+          <tr key={r.symbol} className={r.live ? "live" : undefined} title={`${r.symbol} · last ${fmtStampSafe(r.lastAt)}${r.live ? " · market open" : ""}`}>
             <td className="l">{r.name}<Badges r={r} /></td>
-            <td className="num" style={{ background: levelShade(r.last, lo, hi) }}><b>{fmtNum(r.last, lvlDec(r.last, r.decimals))}</b></td>
-            {PERIODS.map((p) => <td key={p.key} className={`num${p.key === "d1" ? " grp" : ""}`} style={{ background: levelShade(r.closes[p.key], lo, hi) }} title={r.closeDates[p.key] ?? ""}>{fmtNum(r.closes[p.key], lvlDec(r.closes[p.key], r.decimals))}</td>)}
+            <td className="num"><b>{fmtNum(r.last, lvlDec(r.last, r.decimals))}</b></td>
             {PERIODS.map((p) => {
               const c = r.closes[p.key];
               const v = isRate ? (c != null && r.last != null ? r.last - c : null) : r.pct[p.key];
-              return <td key={p.key} className={`num ${signCls(v)}${p.key === "d1" ? " grp" : ""}`} style={{ background: changeShade(v, isRate ? 0.5 : 10) }}>{isRate ? fmtChg(v, 3, true) : fmtPct(v)}</td>;
+              return <td key={p.key} className={`num ${signCls(v)}${p.key === "d1" ? " grp" : ""}`} style={{ background: changeShade(v, isRate ? 0.5 : 10) }} title={c != null ? `from ${fmtNum(c, lvlDec(c, r.decimals))} on ${r.closeDates[p.key] ?? ""}` : ""}>{isRate ? fmtChg(v, 3, true) : fmtPct(v)}</td>;
             })}
             <td className={`num grp ${signCls(r.z1m)}`} style={{ background: changeShade(r.z1m ?? null, 3) }}>{r.z1m == null ? "–" : `${r.z1m > 0 ? "+" : ""}${r.z1m.toFixed(1)}σ`}</td>
             <td className="num" style={{ background: r.pos52 == null ? undefined : levelShade(r.pos52, 0, 100) }}>{r.pos52 == null ? "–" : `${Math.round(r.pos52)}`}</td>

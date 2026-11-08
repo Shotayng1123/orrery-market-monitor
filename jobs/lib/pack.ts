@@ -9,7 +9,7 @@ import { selectAll, SGT, ymdIn } from "./db.js";
 export interface Move { symbol: string; name: string; last: number; prev: number; pct: number; sector?: string; weight?: number | null }
 export interface SectorMove { sector: string; pct: number; n: number; weighted: boolean }
 export interface Pack {
-  generatedAt: string; dateSgt: string;
+  kind?: "daily"; generatedAt: string; dateSgt: string;
   table: Array<{ symbol: string; name: string; cls: string; last: number | null; lastAt: string | null; d1Pct: number | null; d1Chg: number | null; w1Pct: number | null; m1Pct: number | null; unit: "pct" | "bp" }>;
   us: { session: string | null; indices: Move[]; sectorsEtf: Move[]; sectorsConstituents: SectorMove[]; top: Move[]; bottom: Move[]; big: Move[]; breadth: { n: number; up: number; down: number; over2: number; under2: number; over5: number; under5: number } | null; source: string };
   jp: { session: string | null; indices: Move[]; sectors: SectorMove[]; top: Move[]; bottom: Move[]; big: Move[]; breadth: { n: number; up: number; down: number; over2: number; under2: number; over5: number; under5: number } | null; impliedOpenPct: number | null; impliedNote: string; source: string };
@@ -103,5 +103,55 @@ export async function buildPack(sb: SupabaseClient, log: (s: string) => void = c
 
   const us = { session: usSession, indices: usIdx, sectorsEtf: sortDesc(sectorsEtf), sectorsConstituents: sectorAgg(usMoves, false), top: sortDesc(usMoves).slice(0, 10), bottom: sortDesc(usMoves).slice(-10).reverse(), big: usMoves.filter((m) => Math.abs(m.pct) >= 5), breadth: breadth(usMoves), source: `${sp.source} (${sp.asOf}); prices Yahoo Finance daily closes` };
   const jp = { session: null, indices: jpIdx, sectors: sectorAgg(jpMoves, true), top: sortDesc(jpMoves).slice(0, 10), bottom: sortDesc(jpMoves).slice(-10).reverse(), big: jpMoves.filter((m) => Math.abs(m.pct) >= 5), breadth: breadth(jpMoves), impliedOpenPct, impliedNote: "CME Nikkei future (USD) vs the Nikkei 225 cash close; an approximation of the opening gap (E)", source: `${nk.source} (${nk.asOf}); prices Yahoo Finance daily closes` };
-  return { generatedAt: now.toISOString(), dateSgt, table, us, jp, technicals, calendar, headlines, notes };
+  return { kind: "daily", generatedAt: now.toISOString(), dateSgt, table, us, jp, technicals, calendar, headlines, notes };
+}
+
+// ---------- the Sunday weekly wrap-up ----------
+export interface WeeklyPack {
+  kind: "weekly"; generatedAt: string; dateSgt: string; weekStart: string; weekEnd: string;
+  table: Array<{ symbol: string; name: string; cls: string; last: number | null; w1Pct: number | null; w1Chg: number | null; m1Pct: number | null; unit: "pct" | "bp" }>;
+  us: { sectors: SectorMove[]; top: Move[]; bottom: Move[]; big: Move[]; breadth: { n: number; up: number; down: number } | null };
+  jp: { sectors: SectorMove[]; top: Move[]; bottom: Move[]; big: Move[]; breadth: { n: number; up: number; down: number } | null };
+  actuals: Array<{ atSgt: string; country: string; title: string; impact: string; actual: string | null; forecast: string | null; previous: string | null; better: boolean | null }>;
+  weekAhead: Array<{ atSgt: string; country: string; title: string; impact: string; forecast: string | null; previous: string | null }>;
+  headlines: Array<{ publishedAt: string; source: string; title: string; url: string; category: string }>;
+  notes: string[];
+}
+
+/** Weekly moves from the Monitor's own data: the table's 1W column, the constituent statistics (pct1w per name,
+ *  sector averages, weekly movers), the week's calendar actuals, the week ahead and the week's headlines. */
+export async function buildWeeklyPack(sb: SupabaseClient, log: (s: string) => void = console.log): Promise<WeeklyPack> {
+  const notes: string[] = [];
+  const now = new Date();
+  const dateSgt = ymdIn(SGT, now);
+  const { data: snap } = await sb.from("snapshots").select("payload").eq("key", "table").maybeSingle();
+  type Row = { symbol: string; name: string; cls: string; group: string; last: number | null; pct: Record<string, number | null>; chg: Record<string, number | null> };
+  const rows: Row[] = (snap?.payload as { rows?: Row[] } | null)?.rows ?? [];
+  if (!rows.length) notes.push("market table snapshot missing");
+  const table: WeeklyPack["table"] = rows.map((r) => ({ symbol: r.symbol, name: r.name, cls: r.cls, last: r.last, w1Pct: r.pct?.w1 ?? null, w1Chg: r.chg?.w1 ?? null, m1Pct: r.pct?.m1 ?? null, unit: r.group === "rates" ? "bp" : "pct" }));
+  type Stat = { symbol: string; name: string; sector: string | null; weight: number | null; close: number; pct1w: number | null; d: string };
+  const weekly = async (idx: string, weighted: boolean) => {
+    log(`${idx} weekly moves…`);
+    const st = await selectAll<Stat>(() => sb.from("constituent_stats").select("symbol,name,sector,weight,close,pct1w,d").eq("idx", idx).order("symbol"));
+    const moves: Move[] = st.filter((x) => x.pct1w != null).map((x) => ({ symbol: x.symbol, name: x.name, sector: x.sector ?? undefined, weight: x.weight, last: x.close, prev: x.close / (1 + x.pct1w! / 100), pct: r2(x.pct1w!) }));
+    const sorted = sortDesc(moves);
+    return { sectors: sectorAgg(moves, weighted), top: sorted.slice(0, 10), bottom: sorted.slice(-10).reverse(), big: moves.filter((m) => Math.abs(m.pct) >= 10), breadth: moves.length ? { n: moves.length, up: moves.filter((m) => m.pct > 0).length, down: moves.filter((m) => m.pct < 0).length } : null, asOf: st[0]?.d ?? null };
+  };
+  const us = await weekly("SP500", false), jp = await weekly("NK225", true);
+  // the week just ended (Mon–Fri before this Sunday, SGT) and the week ahead
+  const sunday = new Date(`${dateSgt}T00:00:00+08:00`);
+  const weekStartD = new Date(sunday.getTime() - 6 * 86400e3), weekEndD = new Date(sunday.getTime() - 1 * 86400e3);
+  const fmtSgt = (iso: string) => new Intl.DateTimeFormat("en-GB", { timeZone: SGT, weekday: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso));
+  const { data: past } = await sb.from("econ_events").select("at,country,title,impact,actual,forecast,previous,better").gte("at", weekStartD.toISOString()).lt("at", sunday.toISOString()).eq("impact", "High").not("actual", "is", null).order("at");
+  const { data: next } = await sb.from("econ_events").select("at,country,title,impact,forecast,previous").gte("at", sunday.toISOString()).lt("at", new Date(sunday.getTime() + 8 * 86400e3).toISOString()).in("impact", ["High"]).order("at");
+  const MAJOR = new Set(["US", "JP", "EUR", "UK", "CN", "KR", "AU", "DE", "FR", "CA", "CH", "HK", "IN", "TW", "SG"]);
+  const actuals = (past ?? []).filter((e) => MAJOR.has(e.country)).map((e) => ({ atSgt: fmtSgt(e.at), country: e.country, title: e.title, impact: e.impact, actual: e.actual, forecast: e.forecast, previous: e.previous, better: e.better ?? null }));
+  const weekAhead = (next ?? []).filter((e) => MAJOR.has(e.country)).map((e) => ({ atSgt: fmtSgt(e.at), country: e.country, title: e.title, impact: e.impact, forecast: e.forecast, previous: e.previous }));
+  const { data: news } = await sb.from("news_items").select("published_at,source,title,url,category").gte("published_at", weekStartD.toISOString()).order("published_at", { ascending: false }).limit(300);
+  // a spread of the week's headlines across desks, newest first within each desk
+  const byCat = new Map<string, Array<{ publishedAt: string; source: string; title: string; url: string; category: string }>>();
+  for (const n of news ?? []) { const c = n.category ?? "Macro"; byCat.set(c, [...(byCat.get(c) ?? []), { publishedAt: n.published_at, source: n.source, title: n.title, url: n.url, category: c }]); }
+  const headlines = [...byCat.values()].flatMap((xs) => xs.slice(0, 10)).sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
+  if (us.asOf) notes.push(`constituent statistics as of ${us.asOf} (weekly % = close against five sessions earlier)`);
+  return { kind: "weekly", generatedAt: now.toISOString(), dateSgt, weekStart: ymdIn(SGT, weekStartD), weekEnd: ymdIn(SGT, weekEndD), table, us: { sectors: us.sectors, top: us.top, bottom: us.bottom, big: us.big, breadth: us.breadth }, jp: { sectors: jp.sectors, top: jp.top, bottom: jp.bottom, big: jp.big, breadth: jp.breadth }, actuals, weekAhead, headlines, notes };
 }

@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
 import uPlot from "uplot";
+import { zoomMove } from "../lib/chart";
 import type { Curve } from "../lib/types";
 
-const AXIS = { stroke: "#b3afa4", grid: { stroke: "#1a1b1e", width: 1 }, ticks: { stroke: "#26272b", width: 1 }, font: "10px 'IBM Plex Mono', ui-monospace, monospace" };
+const AXIS = { stroke: "#b3afa4", grid: { stroke: "#1a1b1e", width: 1 }, ticks: { stroke: "#26272b", width: 1 }, font: "12px 'IBM Plex Mono', ui-monospace, monospace" };
 const Y_AXIS_PX = 52, PAD_RIGHT = 10;
 const MAJOR = [1 / 12, 0.25, 0.5, 1, 2, 5, 10, 20, 30, 40];
 const shortTenor = (t: string) => t.replace(/\s*(Mo|Month)$/i, "M").replace(/\s*Yr$/i, "Y");
@@ -33,7 +34,7 @@ export function CurveChart({ current, ghost, height = 190 }: { current: Curve; g
         ...(gh ? [{ label: ghost!.date, stroke: "rgba(255,111,97,0.55)", width: 1.4, dash: [4, 3], points: { show: true, size: 4, fill: "rgba(255,111,97,0.55)" } }] : []),
       ],
       legend: { show: false },
-      cursor: { drag: { x: false, y: false }, points: { show: true } },
+      cursor: { drag: { x: false, y: false }, points: { show: true }, move: zoomMove },
     };
     const u = new uPlot(opts, data, el.current);
     const ro = new ResizeObserver(() => { if (el.current) u.setSize({ width: el.current.clientWidth || 300, height: height - 16 }); });
