@@ -141,17 +141,17 @@ export function NewsView({ tick }: { tick: number }) {
           <Empty title="No morning note yet">{note.error ?? "The note is written every day around 07:00 SGT: the overnight US session, movers above 5% and their reasons, the Japan outlook and the day's strategy; on Sundays the weekly wrap-up."}</Empty>
         )}
       </Panel>
-      <Panel no="02" title="ECONOMIC CALENDAR" span={7} aux={<span className="chips" style={{ margin: 0 }}><span className="lbl">Impact</span>{chip(imp === "high", "High", () => setImp("high"))}{chip(imp === "hm", "High + Medium", () => setImp("hm"))}{chip(imp === "all", "All", () => setImp("all"))}<span className="lbl" style={{ marginLeft: 10 }}>Countries</span>{chip(scope === "major", "Major", () => setScope("major"))}{chip(scope === "all", "All", () => setScope("all"))}<span className="mut" style={{ marginLeft: 10 }}>times in SGT{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""}</span></span>}>
+      <Panel no="02" title="ECONOMIC CALENDAR" span={6} aux={<span className="chips" style={{ margin: 0 }}><span className="lbl">Impact</span>{chip(imp === "high", "High", () => setImp("high"))}{chip(imp === "hm", "High + Medium", () => setImp("hm"))}{chip(imp === "all", "All", () => setImp("all"))}<span className="lbl" style={{ marginLeft: 10 }}>Countries</span>{chip(scope === "major", "Major", () => setScope("major"))}{chip(scope === "all", "All", () => setScope("all"))}<span className="mut" style={{ marginLeft: 10 }}>times in SGT{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""}</span></span>}>
         {events.length ? (
           <table className="mini calT">
-            <thead><tr><th className="l">When (SGT)</th><th className="l">Ccy</th><th className="l">Event</th><th className="l">Impact</th><th>Consensus</th><th>Previous</th><th>Actual</th></tr></thead>
+            <thead><tr><th className="l">When (SGT)</th><th className="l">Ccy</th><th className="l">Event</th><th className="l" title="High, medium or low impact">Imp</th><th>Consensus</th><th>Previous</th><th>Actual</th></tr></thead>
             <tbody>{events.map((e, i, arr) => (
               <Fragment key={e.id}>
                 {(i === 0 || dayOf(e.at) !== dayOf(arr[i - 1].at)) && <tr className="cls"><td colSpan={7}>{dayLabel(e.at)}</td></tr>}
                 <tr className={`ecrow${Date.parse(e.at) < Date.now() ? " past" : ""}`}>
                   <td className="l num">{fmtStampSafe(e.at)}</td><td className="l">{e.currency ?? e.country}</td>
                   <td className="l">{e.title}{e.kind === "speech" ? <span className="mut"> · speech</span> : e.kind === "report" ? <span className="mut"> · report</span> : null}</td>
-                  <td className="l"><span className={`imp ${e.impact[0].toLowerCase()}`} /> {e.impact}</td>
+                  <td className="l" title={e.impact}><span className={`imp ${e.impact[0].toLowerCase()}`} /></td>
                   <td>{e.forecast ?? "–"}</td><td className="mut">{e.previous ?? "–"}</td>
                   <td className={e.better === true ? "up" : e.better === false ? "dn" : ""}><b>{e.actual ?? (Date.parse(e.at) < Date.now() ? "–" : "")}</b></td>
                 </tr>
@@ -160,7 +160,7 @@ export function NewsView({ tick }: { tick: number }) {
           </table>
         ) : <Empty title="No calendar loaded">{cal.error ?? "The calendar sync runs every hour."}</Empty>}
       </Panel>
-      <Panel no="03" title="NEWS" span={5} aux={<span className="chips" style={{ margin: 0 }}>{NEWS_CATEGORIES.map((c) => <span key={c} className={`chip-sm${c === cat ? " on" : ""}`} onClick={() => setCat(c)}>{c}</span>)}</span>}>
+      <Panel no="03" title="NEWS" span={6} aux={<span className="chips eq" style={{ margin: 0 }}>{NEWS_CATEGORIES.map((c) => <span key={c} className={`chip-sm${c === cat ? " on" : ""}`} onClick={() => setCat(c)}>{c}</span>)}</span>}>
         {news.data?.rows.length ? <div className="nwlist">{news.data.rows.map((it) => (
           <div className="nwrow" key={it.id}>
             <span className="nwt">{fmtStampSafe(it.publishedAt)}</span>

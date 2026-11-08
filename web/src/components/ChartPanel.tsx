@@ -5,6 +5,7 @@ import type { Series, TableRow } from "../lib/types";
 import { fmtChg, fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtStamp, SGT } from "../lib/time";
 import { marketById } from "../lib/sessions";
+import { Flash } from "./Flash";
 
 export type ChartPeriod = "1D" | "1W" | "1M" | "3M" | "12M" | "36M";
 export const CHART_PERIODS: ChartPeriod[] = ["1D", "1W", "1M", "3M", "12M", "36M"];
@@ -50,7 +51,7 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
         {DEV_MOCK && <span className="badge est">MOCK</span>}
         <span className="asof" title="Source time of the last print, Singapore time"><span className={`st${row.live ? " live" : ""}`}>{row.live ? "LIVE" : "CLOSED"}</span> {stamp}</span>
       </div>
-      <div className="vl">{fmtNum(row.last, row.decimals)}{isRate && row.last != null ? "%" : ""}</div>
+      <div className="vl"><Flash value={row.last}>{fmtNum(row.last, row.decimals)}{isRate && row.last != null ? "%" : ""}</Flash></div>
       <div className={`ch ${signCls(chg)}`}>{isRate ? fmtChg(chg, 3, true) : fmtPct(chg)} <span className="mut">{period}{row.closes[k] != null ? ` · from ${fmtNum(row.closes[k], row.decimals)}` : ""}</span></div>
       {points.length
         ? <SigmaChart points={points} windowSec={windowSec} intraday={intraday} decimals={row.decimals} sigmaWindow={sigmaWindow} onReadout={setRd} onPan={setPan} color={color} fill={shape !== "wide"} height={shape === "wide" ? 150 : undefined} axes={axes} />

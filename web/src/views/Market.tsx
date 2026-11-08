@@ -6,6 +6,7 @@ import type { SigmaWindow } from "../components/SigmaChart";
 import { CurveChart, spread } from "../components/CurveChart";
 import { useApi, DEV_MOCK } from "../lib/useApi";
 import { fmtNum, fmtPct, fmtChg, fmtStampSafe, signCls } from "./shared";
+import { Flash } from "../components/Flash";
 import { PERIODS, type Curve, type TableRow } from "../lib/types";
 import { marketById } from "../lib/sessions";
 import { filterCurve } from "../lib/curveTenors";
@@ -24,13 +25,10 @@ function Badges({ r }: { r: TableRow }) {
 /** Levels in the table: one decimal from 100 up, two between 10 and 100, the instrument's own below 10 (FX crosses). */
 const lvlDec = (v: number | null | undefined, d: number) => (v == null ? d : Math.abs(v) >= 100 ? Math.min(d, 1) : Math.abs(v) >= 10 ? Math.min(d, 2) : d);
 
-const LEFT = new Set(["Equities", "Volatility", "Futures"]);
-/** Two tables side by side (Shota): the level only as of now, every window as a % change, then σ 1M, 52-week
- *  position and distance to the 200-day average. The asset class is the section bar, not a column. */
+/** One table (Shota): the level only as of now, every window as a % change, then σ 1M, 52-week position and
+ *  distance to the 200-day average. The asset class is the section bar, not a column. */
 function MarketsTable({ rows }: { rows: TableRow[] }) {
-  const sorted = [...rows].sort((a, b) => a.order - b.order);
-  const half = (left: boolean) => sorted.filter((r) => LEFT.has(r.cls) === left);
-  return <div className="msg2 mkt2"><OneTable rows={half(true)} /><OneTable rows={half(false)} /></div>;
+  return <OneTable rows={[...rows].sort((a, b) => a.order - b.order)} />;
 }
 function OneTable({ rows }: { rows: TableRow[] }) {
   const groups = new Map<string, TableRow[]>();
@@ -75,7 +73,7 @@ function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
         return (
           <tr key={r.symbol} className={r.live ? "live" : undefined} title={`${r.symbol} · last ${fmtStampSafe(r.lastAt)}${r.live ? " · market open" : ""}`}>
             <td className="l">{r.name}<Badges r={r} /></td>
-            <td className="num"><b>{fmtNum(r.last, lvlDec(r.last, r.decimals))}</b></td>
+            <td className="num"><Flash value={r.last}><b>{fmtNum(r.last, lvlDec(r.last, r.decimals))}</b></Flash></td>
             {PERIODS.map((p) => {
               const c = r.closes[p.key];
               const v = isRate ? (c != null && r.last != null ? r.last - c : null) : r.pct[p.key];
@@ -128,8 +126,9 @@ export function MarketView({ tick }: { tick: number }) {
   const table = useApi<{ rows: TableRow[]; asOf: string }>("table", undefined, tick);
   const [period, setPeriod] = useState<ChartPeriod>("12M");
   const [sigmaWindow, setSigmaWindow] = useState<SigmaWindow>("m12");
-  const rows = (table.data?.rows ?? []).filter((r) => r.marketTab !== false);   // minors stay on RATES & CURRENCY
-  const by = (g: string) => rows.filter((r) => r.group === g && r.chart !== false).sort((a, b) => a.order - b.order);
+  const all = table.data?.rows ?? [];
+  const rows = all.filter((r) => r.marketTab !== false);   // the curated table; every instrument keeps a chart below
+  const by = (g: string) => all.filter((r) => r.group === g && r.chart !== false).sort((a, b) => a.order - b.order);
   const selector = <PeriodBar period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} />;
   return (
     <>
