@@ -182,16 +182,14 @@ function JpShortPanel({ idx }: { idx: string }) {
         <span><span className="k">5-day / 20-day avg</span><span className="v" style={{ fontSize: 13 }}>{avg(5)?.toFixed(1) ?? "–"}% / {avg(20)?.toFixed(1) ?? "–"}%</span></span>
         <span><span className="k">Reported positions ≥0.5% · {d.positions.asOf ?? "–"}</span><span className="v" style={{ fontSize: 13 }}>{d.positions.names} of {d.positions.covered} names</span></span>
       </div>
-      <div className="msg2">
-        <div>
-          <div className="minih">Short selling share of trading value, daily (JPX market total)</div>
-          <Bars data={d.market.map((m) => ({ d: m.d, v: m.ratio }))} fmt={(v) => `${v.toFixed(1)}%`} baseline={avg(20)} />
-        </div>
-        <div>
-          <div className="minih">Reported short positions, index average (sum of holders ≥0.5%)</div>
-          <Bars data={(d.positions.history ?? []).map((h) => ({ d: h.d, v: h.v == null ? null : h.v * 100 }))} fmt={(v) => `${v.toFixed(2)}%`} color="#ff6f61" />
-        </div>
-      </div>
+      <div className="minih">Short-selling share of TSE turnover, daily · 12 months</div>
+      <Bars data={d.market.map((m) => ({ d: m.d, v: m.ratio }))} fmt={(v) => `${v.toFixed(1)}%`} baseline={avg(20)} height={120} />
+      {(d.positions.history ?? []).length > 1 && (
+        <>
+          <div className="minih" style={{ marginTop: 8 }}>Reported short positions ≥0.5%, index average, daily</div>
+          <Bars data={(d.positions.history ?? []).map((h) => ({ d: h.d, v: h.v == null ? null : h.v * 100 }))} fmt={(v) => `${v.toFixed(2)}%`} color="#ff6f61" height={90} />
+        </>
+      )}
       <div className="msg2">
         <div>
           <div className="minih">Largest reported short positions (sum of holders ≥0.5%)</div>
@@ -299,16 +297,10 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
         {jp ? <JpShortPanel idx={ix.stats} /> : s?.shorts ? (
           <>
             <div className="krow"><span><span className="k">Avg short-volume share</span><span className="v">{(s.shorts.avgRatio * 100).toFixed(1)}%</span></span><span><span className="k">Names</span><span className="v">{s.rows.filter((r) => r.shortRatio != null).length}</span></span></div>
-            <div className="msg2">
-              <div>
-                <div className="minih">Average short-volume share, daily</div>
-                <Bars data={(s.shorts.history ?? []).map((h) => ({ d: h.d, v: h.v == null ? null : h.v * 100 }))} fmt={(v) => `${v.toFixed(1)}%`} />
-              </div>
-              <div>
-                <div className="minih">Highest short-volume share</div>
-                <table className="secT"><tbody>{s.shorts.top.slice(0, 10).map((x) => <tr key={x.symbol}><td className="l"><Name r={x} /></td><td className="num">{(x.ratio * 100).toFixed(0)}%</td></tr>)}</tbody></table>
-              </div>
-            </div>
+            <div className="minih">Average short-volume share, daily · 12 months</div>
+            <Bars data={(s.shorts.history ?? []).map((h) => ({ d: h.d, v: h.v == null ? null : h.v * 100 }))} fmt={(v) => `${v.toFixed(1)}%`} height={120} />
+            <div className="minih" style={{ marginTop: 8 }}>Highest short-volume share</div>
+            <table className="secT"><tbody>{s.shorts.top.slice(0, 10).map((x) => <tr key={x.symbol}><td className="l"><Name r={x} /></td><td className="num">{(x.ratio * 100).toFixed(0)}%</td></tr>)}</tbody></table>
           </>
         ) : <Empty title={us ? "No short-volume data" : "No short data for this market"}>{us ? "The FINRA job runs after the US close." : "Public per-name short data is not available for this exchange."}</Empty>}
       </Panel>

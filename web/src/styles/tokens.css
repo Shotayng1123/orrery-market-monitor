@@ -144,7 +144,7 @@ table.secT tbody tr:hover{background:#101318}
 .nwc.cat{color:var(--amber);border-color:var(--amber-dim)}
 .ecrow .imp{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none;background:var(--bord2)}
 .ecrow .imp.h{background:var(--dn)} .ecrow .imp.m{background:var(--warn)} .ecrow .imp.l{background:#3a4450}
-.msg2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+.msg2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}   /* two columns when there is room, one when the panel is narrow */
 .msg2>div{min-width:0}
 .brnar{font-size:12.5px;line-height:1.55;color:var(--txt);white-space:normal;max-width:78ch}
 .brnar p{margin:0 0 8px}
@@ -371,7 +371,7 @@ table.mvT{table-layout:fixed;width:100%}
 table.mvT td.nm{max-width:none;overflow:hidden;text-overflow:ellipsis}
 .barsbox{width:100%}
 .barsbox svg{display:block}
-.barsax{display:flex;justify-content:space-between;color:var(--mut);font-size:9.5px;margin-top:-10px}
+.barsax{display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;color:var(--mut);font-size:10.5px;margin-top:3px;font-variant-numeric:tabular-nums}
 
 .nwlist{max-height:900px;overflow:auto}
 .calwrap{max-height:900px;overflow:auto}
