@@ -351,28 +351,16 @@ async function calendarFf(): Promise<string> {
 }
 
 // ---------- news ----------
-const BN = (q: string) => `https://www.bing.com/news/search?q=${encodeURIComponent(q)}&format=rss`;
+// Publishers only, tier one (Shota): Reuters and Bloomberg offer no public feed; aggregators and searches are out.
 const FEEDS: Array<{ source: string; url: string; lang?: string; cat?: string }> = [
   { source: "WSJ Markets", url: "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain" },
+  { source: "FT Markets", url: "https://www.ft.com/markets?format=rss" },
+  { source: "Nikkei Asia", url: "https://asia.nikkei.com/rss/feed/nar" },          // RSS 1.0 without dates: first-seen time is used
   { source: "CNBC Markets", url: "https://www.cnbc.com/id/10000664/device/rss/rss.html" },
   { source: "CNBC World", url: "https://www.cnbc.com/id/100727362/device/rss/rss.html" },
   { source: "CNBC Asia", url: "https://www.cnbc.com/id/19832390/device/rss/rss.html", cat: "Asia Equities" },
-  { source: "Nikkei Asia", url: "https://asia.nikkei.com/rss/feed/nar" },          // RSS 1.0 without dates: first-seen time is used
   { source: "MarketWatch", url: "https://feeds.content.dowjones.io/public/rss/mw_topstories" },
-  { source: "FT Markets", url: "https://www.ft.com/markets?format=rss" },
-  { source: "Investing.com", url: "https://www.investing.com/rss/news_25.rss", cat: "US Equities" },
-  { source: "Investing.com", url: "https://www.investing.com/rss/news_14.rss", cat: "Macro" },
-  { source: "Investing.com", url: "https://www.investing.com/rss/news_1.rss", cat: "Currency" },
   { source: "Japan Times", url: "https://www.japantimes.co.jp/feed/", cat: "JP Equities" },
-  { source: "BBC Business", url: "https://feeds.bbci.co.uk/news/business/rss.xml", cat: "Macro" },
-  // Bing News searches (publisher taken from the item), one per desk, tagged with the desk when no rule matches
-  { source: "Bing News", url: BN("Nikkei OR TOPIX OR \"Tokyo stocks\" OR \"Japanese stocks\""), cat: "JP Equities" },
-  { source: "Bing News", url: BN("\"Hang Seng\" OR Kospi OR \"Shanghai Composite\" OR \"Asian stocks\""), cat: "Asia Equities" },
-  { source: "Bing News", url: BN("\"Wall Street\" OR \"S&P 500\" OR Nasdaq stocks"), cat: "US Equities" },
-  { source: "Bing News", url: BN("\"Treasury yields\" OR \"Federal Reserve\" OR \"Bank of Japan\" OR JGB"), cat: "DM Rates" },
-  { source: "Bing News", url: BN("yen OR \"dollar index\" OR \"currency markets\" OR yuan"), cat: "Currency" },
-  { source: "Bing News", url: BN("\"Bank of Korea\" OR PBOC OR \"loan prime rate\" OR \"emerging markets\" bonds"), cat: "EM Rates" },
-  { source: "Bing News", url: BN("crude oil OR Brent OR \"gold price\" OR \"copper price\""), cat: "Commodities" },
 ];
 const RULES: Array<[string, RegExp]> = [
   ["JP Equities", /\b(nikkei|topix|tokyo stocks?|japan(ese)? (stocks?|shares|equit)|toyota|sony|softbank|hitachi|keyence|fast retailing|jpx)\b/i],

@@ -5,7 +5,7 @@
 // Plus FINRA daily US short-volume ratios.
 import { chunk, db, selectAll } from "./db.ts";
 import { fetchText } from "./http.ts";
-import { chart, quotes, spark } from "./yahoo.ts";
+import { quotes, spark, type QuoteRow } from "./yahoo.ts";
 import type { IndexId } from "./constituents.ts";
 
 interface Constituent { idx: string; symbol: string; name: string; name_en: string | null; sector: string | null; gics_industry: string | null; weight: number | null }
@@ -29,6 +29,19 @@ function rollingMean(vals: number[], win: number): Array<number | null> {
   for (let i = 0; i < vals.length; i++) { s += vals[i]; if (i >= win) s -= vals[i - win]; if (i >= win - 1) out[i] = s / win; }
   return out;
 }
+
+/** Net money flow for the session from the quote: turnover split by where the close sits in the day's range
+ *  (Chaikin accumulation / distribution). up = turnover × (close − low) / (high − low), down = the rest, net = up − down.
+ *  A close at the low is all outflow, at the high all inflow. Independent of minute bars, so the opening and
+ *  closing auctions (absent from Yahoo's minute data) are covered, and it refreshes with every quote pull. */
+function flowFromQuote(x: QuoteRow, px: number): { mf_up: number | null; mf_down: number | null; mf_net: number | null; mf_d: string | null } {
+  if (x.volume == null || x.high == null || x.low == null || !(x.high > x.low)) return { mf_up: null, mf_down: null, mf_net: null, mf_d: null };
+  const turnover = x.volume * px, k = Math.min(1, Math.max(0, (px - x.low) / (x.high - x.low)));
+  const up = turnover * k, down = turnover - up;
+  const d = x.time ? new Date(x.time * 1000).toLocaleDateString("en-CA", { timeZone: tzOf(x.symbol) }) : null;
+  return { mf_up: up, mf_down: down, mf_net: up - down, mf_d: d };
+}
+const tzOf = (symbol: string) => /\.T$/.test(symbol) ? "Asia/Tokyo" : /\.KS$/.test(symbol) ? "Asia/Seoul" : /\.HK$/.test(symbol) ? "Asia/Hong_Kong" : /\.SS$|\.SZ$/.test(symbol) ? "Asia/Shanghai" : "America/New_York";
 
 /** The not-null columns of constituent_stats, needed on every upsert even when only a few fields change. */
 async function keyRows(idx: string): Promise<Array<{ symbol: string; name: string; d: string; close: number }>> {
@@ -76,7 +89,7 @@ export async function computeIndexStats(idx: IndexId, log: (s: string) => void =
     for (const r of rows) {
       const x = q[r.symbol as string]; if (!x) continue;
       const px = x.price ?? (r.close as number);
-      Object.assign(r, { mcap: x.marketCap, volume: x.volume, adv3m: x.adv3m, turnover: x.volume != null ? x.volume * px : null, adv_turnover: x.adv3m != null ? x.adv3m * px : null, quote_at: at });
+      Object.assign(r, { mcap: x.marketCap, volume: x.volume, adv3m: x.adv3m, turnover: x.volume != null ? x.volume * px : null, adv_turnover: x.adv3m != null ? x.adv3m * px : null, quote_at: at, ...flowFromQuote(x, px), mf_at: at });
       quoted++;
     }
   } catch (e) { log(`quotes failed: ${e instanceof Error ? e.message : e}`); }
@@ -102,46 +115,14 @@ export async function refreshQuotes(idx: IndexId): Promise<string> {
   for (const r of rows) {
     const x = q[r.symbol]; if (!x) continue;
     const px = x.price ?? r.close;
-    upd.push({ idx, symbol: r.symbol, name: r.name, d: r.d, close: r.close, mcap: x.marketCap, volume: x.volume, adv3m: x.adv3m, turnover: x.volume != null ? x.volume * px : null, adv_turnover: x.adv3m != null ? x.adv3m * px : null, quote_at: at });
+    upd.push({ idx, symbol: r.symbol, name: r.name, d: r.d, close: r.close, mcap: x.marketCap, volume: x.volume, adv3m: x.adv3m, turnover: x.volume != null ? x.volume * px : null, adv_turnover: x.adv3m != null ? x.adv3m * px : null, quote_at: at, ...flowFromQuote(x, px), mf_at: at });
   }
   for (const part of chunk(upd, 500)) { const { error: ue } = await db.from("constituent_stats").upsert(part, { onConflict: "idx,symbol" }); if (ue) throw new Error("constituent_stats: " + ue.message); }
   return `${idx}: ${upd.length} of ${rows.length} quoted`;
 }
 
-/** Net money flow for the latest session from one-minute bars: each bar's turnover (volume × close) counts as
- *  buying when the bar closed above the previous bar and as selling when below; unchanged bars carry the
- *  previous direction (the tick rule applied to minute bars, the usual approximation of money flow). */
-export async function computeMoneyFlow(idx: IndexId, log: (s: string) => void = () => {}): Promise<string> {
-  const rows = await keyRows(idx);
-  if (!rows.length) return `${idx}: no statistics yet`;
-  const at = new Date().toISOString();
-  const upd: Array<Record<string, unknown>> = [];
-  let failed = 0;
-  const work = [...rows];
-  const worker = async () => {
-    for (;;) {
-      const r = work.shift(); if (!r) return;
-      try {
-        // the previous session's close (chart metadata) seeds the direction of the opening bar, so an overnight gap
-        // and the opening auction volume that trades on it count; the tick rule alone misses them
-        const c = await chart(r.symbol, "1d", "1m");   // one session of bars; no per-bar date work (Intl per bar blew the edge CPU budget)
-        let up = 0, down = 0, dir = 0, prev: number | null = c.prevClose, lastT = 0;
-        for (let i = 0; i < c.timestamp.length; i++) {
-          const px = c.close[i], vol = c.volume[i];
-          if (px == null || !Number.isFinite(px)) continue;   // earlier sessions only supply the previous close
-          if (prev != null) { if (px > prev) dir = 1; else if (px < prev) dir = -1; }
-          if (vol && prev != null) { if (dir > 0) up += vol * px; else if (dir < 0) down += vol * px; }
-          prev = px; lastT = c.timestamp[i];
-        }
-        const d = lastT ? new Date(lastT * 1000).toLocaleDateString("en-CA", { timeZone: c.tz || "UTC" }) : null;
-        upd.push({ idx, symbol: r.symbol, name: r.name, d: r.d, close: r.close, mf_up: up, mf_down: down, mf_net: up - down, mf_d: d, mf_at: at });
-      } catch (e) { failed++; if (failed <= 3) log(`${r.symbol}: ${e instanceof Error ? e.message : e}`); }
-    }
-  };
-  await Promise.all(Array.from({ length: 4 }, worker));
-  for (const part of chunk(upd, 500)) { const { error: ue } = await db.from("constituent_stats").upsert(part, { onConflict: "idx,symbol" }); if (ue) throw new Error("constituent_stats: " + ue.message); }
-  return `${idx}: money flow for ${upd.length} of ${rows.length}${failed ? `, ${failed} failed` : ""}`;
-}
+/** Kept for the schedules and the Actions job: the net flow comes with the quotes now. */
+export async function computeMoneyFlow(idx: IndexId, _log: (s: string) => void = () => {}): Promise<string> { return refreshQuotes(idx); }
 
 /** FINRA consolidated short-sale volume for one trading day: the most recent available (tries the last six
  *  days) or, with `back`, the day that many calendar days ago (for backfilling the history). Also stores the

@@ -50,7 +50,7 @@ export async function chart(symbol: string, range: string, interval: string): Pr
 }
 
 // ---- quotes (market cap, volume, average volume): the v7 endpoint needs a session cookie and a crumb ----
-export interface QuoteRow { symbol: string; price: number | null; marketCap: number | null; volume: number | null; adv3m: number | null; adv10d: number | null; currency: string | null; name: string | null; exchange: string | null; quoteType: string | null; prevClose: number | null; time: number | null }
+export interface QuoteRow { symbol: string; price: number | null; marketCap: number | null; volume: number | null; adv3m: number | null; adv10d: number | null; currency: string | null; name: string | null; exchange: string | null; quoteType: string | null; prevClose: number | null; time: number | null; high: number | null; low: number | null; open: number | null }
 let crumbCache: { cookie: string; crumb: string; at: number } | null = null;
 async function crumb(): Promise<{ cookie: string; crumb: string }> {
   if (crumbCache && Date.now() - crumbCache.at < 25 * 60e3) return crumbCache;
@@ -71,11 +71,11 @@ export async function quotes(symbols: string[]): Promise<Record<string, QuoteRow
   const { cookie, crumb: cr } = await crumb();
   for (let i = 0; i < symbols.length; i += 100) {
     const batch = symbols.slice(i, i + 100);
-    const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(batch.join(","))}&fields=symbol,marketCap,regularMarketPrice,regularMarketVolume,averageDailyVolume3Month,averageDailyVolume10Day,currency,shortName,longName,fullExchangeName,quoteType,regularMarketPreviousClose,regularMarketTime&crumb=${encodeURIComponent(cr)}`;
+    const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(batch.join(","))}&fields=symbol,marketCap,regularMarketPrice,regularMarketVolume,averageDailyVolume3Month,averageDailyVolume10Day,currency,shortName,longName,fullExchangeName,quoteType,regularMarketPreviousClose,regularMarketTime,regularMarketDayHigh,regularMarketDayLow,regularMarketOpen&crumb=${encodeURIComponent(cr)}`;
     const r = await fetch(url, { headers: { ...headers, cookie }, signal: AbortSignal.timeout(30000) });
     if (!r.ok) throw new Error(`yahoo quote: HTTP ${r.status}`);
-    const j = (await r.json()) as { quoteResponse?: { result?: Array<{ symbol: string; marketCap?: number; regularMarketPrice?: number; regularMarketVolume?: number; averageDailyVolume3Month?: number; averageDailyVolume10Day?: number; currency?: string; shortName?: string; longName?: string; fullExchangeName?: string; quoteType?: string; regularMarketPreviousClose?: number; regularMarketTime?: number }> } };
-    for (const q of j.quoteResponse?.result ?? []) out[q.symbol] = { symbol: q.symbol, price: q.regularMarketPrice ?? null, marketCap: q.marketCap ?? null, volume: q.regularMarketVolume ?? null, adv3m: q.averageDailyVolume3Month ?? null, adv10d: q.averageDailyVolume10Day ?? null, currency: q.currency ?? null, name: q.longName ?? q.shortName ?? null, exchange: q.fullExchangeName ?? null, quoteType: q.quoteType ?? null, prevClose: q.regularMarketPreviousClose ?? null, time: q.regularMarketTime ?? null };
+    const j = (await r.json()) as { quoteResponse?: { result?: Array<{ symbol: string; marketCap?: number; regularMarketPrice?: number; regularMarketVolume?: number; averageDailyVolume3Month?: number; averageDailyVolume10Day?: number; currency?: string; shortName?: string; longName?: string; fullExchangeName?: string; quoteType?: string; regularMarketPreviousClose?: number; regularMarketTime?: number; regularMarketDayHigh?: number; regularMarketDayLow?: number; regularMarketOpen?: number }> } };
+    for (const q of j.quoteResponse?.result ?? []) out[q.symbol] = { symbol: q.symbol, price: q.regularMarketPrice ?? null, marketCap: q.marketCap ?? null, volume: q.regularMarketVolume ?? null, adv3m: q.averageDailyVolume3Month ?? null, adv10d: q.averageDailyVolume10Day ?? null, currency: q.currency ?? null, name: q.longName ?? q.shortName ?? null, exchange: q.fullExchangeName ?? null, quoteType: q.quoteType ?? null, prevClose: q.regularMarketPreviousClose ?? null, time: q.regularMarketTime ?? null, high: q.regularMarketDayHigh ?? null, low: q.regularMarketDayLow ?? null, open: q.regularMarketOpen ?? null };
   }
   return out;
 }
