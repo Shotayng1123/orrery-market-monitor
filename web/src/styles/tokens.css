@@ -374,7 +374,10 @@ table.mvT td.nm{max-width:none;overflow:hidden;text-overflow:ellipsis}
 .barsax{display:flex;justify-content:space-between;color:var(--mut);font-size:9.5px;margin-top:-10px}
 
 .nwlist{max-height:900px;overflow:auto}
-.calT{display:block;max-height:900px;overflow:auto}
+.calwrap{max-height:900px;overflow:auto}
+table.calT{table-layout:fixed;width:100%}
+table.calT td.ev{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+table.calT td,table.calT th{padding-left:4px;padding-right:4px}
 tr.ecrow.past td{opacity:.55}
 #mockbar{background:#ff4d42;color:#000;font-weight:700;text-align:center;padding:6px 10px;font-size:13px;letter-spacing:.04em;position:sticky;top:0;z-index:30}
 .notegrid{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}
