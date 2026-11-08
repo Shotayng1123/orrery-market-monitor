@@ -411,3 +411,65 @@ body.term .c12 .chips,body.term .c12 .pbar{margin:0}
 /* equal-width chips (news categories) */
 .chips.eq .chip-sm{min-width:98px;text-align:center}
 body.term .chips.eq .chip-sm{min-width:84px}
+
+/* ===== COMPACT, dense (Shota): one screen per tab, every panel visible, tables showing their rows; type ~10px ===== */
+body.term{font-size:10.5px;line-height:1.2}
+body.term #grid{gap:3px}
+body.term .phead{padding:1px 6px;gap:6px;min-height:0}
+body.term .phead .t{font-size:9.5px;letter-spacing:.08em}
+body.term .phead .aux{font-size:9px}
+body.term .pbody{padding:2px 5px 3px}
+body.term table{font-size:10px}
+body.term td{padding:0 4px;line-height:1.25}
+body.term th{padding:1px 4px;font-size:8.5px}
+body.term table.secT{font-size:10px}
+body.term table.secT td{padding:0 3px;border-bottom-color:#121316}
+body.term table.secT th{padding:1px 3px;font-size:8.5px}
+body.term table.mini td,body.term table.mini th{padding:0 4px}
+body.term tr.cls td{padding:1px 6px;font-size:8.5px}
+body.term .krow{gap:10px;padding:1px 0 2px}
+body.term .krow .k{font-size:8px}
+body.term .krow .v{font-size:12px}
+body.term .minih{font-size:8.5px;margin:0 0 1px;letter-spacing:.06em}
+body.term .legend{display:none}
+body.term .chips{margin:0}
+body.term .chip-sm{padding:0 4px;font-size:8.5px;margin-left:2px;line-height:1.5}
+body.term .c12 .chips,body.term .c12>div{margin:0}
+body.term .mtile{padding:2px 5px 1px}
+body.term .mtile .vl{font-size:11.5px;margin-top:0}
+body.term .mtile .asof{font-size:8px}
+body.term .rdout{min-height:0;font-size:8.5px;line-height:1.1;margin:0}
+body.term .rdout>span{display:none}
+body.term .cgrid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:3px}
+body.term .sqgrid{gap:3px}
+body.term .barsbox svg{height:56px!important}
+body.term .barsax{font-size:8.5px;margin-top:1px}
+body.term .nwrow{padding:0 0 1px;font-size:10px;line-height:1.25}
+body.term .nwlist,body.term .calwrap{max-height:none}
+body.term .searchrow{margin-bottom:2px;gap:6px}
+body.term .searchrow input,body.term .searchrow select{padding:0 4px;font-size:10px}
+body.term .brnar{font-size:10.5px;line-height:1.3}
+body.term .brnar h4{margin:4px 0 1px;font-size:9px}
+body.term .bbar{height:6px}
+body.term .tleaf b{font-size:9px!important}
+/* per-tab placement: columns and row spans chosen so each tab fills one screen */
+body.term #grid[data-view="equities"] .panel[data-no="01"]{grid-column:span 5;grid-row:span 2}
+body.term #grid[data-view="equities"] .panel[data-no="02"]{grid-column:span 3;grid-row:span 2}
+body.term #grid[data-view="equities"] .panel[data-no="03"],body.term #grid[data-view="equities"] .panel[data-no="04"],body.term #grid[data-view="equities"] .panel[data-no="05"],body.term #grid[data-view="equities"] .panel[data-no="06"]{grid-column:span 4;grid-row:span 1}
+body.term #grid[data-view="equities"] .panel[data-no="07"]{grid-column:span 4;grid-row:span 2}
+body.term #grid[data-view="equities"] .panel[data-no="08"]{grid-column:span 8;grid-row:span 1}
+body.term #grid[data-view="equities"] .panel[data-no="09"]{grid-column:span 12;grid-row:span 1}
+body.term #grid[data-view="market"] .panel[data-no="01"]{grid-column:span 6;grid-row:span 3}
+body.term #grid[data-view="market"] .panel[data-no="02"],body.term #grid[data-view="market"] .panel[data-no="03"]{grid-column:span 6;grid-row:span 1}
+body.term #grid[data-view="market"] .panel[data-no="04"],body.term #grid[data-view="market"] .panel[data-no="05"]{grid-column:span 3;grid-row:span 1}
+body.term #grid[data-view="market"] .cgrid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
+body.term #grid[data-view="news"] .panel[data-no="01"]{grid-column:span 7;grid-row:span 2}
+body.term #grid[data-view="news"] .panel[data-no="02"],body.term #grid[data-view="news"] .panel[data-no="03"]{grid-column:span 5;grid-row:span 1}
+body.term #grid[data-view="news"] .panel[data-no="04"]{grid-column:span 12;grid-row:span 1}
+body.term #grid[data-view="rates"] .panel[data-no="01"]{grid-column:span 4;grid-row:span 1}
+body.term #grid[data-view="rates"] .panel[data-no="02"]{grid-column:span 8;grid-row:span 1}
+body.term #grid[data-view="rates"] .panel[data-no="03"],body.term #grid[data-view="rates"] .panel[data-no="04"],body.term #grid[data-view="rates"] .panel[data-no="05"],body.term #grid[data-view="rates"] .panel[data-no="06"],body.term #grid[data-view="rates"] .panel[data-no="07"],body.term #grid[data-view="rates"] .panel[data-no="08"],body.term #grid[data-view="rates"] .panel[data-no="09"]{grid-column:span 2;grid-row:span 1}
+body.term #grid[data-view="rates"] .panel[data-no="10"],body.term #grid[data-view="rates"] .panel[data-no="11"]{grid-column:span 6;grid-row:span 1}
+body.term #grid[data-view="asset"] .panel[data-no="01"]{grid-column:span 8;grid-row:span 2}
+body.term #grid[data-view="asset"] .panel[data-no="02"]{grid-column:span 4;grid-row:span 2}
+body.term #grid[data-view="asset"] .panel[data-no="03"]{grid-column:span 12;grid-row:span 1}
