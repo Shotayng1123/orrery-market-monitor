@@ -9,14 +9,17 @@ import type { IndexId } from "../supabase/functions/_shared/constituents.ts";
 import { logRun } from "../supabase/functions/_shared/db.ts";
 
 const args = Deno.args.filter((a) => !a.startsWith("--"));
-const mflow = Deno.args.includes("--mflow");
+const mflowOnly = Deno.args.includes("--mflow-only");
+const mflow = mflowOnly || Deno.args.includes("--mflow");
 const idxs = (args.length ? args : ["TOPIX"]) as IndexId[];
 for (const idx of idxs) {
   const t0 = Date.now();
   try {
-    const detail = await computeIndexStats(idx, (s) => console.log("  " + s));
-    console.log(`stats ${detail}`);
-    await logRun(`stats-actions:${idx}`, true, detail, t0);
+    if (!mflowOnly) {
+      const detail = await computeIndexStats(idx, (s) => console.log("  " + s));
+      console.log(`stats ${detail}`);
+      await logRun(`stats-actions:${idx}`, true, detail, t0);
+    }
     if (mflow) { const d2 = await computeMoneyFlow(idx, (s) => console.log("  " + s)); console.log(`mflow ${d2}`); await logRun(`mflow-actions:${idx}`, true, d2, t0); }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
