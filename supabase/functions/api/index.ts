@@ -243,7 +243,7 @@ async function indexStats(idx: string) {
       const sv = await selectAll<{ symbol: string; ratio: number }>(() => db.from("short_volume").select("symbol,ratio").eq("d", lastD.d));
       const byS = new Map(sv.map((x) => [x.symbol, x.ratio]));
       const inIdx = rows.filter((r) => byS.has(r.symbol)).map((r) => ({ symbol: r.symbol, name: r.name, ratio: byS.get(r.symbol)! }));
-      const { data: hist } = await db.from("short_agg").select("d,value,n").eq("idx", idx).eq("metric", "finra_avg_ratio").gte("d", new Date(Date.now() - 95 * 86400e3).toISOString().slice(0, 10)).order("d");
+      const { data: hist } = await db.from("short_agg").select("d,value,n").eq("idx", idx).eq("metric", "finra_avg_ratio").gte("d", new Date(Date.now() - 400 * 86400e3).toISOString().slice(0, 10)).order("d").limit(1000);
       if (inIdx.length) shorts = { d: lastD.d, avgRatio: inIdx.reduce((a, x) => a + x.ratio, 0) / inIdx.length, top: [...inIdx].sort((a, b) => b.ratio - a.ratio).slice(0, 15), history: (hist ?? []).map((h) => ({ d: h.d, v: h.value })) };
       for (const r of rows as Array<StatRow & { shortRatio?: number | null }>) r.shortRatio = byS.get(r.symbol) ?? null;
     }
@@ -277,9 +277,9 @@ async function news(category: string | null, n: number) {
 
 // ---------- Japan short selling (JPX) ----------
 async function jpShorts(idx: string) {
-  const since = new Date(Date.now() - 90 * 86400e3).toISOString().slice(0, 10);
+  const since = new Date(Date.now() - 400 * 86400e3).toISOString().slice(0, 10);   // twelve months of daily history (Shota)
   const [{ data: market }, { data: sectorsAll }, { data: margin }, { data: latest }] = await Promise.all([
-    db.from("jp_short_ratio").select("d,actual,short_restricted,short_free,total").eq("scope", "market").gte("d", since).order("d"),
+    db.from("jp_short_ratio").select("d,actual,short_restricted,short_free,total").eq("scope", "market").gte("d", since).order("d").limit(1000),
     db.from("jp_short_ratio").select("d,name,actual,short_restricted,short_free,total").eq("scope", "sector").order("d", { ascending: false }).limit(40),
     db.from("jp_short_ratio").select("d,actual,short_restricted,short_free,total").eq("scope", "margin").order("d", { ascending: false }).limit(8),
     db.rpc("fn_jp_short_latest", { p_since: new Date(Date.now() - 60 * 86400e3).toISOString().slice(0, 10) }),
@@ -292,7 +292,7 @@ async function jpShorts(idx: string) {
   const inIdx = new Map(cons.map((c) => [c.symbol.replace(/\.T$/, ""), { ...c, name: c.name_en ?? c.name }]));
   const pos = ((latest ?? []) as Array<{ code: string; name: string; holders: number; total_ratio: number; latest: string }>).filter((x) => inIdx.has(x.code)).map((x) => ({ symbol: x.code + ".T", name: inIdx.get(x.code)!.name, sector: inIdx.get(x.code)!.sector, holders: x.holders, ratio: x.total_ratio, d: x.latest })).sort((a, b) => b.ratio - a.ratio);
   const mg = (margin ?? []).map((r) => ({ d: r.d, sellShares: r.actual, sellValue: r.short_restricted, buyShares: r.short_free, buyValue: r.total }));
-  const { data: agg } = await db.from("short_agg").select("d,metric,value,n").eq("idx", idx).in("metric", ["jpx_positions_avg", "jpx_positions_names"]).gte("d", new Date(Date.now() - 95 * 86400e3).toISOString().slice(0, 10)).order("d");
+  const { data: agg } = await db.from("short_agg").select("d,metric,value,n").eq("idx", idx).in("metric", ["jpx_positions_avg", "jpx_positions_names"]).gte("d", new Date(Date.now() - 400 * 86400e3).toISOString().slice(0, 10)).order("d").limit(1000);
   const posHist = (agg ?? []).filter((a) => a.metric === "jpx_positions_avg").map((a) => ({ d: a.d, v: a.value }));
   const namesHist = (agg ?? []).filter((a) => a.metric === "jpx_positions_names").map((a) => ({ d: a.d, v: a.value }));
   return { idx, market: mk, sectorsAsOf: secD, sectors, positions: { asOf: pos.map((p) => p.d).sort().pop() ?? null, names: pos.length, covered: inIdx.size, top: pos.slice(0, 20), avgRatio: pos.length ? pos.reduce((a, p) => a + p.ratio, 0) / pos.length : null, history: posHist, namesHistory: namesHist }, margin: mg };
