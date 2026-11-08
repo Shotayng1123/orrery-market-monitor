@@ -124,15 +124,11 @@ export async function computeMoneyFlow(idx: IndexId, log: (s: string) => void = 
       try {
         // the previous session's close (chart metadata) seeds the direction of the opening bar, so an overnight gap
         // and the opening auction volume that trades on it count; the tick rule alone misses them
-        const c = await chart(r.symbol, "1d", "1m");
-        const dayOf = (t: number) => new Date(t * 1000).toLocaleDateString("en-CA", { timeZone: c.tz || "UTC" });
-        let session = "";
-        for (let i = c.timestamp.length - 1; i >= 0; i--) if (c.close[i] != null) { session = dayOf(c.timestamp[i]); break; }
+        const c = await chart(r.symbol, "1d", "1m");   // one session of bars; no per-bar date work (Intl per bar blew the edge CPU budget)
         let up = 0, down = 0, dir = 0, prev: number | null = c.prevClose, lastT = 0;
         for (let i = 0; i < c.timestamp.length; i++) {
           const px = c.close[i], vol = c.volume[i];
-          if (px == null || !Number.isFinite(px)) continue;
-          if (dayOf(c.timestamp[i]) !== session) { prev = px; continue; }   // earlier sessions only supply the previous close
+          if (px == null || !Number.isFinite(px)) continue;   // earlier sessions only supply the previous close
           if (prev != null) { if (px > prev) dir = 1; else if (px < prev) dir = -1; }
           if (vol && prev != null) { if (dir > 0) up += vol * px; else if (dir < 0) down += vol * px; }
           prev = px; lastT = c.timestamp[i];
