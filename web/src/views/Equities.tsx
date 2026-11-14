@@ -261,7 +261,7 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
   const [sigmaWindow, setSigmaWindow] = useState<SigmaWindow>("m12");
   const [drawer, setDrawer] = useState<string | null>(null);
   const table = useApi<{ rows: TableRow[]; asOf: string }>("table", undefined, tick);
-  const st = useApi<IndexStats>("index_stats", { idx: ix.stats }, tick);
+  const st = useApi<IndexStats>("index_stats", { idx: ix.stats }, Math.floor(tick / 5));   // statistics are daily, quotes and flow every ten minutes in session: a megabyte a minute for TOPIX was waste
   const bh = useApi<{ rows: BreadthRow[] }>("breadth_history", { idx: ix.stats, days: 1100 }, Math.floor(tick / 30));   // daily data: refetch every half hour
   const rows = table.data?.rows ?? [];
   const main = rows.find((r) => r.symbol === ix.symbol);

@@ -115,12 +115,12 @@ function Overnight({ pack }: { pack: Pack }) {
 export function NewsView({ tick }: { tick: number }) {
   const list = useApi<{ rows: Array<{ id: number; d: string; title: string; generatedAt: string; kind?: string }> }>("notes", undefined, Math.floor(tick / 10));
   const [day, setDay] = useState<string | null>(null);
-  const note = useApi<{ note: (Note & { pack?: Pack | WeeklyPack }) | null }>("note", { d: day ?? undefined }, tick);
-  const cal = useApi<{ rows: EconEvent[] }>("calendar", undefined, tick);
+  const note = useApi<{ note: (Note & { pack?: Pack | WeeklyPack }) | null }>("note", { d: day ?? undefined }, Math.floor(tick / 10));   // one note a day
+  const cal = useApi<{ rows: EconEvent[] }>("calendar", undefined, Math.floor(tick / 5));   // the calendar syncs hourly, the headlines every ten minutes
   const [cat, setCat] = useState<(typeof NEWS_CATEGORIES)[number]>("All");
   const [imp, setImp] = useState<"high" | "hm" | "all">("hm");
   const [scope, setScope] = useState<"major" | "all">("major");
-  const news = useApi<{ rows: NewsItem[] }>("news", { category: cat === "All" ? undefined : cat, n: 150 }, tick);
+  const news = useApi<{ rows: NewsItem[] }>("news", { category: cat === "All" ? undefined : cat, n: 150 }, Math.floor(tick / 5));
   const n = note.data?.note ?? null;
   const pack = n?.pack;
   const events = useMemo(() => (cal.data?.rows ?? []).filter((e) => (imp === "all" || e.impact === "High" || (imp === "hm" && e.impact === "Medium")) && (scope === "all" || MAJOR.has(e.country))), [cal.data, imp, scope]);

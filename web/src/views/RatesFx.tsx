@@ -35,7 +35,7 @@ function termSpans(n: number): number[] {
 }
 
 function CurvesGrid({ ago, tick }: { ago: ChartPeriod; tick: number }) {
-  const list = useApi<{ rows: Array<{ country: string; label: string; latest: string; tenors: number }> }>("curves", undefined, tick);
+  const list = useApi<{ rows: Array<{ country: string; label: string; latest: string; tenors: number }> }>("curves", undefined, Math.floor(tick / 30));   // curves and policy rates are daily: refetched every half hour
   const have = new Set((list.data?.rows ?? []).map((r) => r.country));
   const codes = CURVE_ORDER.filter((c) => have.has(c) || c === "US" || c === "JP");
   const spans = termSpans(codes.length + 1);
@@ -49,7 +49,7 @@ function CurvesGrid({ ago, tick }: { ago: ChartPeriod; tick: number }) {
 
 function CurveBlock({ country, label, ago, tick, no, span, ts, set = "std" }: { country: string; label: string; ago: ChartPeriod; tick: number; no: string; span: 4 | 6; ts: number; set?: TenorSet }) {
   const a = ago === "1D" || ago === "1W" ? "1M" : ago;
-  const d = useApi<{ current: Curve | null; ghost: Curve | null }>("curve", { country, ago: a }, tick);
+  const d = useApi<{ current: Curve | null; ghost: Curve | null }>("curve", { country, ago: a }, Math.floor(tick / 30));
   const c = filterCurve(d.data?.current ?? null, set), g = filterCurve(d.data?.ghost ?? null, set);
   const row = (t: string, v: number | null, gv: number | null) => <tr key={t}><td className="l" title={t}>{shortTenor(t)}</td><td className="num">{v == null ? "–" : v.toFixed(3)}</td><td className="num mut">{gv == null ? "–" : gv.toFixed(3)}</td><td className={`num ${signCls(v != null && gv != null ? v - gv : null)}`}>{v != null && gv != null ? fmtChg(v - gv, 1, true) : "–"}</td></tr>;
   return (
@@ -73,8 +73,8 @@ function CurveBlock({ country, label, ago, tick, no, span, ts, set = "std" }: { 
 }
 
 function PolicyTable({ tick }: { tick: number }) {
-  const p = useApi<{ rows: PolicyRow[] }>("policy", undefined, tick);
-  const h = useApi<{ rows: PolicyStep[]; sources: Record<string, string> }>("policy_history", undefined, tick);
+  const p = useApi<{ rows: PolicyRow[] }>("policy", undefined, Math.floor(tick / 30));
+  const h = useApi<{ rows: PolicyStep[]; sources: Record<string, string> }>("policy_history", undefined, Math.floor(tick / 30));
   const rows = p.data?.rows ?? [];
   const steps = h.data?.rows ?? [];
   const anyNext = rows.some((r) => r.nextMeeting);   // the column appears once a meeting calendar is loaded

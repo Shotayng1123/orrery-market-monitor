@@ -106,8 +106,8 @@ function ChartGroup({ no, title, rows, period, tick, sigmaWindow, children }: { 
 
 function CurvePanel({ period, tick }: { period: ChartPeriod; tick: number }) {
   const ago = period === "1D" || period === "1W" ? "1M" : period;
-  const us = useApi<{ current: Curve | null; ghost: Curve | null }>("curve", { country: "US", ago }, tick);
-  const jp = useApi<{ current: Curve | null; ghost: Curve | null }>("curve", { country: "JP", ago }, tick);
+  const us = useApi<{ current: Curve | null; ghost: Curve | null }>("curve", { country: "US", ago }, Math.floor(tick / 30));   // curves are daily
+  const jp = useApi<{ current: Curve | null; ghost: Curve | null }>("curve", { country: "JP", ago }, Math.floor(tick / 30));
   const one = (label: string, raw: { current: Curve | null; ghost: Curve | null } | null, err: string | null) => {
     const d = raw ? { current: filterCurve(raw.current, "std"), ghost: filterCurve(raw.ghost, "std") } : null;
     return (

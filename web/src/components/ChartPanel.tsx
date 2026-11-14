@@ -28,7 +28,10 @@ function sessionWindow(points: Array<{ t: number }>): number {
  *  the name, the period change under the price, then the chart. `shape` sets the tile proportions. */
 const WIN_LABEL: Record<SigmaWindow, string> = { m1: "1M", m12: "12M", m36: "36M" };
 export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wide", axes = false }: { row: TableRow; period: ChartPeriod; tick: number; sigmaWindow?: SigmaWindow; shape?: "wide" | "square" | "large"; axes?: boolean }) {
-  const s = useApi<Series>("series", { symbol: row.symbol, range: period }, tick);
+  // The tile's price and change come from the table row, refreshed every minute. The line itself is refetched
+  // as often as its bars change: one-minute bars every minute, 15-minute and hourly bars every five minutes,
+  // daily closes every quarter of an hour (a full history per tile per minute is megabytes of traffic an hour).
+  const s = useApi<Series>("series", { symbol: row.symbol, range: period }, period === "1D" ? tick : INTRADAY.has(period) ? Math.floor(tick / 5) : Math.floor(tick / 15));
   const [rd, setRd] = useState<{ t: number; v: number; z: number | null } | null>(null);
   const [pan, setPan] = useState(0);
   const k = PERIOD_KEY[period];

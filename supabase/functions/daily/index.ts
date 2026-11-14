@@ -318,7 +318,7 @@ async function calendarFf(): Promise<string> {
 
 // ---------- news ----------
 // Publishers only, tier one (Shota): Reuters and Bloomberg offer no public feed; aggregators and searches are out.
-const FEEDS: Array<{ source: string; url: string; lang?: string; cat?: string }> = [
+const FEEDS: Array<{ source: string; url: string; lang?: string; cat?: string; only?: RegExp }> = [
   { source: "WSJ Markets", url: "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain" },
   { source: "FT Markets", url: "https://www.ft.com/markets?format=rss" },
   { source: "Nikkei Asia", url: "https://asia.nikkei.com/rss/feed/nar" },          // RSS 1.0 without dates: first-seen time is used
@@ -326,14 +326,17 @@ const FEEDS: Array<{ source: string; url: string; lang?: string; cat?: string }>
   { source: "CNBC World", url: "https://www.cnbc.com/id/100727362/device/rss/rss.html" },
   { source: "CNBC Asia", url: "https://www.cnbc.com/id/19832390/device/rss/rss.html", cat: "Asia Equities" },
   { source: "MarketWatch", url: "https://feeds.content.dowjones.io/public/rss/mw_topstories" },
-  { source: "Japan Times", url: "https://www.japantimes.co.jp/feed/", cat: "JP Equities" },
+  // the Japan Times publishes one general feed (its business feed answers 403): keep the business section only,
+  // otherwise sport, travel and world news land in the list under a market heading
+  { source: "Japan Times", url: "https://www.japantimes.co.jp/feed/", cat: "JP Equities", only: /japantimes\.co\.jp\/business\// },
 ];
 const RULES: Array<[string, RegExp]> = [
   ["JP Equities", /\b(nikkei|topix|tokyo stocks?|japan(ese)? (stocks?|shares|equit)|toyota|sony|softbank|hitachi|keyence|fast retailing|jpx)\b/i],
   ["Asia Equities", /\b(hang seng|kospi|shanghai|csi 300|shenzhen|taiex|tsmc|samsung|nifty|sensex|asian? (stocks?|shares|equit)|hong kong stocks?|china stocks?|korea stocks?)\b/i],
   ["US Equities", /\b(s&p ?500|nasdaq|dow jones|dow\b|wall street|us stocks?|u\.s\. stocks?|nvidia|apple|microsoft|tesla|amazon|alphabet|meta platforms|earnings|russell 2000|semiconductor)/i],
+  // emerging-market central banks first: the developed-market rule's generic words (yields, rate cut) would claim them
+  ["EM Rates", /\b(pboc|people'?s bank of china|loan prime rate|reserve requirement ratio|bank of korea|reserve bank of india|rbi\b|bank indonesia|bank of thailand|bank negara|bangko sentral|banxico|bank of mexico|selic|copom|south african reserve bank|central bank of (brazil|turkey|türkiye|russia|india|indonesia|the philippines|malaysia|thailand|mexico)|emerging[- ]markets? (bonds?|debt|rates?|central banks?))\b/i],
   ["DM Rates", /\b(treasur(y|ies)|fed\b|federal reserve|fomc|boj|bank of japan|jgb|ecb|bank of england|gilts?|bund|yields?|rate (cut|hike|decision)|powell|ueda|lagarde)\b/i],
-  ["EM Rates", /\b(pboc|people'?s bank of china|loan prime rate|bank of korea|reserve bank of india|rbi\b|bank indonesia|banxico|central bank of (brazil|turkey|russia))\b/i],
   ["Currency", /\b(dollar|yen|euro\b|sterling|pound|yuan|renminbi|won\b|forex|fx\b|currenc(y|ies)|usd\/?jpy|eur\/?usd|exchange rate)\b/i],
   ["Commodities", /\b(oil|crude|brent|wti|opec|gold|silver|copper|natural gas|lng|commodit(y|ies)|iron ore|wheat)\b/i],
   ["Macro", /\b(inflation|cpi|ppi|gdp|payrolls|jobs report|unemployment|pmi|ism\b|tariffs?|trade (war|deal)|recession|consumer (confidence|sentiment)|retail sales|housing starts)\b/i],
@@ -363,6 +366,7 @@ async function news(): Promise<string> {
       for (const it of items) {
         const t = it.pubDate ? Date.parse(it.pubDate) : Date.now();   // feeds without dates (RSS 1.0) are stamped when first seen
         if (!Number.isFinite(t) || t < since) continue;
+        if (f.only && !f.only.test(it.link)) continue;
         const gm = f.source === "Bing News" && !it.src ? it.title.match(/^(.*)\s+-\s+([^-]{2,40})$/) : null;
         if (gm) it.title = gm[1].trim();
         rows.push({ url: it.link.slice(0, 1000), published_at: new Date(t).toISOString(), source: f.source === "Bing News" ? (it.src ?? gm?.[2]?.trim() ?? f.source) : f.source, title: it.title.slice(0, 400), category: categorise(it.title, f.cat ?? "Macro"), tagged_by: f.cat ? "rules+feed" : "rules" });

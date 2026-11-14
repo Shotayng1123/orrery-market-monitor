@@ -5,9 +5,9 @@ import type { Report } from "../lib/types";
 import { fmtStampSafe } from "./shared";
 
 export function ResearchView({ tick }: { tick: number }) {
-  const list = useApi<{ rows: Report[] }>("reports", { n: 100 }, tick);
+  const list = useApi<{ rows: Report[] }>("reports", { n: 100 }, Math.floor(tick / 10));
   const [open, setOpen] = useState<number | null>(null);
-  const rep = useApi<{ report: Report }>(open != null ? "report" : null, { id: open ?? undefined }, tick);
+  const rep = useApi<{ report: Report }>(open != null ? "report" : null, { id: open ?? undefined }, Math.floor(tick / 10));
   const rows = list.data?.rows ?? [];
   return (
     <>
