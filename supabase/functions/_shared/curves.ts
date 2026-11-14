@@ -78,7 +78,6 @@ export async function fetchBoc(full: boolean): Promise<CurveRow[]> {
 // ---- UK: BoE GLC nominal workbook (zip -> xlsx -> sheet "4. spot curve"); current month only ----
 const GB_TENORS = [0.5, 1, 2, 3, 5, 7, 10, 15, 20, 25, 30, 40];
 export async function fetchBoe(): Promise<CurveRow[]> {
-  const XLSX = await import("npm:xlsx@0.18.5");
   const r = await fetch("https://www.bankofengland.co.uk/-/media/boe/files/statistics/yield-curves/latest-yield-curve-data.zip", { headers: { "user-agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(90000) });
   if (!r.ok) throw new Error(`BoE: HTTP ${r.status}`);
   const zip = new Uint8Array(await r.arrayBuffer());
@@ -86,7 +85,13 @@ export async function fetchBoe(): Promise<CurveRow[]> {
   const files = unzipSync(zip);
   const name = Object.keys(files).find((n) => /GLC Nominal daily data/i.test(n));
   if (!name) throw new Error("BoE: nominal workbook not in zip");
-  const wb = XLSX.read(files[name], { type: "array" });
+  return await parseBoeWorkbook(files[name]);
+}
+
+/** One GLC nominal workbook (the monthly file, or a multi-year file from the Bank's historical archive). */
+export async function parseBoeWorkbook(bytes: Uint8Array): Promise<CurveRow[]> {
+  const XLSX = await import("npm:xlsx@0.18.5");
+  const wb = XLSX.read(bytes, { type: "array" });
   const ws = wb.Sheets["4. spot curve"];
   if (!ws) throw new Error("BoE: sheet '4. spot curve' missing");
   const rows = XLSX.utils.sheet_to_json<Array<number | string | null>>(ws, { header: 1, raw: true });
