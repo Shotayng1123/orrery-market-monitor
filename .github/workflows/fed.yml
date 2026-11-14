@@ -1,4 +1,4 @@
-name: fred
+name: fed-target
 
 on:
   schedule:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  fred:
+  fed:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -23,7 +23,7 @@ jobs:
           cache: npm
           cache-dependency-path: jobs/package-lock.json
       - run: npm ci
-      - run: npx tsx fred.ts
+      - run: npx tsx fed.ts
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}

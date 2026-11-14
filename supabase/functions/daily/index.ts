@@ -426,7 +426,7 @@ async function fred(): Promise<string> {
   return `FED ${last.v}% as of ${last.d} (since ${lastChange})`;
 }
 
-// ---------- policy rates from official feeds (Fed comes from the fred GitHub job) ----------
+// ---------- policy rates from official feeds (Fed comes from the fed-target GitHub job, jobs/fed.ts) ----------
 async function policy(full: boolean, only: string | null = null): Promise<string> {   // bank=… runs one bank (full loads are heavy)
   const parts: string[] = [];
   const want = (b: string) => !only || only === b;
