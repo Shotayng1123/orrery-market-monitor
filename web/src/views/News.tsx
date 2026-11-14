@@ -1,9 +1,10 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Empty, Panel } from "../components/Panel";
 import { Md } from "../components/Md";
 import { useApi } from "../lib/useApi";
 import type { EconEvent, NewsItem, Note } from "../lib/types";
-import { SGT } from "../lib/time";
+import { fmtClock, SGT } from "../lib/time";
+import { zoomNow } from "../lib/prefs";
 import { fmtNum, fmtPct, fmtStampSafe, signCls } from "./shared";
 
 export const NEWS_CATEGORIES = ["All", "US Equities", "JP Equities", "Asia Equities", "DM Rates", "EM Rates", "Currency", "Macro", "Commodities"] as const;
@@ -124,6 +125,19 @@ export function NewsView({ tick }: { tick: number }) {
   const pack = n?.pack;
   const events = useMemo(() => (cal.data?.rows ?? []).filter((e) => (imp === "all" || e.impact === "High" || (imp === "hm" && e.impact === "Medium")) && (scope === "all" || MAJOR.has(e.country))), [cal.data, imp, scope]);
   const upcoming = events.some((e) => Date.parse(e.at) > Date.now());
+  // The list starts five days back; open it at the next event (the last few results stay in view above it).
+  const nextIdx = events.findIndex((e) => Date.parse(e.at) > Date.now());
+  const nextRow = useRef<HTMLTableRowElement>(null), calBox = useRef<HTMLDivElement>(null), placed = useRef("");
+  useEffect(() => {
+    const row = nextRow.current, box = calBox.current;
+    const key = `${imp}|${scope}|${events.length}`;
+    if (!row || !box || placed.current === key) return;
+    placed.current = key;
+    const sc = box.scrollHeight > box.clientHeight + 4 ? box : (box.closest(".pbody") as HTMLElement | null);
+    if (!sc) return;
+    // rectangles are in visual pixels, scroll offsets in the zoomed layout's pixels
+    sc.scrollTop = Math.max(0, sc.scrollTop + (row.getBoundingClientRect().top - sc.getBoundingClientRect().top) / zoomNow() - 64);
+  }, [events.length, imp, scope, nextIdx]);
   const chip = (on: boolean, label: string, f: () => void, key?: string) => <span key={key ?? label} className={`chip-sm${on ? " on" : ""}`} onClick={f}>{label}</span>;
   return (
     <>
@@ -143,14 +157,14 @@ export function NewsView({ tick }: { tick: number }) {
       </Panel>
       <Panel no="02" title="ECONOMIC CALENDAR" span={6} aux={<span className="chips" style={{ margin: 0 }}><span className="lbl">Impact</span>{chip(imp === "high", "High", () => setImp("high"))}{chip(imp === "hm", "High + Medium", () => setImp("hm"))}{chip(imp === "all", "All", () => setImp("all"))}<span className="lbl" style={{ marginLeft: 10 }}>Countries</span>{chip(scope === "major", "Major", () => setScope("major"))}{chip(scope === "all", "All", () => setScope("all"))}<span className="mut" style={{ marginLeft: 10 }}>times in SGT{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""}</span></span>}>
         {events.length ? (
-          <div className="calwrap"><table className="mini calT">
-            <colgroup><col style={{ width: "13%" }} /><col style={{ width: "6%" }} /><col /><col style={{ width: "4%" }} /><col style={{ width: "11%" }} /><col style={{ width: "11%" }} /><col style={{ width: "11%" }} /></colgroup>
-            <thead><tr><th className="l">When (SGT)</th><th className="l">Ccy</th><th className="l">Event</th><th className="l" title="Impact: red high, amber medium, grey low" aria-label="Impact"></th><th>Actual</th><th>Consensus</th><th>Previous</th></tr></thead>
+          <div className="calwrap" ref={calBox}><table className="mini calT">
+            <colgroup><col className="tm" /><col className="cy" /><col /><col className="dot" /><col className="nv" /><col className="nv" /><col className="nv" /></colgroup>
+            <thead><tr><th className="l">SGT</th><th className="l">Ccy</th><th className="l">Event</th><th className="l" title="Impact: red high, amber medium, grey low" aria-label="Impact"></th><th>Actual</th><th>Consensus</th><th>Previous</th></tr></thead>
             <tbody>{events.map((e, i, arr) => (
               <Fragment key={e.id}>
                 {(i === 0 || dayOf(e.at) !== dayOf(arr[i - 1].at)) && <tr className="cls"><td colSpan={7}>{dayLabel(e.at)}</td></tr>}
-                <tr className={`ecrow${Date.parse(e.at) < Date.now() ? " past" : ""}`}>
-                  <td className="l num">{fmtStampSafe(e.at)}</td><td className="l">{e.currency ?? e.country}</td>
+                <tr ref={i === nextIdx ? nextRow : undefined} className={`ecrow${Date.parse(e.at) < Date.now() ? " past" : ""}`}>
+                  <td className="l num" title={fmtStampSafe(e.at)}>{fmtClock(new Date(e.at), SGT)}</td><td className="l">{e.currency ?? e.country}</td>
                   <td className="l ev" title={e.title}>{e.title}{e.kind === "speech" ? <span className="mut"> · speech</span> : e.kind === "report" ? <span className="mut"> · report</span> : null}</td>
                   <td className="l" title={e.impact}><span className={`imp ${e.impact[0].toLowerCase()}`} /></td>
                   <td className={e.better === true ? "up" : e.better === false ? "dn" : ""}><b>{e.actual ?? (Date.parse(e.at) < Date.now() ? "–" : "")}</b></td>

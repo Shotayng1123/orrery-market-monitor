@@ -30,3 +30,6 @@ export function fmtChg(v: number | null | undefined, decimals = 2, bp = false): 
 
 /** CSS class for a signed value. */
 export const signCls = (v: number | null | undefined): string => (v == null || !Number.isFinite(v) || v === 0 ? "" : v > 0 ? "up" : "dn");
+
+/** A row quoted as a yield (level in %, changes in bp). A bond future sits in the rates group but is a price. */
+export const isYield = (r: { group: string; symbol: string }): boolean => r.group === "rates" && !r.symbol.endsWith("=F");

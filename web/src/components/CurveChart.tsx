@@ -6,7 +6,7 @@ import type { Curve } from "../lib/types";
 const AXIS = { stroke: "#b3afa4", grid: { stroke: "#1a1b1e", width: 1 }, ticks: { stroke: "#26272b", width: 1 }, font: "12px 'IBM Plex Mono', ui-monospace, monospace" };
 const Y_AXIS_PX = 52, PAD_RIGHT = 10, LABEL_PX = 30;
 const MAJOR = [1 / 12, 0.25, 0.5, 1, 2, 5, 10, 20, 30, 40];
-const shortTenor = (t: string) => t.replace(/\s*(Mo|Month)$/i, "M").replace(/\s*Yr$/i, "Y");
+export const shortTenor = (t: string) => t.replace(/\s*(Mo|Month)$/i, "M").replace(/\s*Yr$/i, "Y");
 
 /** Yield curve: today's curve solid, the curve from the selected period ago translucent. Tenors are equidistant
  *  (ordinal x, as on a terminal curve screen); the tenor labels are drawn as HTML under the plot. */

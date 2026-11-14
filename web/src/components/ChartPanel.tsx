@@ -2,7 +2,7 @@ import { useState } from "react";
 import { DN, FLAT, SigmaChart, UP, type SigmaWindow } from "./SigmaChart";
 import { useApi, DEV_MOCK } from "../lib/useApi";
 import type { Series, TableRow } from "../lib/types";
-import { fmtChg, fmtNum, fmtPct, signCls } from "../lib/fmt";
+import { fmtChg, fmtNum, fmtPct, isYield, signCls } from "../lib/fmt";
 import { fmtStamp, SGT } from "../lib/time";
 import { marketById } from "../lib/sessions";
 import { Flash } from "./Flash";
@@ -32,7 +32,7 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
   const [rd, setRd] = useState<{ t: number; v: number; z: number | null } | null>(null);
   const [pan, setPan] = useState(0);
   const k = PERIOD_KEY[period];
-  const isRate = row.group === "rates";
+  const isRate = isYield(row);
   const m = marketById(row.market);
   const points = s.data?.points ?? [];
   const windowSec = period === "1D" ? sessionWindow(points) : WINDOW[period];

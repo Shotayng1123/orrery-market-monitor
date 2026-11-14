@@ -6,7 +6,7 @@ import { TileGrid } from "../components/TileGrid";
 import type { SigmaWindow } from "../components/SigmaChart";
 import { CurveChart, spread } from "../components/CurveChart";
 import { useApi, DEV_MOCK } from "../lib/useApi";
-import { fmtNum, fmtPct, fmtChg, fmtStampSafe, signCls } from "./shared";
+import { fmtNum, fmtPct, fmtChg, fmtStampSafe, isYield, signCls } from "./shared";
 import { Flash } from "../components/Flash";
 import { PERIODS, type Curve, type TableRow } from "../lib/types";
 import { marketById } from "../lib/sessions";
@@ -75,7 +75,7 @@ function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
     <>
       <tr className="cls"><td colSpan={5 + PERIODS.length}>{cls}</td></tr>
       {rs.map((r) => {
-        const isRate = r.group === "rates";
+        const isRate = isYield(r);
         return (
           <tr key={r.symbol} className={r.live ? "live" : undefined} title={`${r.symbol} · last ${fmtStampSafe(r.lastAt)}${r.live ? " · market open" : ""}`}>
             <td className="l">{r.name}<Badges r={r} /></td>

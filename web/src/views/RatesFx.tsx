@@ -4,7 +4,7 @@ import { ChartPanel, type ChartPeriod } from "../components/ChartPanel";
 import { PeriodBar } from "../components/PeriodBar";
 import { TileGrid } from "../components/TileGrid";
 import type { SigmaWindow } from "../components/SigmaChart";
-import { CurveChart, spread } from "../components/CurveChart";
+import { CurveChart, shortTenor, spread } from "../components/CurveChart";
 import { PolicyChart, type PolicyStep } from "../components/PolicyChart";
 import { useApi } from "../lib/useApi";
 import type { Curve, TableRow } from "../lib/types";
@@ -51,7 +51,7 @@ function CurveBlock({ country, label, ago, tick, no, span, ts, set = "std" }: { 
   const a = ago === "1D" || ago === "1W" ? "1M" : ago;
   const d = useApi<{ current: Curve | null; ghost: Curve | null }>("curve", { country, ago: a }, tick);
   const c = filterCurve(d.data?.current ?? null, set), g = filterCurve(d.data?.ghost ?? null, set);
-  const row = (t: string, v: number | null, gv: number | null) => <tr key={t}><td className="l">{t}</td><td className="num">{v == null ? "–" : v.toFixed(3)}</td><td className="num mut">{gv == null ? "–" : gv.toFixed(3)}</td><td className={`num ${signCls(v != null && gv != null ? v - gv : null)}`}>{v != null && gv != null ? fmtChg(v - gv, 1, true) : "–"}</td></tr>;
+  const row = (t: string, v: number | null, gv: number | null) => <tr key={t}><td className="l" title={t}>{shortTenor(t)}</td><td className="num">{v == null ? "–" : v.toFixed(3)}</td><td className="num mut">{gv == null ? "–" : gv.toFixed(3)}</td><td className={`num ${signCls(v != null && gv != null ? v - gv : null)}`}>{v != null && gv != null ? fmtChg(v - gv, 1, true) : "–"}</td></tr>;
   return (
     <Panel no={no} title={label} span={span} k="curve" ts={ts} aux={c ? <>{c.date} · ghost {g?.date ?? "–"} ({a} ago) · {c.source}</> : d.error ? <span className="warn">{d.error}</span> : ""}>
       {c ? (
@@ -77,13 +77,14 @@ function PolicyTable({ tick }: { tick: number }) {
   const h = useApi<{ rows: PolicyStep[]; sources: Record<string, string> }>("policy_history", undefined, tick);
   const rows = p.data?.rows ?? [];
   const steps = h.data?.rows ?? [];
+  const anyNext = rows.some((r) => r.nextMeeting);   // the column appears once a meeting calendar is loaded
   return (
     <Panel no="11" title="POLICY RATES" span={12} k="policy" aux={h.data && Object.keys(h.data.sources).length > 0 ? <span title={Object.entries(h.data.sources).map(([b, src]) => `${b}: ${src}`).join("\n")}>sources on hover</span> : ""}>
       {steps.length ? <PolicyChart steps={steps} /> : <Empty title="No rate history yet">{h.error ?? "Loads once the policy jobs have run."}</Empty>}
       {rows.length ? (
         <table className="mini">
-          <thead><tr><th className="l">Central bank</th><th className="l">Rate</th><th>Level</th><th className="l">As of</th><th className="l">Last change</th><th className="l">Next meeting</th><th className="l src">Source</th></tr></thead>
-          <tbody>{rows.map((r) => <tr key={r.bank}><td className="l"><b>{r.bank}</b> <span className="mut">{r.name}</span></td><td className="l">{r.rateLabel}</td><td className="num">{r.rate == null ? "–" : r.bank === "FED" ? `${(r.rate - 0.25).toFixed(2)}–${r.rate.toFixed(2)}%` : `${r.rate.toFixed(2)}%`}</td><td className="l">{r.asOf ?? "–"}</td><td className="l">{r.lastChange ?? "–"}</td><td className="l">{r.nextMeeting ?? "–"}</td><td className="l">{r.sourceUrl ? <a href={r.sourceUrl} target="_blank" rel="noreferrer">{new URL(r.sourceUrl).hostname}</a> : "–"}{r.sourceNote && <span className="mut"> · {r.sourceNote}</span>}</td></tr>)}</tbody>
+          <thead><tr><th className="l">Central bank</th><th className="l">Rate</th><th>Level</th><th className="l">As of</th><th className="l">Last change</th>{anyNext && <th className="l">Next meeting</th>}<th className="l src">Source</th></tr></thead>
+          <tbody>{rows.map((r) => <tr key={r.bank}><td className="l" title={r.name}><b>{r.bank}</b> <span className="mut bnm">{r.name}</span></td><td className="l">{r.rateLabel}</td><td className="num">{r.rate == null ? "–" : r.bank === "FED" ? `${(r.rate - 0.25).toFixed(2)}–${r.rate.toFixed(2)}%` : `${r.rate.toFixed(2)}%`}</td><td className="l">{r.asOf ?? "–"}</td><td className="l">{r.lastChange ?? "–"}</td>{anyNext && <td className="l">{r.nextMeeting ?? "–"}</td>}<td className="l">{r.sourceUrl ? <a href={r.sourceUrl} target="_blank" rel="noreferrer">{new URL(r.sourceUrl).hostname}</a> : "–"}{r.sourceNote && <span className="mut"> · {r.sourceNote}</span>}</td></tr>)}</tbody>
         </table>
       ) : <Empty title="No policy rates loaded">{p.error ?? "Fed from FRED; the others follow."}</Empty>}
     </Panel>

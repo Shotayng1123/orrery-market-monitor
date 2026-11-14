@@ -587,3 +587,29 @@ body.term table.brT tr:last-child td.num{font-size:8.5px!important;padding:0 1px
   .sres{width:min(440px,94vw);left:0;right:auto}
   #mktstat{flex-wrap:wrap;white-space:normal}
 }
+
+/* ===== Checks against live data (2026-11-14) ===== */
+/* economic calendar: the day sits in the section bar, so the first column is the time only; no cell runs into the next */
+table.calT col.tm{width:4.2em} table.calT col.cy{width:3.4em} table.calT col.dot{width:1.5em} table.calT col.nv{width:11%}
+table.calT td{overflow:hidden;text-overflow:ellipsis}
+/* chart tiles in COMPACT: name, then price and change on one line, then the chart (more height for the line) */
+body.term .mtile.cp{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr);column-gap:6px;align-items:baseline}
+body.term .mtile.cp>.lb{grid-column:1/-1}
+body.term .mtile.cp>.vl{grid-column:1;grid-row:2}
+body.term .mtile.cp>.ch{grid-column:2;grid-row:2;margin:0}
+body.term .mtile.cp>.chartbox{grid-column:1/-1;grid-row:3;align-self:stretch;min-width:0}
+body.term .cgrid.fit>.mtile.cp{min-height:54px}
+/* MARKET: rows weighted by the tile rows each group needs (equities three, rates two, currency and commodities up to three) */
+body.term #grid[data-view="market"]{grid-template-rows:auto minmax(0,1.45fr) minmax(0,1fr) minmax(0,1.3fr)}
+/* RATES & CURRENCY: the pairs and yields rows are taller than the curve rows; policy and yields share the last row evenly */
+body.term #grid[data-view="rates"]{grid-template-rows:auto minmax(0,1.55fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.3fr)}
+body.term #grid[data-view="rates"]:not(:has(.panel[data-k="curve"]~.panel[data-k="curve"]~.panel[data-k="curve"]~.panel[data-k="curve"]~.panel[data-k="curve"])){grid-template-rows:auto minmax(0,1.55fr) minmax(0,1fr) minmax(0,1.3fr)}
+body.term #grid[data-view="rates"] .panel[data-k="policy"],body.term #grid[data-view="rates"] .panel[data-k="yields"]{grid-column:span 6}
+body.term .panel[data-k="policy"] .pbody>.chartwrap{min-width:150px}
+body.term .panel[data-k="fx"] table td,body.term .panel[data-k="fx"] table th{padding-left:2px;padding-right:2px}
+/* curve panels: the tenor table never needs a sideways scrollbar */
+body.term .curvetab{max-width:60%;overflow-x:hidden;overflow-y:auto}
+body.term .curvetab table td,body.term .curvetab table th{padding:0 3px}
+/* policy rates: bank codes only (full name on hover), so the table and the chart both fit */
+body.term .panel[data-k="policy"] .bnm{display:none}
+body.term .panel[data-k="policy"] .pbody>.chartwrap{min-width:200px}
