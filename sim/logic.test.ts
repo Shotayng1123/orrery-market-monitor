@@ -47,7 +47,10 @@ console.log("\n[C] FX (Mon 05:00 SGT to Sat 06:00 SGT) and CME Globex (Sun 18:00
   ck("CME Thu 17:30 ET break", web.marketStatus(cme, at("2026-11-05T22:30:00Z")).state === "CLOSED");
   ck("CME Thu 18:30 ET open", web.marketStatus(cme, at("2026-11-05T23:30:00Z")).state === "OPEN");
   ck("CME Fri 17:30 ET closed", web.marketStatus(cme, at("2026-11-06T22:30:00Z")).state === "CLOSED");
-  ck("anyOpen Sat 08:00 SGT false", !web.anyOpen(at("2026-11-07T00:00:00Z")));
+  // Saturday 08:00 SGT: FX, CME and every exchange are shut; crypto trades around the clock, so anyOpen stays true.
+  const satOpen = web.allStatuses(at("2026-11-07T00:00:00Z")).filter((s) => s.state === "OPEN").map((s) => s.market.id);
+  ck("Sat 08:00 SGT: only CRYPTO open", satOpen.join(",") === "CRYPTO", satOpen);
+  ck("anyOpen Sat 08:00 SGT true (crypto)", web.anyOpen(at("2026-11-07T00:00:00Z")));
   ck("anyOpen Tue 03:00 SGT true (FX)", web.anyOpen(at("2026-11-09T19:00:00Z")));
 }
 

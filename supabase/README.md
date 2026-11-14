@@ -23,10 +23,9 @@ intraday prices, yield curves, calendar, news, notes, reports and sign-ins; pg_c
    npx supabase secrets set MONITOR_PASSWORD='<the shared password>' MONITOR_TOKEN_SECRET='<32+ random chars>' CRON_SECRET='<32+ random chars>' REPORT_SECRET='<32+ random chars>'
    npx supabase functions deploy tick daily api
    ```
-4. In the SQL editor, store the two values pg_cron needs, then run `supabase/cron.sql`:
+4. In the SQL editor, install the schedules (this also stores the two values pg_cron needs in Vault; `supabase/cron.sql` holds the same line):
    ```sql
-   select vault.create_secret('<CRON_SECRET>', 'cron_secret');
-   select vault.create_secret('https://<ref>.supabase.co/functions/v1', 'functions_url');
+   select monitor_install_cron('<CRON_SECRET>', 'https://<ref>.supabase.co/functions/v1');
    ```
 5. History backfill (10 years of daily closes, both curves), from the repo root:
    ```bash
@@ -38,10 +37,22 @@ intraday prices, yield curves, calendar, news, notes, reports and sign-ins; pg_c
    curl -H 'x-cron-secret: <CRON_SECRET>' 'https://<ref>.supabase.co/functions/v1/daily?job=history'
    curl -H 'x-cron-secret: <CRON_SECRET>' 'https://<ref>.supabase.co/functions/v1/daily?job=calendar'
    curl -H 'x-cron-secret: <CRON_SECRET>' 'https://<ref>.supabase.co/functions/v1/daily?job=news'
-   curl -H 'x-cron-secret: <CRON_SECRET>' 'https://<ref>.supabase.co/functions/v1/daily?job=fred'
    curl -H 'x-cron-secret: <CRON_SECRET>' 'https://<ref>.supabase.co/functions/v1/tick'
    ```
+   The Fed target range is not a `daily` job (the edge runtime cannot reach FRED): run the `fed-target` workflow in GitHub Actions.
 7. GitHub: repository variable `VITE_API_URL = https://<ref>.supabase.co/functions/v1/api`; Pages source = GitHub Actions; secrets `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY` for the jobs.
+
+## Changing the shared sign-in password
+
+The password exists only as the function secret `MONITOR_PASSWORD`; it is not in git or in the database, and
+`npx supabase secrets list` shows a digest, not the value. A forgotten password cannot be read back, only replaced:
+
+```bash
+npx supabase secrets set MONITOR_PASSWORD='<new shared password>'
+```
+
+Browsers already signed in stay signed in (tokens are signed with `MONITOR_TOKEN_SECRET`, not the password; they last
+12 hours, or 30 days with "remember me"). Ten wrong passwords from one IP within ten minutes lock that IP out for up to ten minutes.
 
 ## Verifying
 
