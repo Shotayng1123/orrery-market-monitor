@@ -33,6 +33,7 @@ export default function App() {
   const [token, setTok] = useState<string | null>(() => getToken());
   const [prefs, setPrefsState] = useState<Prefs>(loadPrefs);
   const [full, setFull] = useState(false);
+  const [, setTerm] = useState(false);   // re-render when the one-screen layout switches on or off (views read it from <body>)
   const [health, setHealth] = useState<Health | null>(null);
   const [healthErr, setHealthErr] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
@@ -46,7 +47,13 @@ export default function App() {
 
   useEffect(() => { const f = () => setRoute(parseHash()); window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
   useEffect(() => { const f = () => setTok(null); window.addEventListener("om:unauth", f); return () => window.removeEventListener("om:unauth", f); }, []);
-  useEffect(() => { applyPrefs(prefs, full); }, [prefs, full]);
+  // The scale and the one-screen layout follow the window: re-applied on every resize (and on monitor changes).
+  useEffect(() => {
+    const apply = () => setTerm(applyPrefs(prefs, full));
+    apply();
+    window.addEventListener("resize", apply);
+    return () => window.removeEventListener("resize", apply);
+  }, [prefs, full]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement | null)?.tagName === "INPUT") return;

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import uPlot from "uplot";
-import { AXIS as SHARED_AXIS, zoomMove } from "../lib/chart";
+import { AXIS as SHARED_AXIS, boxHeight, zoomMove } from "../lib/chart";
+import { termMode } from "../lib/prefs";
 import "uplot/dist/uPlot.min.css";
 import { rollingBands } from "../lib/stats";
 import type { SeriesPoint } from "../lib/types";
@@ -83,7 +84,7 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
     const axisFmt = (v: number) => (Math.abs(v) >= 1000 ? nf(0).format(v) : fmt.format(v));
     const ys = points.map((p) => p.v);
     const yMax = Math.max(...ys), yMin = Math.min(...ys);
-    const axisSize = 12 + Math.max(axisFmt(yMax).length, axisFmt(yMin).length, 4) * 6;
+    const axisSize = 16 + Math.max(axisFmt(yMax).length, axisFmt(yMin).length, 4) * 7.3;   // 12px mono digits are 7.2px wide; room for the tick and gap
     // the visible window: the bars within windowSec of the latest one; panning moves it by whole bars
     const xsAll = data[0] as number[];
     const nAll = xsAll.length, lastT = ts[nAll - 1];
@@ -92,7 +93,7 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
     const winN = Math.max(1, i1 - i0);
     const hourly = intraday && (ts[nAll - 1] - ts[Math.max(0, nAll - 2)]) >= 1800;
     const xLabel = (x: number) => { const t = intraday ? ts[Math.min(nAll - 1, Math.max(0, Math.round(x)))] : x; if (t == null) return ""; return intraday ? fmtStamp(t * 1000, SGT).replace(" SGT", "").slice(hourly ? 0 : 6) : new Date(t * 1000).toISOString().slice(0, 7); };
-    const size = () => ({ width: box.clientWidth || 300, height: fill ? Math.max(60, box.clientHeight) : height });
+    const size = () => ({ width: box.clientWidth || 300, height: fill ? Math.max(termMode() ? 24 : 60, box.clientHeight) : boxHeight(box, height) });
     const opts: uPlot.Options = {
       ...size(),
       padding: axes ? [6, 8, 0, 0] : [4, 2, 4, 2],

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Empty, Panel } from "../components/Panel";
 import { ChartPanel, type ChartPeriod } from "../components/ChartPanel";
 import { PeriodBar } from "../components/PeriodBar";
+import { TileGrid } from "../components/TileGrid";
 import type { SigmaWindow } from "../components/SigmaChart";
 import { CurveChart, spread } from "../components/CurveChart";
 import { useApi, DEV_MOCK } from "../lib/useApi";
@@ -24,6 +25,11 @@ function Badges({ r }: { r: TableRow }) {
 
 /** Levels in the table: one decimal from 100 up, two between 10 and 100, the instrument's own below 10 (FX crosses). */
 const lvlDec = (v: number | null | undefined, d: number) => (v == null ? d : Math.abs(v) >= 100 ? Math.min(d, 1) : Math.abs(v) >= 10 ? Math.min(d, 2) : d);
+
+/** Table cells are narrow: moves of 100% or 100bp and more drop one decimal so the figure is never cut off
+ *  (the base level stays in the cell's tooltip). */
+const cellPct = (v: number | null | undefined) => (v != null && Math.abs(v) >= 100 ? fmtPct(v, 1) : fmtPct(v));
+const cellBp = (v: number | null | undefined) => (v != null && Math.abs(v) >= 1 ? `${v > 0 ? "+" : ""}${Math.round(v * 100)}bp` : fmtChg(v, 3, true));
 
 /** One table (Shota): the level only as of now, every window as a % change, then σ 1M, 52-week position and
  *  distance to the 200-day average. The asset class is the section bar, not a column. */
@@ -77,7 +83,7 @@ function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
             {PERIODS.map((p) => {
               const c = r.closes[p.key];
               const v = isRate ? (c != null && r.last != null ? r.last - c : null) : r.pct[p.key];
-              return <td key={p.key} className={`num ${signCls(v)}${p.key === "d1" ? " grp" : ""}`} style={{ background: changeShade(v, isRate ? 0.5 : 10) }} title={c != null ? `from ${fmtNum(c, lvlDec(c, r.decimals))} on ${r.closeDates[p.key] ?? ""}` : ""}>{isRate ? fmtChg(v, 3, true) : fmtPct(v)}</td>;
+              return <td key={p.key} className={`num ${signCls(v)}${p.key === "d1" ? " grp" : ""}`} style={{ background: changeShade(v, isRate ? 0.5 : 10) }} title={c != null ? `from ${fmtNum(c, lvlDec(c, r.decimals))} on ${r.closeDates[p.key] ?? ""}` : ""}>{isRate ? cellBp(v) : cellPct(v)}</td>;
             })}
             <td className={`num grp ${signCls(r.z1m)}`} style={{ background: changeShade(r.z1m ?? null, 3) }}>{r.z1m == null ? "–" : `${r.z1m > 0 ? "+" : ""}${r.z1m.toFixed(1)}σ`}</td>
             <td className="num" style={{ background: r.pos52 == null ? undefined : levelShade(r.pos52, 0, 100) }}>{r.pos52 == null ? "–" : `${Math.round(r.pos52)}`}</td>
@@ -93,7 +99,7 @@ function ChartGroup({ no, title, rows, period, tick, sigmaWindow, children }: { 
   return (
     <Panel no={no} title={title} span={12} aux={`${rows.length} panels · ${period}`}>
       {children}
-      {rows.length ? <div className="cgrid">{rows.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} />)}</div> : <Empty title="No instruments in this group yet" />}
+      {rows.length ? <TileGrid n={rows.length}>{rows.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} />)}</TileGrid> : <Empty title="No instruments in this group yet" />}
     </Panel>
   );
 }

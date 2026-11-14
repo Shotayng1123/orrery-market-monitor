@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import uPlot from "uplot";
-import { AXIS as SHARED_AXIS, zoomMove } from "../lib/chart";
+import { AXIS as SHARED_AXIS, boxHeight, zoomMove } from "../lib/chart";
 
 export interface PolicyStep { bank: string; d: string; rate: number }
 const COLORS: Record<string, string> = { FED: "#e8e5de", ECB: "#5aa7ff", BOE: "#ff6f61", BOJ: "#3fd07e", HKMA: "#b08cff", RBA: "#ffc53d", BOK: "#1fd1c1", PBOC: "#ff9f43", MAS: "#9aa8b8" };
@@ -34,7 +34,7 @@ export function PolicyChart({ steps, height = 260 }: { steps: PolicyStep[]; heig
     if (!box || !banks.length) return;
     const from = Date.now() / 1000 - 30 * 365.25 * 86400;
     const opts: uPlot.Options = {
-      width: box.clientWidth || 300, height,
+      width: box.clientWidth || 300, height: boxHeight(box, height, 60),
       tzDate: (t) => uPlot.tzDate(new Date(t * 1e3), "UTC"),
       scales: { x: { time: true, range: () => [from, data.ts[data.ts.length - 1]] }, y: { range: (_u, min, max) => [Math.min(0, min) - 0.25, max + 0.25] } },
       axes: [{ ...AXIS, space: 70 }, { ...AXIS, size: 42, values: (_u, vals) => vals.map((v) => v.toFixed(1)) }],
@@ -51,15 +51,15 @@ export function PolicyChart({ steps, height = 260 }: { steps: PolicyStep[]; heig
       tip.style.display = "block"; const w = uu.over.clientWidth, left = uu.cursor.left ?? 0, top = uu.cursor.top ?? 0;
       tip.style.left = `${left + 12 + tip.offsetWidth > w ? Math.max(0, left - 12 - tip.offsetWidth) : left + 12}px`; tip.style.top = `${Math.max(0, top - 26)}px`;
     }];
-    const ro = new ResizeObserver(() => u.setSize({ width: box.clientWidth || 300, height }));
+    const ro = new ResizeObserver(() => u.setSize({ width: box.clientWidth || 300, height: boxHeight(box, height, 60) }));
     ro.observe(box);
     return () => { ro.disconnect(); u.destroy(); };
   }, [data, banks, hidden, height]);
   return (
-    <div>
+    <div className="chartwrap">
       <div className="chips" style={{ margin: "0 0 4px" }}>
         {banks.map((b) => <span key={b} className={`chip-sm${hidden.has(b) ? "" : " on"}`} style={hidden.has(b) ? undefined : { background: COLORS[b], borderColor: COLORS[b], color: "#000" }} onClick={() => setHidden((h) => { const n = new Set(h); if (n.has(b)) n.delete(b); else n.add(b); return n; })}>{b}</span>)}
-        <span className="mut" style={{ marginLeft: 8, fontSize: 10 }}>30 years · step lines on change dates · click a bank to hide it</span>
+        <span className="mut chartnote" style={{ marginLeft: 8, fontSize: 10 }}>30 years · step lines on change dates · click a bank to hide it</span>
       </div>
       <div className="chartbox" ref={el} style={{ height }} />
     </div>

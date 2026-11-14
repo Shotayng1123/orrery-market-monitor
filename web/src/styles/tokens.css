@@ -468,10 +468,6 @@ body.term #grid[data-view="market"] .cgrid{grid-template-columns:repeat(auto-fil
 body.term #grid[data-view="news"] .panel[data-no="01"]{grid-column:span 7;grid-row:span 2}
 body.term #grid[data-view="news"] .panel[data-no="02"],body.term #grid[data-view="news"] .panel[data-no="03"]{grid-column:span 5;grid-row:span 1}
 body.term #grid[data-view="news"] .panel[data-no="04"]{grid-column:span 12;grid-row:span 1}
-body.term #grid[data-view="rates"] .panel[data-no="01"]{grid-column:span 4;grid-row:span 1}
-body.term #grid[data-view="rates"] .panel[data-no="02"]{grid-column:span 8;grid-row:span 1}
-body.term #grid[data-view="rates"] .panel[data-no="03"],body.term #grid[data-view="rates"] .panel[data-no="04"],body.term #grid[data-view="rates"] .panel[data-no="05"],body.term #grid[data-view="rates"] .panel[data-no="06"],body.term #grid[data-view="rates"] .panel[data-no="07"],body.term #grid[data-view="rates"] .panel[data-no="08"],body.term #grid[data-view="rates"] .panel[data-no="09"]{grid-column:span 2;grid-row:span 1}
-body.term #grid[data-view="rates"] .panel[data-no="10"],body.term #grid[data-view="rates"] .panel[data-no="11"]{grid-column:span 6;grid-row:span 1}
 body.term #grid[data-view="asset"] .panel[data-no="01"]{grid-column:span 8;grid-row:span 2}
 body.term #grid[data-view="asset"] .panel[data-no="02"]{grid-column:span 4;grid-row:span 2}
 body.term #grid[data-view="asset"] .panel[data-no="03"]{grid-column:span 12;grid-row:span 1}
@@ -485,3 +481,109 @@ body.term .mtile .lb{overflow:hidden;min-width:0}
 body.term .mtile .lbtxt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
 body.term .mtile .ch{font-size:9.5px}
 body.term .mtile .ch .mut{display:none}
+
+/* ===== Responsive pass (2026-11-14): one layout for any window and any monitor =====
+   1. Scale. The size control defaults to AUTO: lib/prefs.ts sets the body zoom from the window (COMPACT fits
+      a 1440 x 800 reference in both dimensions; the scrolling layout follows the width), re-applied on resize.
+   2. No overlap. Heads never shrink or wrap over their panel, tiles clip their own content, and charts take
+      the height their box has instead of a fixed pixel height.
+   3. No dead space. The selector strip takes only its own height, chart tiles are fitted to their panel
+      (components/TileGrid.tsx) and tables stretch to the panel. */
+
+/* --- every layout --- */
+.phead{flex:0 0 auto;min-width:0}
+.phead .t{flex:0 0 auto}
+.phead .aux{min-width:0}
+.mtile.cp{overflow:hidden;position:relative}
+.mtile .lb,.mtile .vl,.mtile .ch,.rdout{flex:0 0 auto;min-width:0}
+.mtile .vl,.mtile .ch{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chartbox{overflow:hidden}
+/* the market table keeps every figure whole: under this width the panel scrolls sideways instead */
+table.mkt{min-width:980px}
+table.mkt col.nm{width:auto} table.mkt col.lv{width:9.5%} table.mkt col.n{width:7.4%}
+#alerts{flex:0 1 auto}
+
+/* --- COMPACT, one screen per tab --- */
+body.term{overflow:auto}                              /* scrolls only when the window is under the minimum below */
+body.term #root{min-height:560px}
+body.term #alerts{min-width:0}
+body.term #alerts .alrt{max-width:min(320px,100%)}
+body.term #search input{width:180px;padding:1px 6px;font-size:10px}
+body.term .phead .aux{display:block;flex:1 1 0;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.term .phead .aux:has(.chips){display:inline-flex;flex-wrap:wrap;white-space:normal;overflow:visible}
+
+/* the selector strip (index toggle, period, σ window) is the first row and only as tall as its chips */
+body.term #grid:has(>.c12:not(.panel)){grid-template-rows:auto}
+body.term #grid>.c12:not(.panel){order:-1;grid-row:1;grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:2px 14px;min-width:0}
+body.term #grid>.c12:not(.panel) .chips{margin:0!important}
+
+/* charts take the height of their box */
+body.term .mtile.cp .chartbox{flex:1 1 0;min-height:0!important;height:auto!important}
+body.term .chartwrap{flex:1 1 auto;min-height:0;min-width:0;display:flex;flex-direction:column}
+body.term .chartwrap>*{flex:0 0 auto}
+body.term .chartwrap>.chartbox{flex:1 1 0;min-height:0!important;height:auto!important}
+body.term .pbody>.chartwrap,body.term .pbody>.curvebody{flex:1 1 auto;min-height:0}
+body.term .chartnote{display:none}
+/* the hover readout sits over the foot of the chart, so showing it never moves the tile's content */
+body.term .mtile.cp .rdout{position:absolute;left:5px;right:5px;bottom:1px;pointer-events:none;text-shadow:0 0 3px #000,0 0 3px #000}
+
+/* chart tiles fitted to the panel: --c columns, a short last row stretches, rows share the height */
+body.term .cgrid.fit{display:flex;flex-wrap:wrap;align-content:stretch;gap:3px;height:auto;overflow:auto}
+body.term .cgrid.fit>.mtile.cp{flex:1 1 calc(100% / var(--c) - 3px);min-width:0;min-height:58px;height:auto;aspect-ratio:auto}
+
+/* MARKET: table on the left over three rows, chart groups on the right */
+body.term #grid[data-view="market"]{grid-template-rows:auto minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr)}
+body.term table.mkt{min-width:0;height:100%}
+body.term table.mkt td{padding:0 3px}
+body.term table.mkt th{padding:1px 3px}
+body.term table.mkt tr.cls td{height:1%}
+
+/* RATES & CURRENCY: FX table and pairs, the curves at most four to a row, then policy rates and yields */
+body.term #grid[data-view="rates"] .panel[data-k="fx"]{grid-column:span 4}
+body.term #grid[data-view="rates"] .panel[data-k="pairs"]{grid-column:span 8}
+body.term #grid[data-view="rates"] .panel[data-k="policy"]{grid-column:span 8}
+body.term #grid[data-view="rates"] .panel[data-k="yields"]{grid-column:span 4}
+body.term .panel[data-ts="12"]{grid-column:span 12}
+body.term .panel[data-ts="6"]{grid-column:span 6}
+body.term .panel[data-ts="4"]{grid-column:span 4}
+body.term .panel[data-ts="3"]{grid-column:span 3}
+body.term .curvebody{display:flex;gap:6px}
+body.term .curvechart{flex:1 1 0;min-width:0;min-height:0;display:flex;flex-direction:column}
+body.term .curvechart .krow{flex:0 0 auto;margin:0!important;flex-wrap:nowrap;gap:8px;overflow:hidden;white-space:nowrap}
+body.term .curvetab{flex:0 0 auto;max-width:50%;overflow:auto}
+body.term .curvetab table{width:auto}
+body.term .panel[data-k="policy"] .pbody{flex-direction:row;gap:8px}
+body.term .panel[data-k="policy"] .pbody>.chartwrap{flex:1 1 0;min-width:180px}
+body.term .panel[data-k="policy"] .pbody>table{flex:0 1 auto;width:auto;align-self:flex-start}
+/* curve panels: the spreads read on one line each (label then value), wrapping when the chart is narrow */
+body.term .curvechart .krow{flex-wrap:wrap;gap:0 10px;overflow:visible;white-space:normal;padding:0}
+body.term .curvechart .krow>span{flex:0 0 auto;white-space:nowrap}
+body.term .curvechart .krow .k{display:inline;margin-right:4px}
+body.term .curvechart .krow .v{font-size:10.5px}
+/* policy rates: chart and table side by side; the source links stay on hover in the head */
+body.term .panel[data-k="policy"] table th:last-child,body.term .panel[data-k="policy"] table td:last-child{display:none}
+body.term .panel[data-k="policy"] .pbody>.chartwrap{flex:1 1 0;min-width:220px}
+/* top bar on one row: the alert line takes whatever is left between the tabs and the search box */
+body.term #alerts{flex:1 1 0;min-width:90px}
+body.term #alerts .alrt{max-width:100%}
+body.term #search{margin-left:0;flex:0 0 auto}
+body.term #search input{width:150px}
+body.term #topbar .bmq{margin-left:0;flex:0 0 auto;flex-wrap:nowrap}
+body.term #userchip .so{display:none}                 /* the chip's tooltip says "click to sign out" */
+body.term #search input{width:124px}
+/* sector tables in the narrow panels: long sector names give way to the figures (full name on hover) */
+body.term table.secT td.l{max-width:112px;overflow:hidden;text-overflow:ellipsis}
+body.term table.brT td.l{min-width:0}
+body.term table.brT tr:last-child td.num{font-size:8.5px!important;padding:0 1px}   /* the session dates row */
+
+/* --- scrolling layout on narrow windows and phones --- */
+.cgrid{grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr))}
+.cgrid.two{grid-template-columns:repeat(auto-fill,minmax(min(430px,100%),1fr))}
+.msg2{grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr))}
+@media (max-width:720px){
+  #topbar{position:static}                             /* a wrapped header must not stay pinned over a third of a phone screen */
+  #search{margin-left:0;flex:1 1 100%}
+  #search input{width:100%}
+  .sres{width:min(440px,94vw);left:0;right:auto}
+  #mktstat{flex-wrap:wrap;white-space:normal}
+}

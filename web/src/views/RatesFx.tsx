@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Empty, Panel } from "../components/Panel";
 import { ChartPanel, type ChartPeriod } from "../components/ChartPanel";
 import { PeriodBar } from "../components/PeriodBar";
+import { TileGrid } from "../components/TileGrid";
 import type { SigmaWindow } from "../components/SigmaChart";
 import { CurveChart, spread } from "../components/CurveChart";
 import { PolicyChart, type PolicyStep } from "../components/PolicyChart";
@@ -26,36 +27,46 @@ function FxTable({ rows }: { rows: TableRow[] }) {
 const CURVE_ORDER = ["US", "JP", "DE", "EA", "EB", "GB", "CA"];
 const CURVE_TITLES: Record<string, string> = { USB: "US T-BILLS (1Y AND UNDER)", US: "US TREASURY CURVE", JP: "JGB CURVE", DE: "GERMANY BUND CURVE", EA: "EURO AREA AAA CURVE", EB: "EURO AREA ALL-RATINGS CURVE", GB: "UK GILT CURVE", CA: "CANADA CURVE" };
 
+/** Column spans for n curve panels in the one-screen layout: at most four to a row, every row filled edge to edge. */
+function termSpans(n: number): number[] {
+  const rows = Math.ceil(n / 4), out: number[] = [];
+  for (let r = 0, left = n; r < rows; r++) { const k = Math.ceil(left / (rows - r)); for (let i = 0; i < k; i++) out.push(12 / k); left -= k; }
+  return out;
+}
+
 function CurvesGrid({ ago, tick }: { ago: ChartPeriod; tick: number }) {
   const list = useApi<{ rows: Array<{ country: string; label: string; latest: string; tenors: number }> }>("curves", undefined, tick);
   const have = new Set((list.data?.rows ?? []).map((r) => r.country));
   const codes = CURVE_ORDER.filter((c) => have.has(c) || c === "US" || c === "JP");
+  const spans = termSpans(codes.length + 1);
   return (
     <>
-      {codes.map((c, i) => <CurveBlock key={c} country={c} label={CURVE_TITLES[c] ?? c} ago={ago} tick={tick} no={String(i + 3).padStart(2, "0")} span={i < 2 ? 6 : 4} />)}
-      <CurveBlock key="USB" country="US" set="bills" label={CURVE_TITLES.USB} ago={ago} tick={tick} no={String(codes.length + 3).padStart(2, "0")} span={4} />
+      {codes.map((c, i) => <CurveBlock key={c} country={c} label={CURVE_TITLES[c] ?? c} ago={ago} tick={tick} no={String(i + 3).padStart(2, "0")} span={i < 2 ? 6 : 4} ts={spans[i]} />)}
+      <CurveBlock key="USB" country="US" set="bills" label={CURVE_TITLES.USB} ago={ago} tick={tick} no={String(codes.length + 3).padStart(2, "0")} span={4} ts={spans[codes.length]} />
     </>
   );
 }
 
-function CurveBlock({ country, label, ago, tick, no, span, set = "std" }: { country: string; label: string; ago: ChartPeriod; tick: number; no: string; span: 4 | 6; set?: TenorSet }) {
+function CurveBlock({ country, label, ago, tick, no, span, ts, set = "std" }: { country: string; label: string; ago: ChartPeriod; tick: number; no: string; span: 4 | 6; ts: number; set?: TenorSet }) {
   const a = ago === "1D" || ago === "1W" ? "1M" : ago;
   const d = useApi<{ current: Curve | null; ghost: Curve | null }>("curve", { country, ago: a }, tick);
   const c = filterCurve(d.data?.current ?? null, set), g = filterCurve(d.data?.ghost ?? null, set);
   const row = (t: string, v: number | null, gv: number | null) => <tr key={t}><td className="l">{t}</td><td className="num">{v == null ? "–" : v.toFixed(3)}</td><td className="num mut">{gv == null ? "–" : gv.toFixed(3)}</td><td className={`num ${signCls(v != null && gv != null ? v - gv : null)}`}>{v != null && gv != null ? fmtChg(v - gv, 1, true) : "–"}</td></tr>;
   return (
-    <Panel no={no} title={label} span={span} aux={c ? <>{c.date} · ghost {g?.date ?? "–"} ({a} ago) · {c.source}</> : d.error ? <span className="warn">{d.error}</span> : ""}>
+    <Panel no={no} title={label} span={span} k="curve" ts={ts} aux={c ? <>{c.date} · ghost {g?.date ?? "–"} ({a} ago) · {c.source}</> : d.error ? <span className="warn">{d.error}</span> : ""}>
       {c ? (
-        <>
+        <div className="curvebody">
+          <div className="curvechart">
           <CurveChart current={c} ghost={g} height={230} />
           {set === "std" && <div className="krow" style={{ marginTop: 6 }}>
             <span><span className="k">2s10s</span><span className={`v ${signCls(spread(c, 2, 10))}`}>{fmtChg(spread(c, 2, 10), 0)}bp</span></span>
             <span><span className="k">10s30s</span><span className={`v ${signCls(spread(c, 10, 30))}`}>{fmtChg(spread(c, 10, 30), 0)}bp</span></span>
             {g && <span><span className="k">2s10s vs {a} ago</span><span className="v">{fmtChg((spread(c, 2, 10) ?? 0) - (spread(g, 2, 10) ?? 0), 0)}bp</span></span>}
           </div>}
-          <table className="mini"><thead><tr><th className="l">Tenor</th><th>Today</th><th>{a} ago</th><th>Change</th></tr></thead>
-            <tbody>{c.points.map((p) => row(p.tenor, p.yield, g?.points.find((q) => q.tenor === p.tenor)?.yield ?? null))}</tbody></table>
-        </>
+          </div>
+          <div className="curvetab"><table className="mini"><thead><tr><th className="l">Tenor</th><th>Today</th><th>{a} ago</th><th>Change</th></tr></thead>
+            <tbody>{c.points.map((p) => row(p.tenor, p.yield, g?.points.find((q) => q.tenor === p.tenor)?.yield ?? null))}</tbody></table></div>
+        </div>
       ) : <Empty title="No curve yet">{d.error ?? "Loads once the curves job has run."}</Empty>}
     </Panel>
   );
@@ -67,11 +78,11 @@ function PolicyTable({ tick }: { tick: number }) {
   const rows = p.data?.rows ?? [];
   const steps = h.data?.rows ?? [];
   return (
-    <Panel no="10" title="POLICY RATES" span={12} aux={h.data && Object.keys(h.data.sources).length > 0 ? <span title={Object.entries(h.data.sources).map(([b, src]) => `${b}: ${src}`).join("\n")}>sources on hover</span> : ""}>
+    <Panel no="11" title="POLICY RATES" span={12} k="policy" aux={h.data && Object.keys(h.data.sources).length > 0 ? <span title={Object.entries(h.data.sources).map(([b, src]) => `${b}: ${src}`).join("\n")}>sources on hover</span> : ""}>
       {steps.length ? <PolicyChart steps={steps} /> : <Empty title="No rate history yet">{h.error ?? "Loads once the policy jobs have run."}</Empty>}
       {rows.length ? (
         <table className="mini">
-          <thead><tr><th className="l">Central bank</th><th className="l">Rate</th><th>Level</th><th className="l">As of</th><th className="l">Last change</th><th className="l">Next meeting</th><th className="l">Source</th></tr></thead>
+          <thead><tr><th className="l">Central bank</th><th className="l">Rate</th><th>Level</th><th className="l">As of</th><th className="l">Last change</th><th className="l">Next meeting</th><th className="l src">Source</th></tr></thead>
           <tbody>{rows.map((r) => <tr key={r.bank}><td className="l"><b>{r.bank}</b> <span className="mut">{r.name}</span></td><td className="l">{r.rateLabel}</td><td className="num">{r.rate == null ? "–" : r.bank === "FED" ? `${(r.rate - 0.25).toFixed(2)}–${r.rate.toFixed(2)}%` : `${r.rate.toFixed(2)}%`}</td><td className="l">{r.asOf ?? "–"}</td><td className="l">{r.lastChange ?? "–"}</td><td className="l">{r.nextMeeting ?? "–"}</td><td className="l">{r.sourceUrl ? <a href={r.sourceUrl} target="_blank" rel="noreferrer">{new URL(r.sourceUrl).hostname}</a> : "–"}{r.sourceNote && <span className="mut"> · {r.sourceNote}</span>}</td></tr>)}</tbody>
         </table>
       ) : <Empty title="No policy rates loaded">{p.error ?? "Fed from FRED; the others follow."}</Empty>}
@@ -88,16 +99,16 @@ export function RatesFxView({ tick }: { sub: string; onSub: (s: string) => void;
   return (
     <>
       <div className="c12"><PeriodBar period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} /></div>
-      <Panel no="01" title="FOREX" span={12} aux={table.data ? <>as of {fmtStampSafe(table.data.asOf)} · Yahoo Finance</> : ""}>
+      <Panel no="01" title="FOREX" span={12} k="fx" aux={table.data ? <>as of {fmtStampSafe(table.data.asOf)} · Yahoo Finance</> : ""}>
         {fx.length ? <FxTable rows={fx} /> : <Empty title="Awaiting the data feed">{table.error ?? "Pairs load with the market table."}</Empty>}
       </Panel>
-      <Panel no="02" title="PAIRS" span={12} aux={`${fx.length} panels · ${period}`}>
-        {fx.length ? <div className="cgrid">{fx.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} />)}</div> : <Empty title="No pairs yet" />}
+      <Panel no="02" title="PAIRS" span={12} k="pairs" aux={`${fx.length} panels · ${period}`}>
+        {fx.length ? <TileGrid n={fx.length}>{fx.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} />)}</TileGrid> : <Empty title="No pairs yet" />}
       </Panel>
       <CurvesGrid ago={period} tick={tick} />
       <PolicyTable tick={tick} />
-      <Panel no="11" title="YIELDS" span={12} aux={`${rates.length} panels · ${period}`}>
-        {rates.length ? <div className="cgrid">{rates.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} />)}</div> : <Empty title="No yields yet" />}
+      <Panel no="12" title="YIELDS" span={12} k="yields" aux={`${rates.length} panels · ${period}`}>
+        {rates.length ? <TileGrid n={rates.length}>{rates.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} />)}</TileGrid> : <Empty title="No yields yet" />}
       </Panel>
     </>
   );

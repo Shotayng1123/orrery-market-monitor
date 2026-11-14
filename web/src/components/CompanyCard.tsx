@@ -1,3 +1,4 @@
+import { zoomNow } from "../lib/prefs";
 import { useEffect, useRef, useState } from "react";
 import { useApi } from "../lib/useApi";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
@@ -109,7 +110,9 @@ export function CardLayer() {
   }, []);
   if (!st) return null;
   const W = 300, H = 330;
-  const left = Math.min(st.x + 16, window.innerWidth - W - 12), top = st.y + 16 + H > window.innerHeight ? Math.max(8, st.y - H - 10) : st.y + 16;
+  // the pointer and the window are measured in visual pixels; the card is placed in the zoomed layout's pixels
+  const z = zoomNow(), px = st.x / z, py = st.y / z, vw = window.innerWidth / z, vh = window.innerHeight / z;
+  const left = Math.max(8, Math.min(px + 16, vw - W - 12)), top = py + 16 + H > vh ? Math.max(8, py - H - 10) : py + 16;
   return (
     <div ref={box} className="ccard" style={{ left, top, width: W }} onMouseEnter={() => { /* keep open while over the card */ }} onMouseLeave={hideCard} onClick={() => openAsset(st.symbol)}>
       <CardBody symbol={st.symbol} />

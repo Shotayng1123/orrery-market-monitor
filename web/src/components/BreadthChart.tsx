@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import uPlot from "uplot";
-import { AXIS as SHARED_AXIS, zoomMove } from "../lib/chart";
+import { AXIS as SHARED_AXIS, boxHeight, zoomMove } from "../lib/chart";
 
 export interface BreadthRow { d: string; n: number; adv: number; dec: number; above50: number; above200: number; new_hi: number; new_lo: number }
 const AXIS = SHARED_AXIS;
@@ -17,7 +17,7 @@ export function BreadthChart({ rows, height = 170 }: { rows: BreadthRow[]; heigh
     const advRaw = pc((r) => r.adv), adv: Array<number | null> = advRaw.map((_, i) => { const w = advRaw.slice(Math.max(0, i - 9), i + 1).filter((v): v is number => v != null); return w.length ? w.reduce((a, v) => a + v, 0) / w.length : null; });
     const data = [xs, pc((r) => r.above200), pc((r) => r.above50), adv] as uPlot.AlignedData;
     const opts: uPlot.Options = {
-      width: box.clientWidth || 300, height,
+      width: box.clientWidth || 300, height: boxHeight(box, height, 60),
       tzDate: (t) => uPlot.tzDate(new Date(t * 1e3), "UTC"),
       scales: { x: { time: true }, y: { range: [0, 100] } },
       axes: [{ ...AXIS, space: 70 }, { ...AXIS, size: 34, values: (_u, vals) => vals.map((v) => `${v}%`) }],
@@ -39,12 +39,12 @@ export function BreadthChart({ rows, height = 170 }: { rows: BreadthRow[]; heigh
       tip.style.display = "block"; const w = uu.over.clientWidth, left = uu.cursor.left ?? 0, top = uu.cursor.top ?? 0;
       tip.style.left = `${left + 12 + tip.offsetWidth > w ? Math.max(0, left - 12 - tip.offsetWidth) : left + 12}px`; tip.style.top = `${Math.max(0, top - 26)}px`;
     }];
-    const ro = new ResizeObserver(() => u.setSize({ width: box.clientWidth || 300, height }));
+    const ro = new ResizeObserver(() => u.setSize({ width: box.clientWidth || 300, height: boxHeight(box, height, 60) }));
     ro.observe(box);
     return () => { ro.disconnect(); u.destroy(); };
   }, [rows, height]);
   return (
-    <div>
+    <div className="chartwrap">
       <div className="legend" style={{ padding: "0 0 2px" }}>
         <span><span className="sw" style={{ borderTop: "2px solid #1fd1c1" }} />above 200d</span>
         <span><span className="sw" style={{ borderTop: "2px solid #5aa7ff" }} />above 50d</span>

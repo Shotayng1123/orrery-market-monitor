@@ -56,10 +56,10 @@ export function Topbar(p: TopbarProps) {
           &#8635; {p.nextIn == null ? "–:––" : `${Math.floor(p.nextIn / 60)}:${String(p.nextIn % 60).padStart(2, "0")}`}
         </span>
         <span id="hlth" className={`chip-sm hl hl-${p.health}`} title={p.healthTitle}>DATA {p.health === "ok" ? "OK" : p.health === "warn" ? "!" : p.health === "bad" ? "✕" : "?"}</span>
-        <span id="sz-ctl">{SIZES.map((s) => <span key={s.k} className={`chip-sm${p.prefs.size === s.k ? " on" : ""}`} onClick={() => p.onPrefs({ ...p.prefs, size: s.k as SizeKey })}>{s.k}</span>)}</span>
+        <span id="sz-ctl">{SIZES.map((s) => <span key={s.k} className={`chip-sm${p.prefs.size === s.k ? " on" : ""}`} title={s.k === "AUTO" ? "Text and layout scale to this window automatically" : `Fixed text size ${s.k}`} onClick={() => p.onPrefs({ ...p.prefs, size: s.k as SizeKey })}>{s.k}</span>)}</span>
         <span id="cmp-ctl" className={`chip-sm${p.prefs.compact ? " on" : ""}`} title="Terminal layout: one screen per tab, sized to the window" onClick={() => p.onPrefs({ ...p.prefs, compact: !p.prefs.compact })}>COMPACT</span>
         <span id="fs-ctl" className="chip-sm" title="Fullscreen: hides the header (Esc or click the corner strip to leave; keys 1 to 5 switch tabs)" onClick={() => p.onFull(true)}>&#9974; FULL</span>
-        {p.userId && <span className="chip" id="userchip" title="Signed in. Click to sign out" onClick={p.onSignOut}>{p.userId.toUpperCase()} · SIGN OUT</span>}
+        {p.userId && <span className="chip" id="userchip" title="Signed in. Click to sign out" onClick={p.onSignOut}>{p.userId.toUpperCase()}<span className="so"> · SIGN OUT</span></span>}
       </span>
     </div>
   );
