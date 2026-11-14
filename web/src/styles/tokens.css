@@ -613,3 +613,10 @@ body.term .curvetab table td,body.term .curvetab table th{padding:0 3px}
 /* policy rates: bank codes only (full name on hover), so the table and the chart both fit */
 body.term .panel[data-k="policy"] .bnm{display:none}
 body.term .panel[data-k="policy"] .pbody>.chartwrap{min-width:200px}
+/* RATES & CURRENCY with the live universe (24 pairs, 14 yields): three tile rows must fit in the first row */
+body.term #grid[data-view="rates"]{grid-template-rows:auto minmax(0,1.95fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.35fr)}
+body.term #grid[data-view="rates"]:not(:has(.panel[data-k="curve"]~.panel[data-k="curve"]~.panel[data-k="curve"]~.panel[data-k="curve"]~.panel[data-k="curve"])){grid-template-rows:auto minmax(0,1.95fr) minmax(0,1fr) minmax(0,1.35fr)}
+body.term table.brT td,body.term table.brT th{padding-left:2px;padding-right:2px}
+body.term table.brT td.l{max-width:100px}
+/* morning-note tables: a long company name gives way to the figures instead of pushing the panel sideways */
+.msg2 table.secT:not(.mvT) td.l{max-width:0;width:100%;overflow:hidden;text-overflow:ellipsis}
