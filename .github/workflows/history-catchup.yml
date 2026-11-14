@@ -1,0 +1,25 @@
+name: history-catchup
+# The daily closes are booked by pg_cron on weekdays (07:05, 17:05 and 22:35 UTC). This is the safety net: the
+# same job twice a day, every day, for bars Yahoo publishes late and for crypto's Friday and weekend days.
+# (GitHub may start a scheduled run late; that is harmless here, the job is idempotent.)
+on:
+  schedule:
+    - cron: "20 1 * * *"
+    - cron: "20 11 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Daily closes and table snapshot
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: deno run -A --node-modules-dir=none jobs/history_deno.ts

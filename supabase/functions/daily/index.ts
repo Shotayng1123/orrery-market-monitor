@@ -8,7 +8,9 @@
 import { chunk, db, logRun, selectAll, sourceErr, sourceOk, type InstrumentRow } from "../_shared/db.ts";
 import { fetchJson, fetchText, isCron, json } from "../_shared/http.ts";
 import { localDate, marketById, marketState, partsIn } from "../_shared/sessions.ts";
+import { FX_SOURCE_HOURLY, fxClosesFromHourly, isFxPair, spikeThreshold, suspectBars } from "../_shared/fx.ts";
 import { loadHolidays, saveTableSnapshot } from "../_shared/table.ts";
+import { history } from "../_shared/history.ts";
 import { chart, profiles, quotes, spark, type Profile, type QuoteRow } from "../_shared/yahoo.ts";
 import { fetchHsi, fetchKospi200, fetchNikkei225, fetchSp500, fetchSse180, fetchTopix, type IndexId } from "../_shared/constituents.ts";
 import { fetchBoc, fetchBoe, fetchBundesbank, fetchEcb } from "../_shared/curves.ts";
@@ -51,42 +53,6 @@ Deno.serve(async (req) => {
     return json(req, { ok: false, job, error: msg }, 500);
   }
 });
-
-// ---------- history ----------
-async function history(): Promise<string> {
-  const now = new Date();
-  const holidays = await loadHolidays();
-  const { data, error } = await db.from("instruments").select("*").eq("active", true).eq("provider", "yahoo");
-  if (error) throw new Error(error.message);
-  const inst = data as InstrumentRow[];
-  let series: Awaited<ReturnType<typeof spark>>;
-  try { series = await spark(inst.map((i) => i.symbol), "3mo", "1d"); await sourceOk("yahoo"); } catch (e) { await sourceErr("yahoo", e); throw e; }
-  const rows: Array<Record<string, unknown>> = [];
-  const missing: string[] = [];
-  for (const i of inst) {
-    const s = series[i.symbol];
-    if (!s) { missing.push(i.symbol); continue; }
-    const m = marketById(i.market);
-    const today = partsIn(i.tz, now).ymd;
-    const inSession = m ? ["OPEN", "BREAK"].includes(marketState(m, now, holidays)) : false;
-    for (let k = 0; k < s.timestamp.length; k++) {
-      const v = s.close[k];
-      if (v == null || !Number.isFinite(v)) continue;
-      const d = localDate(i.tz, s.timestamp[k]);
-      if (d > today) continue;
-      if (d === today && inSession) continue;              // never book a session still trading
-      rows.push({ symbol: i.symbol, d, close: v, source: "yahoo", updated_at: now.toISOString() });
-    }
-  }
-  const uniq = [...new Map(rows.map((r) => [`${r.symbol}|${r.d}`, r])).values()];   // two bars can land on one exchange-local date (DST edges, Sydney): keep the last
-  for (const part of chunk(uniq, 1000)) {
-    const { error: ue } = await db.from("prices_daily").upsert(part, { onConflict: "symbol,d" });
-    if (ue) throw new Error("prices_daily: " + ue.message);
-  }
-  const n = await saveTableSnapshot(now);
-  return `${rows.length} closes for ${inst.length - missing.length} instruments${missing.length ? `, missing: ${missing.join(" ")}` : ""}; table ${n} rows`;
-}
-
 // ---------- constituents (alert scan, breadth, movers) ----------
 async function constituents(reqUrl: string): Promise<string> {
   const parts: string[] = [];

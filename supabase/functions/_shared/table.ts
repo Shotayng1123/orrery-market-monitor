@@ -1,5 +1,6 @@
 // The market table: one row per active instrument with last print, period anchors and % changes.
 // Rebuilt by `tick` once a minute (and by `daily` after history runs) into snapshots.key = 'table'.
+import { fxDay, isFxPair } from "./fx.ts";
 import { db, type InstrumentRow } from "./db.ts";
 import { localDate, marketById, marketState, partsIn, type Holidays } from "./sessions.ts";
 
@@ -21,6 +22,9 @@ export interface TableRow {
   vs200: number | null;  // % (bp for yields handled by the view) above the 200-day average
 }
 
+/** Yields are compared in points; a bond future in the rates group is a price and is compared in per cent. */
+const isYield = (i: { grp: string; symbol: string }): boolean => i.grp === "rates" && !i.symbol.endsWith("=F");
+
 export async function loadHolidays(): Promise<Holidays> {
   const { data } = await db.from("sessions_cal").select("market,d").gte("d", new Date(Date.now() - 2 * 86400e3).toISOString().slice(0, 10)).lte("d", new Date(Date.now() + 400 * 86400e3).toISOString().slice(0, 10));
   const h: Holidays = {};
@@ -40,12 +44,25 @@ export async function computeTable(now: Date = new Date()): Promise<{ rows: Tabl
   const sBy = new Map(((stats ?? []) as Stat[]).map((x) => [x.symbol, x]));
   const aBy = new Map((anchors as Anchor[]).map((a) => [a.symbol, a]));
   const qBy = new Map((quotes as Quote[]).map((q) => [q.symbol, q]));
+  // The SQL dates a quote in the instrument's time zone. When that date is after the last booked close but the
+  // quote is not a new session (a currency pair's Friday quote that Yahoo re-stamps on Saturday), the SQL hands
+  // back the last close itself as the "previous close". Fetch the close before it for those symbols.
+  const stuck = (anchors as Anchor[]).filter((a) => a.last_d && a.d1_d === a.last_d);
+  const prevBy = new Map<string, { d: string; close: number }>();
+  if (stuck.length) {
+    const lo = stuck.map((a) => a.last_d as string).sort()[0];
+    const from = new Date(Date.parse(lo + "T00:00:00Z") - 14 * 86400e3).toISOString().slice(0, 10);
+    const { data: prevRows } = await db.from("prices_daily").select("symbol,d,close").in("symbol", stuck.map((a) => a.symbol)).gte("d", from).order("d");
+    const lastOf = new Map(stuck.map((a) => [a.symbol, a.last_d as string]));
+    for (const r of (prevRows ?? []) as Array<{ symbol: string; d: string; close: number }>) if (r.d < lastOf.get(r.symbol)!) prevBy.set(r.symbol, { d: r.d, close: r.close });   // ascending: the latest before last_d wins
+  }
   const rows: TableRow[] = [];
   for (const i of inst as InstrumentRow[]) {
     const a = aBy.get(i.symbol), q = qBy.get(i.symbol);
     const m = marketById(i.market);
     // The quote is the newer view only when its exchange-local date is after the last booked close.
-    const qDate = q ? localDate(i.tz, Date.parse(q.market_time) / 1000) : null;
+    // (a currency pair's day rolls at 17:00 New York, the same boundary its daily closes are booked on)
+    const qDate = q ? (isFxPair(i.symbol) ? fxDay(Date.parse(q.market_time) / 1000) : localDate(i.tz, Date.parse(q.market_time) / 1000)) : null;
     const useQuote = !!q && (!a?.last_d || (qDate! > a.last_d));
     const last = useQuote ? q!.price : a?.last_close ?? null;
     const lastAt = useQuote ? q!.market_time : a?.last_d ? `${a.last_d}T00:00:00Z` : null;
@@ -54,7 +71,13 @@ export async function computeTable(now: Date = new Date()): Promise<{ rows: Tabl
     const live = useQuote && open && ageMin < (m?.delayMin ?? 0) + 15;
     const closes: TableRow["closes"] = {}, closeDates: TableRow["closeDates"] = {}, pct: TableRow["pct"] = {}, chg: TableRow["chg"] = {};
     for (const p of PERIODS) {
-      const c = a ? (a[p] as number | null) : null, d = a ? (a[`${p}_d`] as string | null) : null;
+      // When the quote is newer than the last booked close, that close is the previous close by definition. (The
+      // SQL anchors date a quote in the instrument's time zone; a currency pair's day rolls at 17:00 New York, so
+      // for the hours between that roll and London midnight the SQL "previous close" would be a day too old.)
+      const prevIsLast = p === "d1" && useQuote && a?.last_close != null;
+      const before = p === "d1" && !useQuote && a?.last_d && a.d1_d === a.last_d ? prevBy.get(i.symbol) : undefined;   // see `stuck` above
+      const c = prevIsLast ? a!.last_close : before ? before.close : a ? (a[p] as number | null) : null;
+      const d = prevIsLast ? a!.last_d : before ? before.d : a ? (a[`${p}_d`] as string | null) : null;
       closes[p] = c; closeDates[p] = d;
       pct[p] = c != null && last != null && c !== 0 ? (last / c - 1) * 100 : null;
       chg[p] = c != null && last != null ? last - c : null;
@@ -62,7 +85,7 @@ export async function computeTable(now: Date = new Date()): Promise<{ rows: Tabl
     const st = sBy.get(i.symbol);
     const z1m = st && st.mean21 != null && st.sd21 && last != null ? (last - st.mean21) / st.sd21 : null;
     const pos52 = st && st.hi252 != null && st.lo252 != null && st.hi252 > st.lo252 && last != null ? ((last - st.lo252) / (st.hi252 - st.lo252)) * 100 : null;
-    const vs200 = st && st.mean200 && last != null ? (i.grp === "rates" ? last - st.mean200 : (last / st.mean200 - 1) * 100) : null;
+    const vs200 = st && st.mean200 && last != null ? (isYield(i) ? last - st.mean200 : (last / st.mean200 - 1) * 100) : null;
     rows.push({ marketTab: i.market_tab !== false, chart: i.chart !== false, z1m, pos52, vs200, symbol: i.symbol, name: i.name, cls: i.cls, group: i.grp, market: i.market, currency: i.currency, decimals: i.decimals, proxyFor: i.proxy_for ?? undefined, order: i.ord, last, lastAt, live, source: i.provider, closes, closeDates, pct, chg });
   }
   return { rows, asOf: now.toISOString() };

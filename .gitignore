@@ -8,3 +8,4 @@ dist/
 supabase/.temp/
 web/.vite-dev.log
 web/.vite-mock.log
+jobs/data/backups/
