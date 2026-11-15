@@ -727,3 +727,41 @@ body.term #grid[data-view="research"] .panel[data-k="report"]{grid-column:span 8
 .panel[data-k="policy"] table td:last-child{white-space:normal;overflow-wrap:anywhere;min-width:160px}
 /* phones: chart tiles two across */
 @media (max-width:720px){.cgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.cgrid.two{grid-template-columns:minmax(0,1fr)}}
+
+/* ===== review follow-ups (15 Nov 2026) ===== */
+/* CSV button in a panel header: only where the panel holds a table */
+.csvbtn{flex:0 0 auto;margin-left:8px;border:1px solid var(--bord2);border-radius:3px;padding:0 5px;font-size:9px;letter-spacing:.08em;color:var(--mut);cursor:pointer;line-height:1.6}
+.csvbtn:hover{color:var(--amber);border-color:var(--amber)}
+.panel:not(:has(.pbody table)) .csvbtn{display:none}
+body.term .csvbtn{font-size:8px;padding:0 4px;margin-left:5px}
+@media (max-width:720px){.csvbtn{display:none}}
+.pdfbtn{margin-left:8px}
+.lnk.alpg{font-weight:700}
+/* help legend */
+#help-ctl{font-weight:700;min-width:18px;text-align:center}
+.helpwrap{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}
+.helpbox{background:var(--panel2);border:1px solid var(--bord2);border-radius:5px;width:min(980px,100%);max-height:92vh;display:flex;flex-direction:column}
+.helphead{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--bord);letter-spacing:.1em;font-size:11.5px;color:var(--amber)}
+.helpbody{overflow:auto;padding:6px 14px 14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr));gap:4px 26px}
+.helpsec h4{margin:12px 0 4px;color:var(--amber);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase}
+.helpsec dl{margin:0}
+.helpsec dl>div{display:grid;grid-template-columns:118px minmax(0,1fr);gap:8px;padding:3px 0;border-bottom:1px solid var(--bord);font-size:11.5px;line-height:1.45}
+.helpsec dt{color:var(--txt);font-weight:600}
+.helpsec dd{margin:0;color:var(--txt2)}
+/* phones: table figures a little larger than the rest (they were under 8.5px after the overall reduction) */
+@media (max-width:720px){table.mkt,table.mini,table.secT{font-size:11.5px}.nwrow{font-size:11.5px}}
+/* printing a research piece: the piece only, black on white */
+@media print{
+  html,body{background:#fff!important}
+  body{zoom:1!important;height:auto!important;overflow:visible!important;display:block!important}
+  #topbar,#fsx,footer,.panel[data-k="replist"],.phead,.csvbtn,#mockbar{display:none!important}
+  #root,#wrap,#grid{display:block!important;height:auto!important;overflow:visible!important;padding:0!important;margin:0!important;max-width:none!important}
+  .panel{border:0!important;background:#fff!important;display:block!important;overflow:visible!important}
+  .panel>.pbody{overflow:visible!important;display:block!important;padding:0!important}
+  .panel:not([data-k="report"]){display:none!important}
+  .brnar.report{max-width:none;font-size:11pt;line-height:1.5;color:#000!important;padding:0}
+  .brnar.report *{color:#000!important;background:transparent!important;border-color:#999!important}
+  .brnar.report h2{font-size:20pt}
+  .brnar.report a{text-decoration:none}
+  .brnar.report .ntabs{border:1px solid #999!important}
+}

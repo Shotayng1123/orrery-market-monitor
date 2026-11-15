@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
       case "calendar": return json(req, await calendar());
       case "news": return json(req, await news(q("category"), Number(q("n") ?? 120)));
       case "notes": {
-        const { data } = await db.from("notes").select("id,d,title,generated_at,kind").lte("d", new Date().toISOString().slice(0, 10)).order("d", { ascending: false }).limit(30);
+        const { data } = await db.from("notes").select("id,d,title,generated_at,kind").lte("d", new Date().toISOString().slice(0, 10)).order("d", { ascending: false }).limit(Math.min(1000, Math.max(1, Number(q("n") ?? 30))));
         return json(req, { rows: (data ?? []).map((r) => ({ id: r.id, d: r.d, title: r.title, generatedAt: r.generated_at, kind: r.kind ?? "daily" })) });
       }
       case "note": {
@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
         return json(req, { note: data ? { id: data.id, d: data.d, title: data.title, generatedAt: data.generated_at, model: data.model, sections: data.sections, sources: data.sources, pack: data.pack, kind: data.kind ?? "daily" } : null });
       }
       case "reports": {
-        const { data } = await db.from("reports").select("id,kind,title,summary,published_at").order("published_at", { ascending: false }).limit(Math.min(200, Number(q("n") ?? 100)));
+        const { data } = await db.from("reports").select("id,kind,title,summary,published_at").order("published_at", { ascending: false }).limit(Math.min(1000, Number(q("n") ?? 100)));
         return json(req, { rows: (data ?? []).map((r) => ({ id: r.id, kind: r.kind, title: r.title, summary: r.summary, publishedAt: r.published_at })) });
       }
       case "report": {

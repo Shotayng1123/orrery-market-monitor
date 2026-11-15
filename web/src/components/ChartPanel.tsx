@@ -51,7 +51,16 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
   const m = marketById(row.market);
   const points = s.data?.points ?? [];
   const windowSec = period === "1D" ? sessionWindow(points) : WINDOW[period];
-  const chg = isRate ? (row.last != null && row.closes[k] != null ? row.last - row.closes[k]! : null) : row.pct[k];
+  // A searched stock has no stored period anchors: its change over the period is read from the chart's own
+  // history (the last point at or before the start of the window against the last print).
+  const anchor = (() => {
+    if (row.closes[k] != null || !points.length || row.last == null) return row.closes[k] ?? null;
+    const startT = points[points.length - 1].t - windowSec;
+    let a: number | null = null;
+    for (const p of points) { if (p.t <= startT) a = p.v; else break; }
+    return a ?? (period === "1D" ? null : points[0].v);
+  })();
+  const chg = isRate ? (row.last != null && anchor != null ? row.last - anchor : null) : row.pct[k] ?? (anchor != null && anchor !== 0 && row.last != null ? (row.last / anchor - 1) * 100 : null);
   const color = chg == null || chg === 0 ? FLAT : chg > 0 ? UP : DN;
   const z = (x: number | null) => (x == null ? "–" : (x > 0 ? "+" : "") + x.toFixed(2) + "σ");
   const stamp = row.lastAt ? fmtStamp(row.lastAt, SGT).replace(" SGT", "") : "–";
@@ -67,7 +76,7 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
         <span className="asof" title="Source time of the last print, Singapore time"><span className={`st${row.live ? " live" : ""}`}>{row.live ? "LIVE" : "CLOSED"}</span> {stamp}</span>
       </div>
       <div className="vl"><Flash value={row.last}>{fmtNum(row.last, row.decimals)}{isRate && row.last != null ? "%" : ""}</Flash></div>
-      <div className={`ch ${signCls(chg)}`}>{isRate ? fmtChg(chg, 3, true) : fmtPct(chg)} <span className="mut">{period}{row.closes[k] != null ? ` · from ${fmtNum(row.closes[k], row.decimals)}` : ""}</span></div>
+      <div className={`ch ${signCls(chg)}`}>{isRate ? fmtChg(chg, 3, true) : fmtPct(chg)} <span className="mut">{period}{anchor != null ? ` · from ${fmtNum(anchor, row.decimals)}` : ""}</span></div>
       {points.length
         ? <SigmaChart points={points} windowSec={windowSec} intraday={intraday} decimals={row.decimals} sigmaWindow={sigmaWindow} onReadout={setRd} onPan={setPan} color={color} fill={shape !== "wide"} height={shape === "wide" ? 150 : undefined} axes={axes} />
         : <div className="chartbox empty" style={shape === "wide" ? { height: 150 } : undefined}>{s.error ?? (s.loading || !seen ? "loading…" : "no history yet")}</div>}
