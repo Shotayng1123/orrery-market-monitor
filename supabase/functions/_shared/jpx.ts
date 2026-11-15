@@ -189,6 +189,32 @@ export async function loadMarginTotals(): Promise<string> {
     out.push({ d, scope: "margin", name: "TSE", actual: sellSh, short_restricted: sellVal, short_free: buySh, total: buyVal });
   }
   if (!out.length) throw new Error("JPX margin: no dated rows parsed");
+  // The history workbook is refreshed only now and then (on 15 Nov 2026 it still ended on 18 Sep). The weeks
+  // since come from the weekly release itself (信用取引現在高, one workbook per week, the last five linked):
+  // row "信用取引残高合計 Total Outstanding Margin Trading", two-market columns, shares then value. Each file
+  // also gives the change on the week, so the week before the oldest file is filled by subtraction.
+  const have = new Set(out.map((r) => r.d as string));
+  const weekly: Array<Record<string, unknown>> = [], derived: Array<Record<string, unknown>> = [];
+  try {
+    const cur = await fetchText(`${BASE}/markets/statistics-equities/margin/04.html`, { headers: UA }, 30000);
+    const links = [...new Set([...cur.matchAll(/href="([^"]*\/\d{8}_mtcurrent\.xlsx?)"/g)].map((m) => m[1]))];
+    for (const href of links) {
+      const rows = sheetRows(await fetchBytes(BASE + href));
+      const d = excelDate(rows[0]?.[1]);
+      const k = rows.findIndex((r) => String(r?.[1] ?? "").includes("信用取引残高合計"));
+      if (!d || k < 0) continue;
+      const sh = rows[k], val = rows[k + 1] ?? [];
+      const sellSh = num(sh[4]), buySh = num(sh[6]), sellVal = num(val[4]), buyVal = num(val[6]);
+      if (sellSh == null || buySh == null) continue;
+      weekly.push({ d, scope: "margin", name: "TSE", actual: sellSh, short_restricted: sellVal, short_free: buySh, total: buyVal });
+      const dSell = num(sh[5]), dBuy = num(sh[7]), dSellVal = num(val[5]), dBuyVal = num(val[7]);
+      const prevD = new Date(Date.parse(d + "T00:00:00Z") - 7 * 86400e3).toISOString().slice(0, 10);
+      if (dSell != null && dBuy != null) derived.push({ d: prevD, scope: "margin", name: "TSE", actual: sellSh - dSell, short_restricted: sellVal != null && dSellVal != null ? sellVal - dSellVal : null, short_free: buySh - dBuy, total: buyVal != null && dBuyVal != null ? buyVal - dBuyVal : null });
+    }
+  } catch (e) { if (!weekly.length) console.warn("JPX margin weekly: " + (e instanceof Error ? e.message : e)); }
+  for (const r of weekly) if (!have.has(r.d as string)) { out.push(r); have.add(r.d as string); }
+  for (const r of derived) if (!have.has(r.d as string)) { out.push(r); have.add(r.d as string); }
+  out.sort((a, b) => String(a.d).localeCompare(String(b.d)));
   const recent = out.slice(-120);
   for (const part of chunk(recent, 500)) { const { error } = await db.from("jp_short_ratio").upsert(part, { onConflict: "d,scope,name" }); if (error) throw new Error("jp_short_ratio: " + error.message); }
   return `margin totals to ${recent[recent.length - 1].d} (${recent.length} weeks)`;
