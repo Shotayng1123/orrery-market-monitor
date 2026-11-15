@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
       case "report": {
         const { data } = await db.from("reports").select("*").eq("id", Number(q("id"))).maybeSingle();
         if (!data) return json(req, { error: "not found" }, 404);
-        return json(req, { report: { id: data.id, kind: data.kind, title: data.title, summary: data.summary, md: data.md, publishedAt: data.published_at } });
+        return json(req, { report: { id: data.id, kind: data.kind, title: data.title, summary: data.summary, md: data.md, publishedAt: data.published_at, meta: data.meta ?? null } });
       }
       case "index_stats": return json(req, await indexStats(q("idx") ?? "SP500"));
       case "breadth_history": return json(req, await breadthHistory(q("idx") ?? "SP500", Math.min(1200, Number(q("days") ?? 400))));

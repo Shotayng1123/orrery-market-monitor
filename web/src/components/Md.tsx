@@ -4,7 +4,16 @@ import { hideCard, openAsset, showCard } from "./CompanyCard";
 /** Minimal markdown for the notes: paragraphs, "- " bullets, **bold**, [text](url) links, [n] source markers, (E) marks,
  *  and [[SYMBOL|name]] tags, shown as the name linked to that instrument's page (hover = company card). */
 export function Md({ text, sources }: { text: string; sources?: Array<{ n: number; url: string; title: string }> }) {
-  const blocks = text.replace(/\r/g, "").split(/\n{2,}/);
+  // a list that follows a text line without a blank line between them (and the reverse) is still a list
+  const isBullet = (l: string) => /^\s*[-*•]\s+/.test(l);
+  const lines = text.replace(/\r/g, "").split("\n");
+  const spaced: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const prev = lines[i - 1];
+    if (i > 0 && prev.trim() && lines[i].trim() && isBullet(prev) !== isBullet(lines[i])) spaced.push("");
+    spaced.push(lines[i]);
+  }
+  const blocks = spaced.join("\n").split(/\n{2,}/);
   return <>{blocks.map((b, i) => <Block key={i} text={b} sources={sources} />)}</>;
 }
 
@@ -12,13 +21,15 @@ function Block({ text, sources }: { text: string; sources?: Array<{ n: number; u
   const lines = text.split("\n").filter((l) => l.trim().length);
   if (!lines.length) return null;
   if (lines.every((l) => /^\s*[-*•]\s+/.test(l))) return <ul>{lines.map((l, i) => <li key={i}>{inline(l.replace(/^\s*[-*•]\s+/, ""), sources)}</li>)}</ul>;
-  if (/^#{1,6}\s/.test(lines[0])) return <h4>{inline(lines[0].replace(/^#{1,6}\s+/, ""), sources)}</h4>;
+  if (lines.length === 1 && /^-{3,}\s*$/.test(lines[0])) return <hr />;
+  if (/^#{1,2}\s/.test(lines[0])) return <h3>{inline(lines[0].replace(/^#{1,2}\s+/, ""), sources)}</h3>;
+  if (/^#{3,6}\s/.test(lines[0])) return <h4>{inline(lines[0].replace(/^#{3,6}\s+/, ""), sources)}</h4>;
   return <p>{lines.map((l, i) => <Fragment key={i}>{i > 0 && <br />}{inline(l, sources)}</Fragment>)}</p>;
 }
 
 function inline(s: string, sources?: Array<{ n: number; url: string; title: string }>): ReactNode[] {
   const out: ReactNode[] = [];
-  const re = /(\[\[([^\]|]+)\|([^\]]+)\]\])|(\*\*[^*]+\*\*)|(\[[^\]]+\]\((https?:\/\/[^)\s]+)\))|(\[(\d{1,2})\])|(\(E\))/g;
+  const re = /(\[\[([^\]|]+)\|([^\]]+)\]\])|(\*\*[^*]+\*\*)|(\[[^\]]+\]\((https?:\/\/[^)\s]+)\))|(\[(\d{1,2})\])|(\(E\))|(\*[^*\s][^*]*\*)/g;
   let last = 0, m: RegExpExecArray | null, k = 0;
   while ((m = re.exec(s))) {
     if (m.index > last) out.push(s.slice(last, m.index));
@@ -27,6 +38,7 @@ function inline(s: string, sources?: Array<{ n: number; url: string; title: stri
     else if (m[5]) { const t = m[5].match(/^\[([^\]]+)\]/)![1]; out.push(<a key={k++} href={m[6]} target="_blank" rel="noreferrer">{t}</a>); }
     else if (m[7]) { const n = Number(m[8]); const src = sources?.find((x) => x.n === n); out.push(src ? <a key={k++} className="src" href={src.url} target="_blank" rel="noreferrer" title={src.title}>[{n}]</a> : <span key={k++} className="src">[{n}]</span>); }
     else if (m[9]) out.push(<span key={k++} className="e" title="Estimate or judgement, not a sourced fact">(E)</span>);
+    else if (m[10]) out.push(<i key={k++}>{m[10].slice(1, -1)}</i>);
     last = m.index + m[0].length;
   }
   if (last < s.length) out.push(s.slice(last));
