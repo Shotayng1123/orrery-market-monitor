@@ -1,18 +1,18 @@
 // Weekly Strategy — Emma's Friday report, due on the RESEARCH tab at 15:00 SGT (.github/workflows/weekly-strategy.yml).
 //   1. buildWeeklyPack(): the week's figures from the Monitor's own data (table with 1W changes and technical
 //      readings, sector and single-stock moves, calendar actuals, the week ahead, headlines).
-//   2. Claude (web search) writes the report in markdown from the pack and the pages it fetches.
+//   2. Claude (Fable 5.2 at xhigh effort, web search; lib/llm.ts) writes the report in markdown from the pack and
+//      the pages it fetches, then reviews its own draft as the demanding reader and returns the finished report.
 //   3. The draft is split by code into title, standfirst, body and sources; name tags are checked against the
 //      Monitor's symbols; the report is stored in `reports` (kind "Weekly").
 // Shota's brief (15 Nov 2026) is in STRATEGY_RULES: the review is short, the weight is on next week's strategy,
 // and the brief's questions are underlying questions for a continuous argument, never headings.
 // Env: ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY.
 // Flags: --dry (print, don't store), --if-missing (skip when this week's report is already stored).
-import Anthropic from "@anthropic-ai/sdk";
 import { db, selectAll, SGT, ymdIn } from "./lib/db.js";
 import { buildWeeklyPack, type WeeklyPack } from "./lib/pack.js";
+import { newClient, review, write } from "./lib/llm.js";
 
-const MODEL = "claude-opus-5-5";
 const DRY = process.argv.includes("--dry"), IF_MISSING = process.argv.includes("--if-missing");
 
 const STRATEGY_RULES = `You are Emma, a professional financial researcher at Orrery Research. Every Friday afternoon (Singapore time) you write the Weekly Strategy for portfolio managers in Singapore and Tokyo. You write in the first person: "I" for your own views. British English. The tone is a good sell-side strategist's weekly: confident, plain, argued, never a list of data.
@@ -115,25 +115,20 @@ async function main() {
     if (have?.length) { console.log(`already stored for this week (report ${have[0].id}): nothing to do.`); return; }
   }
 
-  const client = new Anthropic();
-  const stream = client.beta.messages.stream({
-    model: MODEL,
-    max_tokens: 24000,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
-    output_config: { effort: "high" },
-    system: [{ type: "text", text: STRATEGY_RULES, cache_control: { type: "ephemeral" } }],
-    tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 45 }],   // the method asks for several rounds of "why" per conclusion, each needing its own searches
-    messages: [{ role: "user", content: `NUMBERS PACK (JSON):\n${JSON.stringify({ ...pack, headlines: pack.headlines.slice(0, 80) })}\n\nWrite this week's Weekly Strategy.` }],
-  });
-  const msg = await stream.finalMessage();
-  if (msg.stop_reason === "refusal") throw new Error(`draft refused: ${JSON.stringify(msg.stop_details)}`);
-  let draft = "";
-  for (const b of msg.content) if (b.type === "text") draft += b.text;
+  const client = newClient();
+  const packUser = `NUMBERS PACK (JSON):\n${JSON.stringify({ ...pack, headlines: pack.headlines.slice(0, 80) })}\n\nWrite this week's Weekly Strategy.`;
+  const first = await write(client, STRATEGY_RULES, packUser, 45);
+  console.log(`draft: ${first.text.length} chars, ${first.searches} searches, in ${first.inputTokens} out ${first.outputTokens} (served by ${first.model})`);
   // the model may think aloud before the report: the report starts at its TITLE line
-  const start = draft.search(/^\s*TITLE:/m);
-  if (start > 0) draft = draft.slice(start);
-  if (draft.trim().length < 3000) throw new Error(`draft too short (${draft.trim().length} characters)`);
+  const fromTitle = (t: string) => { const i = t.search(/^\s*TITLE:/m); return i > 0 ? t.slice(i) : t; };
+  if (fromTitle(first.text).trim().length < 3000) throw new Error(`draft too short (${first.text.trim().length} characters)`);
+  // review pass: Emma rereads her draft as the reader would and returns the finished report; the draft stands if it fails
+  const revised = await review(client, STRATEGY_RULES, packUser, fromTitle(first.text), 25, 3000);
+  if (revised) console.log(`review: ${revised.text.length} chars, ${revised.searches} more searches, in ${revised.inputTokens} out ${revised.outputTokens} (served by ${revised.model})`);
+  const usable = revised && /^\s*TITLE:/m.test(revised.text) ? revised : null;
+  if (revised && !usable) console.warn("the review did not keep the output format: keeping the draft");
+  const final = usable ?? first;
+  const draft = fromTitle(final.text);
 
   const rep = parseDraft(draft);
   const known = await knownSymbols(sb, pack);
@@ -146,13 +141,12 @@ async function main() {
   const cited = new Set([...rep.md.matchAll(/\[(\d{1,3})\]/g)].map((m) => Number(m[1])));
   const sources = rep.sources.filter((x) => cited.has(x.n));
   const words = rep.md.split(/\s+/).length;
-  const u = msg.usage;
-  const cost = (u.input_tokens * 4 + u.output_tokens * 20) / 1e6 + (u.server_tool_use?.web_search_requests ?? 0) * 0.01;
-  console.log(`title: ${rep.title}\nwords ${words}, sources ${sources.length}, name tags ${kept} kept / ${dropped} dropped, ${orphan} citations without a source removed, cost ≈ $${cost.toFixed(2)} (served by ${msg.model})`);
+  const cost = first.costUsd + (revised?.costUsd ?? 0);
+  console.log(`title: ${rep.title}\nwords ${words}, sources ${sources.length}, name tags ${kept} kept / ${dropped} dropped, ${orphan} citations without a source removed, cost ≈ $${cost.toFixed(2)} (served by ${final.model}${usable ? ", reviewed" : ", not reviewed"})`);
   if (words < 900) throw new Error(`report too short (${words} words)`);
   if (DRY) { console.log(`\nSUMMARY: ${rep.summary}\n\n${rep.md}\n\n${sources.map((x) => `[${x.n}] ${x.title} - ${x.url}`).join("\n")}`); return; }
 
-  const { data, error } = await sb.from("reports").insert({ kind: "Weekly", title: rep.title, summary: rep.summary || null, md: rep.md, meta: { author: "Emma", week: pack.weekStart, written: date, sources, model: msg.model, cost_usd: cost } }).select("id").single();
+  const { data, error } = await sb.from("reports").insert({ kind: "Weekly", title: rep.title, summary: rep.summary || null, md: rep.md, meta: { author: "Emma", week: pack.weekStart, written: date, sources, model: final.model, reviewed: !!usable, cost_usd: cost } }).select("id").single();
   if (error) throw new Error(error.message);
   console.log(`stored as report ${data.id}.`);
 }

@@ -2,12 +2,12 @@ name: weekly-strategy
 
 # Emma's Weekly Strategy, due on the RESEARCH tab every Friday at 15:00 SGT (07:00 UTC).
 # Same precautions as the morning note: GitHub starts scheduled runs hours late, so the main run is requested at
-# 01:20 UTC and waits until 06:40 UTC (the report takes about a quarter of an hour to write); backups at 06:30 and
+# 01:20 UTC and waits until 06:00 UTC (writing and reviewing the report on Fable 5.2 at xhigh effort can take up to an hour); backups at 06:10 and
 # 09:30 UTC write only if this week's report is not stored yet (--if-missing); the writing step is tried three times.
 on:
   schedule:
     - cron: "20 1 * * 5"
-    - cron: "30 6 * * 5"
+    - cron: "10 6 * * 5"
     - cron: "30 9 * * 5"
   workflow_dispatch:
     inputs:
@@ -31,11 +31,11 @@ jobs:
       run:
         working-directory: jobs
     steps:
-      - name: Wait until 06:40 UTC
+      - name: Wait until 06:00 UTC
         if: github.event_name == 'schedule'
         working-directory: .
         run: |
-          now=$(date -u +%s); target=$(date -u -d "today 06:40" +%s)
+          now=$(date -u +%s); target=$(date -u -d "today 06:00" +%s)
           if [ "$now" -lt "$target" ]; then echo "waiting $((target - now)) s"; sleep $((target - now)); fi
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

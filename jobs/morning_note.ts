@@ -1,17 +1,17 @@
 // Morning Notes — written Monday to Saturday around 07:00 SGT by GitHub Actions (.github/workflows/morning-note.yml);
 // Saturday covers Friday's US session, Sunday has no note (the weekly view is the Friday Weekly Strategy).
 //   1. buildPack(): every number the note may use, from the Monitor's own data and Yahoo constituent moves.
-//   2. Claude (claude-opus-5-5, web search) drafts the note in markdown, strictly from the pack, citing URLs.
+//   2. Claude (Fable 5.2 at xhigh effort, web search; lib/llm.ts) drafts the note in markdown, strictly from the
+//      pack, citing URLs, then reviews its own draft as the demanding reader and returns the finished note.
 //   3. Claude structures the draft into sections + sources (no new numbers; checked against the draft).
 //   4. The note is stored in `notes` with the pack and the token cost.
 // Env: ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY. Flags: --dry (print, don't store), --date YYYY-MM-DD.
-import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { db, selectAll, SGT, ymdIn } from "./lib/db.js";
 import { buildPack, buildWeeklyPack, type Pack, type WeeklyPack } from "./lib/pack.js";
+import { newClient, review, write } from "./lib/llm.js";
 
-const MODEL = "claude-opus-5-5";
 const arg = (k: string, d = ""): string => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] ?? d : d; };
 const DRY = process.argv.includes("--dry"), IF_MISSING = process.argv.includes("--if-missing");
 
@@ -93,7 +93,7 @@ const numbersIn = (s: string): Set<string> => new Set((s.match(/-?\d[\d,]*\.?\d*
 
 async function main() {
   const sb = db();
-  const client = new Anthropic();
+  const client = newClient();
   const date = arg("date") || ymdIn(SGT);
   const weekday = new Date(`${date}T12:00:00+08:00`).getUTCDay();   // 0 = Sunday in Singapore
   // No note on Sundays: there is no new session to report (Saturday's note covers Friday's US close), and the
@@ -112,31 +112,22 @@ async function main() {
 
   // --- 1. draft with web search ---
   const packJson = JSON.stringify({ ...pack, headlines: pack.headlines.slice(0, pack.kind === "weekly" ? 80 : 30) });
-  const stream = client.beta.messages.stream({
-    model: MODEL,
-    max_tokens: 24000,
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
-    output_config: { effort: "high" },
-    system: [{ type: "text", text: pack.kind === "weekly" ? WEEKLY_RULES : RULES, cache_control: { type: "ephemeral" } }],
-    tools: [{ type: "web_search_20260209", name: "web_search", max_uses: pack.kind === "weekly" ? 28 : 26 }],
-    messages: [{ role: "user", content: `NUMBERS PACK (JSON):\n${packJson}\n\n${pack.kind === "weekly" ? "Write this week's Weekly Wrap-up." : "Write today's Morning Notes."}` }],
-  });
-  const draftMsg = await stream.finalMessage();
-  if (draftMsg.stop_reason === "refusal") throw new Error(`draft refused: ${JSON.stringify(draftMsg.stop_details)}`);
-  let draft = "";
-  const seen: Array<{ title: string; url: string }> = [];
-  for (const b of draftMsg.content) {
-    if (b.type === "text") draft += b.text;
-    else if (b.type === "web_search_tool_result" && Array.isArray(b.content)) for (const r of b.content) if (r.type === "web_search_result") seen.push({ title: r.title, url: r.url });
-  }
-  if (!draft.trim()) throw new Error("empty draft");
-  const u1 = draftMsg.usage;
-  console.log(`draft: ${draft.length} chars, ${seen.length} pages fetched, in ${u1.input_tokens} out ${u1.output_tokens} (served by ${draftMsg.model})`);
+  const system = pack.kind === "weekly" ? WEEKLY_RULES : RULES;
+  const packUser = `NUMBERS PACK (JSON):\n${packJson}\n\n${pack.kind === "weekly" ? "Write this week's Weekly Wrap-up." : "Write today's Morning Notes."}`;
+  const first = await write(client, system, packUser, pack.kind === "weekly" ? 28 : 26);
+  if (!first.text.trim()) throw new Error("empty draft");
+  console.log(`draft: ${first.text.length} chars, ${first.pages.length} pages fetched, ${first.searches} searches, in ${first.inputTokens} out ${first.outputTokens} (served by ${first.model})`);
+
+  // --- 1b. review pass: the same model reads the draft as the demanding reader and returns the finished note;
+  // if the review fails or comes back short, the draft stands
+  const revised = await review(client, system, packUser, first.text, 14, 1200);
+  if (revised) console.log(`review: ${revised.text.length} chars, ${revised.searches} more searches, in ${revised.inputTokens} out ${revised.outputTokens} (served by ${revised.model})`);
+  const final = revised ?? first;
+  const draft = final.text;
 
   // --- 2. structure, without changing numbers ---
   const parsed = await client.messages.parse({
-    model: MODEL,
+    model: final.model,
     max_tokens: 16000,
     output_config: { effort: "low", format: zodOutputFormat(NoteSchema) },
     messages: [{ role: "user", content: `Split this draft into the schema. Copy each section's markdown verbatim (keep the [n] markers, the (E) marks and the [[SYMBOL|name]] tags exactly as written; do not add, remove or round any number). Build the sources list from the draft's Sources section.\n\nDRAFT:\n${draft}` }],
@@ -157,11 +148,12 @@ async function main() {
   for (const sec of note.sections) sec.md = sec.md.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, (_m, sym: string, text: string) => { if (known.has(sym.trim())) { kept++; return `[[${sym.trim()}|${text}]]`; } dropped++; return text; });
   console.log(`name tags: ${kept} kept, ${dropped} dropped (unknown symbol)`);
 
-  const cost = (u1.input_tokens * 4 + u1.output_tokens * 20 + u2.input_tokens * 4 + u2.output_tokens * 20) / 1e6 + (u1.server_tool_use?.web_search_requests ?? 0) * 0.01;
+  const structRate = final.model.includes("fable") ? [8, 40] : [4, 20];
+  const cost = first.costUsd + (revised?.costUsd ?? 0) + (u2.input_tokens * structRate[0] + u2.output_tokens * structRate[1]) / 1e6;
   console.log(`title: ${note.title}\nsections: ${note.sections.map((s) => s.heading).join(" | ")}\nsources: ${note.sources.length}\ncost ≈ $${cost.toFixed(3)}`);
   if (DRY) { console.log("\n" + note.sections.map((s) => `## ${s.heading}\n${s.md}`).join("\n\n")); return; }
 
-  const { error } = await sb.from("notes").upsert({ d: date, kind, title: note.title, generated_at: new Date().toISOString(), model: draftMsg.model, sections: note.sections, sources: note.sources, pack, cost_usd: cost }, { onConflict: "d" });
+  const { error } = await sb.from("notes").upsert({ d: date, kind, title: note.title, generated_at: new Date().toISOString(), model: final.model, sections: note.sections, sources: note.sources, pack, cost_usd: cost }, { onConflict: "d" });
   if (error) throw new Error(error.message);
   console.log("stored.");
 }
