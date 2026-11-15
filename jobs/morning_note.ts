@@ -8,34 +8,40 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import { db, SGT, ymdIn } from "./lib/db.js";
+import { db, selectAll, SGT, ymdIn } from "./lib/db.js";
 import { buildPack, buildWeeklyPack, type Pack, type WeeklyPack } from "./lib/pack.js";
 
 const MODEL = "claude-opus-5-5";
 const arg = (k: string, d = ""): string => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] ?? d : d; };
 const DRY = process.argv.includes("--dry");
 
+const TAG_RULE = `Name tags: the first time a paragraph mentions an index, a stock, a currency pair, a yield or a commodity that has a symbol, write it as [[SYMBOL|Name as it reads in the sentence]], for example [[AMD|AMD]], [[^SOX|the SOX]], [[8035.T|Tokyo Electron]], [[USDJPY=X|USD/JPY]]. Use the symbol exactly as it appears in the pack; for a company that is not in the pack use its exchange ticker (US ticker, or the four-character Tokyo code followed by .T) only when you are certain of it, otherwise write the name without a tag. The page turns each tag into a link to that instrument's page.`;
+
 const RULES = `You write the Morning Notes of Orrery Monitor for professional investors (portfolio managers) in Singapore and Tokyo, before the Tokyo open. British English, terse, no filler, no greetings.
 
-Hard rules:
-1. Every number you state must come from the NUMBERS PACK provided, or from a web page you actually fetched with web_search in this conversation. Never compute, estimate or recall numbers. If a figure is not in the pack and not on a fetched page, do not state it.
-2. Cite every externally sourced claim inline as [n] and list the URLs at the end under "Sources", one per line as "[n] title - URL". Pack figures need no citation.
-3. Mark any judgement, interpretation or expectation with (E) at the end of the sentence. Facts carry no (E).
-4. For each stock in the pack that moved 5% or more, search for the reason (earnings beat or miss with the reported figures, guidance, deal, downgrade). State what you found with a citation; if you find nothing reliable, say "reason not found".
-5. Dates and times: the pack is as of the generatedAt timestamp; today is dateSgt (Singapore). Refer to sessions by their date.
-6. If dateSgt is a Saturday there is no Tokyo session today or tomorrow: write the Japan section as the read-across for Monday's open, and say so. If dateSgt is a Monday, cover weekend news that matters for the open, with citations.
+What the reader wants (Shota, 15 Nov 2026): the news and events behind the moves, not the moves themselves. A table of every index, yield, currency and commodity with its change sits right beside your text, so repeating those figures wastes the reader's time. Your job is the why: which headline, result, policy step or scandal moved what, and who gains or loses from it, in short sentences. The model to follow: "[[AMD|AMD]] rallied as the main beneficiary of the Nvidia accounting probe [3]" - one cause, one effect, one citation.
 
-Depth: this is read by portfolio managers before the open; aim for 800 to 1,200 words of dense content, no padding. Prefer precise figures from the pack over adjectives. Every paragraph should carry at least one number.
+Hard rules:
+1. Do not state the level or the % / bp change of any index, yield, currency pair, commodity or volatility index: the tables show them. Say the direction in words (fell, rallied, steepened, weakened) and spend the sentence on the cause.
+2. Numbers are for the news itself: reported earnings and guidance figures, data prints against consensus, deal sizes, policy rates decided, and the % move of a single stock when you explain it. Every such number must come from the NUMBERS PACK or from a web page you actually fetched with web_search in this conversation. Never compute, estimate or recall numbers.
+3. Cite every externally sourced claim inline as [n] and list the URLs at the end under "Sources", one per line as "[n] title - URL".
+4. Mark any judgement, interpretation or expectation with (E) at the end of the sentence. Facts carry no (E).
+5. For each stock in the pack that moved 5% or more, search for the reason. State what you found with a citation; if you find nothing reliable, say "reason not found". Look for the second-order names too: who benefits or suffers from the same news (a rival, a supplier, a customer, the Japanese peers).
+6. Dates and times: the pack is as of the generatedAt timestamp; today is dateSgt (Singapore). Refer to sessions by their date.
+7. If dateSgt is a Saturday there is no Tokyo session today or tomorrow: write the Japan section as the read-across for Monday's open, and say so. If dateSgt is a Monday, cover weekend news that matters for the open, with citations.
+8. ${TAG_RULE}
+
+Length and style: 350 to 600 words in all. Short sentences, one cause and one effect each. Bullets ("- ") rather than long paragraphs. No sentence that only restates a move.
 
 Structure (markdown, H2 headings exactly as written):
-## Overnight: US
-Every index in the pack with level and % (S&P 500, NASDAQ, SOX, Dow, Russell, VIX). Breadth with the counts (advancers / decliners, names beyond ±2% and ±5%). The sector picture: the three best and three worst SPDR sectors with their %, then the constituent-average sectors where they tell a different story. Finish with one explicit characterisation such as "broad sell-off, centred on Tech" or "narrow rally led by semis", and say what drove it only with a citation.
-## Big movers and why
-Every name that moved 5% or more: the move, then the reason found by search (earnings beat or miss with the figures and the guidance, deals, downgrades, regulatory news) with a citation; "reason not found" when nothing reliable was found. Then the top five and bottom five S&P 500 names with their % in one line each.
-## Japan outlook and daily strategy
-Yesterday's Tokyo session in detail: Nikkei 225 and TOPIX levels and %, breadth counts, the three strongest and weakest Nikkei sectors with %, the big movers with reasons if found. The read-across from the US session to Japan: which Japanese sectors are exposed to what moved overnight (semis to SOX, autos and exporters to USD/JPY, banks and insurers to JGB and UST yields, China-linked names to Hang Seng and CNH), each with the relevant overnight number. The implied open from the CME future, marked (E). Technicals from the pack for Nikkei 225, TOPIX, USD/JPY and UST 10Y: level against the 20-, 50- and 200-day averages and the 1M and 12M sigma positions, with the actual average levels as support and resistance. Then the strategy, every sentence marked (E): a base case and an alternative with what would confirm each, what to buy, trim or avoid at sector level with the reason, how to handle the open (fade or follow the gap, and why), positioning or flow only if sourced, and hedging: when volatility is rising name the instrument (Nikkei VI, Nikkei futures or puts, USD/JPY, JGB futures) and the reason.
-## Other macro
-Rates: UST 2Y, 10Y, 30Y levels and bp changes, the 2s10s read, JGB 10Y; policy expectations only with a citation. FX: USD/JPY, DXY, EUR/USD, USD/CNH, USD/KRW with % and what it means for exporters. Commodities: WTI, Brent, gold, copper, natural gas. Volatility: VIX level and change. Today's calendar: every High and Medium item with its time in SGT, the forecast and the previous value, and one line on why it matters to the Tokyo session.
+## What moved markets
+Three to six bullets, the most important first. Each: the event or headline, then what it moved and in which direction (sectors and names rather than index figures), with a citation. End with one line that characterises the session ("broad risk-off led by semis after ...") (E).
+## Stocks: movers and why
+One bullet per name that moved 5% or more: the tagged name, its move, the reason found (with the reported figures when it is earnings or guidance) and a citation; then the related names moved by the same news. "reason not found" when nothing reliable was found.
+## Japan: read-across and strategy
+Which of the overnight events matter for Tokyo and for which sectors and names (semis, autos and exporters, banks and insurers, China-linked names), each tied to its cause. What drove yesterday's Tokyo session, by news. Then the strategy, every sentence marked (E): the base case and what would change it, what to favour or avoid at sector level and why, how to treat the open, and a hedge when the news flow calls for one. At most two price levels in this section, and only when a level is itself the trigger.
+## Macro and today's events
+Rates, currencies and commodities: only the reasons (central bank decisions and speeches, data surprises against consensus, politics, supply news), each with a citation. Then today's High and Medium calendar items that can move the Tokyo session: time in SGT, what is expected, and why it matters, one line each.
 ## Sources`;
 
 const WEEKLY_RULES = `You write the Sunday Weekly Wrap-up of Orrery Monitor for professional investors (portfolio managers) in Singapore and Tokyo. British English, terse, no filler, no greetings.
@@ -47,6 +53,7 @@ Hard rules:
 4. For every stock in the pack's weekly top and bottom lists, and every name that moved 10% or more on the week, search for the reason (earnings, guidance, deals, downgrades, regulation, index changes) and state it with a citation; "reason not found" when nothing reliable was found.
 5. Explain the why behind rates and currencies: central bank decisions and speeches, data surprises (use the pack's calendar actuals against consensus), politics. Each explanation needs a citation or an (E).
 6. Dates: the week reviewed runs from weekStart to weekEnd (Singapore dates); today is dateSgt.
+7. ${TAG_RULE}
 
 Depth: 1,200 to 1,800 words of dense content; every paragraph carries numbers from the pack.
 
@@ -68,6 +75,16 @@ const NoteSchema = z.object({
   sections: z.array(z.object({ heading: z.string(), md: z.string() })).describe("The content sections in the order of the draft (the H2 headings of the draft, Sources excluded). Markdown bodies copied from the draft verbatim except for formatting."),
   sources: z.array(z.object({ n: z.number().int(), title: z.string(), url: z.string() })),
 });
+
+/** Every symbol a name tag may point at: the Monitor's instruments, the pack's rows and all index constituents. */
+async function knownSymbols(sb: ReturnType<typeof db>, pack: Pack | WeeklyPack): Promise<string[]> {
+  const out: string[] = pack.table.map((r) => r.symbol);
+  for (const side of [pack.us, pack.jp]) for (const list of [side.top, side.bottom, side.big]) for (const m of list) out.push(m.symbol);
+  const { data: inst } = await sb.from("instruments").select("symbol");
+  for (const r of inst ?? []) out.push(r.symbol as string);
+  out.push(...(await selectAll<{ symbol: string }>(() => sb.from("constituents").select("symbol").order("symbol"))).map((r) => r.symbol));
+  return out;
+}
 
 const numbersIn = (s: string): Set<string> => new Set((s.match(/-?\d[\d,]*\.?\d*\s?(%|bp|pts?)?/g) ?? []).map((x) => x.replace(/[\s,]/g, "")));
 
@@ -111,7 +128,7 @@ async function main() {
     model: MODEL,
     max_tokens: 16000,
     output_config: { effort: "low", format: zodOutputFormat(NoteSchema) },
-    messages: [{ role: "user", content: `Split this draft into the schema. Copy each section's markdown verbatim (keep the [n] markers and the (E) marks; do not add, remove or round any number). Build the sources list from the draft's Sources section.\n\nDRAFT:\n${draft}` }],
+    messages: [{ role: "user", content: `Split this draft into the schema. Copy each section's markdown verbatim (keep the [n] markers, the (E) marks and the [[SYMBOL|name]] tags exactly as written; do not add, remove or round any number). Build the sources list from the draft's Sources section.\n\nDRAFT:\n${draft}` }],
   });
   const note = parsed.parsed_output;
   if (!note) throw new Error("structuring failed");
@@ -121,6 +138,13 @@ async function main() {
   const draftNums = numbersIn(draft);
   const extra = [...numbersIn(note.sections.map((s) => s.md).join("\n"))].filter((n) => !draftNums.has(n) && /\d/.test(n) && n.replace(/\D/g, "").length > 1);
   if (extra.length) throw new Error(`structured note contains numbers absent from the draft: ${extra.slice(0, 10).join(", ")}`);
+
+  // --- 4. name tags: a tag is kept only when its symbol is one the Monitor knows (an instrument, a pack row or an
+  // index constituent); anything else becomes plain text, so a mistaken ticker can never link to the wrong page.
+  const known = new Set<string>(await knownSymbols(sb, pack));
+  let kept = 0, dropped = 0;
+  for (const sec of note.sections) sec.md = sec.md.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, (_m, sym: string, text: string) => { if (known.has(sym.trim())) { kept++; return `[[${sym.trim()}|${text}]]`; } dropped++; return text; });
+  console.log(`name tags: ${kept} kept, ${dropped} dropped (unknown symbol)`);
 
   const cost = (u1.input_tokens * 4 + u1.output_tokens * 20 + u2.input_tokens * 4 + u2.output_tokens * 20) / 1e6 + (u1.server_tool_use?.web_search_requests ?? 0) * 0.01;
   console.log(`title: ${note.title}\nsections: ${note.sections.map((s) => s.heading).join(" | ")}\nsources: ${note.sources.length}\ncost ≈ $${cost.toFixed(3)}`);
