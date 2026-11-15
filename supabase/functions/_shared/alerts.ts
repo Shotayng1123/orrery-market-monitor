@@ -19,13 +19,21 @@ async function upsertAlerts(rows: Array<Record<string, unknown>>): Promise<numbe
 
 /** Index alerts from the market-table rows: equities (indices) whose 1D change passed ±3%. */
 export async function scanIndexAlerts(rows: TableRow[], now: Date): Promise<number> {
-  const out: Array<Record<string, unknown>> = [];
+  const cand: Array<Record<string, unknown> & { symbol: string; d: string; pct: number; msg: string }> = [];
   for (const r of rows) {
     if (r.cls !== "Equities" || r.pct.d1 == null || Math.abs(r.pct.d1) < INDEX_PCT || !r.lastAt) continue;
     const m = marketById(r.market);
-    const d = localDate(m?.tz ?? "UTC", Date.parse(r.lastAt) / 1000);
-    out.push({ d, symbol: r.symbol, name: r.name.replace(/ via 1306\.T$/, ""), kind: "index", pct: r.pct.d1, price: r.last, market: r.market, msg: alertMsg(r.name.replace(/ via 1306\.T$/, ""), r.pct.d1, r.live), upd: now.toISOString() });
+    // A booked close carries its session date as "<date>T00:00:00Z": that date is the session, not an instant to
+    // convert (in New York it would fall on the evening before and the alert would be filed a day early).
+    const d = /T00:00:00Z$/.test(r.lastAt) ? r.lastAt.slice(0, 10) : localDate(m?.tz ?? "UTC", Date.parse(r.lastAt) / 1000);
+    cand.push({ d, symbol: r.symbol, name: r.name.replace(/ via 1306\.T$/, ""), kind: "index", pct: r.pct.d1, price: r.last, market: r.market, msg: alertMsg(r.name.replace(/ via 1306\.T$/, ""), r.pct.d1, r.live), upd: now.toISOString() });
   }
+  if (!cand.length) return 0;
+  // Write only what changed, so `upd` means "the move was last re-measured differently" and a closed market's
+  // alert is not re-stamped every minute.
+  const { data: have } = await db.from("alerts").select("symbol,d,pct,msg").eq("kind", "index").in("symbol", cand.map((c) => c.symbol)).gte("d", cand.map((c) => c.d).sort()[0]);
+  const old = new Map(((have ?? []) as Array<{ symbol: string; d: string; pct: number; msg: string }>).map((x) => [`${x.symbol}|${x.d}`, x]));
+  const out = cand.filter((c) => { const o = old.get(`${c.symbol}|${c.d}`); return !o || Math.abs(o.pct - c.pct) >= 0.005 || o.msg !== c.msg; });
   return upsertAlerts(out);
 }
 
@@ -36,9 +44,10 @@ export async function scanStockAlerts(now: Date, holidays: Holidays): Promise<{ 
   if (open("TSE")) idxs.push("NK225");
   if (open("NYSE")) idxs.push("SP500");
   if (!idxs.length) return { scanned: 0, alerts: 0 };
-  const { data, error } = await db.from("constituents").select("idx,symbol,name").in("idx", idxs);
+  const { data, error } = await db.from("constituents").select("idx,symbol,name,name_en").in("idx", idxs);
   if (error) throw new Error(error.message);
-  const list = (data ?? []) as Array<{ idx: string; symbol: string; name: string }>;
+  // English company names as on the rest of the page (the Nikkei list's own names are upper-case short forms)
+  const list = ((data ?? []) as Array<{ idx: string; symbol: string; name: string; name_en: string | null }>).map((c) => ({ idx: c.idx, symbol: c.symbol, name: c.name_en ?? c.name }));
   if (!list.length) return { scanned: 0, alerts: 0 };
   const s = await spark(list.map((c) => c.symbol), "1d", "1m");
   const out: Array<Record<string, unknown>> = [];

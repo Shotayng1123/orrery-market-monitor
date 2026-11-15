@@ -68,7 +68,8 @@ Deno.serve(async (req) => {
       case "asset": return json(req, await asset(q("symbol") ?? "", q("range") ?? "12M", q("lite") === "1"));
       case "search": return json(req, await search(q("q") ?? ""));
       case "alerts": {
-        const { data } = await db.from("alerts").select("id,at,upd,d,symbol,name,kind,pct,price,market,msg").order("upd", { ascending: false }).limit(Math.min(50, Number(q("n") ?? 20)));
+        // newest first by the time shown on the page: when the alert was first raised (`upd` moves whenever a move is re-measured)
+        const { data } = await db.from("alerts").select("id,at,upd,d,symbol,name,kind,pct,price,market,msg").order("at", { ascending: false }).order("id", { ascending: false }).limit(Math.min(50, Number(q("n") ?? 20)));
         return json(req, { rows: (data ?? []).map((a) => ({ id: a.id, at: a.at, upd: a.upd, d: a.d, symbol: a.symbol, name: a.name, kind: a.kind, pct: a.pct, price: a.price, market: a.market, msg: a.msg })) });
       }
       case "policy_history": {

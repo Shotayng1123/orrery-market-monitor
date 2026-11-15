@@ -2,8 +2,10 @@ name: morning-note
 
 on:
   schedule:
-    # 23:00 UTC every day = 07:00 SGT every day: weekday and Saturday notes, the weekly wrap-up on Sunday (GitHub cron can run some minutes late)
-    - cron: "0 23 * * *"
+    # The note is due at 07:00 SGT (23:00 UTC) every day: weekday and Saturday notes, the weekly wrap-up on Sunday.
+    # GitHub starts this repository's scheduled runs 3.5 to 6.5 hours late (measured 9-15 Nov 2026), so the run is
+    # requested at 17:10 UTC and its first step waits until 22:50 UTC; a run that starts later than that goes at once.
+    - cron: "10 17 * * *"
   workflow_dispatch:
     inputs:
       date:
@@ -25,11 +27,18 @@ concurrency:
 jobs:
   write:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 360
     defaults:
       run:
         working-directory: jobs
     steps:
+      - name: Wait until 22:50 UTC
+        if: github.event_name == 'schedule'
+        working-directory: .
+        run: |
+          now=$(date -u +%s); target=$(date -u -d "today 22:50" +%s)
+          if [ "$(date -u +%H)" -lt 12 ]; then target=0; fi   # started after midnight UTC: already late, go
+          if [ "$now" -lt "$target" ]; then echo "waiting $((target - now)) s"; sleep $((target - now)); fi
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:

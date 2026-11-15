@@ -1,10 +1,13 @@
 name: stats-topix
 # TOPIX has ~1,600 names: too many for one Edge Function call, so its daily statistics and net money flow run
-# here with Deno (same code as the `daily` function). 07:40 UTC = 16:40 JST, after the Tokyo close.
+# here with Deno (same code as the `daily` function). Due at 07:40 UTC = 16:40 JST, after the Tokyo close.
+# GitHub starts this repository's scheduled runs hours late (8 to 10 hours for this one, 9-13 Nov 2026), so the run
+# is requested at 02:10 UTC (a job may last six hours at most) and its first step waits until 07:40 UTC; a run
+# that starts later goes at once.
 # --node-modules-dir=none: jobs/package.json would otherwise make Deno look for npm packages in node_modules.
 on:
   schedule:
-    - cron: "40 7 * * 1-5"
+    - cron: "10 2 * * 1-5"
   workflow_dispatch:
     inputs:
       indices:
@@ -13,8 +16,13 @@ on:
 jobs:
   stats:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 360
     steps:
+      - name: Wait until 07:40 UTC
+        if: github.event_name == 'schedule'
+        run: |
+          now=$(date -u +%s); target=$(date -u -d "today 07:40" +%s)
+          if [ "$now" -lt "$target" ]; then echo "waiting $((target - now)) s"; sleep $((target - now)); fi
       - uses: actions/checkout@v4
       - uses: denoland/setup-deno@v2
         with:
