@@ -78,7 +78,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
             <tr><td className="l"><b>Reported short positions (≥0.5%) · {d.short.d}</b></td><td className="num"><b>{(d.short.ratio * 100).toFixed(2)}%</b></td></tr>
             {d.short.holders.slice(0, 8).map((h) => <tr key={h.holder}><td className="l mut">{h.holder}<span className="mut"> · {h.d}</span></td><td className="num">{(h.ratio * 100).toFixed(2)}%</td></tr>)}
           </tbody></table>
-        ) : <div className="mut" style={{ fontSize: 10.5 }}>none for this market</div>}
+        ) : <div className="mut" style={{ fontSize: 10.5 }}>no short data reported for this name</div>}
       </Panel>
       <Panel no="03" title="STATEMENTS" span={12} aux={st?.source ? <>{st.source === "edinetdb" ? "EDINET DB (有価証券報告書 · 決算短信)" : "Yahoo Finance fundamentals"}{st.asOf ? ` · fetched ${st.asOf}` : ""}</> : ""}>
         {st && (st.annual.length || st.quarterly.length) ? (

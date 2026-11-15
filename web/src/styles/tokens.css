@@ -721,3 +721,9 @@ table.repT td.dt{white-space:nowrap;overflow-wrap:normal}
 body.term #grid[data-view="news"] .panel[data-no="01"],body.term #grid[data-view="news"] .panel[data-no="02"]{grid-column:span 6;grid-row:span 1}
 body.term #grid[data-view="research"] .panel[data-k="replist"]{grid-column:span 4}
 body.term #grid[data-view="research"] .panel[data-k="report"]{grid-column:span 8}
+
+/* audit of 15 Nov 2026 */
+/* POLICY RATES: the source column wraps instead of pushing the table past the panel */
+.panel[data-k="policy"] table td:last-child{white-space:normal;overflow-wrap:anywhere;min-width:160px}
+/* phones: chart tiles two across */
+@media (max-width:720px){.cgrid{grid-template-columns:repeat(2,minmax(0,1fr))}.cgrid.two{grid-template-columns:minmax(0,1fr)}}

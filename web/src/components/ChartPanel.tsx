@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DN, FLAT, SigmaChart, UP, type SigmaWindow } from "./SigmaChart";
 import { useApi, DEV_MOCK } from "../lib/useApi";
 import type { Series, TableRow } from "../lib/types";
@@ -31,7 +31,19 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
   // The tile's price and change come from the table row, refreshed every minute. The line itself is refetched
   // as often as its bars change: one-minute bars every minute, 15-minute and hourly bars every five minutes,
   // daily closes every quarter of an hour (a full history per tile per minute is megabytes of traffic an hour).
-  const s = useApi<Series>("series", { symbol: row.symbol, range: period }, period === "1D" ? tick : INTRADAY.has(period) ? Math.floor(tick / 5) : Math.floor(tick / 15));
+  // A tile asks for its history only once it is on or near the screen (audit of 15 Nov 2026: the MARKET tab opened
+  // with 80 requests at once and needed eleven seconds before the last chart drew; most tiles are below the fold).
+  const box = useRef<HTMLDivElement>(null);
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || seen) return;
+    if (typeof IntersectionObserver === "undefined") { setSeen(true); return; }
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { setSeen(true); io.disconnect(); } }, { rootMargin: "400px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [seen]);
+  const s = useApi<Series>(seen ? "series" : null, { symbol: row.symbol, range: period }, period === "1D" ? tick : INTRADAY.has(period) ? Math.floor(tick / 5) : Math.floor(tick / 15));
   const [rd, setRd] = useState<{ t: number; v: number; z: number | null } | null>(null);
   const [pan, setPan] = useState(0);
   const k = PERIOD_KEY[period];
@@ -46,7 +58,7 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
   const intraday = INTRADAY.has(period);
   const panLabel = pan > 0 ? `← ${pan >= DAY ? `${Math.round(pan / DAY)}d` : `${Math.round(pan / 3600)}h`} back · double-click = latest` : "";
   return (
-    <div className={`mtile cp ${shape}${row.live ? " live" : ""}`}>
+    <div ref={box} className={`mtile cp ${shape}${row.live ? " live" : ""}`}>
       <div className="lb">
         <span className="lbtxt" title={row.symbol}>{row.name}</span>
         {row.proxyFor && <span className="badge proxy" title={`${row.name} stands in for ${row.proxyFor}`}>PROXY</span>}
@@ -58,7 +70,7 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
       <div className={`ch ${signCls(chg)}`}>{isRate ? fmtChg(chg, 3, true) : fmtPct(chg)} <span className="mut">{period}{row.closes[k] != null ? ` · from ${fmtNum(row.closes[k], row.decimals)}` : ""}</span></div>
       {points.length
         ? <SigmaChart points={points} windowSec={windowSec} intraday={intraday} decimals={row.decimals} sigmaWindow={sigmaWindow} onReadout={setRd} onPan={setPan} color={color} fill={shape !== "wide"} height={shape === "wide" ? 150 : undefined} axes={axes} />
-        : <div className="chartbox empty" style={shape === "wide" ? { height: 150 } : undefined}>{s.error ?? (s.loading ? "loading…" : "no history yet")}</div>}
+        : <div className="chartbox empty" style={shape === "wide" ? { height: 150 } : undefined}>{s.error ?? (s.loading || !seen ? "loading…" : "no history yet")}</div>}
       <div className="rdout mut" title="Click, hold and drag the chart to move back in time; double-click to return to the latest">
         {rd ? (intraday ? <>{fmtStamp(rd.t * 1000, SGT)} · {fmtNum(rd.v, row.decimals)}</> : <>{new Date(rd.t * 1000).toISOString().slice(0, 10)} · {fmtNum(rd.v, row.decimals)} · {WIN_LABEL[sigmaWindow]} {z(rd.z)}</>)
           : <span style={{ opacity: .6 }}>{panLabel || (period === "1D" ? "1-minute bars · drag to pan" : intraday ? (s.data?.res === "15m" ? "15-minute bars · drag to pan" : "hourly bars · drag to pan") : "daily closes · σ corridors · drag to pan")}</span>}

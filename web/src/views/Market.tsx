@@ -134,7 +134,8 @@ export function MarketView({ tick }: { tick: number }) {
   const [sigmaWindow, setSigmaWindow] = useState<SigmaWindow>("m12");
   const all = table.data?.rows ?? [];
   const rows = all.filter((r) => r.marketTab !== false);   // the curated table; every instrument keeps a chart below
-  const compact = typeof document !== "undefined" && document.body.classList.contains("term");   // one screen: charts for the table set only
+  // one screen, or a phone: charts for the table set only (on a phone every instrument's chart made a page twenty thousand pixels long)
+  const compact = typeof document !== "undefined" && (document.body.classList.contains("term") || window.innerWidth <= 720);
   const by = (g: string) => (compact ? rows : all).filter((r) => r.group === g && r.chart !== false).sort((a, b) => a.order - b.order);
   const selector = <PeriodBar period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} />;
   return (
