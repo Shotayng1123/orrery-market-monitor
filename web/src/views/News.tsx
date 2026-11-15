@@ -112,9 +112,16 @@ function Overnight({ pack }: { pack: Pack }) {
   );
 }
 
+/** Some feeds send headlines with HTML entities left in ("Anthropic&#x2019;s"); shown as the characters they stand for. */
+const NAMED: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+const decodeEntities = (t: string): string => t.replace(/&amp;/g, "&").replace(/&#x([0-9a-f]+);/gi, (_m, h: string) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_m, d: string) => String.fromCodePoint(Number(d))).replace(/&(lt|gt|quot|apos|nbsp);/g, (_m, n: string) => NAMED[n]);
+
 export function NewsView({ tick }: { tick: number }) {
   const list = useApi<{ rows: Array<{ id: number; d: string; title: string; generatedAt: string; kind?: string }> }>("notes", undefined, Math.floor(tick / 10));
   const [day, setDay] = useState<string | null>(null);
+  // the note can be folded away so the calendar and the news take the whole tab (Shota, 15 Nov); remembered per browser
+  const [noteOpen, setNoteOpen] = useState<boolean>(() => { try { return localStorage.getItem("om_note_open") !== "0"; } catch { return true; } });
+  const toggleNote = () => setNoteOpen((v) => { try { localStorage.setItem("om_note_open", v ? "0" : "1"); } catch { /* ignore */ } return !v; });
   const note = useApi<{ note: (Note & { pack?: Pack | WeeklyPack }) | null }>("note", { d: day ?? undefined }, Math.floor(tick / 10));   // one note a day
   const cal = useApi<{ rows: EconEvent[] }>("calendar", undefined, Math.floor(tick / 5));   // the calendar syncs hourly, the headlines every ten minutes
   const [cat, setCat] = useState<(typeof NEWS_CATEGORIES)[number]>("All");
@@ -141,8 +148,8 @@ export function NewsView({ tick }: { tick: number }) {
   const chip = (on: boolean, label: string, f: () => void, key?: string) => <span key={key ?? label} className={`chip-sm${on ? " on" : ""}`} onClick={f}>{label}</span>;
   return (
     <>
-      <Panel no="01" title={n?.kind === "weekly" ? "WEEKLY WRAP-UP" : "MORNING NOTES"} span={12} aux={<span className="chips" style={{ margin: 0 }}>{(list.data?.rows ?? []).slice(0, 10).map((r) => chip((day ?? list.data?.rows[0]?.d) === r.d, r.kind === "weekly" ? `${r.d.slice(5)} W` : r.d.slice(5), () => setDay(r.d), r.d))}{n && <span className="mut" style={{ marginLeft: 8 }}>generated {fmtStampSafe(n.generatedAt)} · {n.model}</span>}</span>}>
-        {n ? (
+      <Panel no="01" k={noteOpen ? "note" : "note-closed"} title={n?.kind === "weekly" ? "WEEKLY WRAP-UP" : "MORNING NOTES"} span={12} aux={<span className="chips" style={{ margin: 0 }}><span className={`chip-sm notetog${noteOpen ? "" : " on"}`} title={noteOpen ? "Hide the note: the calendar and the news take the whole tab" : "Show the note"} onClick={toggleNote}>{noteOpen ? "HIDE" : "SHOW"}</span>{noteOpen && (list.data?.rows ?? []).slice(0, 10).map((r) => chip((day ?? list.data?.rows[0]?.d) === r.d, r.kind === "weekly" ? `${r.d.slice(5)} W` : r.d.slice(5), () => setDay(r.d), r.d))}{noteOpen && n && <span className="mut" style={{ marginLeft: 8 }}>generated {fmtStampSafe(n.generatedAt)} · {n.model}</span>}{!noteOpen && n && <span className="mut" style={{ marginLeft: 8 }}>{n.title}</span>}</span>}>
+        {!noteOpen ? null : n ? (
           <div className="msg2 notegrid">
             <div className="brnar">
               <p><b>{n.title}</b></p>
@@ -180,7 +187,7 @@ export function NewsView({ tick }: { tick: number }) {
           <div className="nwrow" key={it.id}>
             <span className="nwt">{fmtStampSafe(it.publishedAt)}</span>
             <span className="nwc cat">{it.category}</span>
-            <span className="nwh"><a href={it.url} target="_blank" rel="noreferrer">{it.title}</a></span>
+            <span className="nwh"><a href={it.url} target="_blank" rel="noreferrer">{decodeEntities(it.title)}</a></span>
             <span className="nwsrc">{it.source}</span>
           </div>
         ))}</div> : <Empty title="No headlines">{news.error ?? "The news job runs every ten minutes."}</Empty>}
