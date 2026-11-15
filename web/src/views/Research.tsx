@@ -7,8 +7,8 @@ import type { Note, Report } from "../lib/types";
 import { SGT } from "../lib/time";
 import { fmtStampSafe } from "./shared";
 
-/** Kinds of research (Shota, 15 Nov). Daily = the morning note, Weekly = the Friday strategy report and the
- *  Sunday wrap-up. Alpha and Deep-dive are reserved: shown, not yet published. */
+/** Kinds of research (Shota, 15 Nov). Daily = the morning note, Weekly = Emma's Friday strategy report.
+ *  Alpha and Deep-dive are reserved: shown, not yet published. */
 const KINDS = ["Daily", "Weekly", "Alpha", "Deep-dive"] as const;
 type Kind = (typeof KINDS)[number];
 const kindOf = (k: string | undefined): Kind => { const s = (k ?? "").toLowerCase(); return s.startsWith("week") ? "Weekly" : s.startsWith("alpha") ? "Alpha" : s.startsWith("deep") ? "Deep-dive" : "Daily"; };
@@ -26,7 +26,8 @@ export function ResearchView({ tick }: { tick: number }) {
   const [filter, setFilter] = useState<Kind | "All">("All");
   const [open, setOpen] = useState<string | null>(null);
   const items = useMemo<Item[]>(() => {
-    const a: Item[] = (notes.data?.rows ?? []).map((n) => ({ key: `note:${n.d}`, src: "note", id: n.id, d: n.d, sort: n.generatedAt, kind: kindOf(n.kind), title: n.title }));
+    // the old Sunday wrap-up notes are not listed: the weekly piece is Emma's Weekly Strategy (Shota, 15 Nov)
+    const a: Item[] = (notes.data?.rows ?? []).filter((n) => (n.kind ?? "daily") !== "weekly").map((n) => ({ key: `note:${n.d}`, src: "note", id: n.id, d: n.d, sort: n.generatedAt, kind: kindOf(n.kind), title: n.title }));
     const b: Item[] = (reports.data?.rows ?? []).map((r) => ({ key: `report:${r.id}`, src: "report", id: r.id, d: r.publishedAt, sort: r.publishedAt, kind: kindOf(r.kind), title: r.title }));
     return [...a, ...b].sort((x, y) => y.sort.localeCompare(x.sort));
   }, [notes.data, reports.data]);

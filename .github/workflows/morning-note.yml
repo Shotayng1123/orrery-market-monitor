@@ -1,6 +1,7 @@
 name: morning-note
 
-# The note is due at 07:00 SGT (23:00 UTC) every day: weekday and Saturday notes, the weekly wrap-up on Sunday.
+# The note is due at 07:00 SGT (23:00 UTC), Monday to Saturday (Saturday covers Friday's US session). On Sundays
+# the job starts and stops at once: the weekly view is the Friday Weekly Strategy (weekly-strategy.yml).
 # It must arrive without anyone opening anything, so the schedule is built for GitHub's habits:
 #   - GitHub starts this repository's scheduled runs 3.5 to 6.5 hours late (measured 9-15 Nov 2026). The main run
 #     is requested at 17:10 UTC and its first step waits until 22:50 UTC; a run that starts later goes at once.

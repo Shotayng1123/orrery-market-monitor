@@ -1,5 +1,5 @@
-// Morning Notes — written every day around 07:00 SGT by GitHub Actions (.github/workflows/morning-note.yml):
-// Monday to Saturday the daily note (Saturday covers Friday's US session), Sunday the weekly wrap-up.
+// Morning Notes — written Monday to Saturday around 07:00 SGT by GitHub Actions (.github/workflows/morning-note.yml);
+// Saturday covers Friday's US session, Sunday has no note (the weekly view is the Friday Weekly Strategy).
 //   1. buildPack(): every number the note may use, from the Monitor's own data and Yahoo constituent moves.
 //   2. Claude (claude-opus-5-5, web search) drafts the note in markdown, strictly from the pack, citing URLs.
 //   3. Claude structures the draft into sections + sources (no new numbers; checked against the draft).
@@ -93,7 +93,11 @@ async function main() {
   const client = new Anthropic();
   const date = arg("date") || ymdIn(SGT);
   const weekday = new Date(`${date}T12:00:00+08:00`).getUTCDay();   // 0 = Sunday in Singapore
-  const kind: "daily" | "weekly" = arg("kind") === "weekly" || (arg("kind") !== "daily" && weekday === 0) ? "weekly" : "daily";
+  // No note on Sundays: there is no new session to report (Saturday's note covers Friday's US close), and the
+  // weekly view is Emma's Friday Weekly Strategy (weekly_strategy.ts), which replaced the Sunday wrap-up on
+  // 15 Nov 2026. The wrap-up can still be written by hand with --kind weekly.
+  const kind: "daily" | "weekly" = arg("kind") === "weekly" ? "weekly" : "daily";
+  if (weekday === 0 && !arg("kind") && !arg("date")) { console.log(`${date} is a Sunday: no note today.`); return; }
   console.log(`${kind === "weekly" ? "Weekly Wrap-up" : "Morning Notes"} for ${date} (SGT)`);
   if (IF_MISSING && !DRY) {
     const { data: have } = await sb.from("notes").select("id,generated_at").eq("d", date).limit(1);
