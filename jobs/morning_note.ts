@@ -74,7 +74,7 @@ Every High-impact event in the pack's week ahead with consensus and previous, ce
 ## Sources`;
 
 const NoteSchema = z.object({
-  title: z.string().describe("A punchy headline: one short sentence of at most eight words (about 60 characters) on the main story. No figures, no semicolon, no second clause. Example: 'Nvidia loses Huang; rivals rally' is too long-winded, 'Nvidia loses its founder' is right"),
+  title: z.string().describe("A punchy headline: one sentence of 10 to 15 words on the main story and what it did to markets. No figures, no semicolon. Example: 'Nvidia loses its founder and investors move their money to its rivals overnight'"),
   sections: z.array(z.object({ heading: z.string(), md: z.string() })).describe("The content sections in the order of the draft (the H2 headings of the draft, Sources excluded). Markdown bodies copied from the draft verbatim except for formatting."),
   sources: z.array(z.object({ n: z.number().int(), title: z.string(), url: z.string() })),
 });
