@@ -635,3 +635,26 @@ body.term .cgrid.fit:not(.scroll)>.mtile.cp{height:var(--rh);min-height:0}
 /* conditional formatting (Shota, 15 Nov): a cell that carries a shade is lettered in white; the shade and the
    sign in front of the figure say which way it moved */
 td[style*="background"]{color:#fff!important}
+/* COMPACT and FULL need a laptop-sized window (prefs.ts: 1100 x 540); on anything smaller the buttons are not shown */
+@media (max-width:1099px),(max-height:539px){#cmp-ctl,#fs-ctl{display:none!important}}
+/* phones (Shota uses the Monitor on one, 15 Nov): a shorter header, and wide tables keep their first column in
+   view while the figures scroll sideways */
+@media (max-width:720px){
+  #mktstat,#upd{display:none}
+  #topbar{gap:6px 8px;padding:5px 8px}
+  #nav{flex-wrap:nowrap;overflow-x:auto;max-width:100%;scrollbar-width:none}
+  #nav::-webkit-scrollbar{display:none}
+  #nav a{white-space:nowrap;padding:4px 8px;font-size:10.5px}
+  #topbar .bmq{flex-wrap:wrap;gap:4px 8px;align-items:center}
+  #clock{font-size:10.5px}
+  table.mkt th:first-child,table.mkt td:first-child,table.secT th:first-child,table.secT td:first-child,table.mini th:first-child,table.mini td:first-child{position:sticky;left:0;z-index:1;background:var(--panel)}
+  table.mkt tr.cls td{background:var(--panel2)}
+  .panel[data-k="policy"] table th:last-child,.panel[data-k="policy"] table td:last-child,.panel[data-k="policy"] .bnm{display:none}
+}
+@media (max-width:720px){
+  table.mkt th:first-child,table.mkt td:first-child,table.secT th:first-child,table.secT td:first-child,table.mini th:first-child,table.mini td:first-child{box-shadow:-12px 0 0 var(--panel)}   /* covers the panel's left padding, where scrolled figures showed through */
+}
+@media (max-width:720px){
+  .pbody:has(>table.mkt){padding-left:0}
+  table.mkt th:first-child,table.mkt td:first-child{padding-left:10px}
+}
