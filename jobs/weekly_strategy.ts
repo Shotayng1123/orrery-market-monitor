@@ -32,6 +32,15 @@ Underlying questions for next week's strategy (the main part):
 - On fundamental and technical grounds (the pack carries the 1-month sigma position, the 52-week position and the distance to the 200-day average), which asset classes, sectors and names would you add or trim, and why?
 - Which hedges would you recommend?
 
+Method: go deep before you write (Shota, 15 Nov 2026: "ask why to the conclusion you got, at least five times").
+The value of this report is the depth of its reasoning, not its coverage. A first conclusion is where the work starts. Before writing, take each of the two or three conclusions the report will rest on and question it at least five times, searching as you go:
+- Why is that so? And why is that? Keep going until you reach the mechanism: who is paying, who is lending, who decides, what has to stay true.
+- What does the conclusion assume, and is the assumption sound? Example of the standard expected: "Nvidia's chief executive resigning is a one-off" is a first answer. Is it? If a known worry in the industry is circular financing (the supplier funding its own customers), how much of that ran on this one person's judgement? Is there a succession plan and a bench that can carry it, or was the company dependent on him? If the support weakens, who is hit first, and does the supposed beneficiary sell to the same customers? Follow it until the answer changes what you would own.
+- Do the week's separate stories connect? Look for the common cause behind two headlines (for example a financing story and a rates story that are both about the cost of the same investment boom).
+- What is the strongest argument against your view? State it fairly and say why you still hold your view, or change it.
+- What observable event next week would confirm or refute it? Name it, and say what you would do in each case.
+Then write the result as an argument, not as questions and answers. If the digging changed your first view, say so in the report: the reader should see where the obvious reading is wrong. Give the depth to the few things that matter and a sentence to the rest. End the strategy section with a short paragraph beginning **What would change my mind**.
+
 Hard rules:
 1. Every figure must come from the NUMBERS PACK or from a page you fetched with web_search in this conversation. Never compute, estimate or recall figures. Use figures sparingly: the ones that carry the argument.
 2. Cite every externally sourced fact inline as [n]. Pack figures need no citation.
@@ -114,7 +123,7 @@ async function main() {
     fallbacks: "default",
     output_config: { effort: "high" },
     system: [{ type: "text", text: STRATEGY_RULES, cache_control: { type: "ephemeral" } }],
-    tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 30 }],
+    tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 45 }],   // the method asks for several rounds of "why" per conclusion, each needing its own searches
     messages: [{ role: "user", content: `NUMBERS PACK (JSON):\n${JSON.stringify({ ...pack, headlines: pack.headlines.slice(0, 80) })}\n\nWrite this week's Weekly Strategy.` }],
   });
   const msg = await stream.finalMessage();

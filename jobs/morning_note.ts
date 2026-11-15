@@ -21,6 +21,9 @@ const RULES = `You write the Morning Notes of Orrery Monitor for professional in
 
 What the reader wants (Shota, 15 Nov 2026): the news and events behind the moves, not the moves themselves. A table of every index, yield, currency and commodity with its change sits right beside your text, so repeating those figures wastes the reader's time. Your job is the why: which headline, result, policy step or scandal moved what, and who gains or loses from it, in short sentences. The model to follow: "[[AMD|AMD]] rallied as the main beneficiary of the Nvidia accounting probe [3]" - one cause, one effect, one citation.
 
+Method: think before you write (Shota, 15 Nov 2026: "ask why to the conclusion you got, at least five times").
+A first explanation is not the answer. For the one or two stories that drove the session, ask why at least five times, searching as you go, until you reach the mechanism: who pays, who lends, who decides, what has to stay true. Test the obvious reading. Example: "a chief executive resigning is a one-off" is a first answer; ask what depended on that person (financing arrangements, customer relationships, a succession plan that may not exist), who is hit first if it weakens, and whether the supposed beneficiaries sell to the same customers. Ask whether two of the day's headlines share a cause. The note stays short: write the conclusion the digging reached, in one or two sentences, with the link in the chain that matters and what to watch next. Do not write out the questions. Spend the depth on what matters and a clause on the rest.
+
 Hard rules:
 1. Do not state the level or the % / bp change of any index, yield, currency pair, commodity or volatility index: the tables show them. Say the direction in words (fell, rallied, steepened, weakened) and spend the sentence on the cause.
 2. Numbers are for the news itself: reported earnings and guidance figures, data prints against consensus, deal sizes, policy rates decided, and the % move of a single stock when you explain it. Every such number must come from the NUMBERS PACK or from a web page you actually fetched with web_search in this conversation. Never compute, estimate or recall numbers.
@@ -31,11 +34,11 @@ Hard rules:
 7. If dateSgt is a Saturday there is no Tokyo session today or tomorrow: write the Japan section as the read-across for Monday's open, and say so. If dateSgt is a Monday, cover weekend news that matters for the open, with citations.
 8. ${TAG_RULE}
 
-Length and style: 350 to 600 words in all. Short sentences, one cause and one effect each. Bullets ("- ") rather than long paragraphs. No sentence that only restates a move.
+Length and style: 400 to 650 words in all. Short sentences, one cause and one effect each. Bullets ("- ") rather than long paragraphs. No sentence that only restates a move.
 
 Structure (markdown, H2 headings exactly as written):
 ## What moved markets
-Three to six bullets, the most important first. Each: the event or headline, then what it moved and in which direction (sectors and names rather than index figures), with a citation. End with one line that characterises the session ("broad risk-off led by semis after ...") (E).
+Three to six bullets, the most important first. Each: the event or headline, then what it moved and in which direction (sectors and names rather than index figures), with a citation. For the main story, add the second-order point your digging reached: why it matters beyond the day, and who is exposed next. End with one line that characterises the session ("broad risk-off led by semis after ...") (E).
 ## Stocks: movers and why
 One bullet per name that moved 5% or more: the tagged name, its move, the reason found (with the reported figures when it is earnings or guidance) and a citation; then the related names moved by the same news. "reason not found" when nothing reliable was found.
 ## Japan: read-across and strategy
@@ -116,7 +119,7 @@ async function main() {
     fallbacks: "default",
     output_config: { effort: "high" },
     system: [{ type: "text", text: pack.kind === "weekly" ? WEEKLY_RULES : RULES, cache_control: { type: "ephemeral" } }],
-    tools: [{ type: "web_search_20260209", name: "web_search", max_uses: pack.kind === "weekly" ? 28 : 18 }],
+    tools: [{ type: "web_search_20260209", name: "web_search", max_uses: pack.kind === "weekly" ? 28 : 26 }],
     messages: [{ role: "user", content: `NUMBERS PACK (JSON):\n${packJson}\n\n${pack.kind === "weekly" ? "Write this week's Weekly Wrap-up." : "Write today's Morning Notes."}` }],
   });
   const draftMsg = await stream.finalMessage();
