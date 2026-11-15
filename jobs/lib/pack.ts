@@ -73,6 +73,11 @@ export async function buildPack(sb: SupabaseClient, log: (s: string) => void = c
   // 3. Japan constituents (previous session)
   log("Nikkei 225 constituents…");
   const nk = await nikkei225();
+  // Nikkei's CSV carries upper-case short names ("TAISEI CORP."); the page and the weekly note show the English
+  // company names kept in `constituents`, so the daily tables use the same ones.
+  const nkNames = await selectAll<{ symbol: string; name_en: string | null }>(() => sb.from("constituents").select("symbol,name_en").eq("idx", "NK225").order("symbol"));
+  const nameBy = new Map(nkNames.filter((r) => r.name_en).map((r) => [r.symbol, r.name_en as string]));
+  for (const r of nk.rows) r.name = nameBy.get(r.symbol) ?? r.name;
   const jpMoves = await movesFor(nk, log);
   const jpIdx = [idx("^N225", "Nikkei 225"), idx("1306.T", "TOPIX (1306.T proxy)")].filter((x): x is Move => !!x);
   const n225 = byRow.get("^N225"), nkd = byRow.get("NKD=F");

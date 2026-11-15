@@ -28,7 +28,15 @@ Deno.serve(async (req) => {
         if (data) return json(req, data.payload);
         return json(req, await computeTable());
       }
-      case "series": return json(req, await series(q("symbol") ?? "", q("range") ?? "12M"));
+      case "series": {
+        const symbol = q("symbol") ?? "";
+        if (!symbol) return json(req, { error: "symbol required" }, 400);
+        try { return json(req, await series(symbol, q("range") ?? "12M")); } catch (e) {
+          // a symbol neither the Monitor nor Yahoo knows is the caller's mistake, not a server fault
+          if (!(await isInstrument(symbol)) && /HTTP 404|No data found|delisted|no result/i.test(e instanceof Error ? e.message : String(e))) return json(req, { error: "unknown symbol" }, 404);
+          throw e;
+        }
+      }
       case "curve": return json(req, await curve(q("country") ?? "US", q("ago")));
       case "curves": {
         const { data } = await db.rpc("fn_curve_latest");
@@ -144,7 +152,8 @@ async function health() {
     at: new Date(now).toISOString(),
     tick: { lastAt: tick?.at ?? null, ageMin: tickAge, ok: tickOk, note: tick ? (tick.ok ? tick.detail : `last run failed: ${tick.detail}`) : "no tick yet" },
     daily: { lastAt: daily?.at ?? null, ok: !!daily && daily.ok, note: daily ? `${daily.job}: ${daily.detail}` : "no daily run yet" },
-    sources: (sources ?? []).map((s) => ({ name: s.name, lastOk: s.last_ok, lastError: s.last_error })),
+    // a source that has neither succeeded nor failed for a week is no longer called (a feed that was dropped): not listed
+    sources: (sources ?? []).filter((s) => Math.max(Date.parse(s.last_ok ?? "") || 0, Date.parse(s.last_error_at ?? "") || 0) > now - 7 * 86400e3).map((s) => ({ name: s.name, lastOk: s.last_ok, lastError: s.last_error })),
     holidays,
     holidaysVerified: unverifiedCount === 0,
   };
