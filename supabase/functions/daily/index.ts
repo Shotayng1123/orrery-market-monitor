@@ -16,6 +16,7 @@ import { fetchHsi, fetchKospi200, fetchNikkei225, fetchSp500, fetchSse180, fetch
 import { fetchBoc, fetchBoe, fetchBundesbank, fetchEcb } from "../_shared/curves.ts";
 import { computeIndexStats, computeMoneyFlow, loadShortVolume, refreshQuotes } from "../_shared/istats.ts";
 import { loadMarginTotals, loadShortPositions, loadShortRatio } from "../_shared/jpx.ts";
+import { scanNewsAlerts } from "../_shared/newsalerts.ts";
 import { fetchNasdaq100 } from "../_shared/constituents.ts";
 
 Deno.serve(async (req) => {
@@ -379,7 +380,10 @@ async function news(): Promise<string> {
   const seen = new Set<string>();
   const uniq = rows.filter((r) => { const u = r.url as string; if (seen.has(u)) return false; seen.add(u); return true; });
   for (const part of chunk(uniq, 500)) { const { error } = await db.from("news_items").upsert(part, { onConflict: "url", ignoreDuplicates: true }); if (error) throw new Error("news_items: " + error.message); }
-  return `${uniq.length} items (${report.join(", ")})`;
+  // buybacks, guidance revisions and M&A among the last three hours of headlines (see _shared/newsalerts.ts)
+  let alertNote = "";
+  try { const r = await scanNewsAlerts(new Date(), 3); alertNote = `; news alerts ${r.raised.length} of ${r.scanned} headlines`; } catch (e) { alertNote = `; news alerts failed: ${e instanceof Error ? e.message : e}`; }
+  return `${uniq.length} items (${report.join(", ")})${alertNote}`;
 }
 
 // ---------- fred ----------

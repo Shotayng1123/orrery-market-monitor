@@ -28,7 +28,7 @@ export function termFits(): boolean { return window.innerWidth >= TERM_MIN_W && 
 export function autoZoom(term: boolean): number {
   const w = window.innerWidth, h = window.innerHeight;
   if (term) return clamp(Math.min(w / REF_W, h / REF_H), 0.9, 3)   // never under 9.5px type: smaller windows scroll inside panels;
-  if (w <= 720) return 1;                         // phones keep the base type size
+  if (w <= 720) return 0.88;                      // phones: a little smaller than the base size (Shota, 15 Nov), so more fits on the screen
   return clamp(w / 1500, 0.9, 1.8);
 }
 

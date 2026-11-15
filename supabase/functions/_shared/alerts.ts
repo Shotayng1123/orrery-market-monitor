@@ -61,7 +61,12 @@ export async function scanStockAlerts(now: Date, holidays: Holidays): Promise<{ 
     if (Math.abs(pct) < STOCK_PCT) continue;
     const market = c.idx === "NK225" ? "TSE" : "NYSE";
     const d = localDate(marketById(market)!.tz, lastT);
-    out.push({ d, symbol: c.symbol, name: c.name, kind: "stock", pct, price: last, market, msg: alertMsg(c.name, pct, true), upd: now.toISOString() });
+    // The alert's time is the minute the stock first passed the threshold in this session, read from its own
+    // one-minute bars. (The scan runs every five minutes for all names at once; stamping alerts with the scan
+    // time gave every stock that crossed in the same window an identical time.)
+    let crossT = lastT;
+    for (let i = 0; i < x.close.length; i++) { const v = x.close[i]; if (v != null && Math.abs((v / prev - 1) * 100) >= STOCK_PCT) { crossT = x.timestamp[i]; break; } }
+    out.push({ d, at: new Date(crossT * 1000).toISOString(), symbol: c.symbol, name: c.name, kind: "stock", pct, price: last, market, msg: alertMsg(c.name, pct, true), upd: now.toISOString() });
   }
   return { scanned: list.length, alerts: await upsertAlerts(out) };
 }
