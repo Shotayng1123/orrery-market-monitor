@@ -1,0 +1,60 @@
+name: weekly-strategy
+
+# Emma's Weekly Strategy, due on the RESEARCH tab every Friday at 15:00 SGT (07:00 UTC).
+# Same precautions as the morning note: GitHub starts scheduled runs hours late, so the main run is requested at
+# 01:20 UTC and waits until 06:40 UTC (the report takes about a quarter of an hour to write); backups at 06:30 and
+# 09:30 UTC write only if this week's report is not stored yet (--if-missing); the writing step is tried three times.
+on:
+  schedule:
+    - cron: "20 1 * * 5"
+    - cron: "30 6 * * 5"
+    - cron: "30 9 * * 5"
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: "Dry run (print only)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-strategy
+  cancel-in-progress: false
+
+jobs:
+  write:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    defaults:
+      run:
+        working-directory: jobs
+    steps:
+      - name: Wait until 06:40 UTC
+        if: github.event_name == 'schedule'
+        working-directory: .
+        run: |
+          now=$(date -u +%s); target=$(date -u -d "today 06:40" +%s)
+          if [ "$now" -lt "$target" ]; then echo "waiting $((target - now)) s"; sleep $((target - now)); fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: jobs/package-lock.json
+      - run: npm ci
+      - name: Write the report
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          ARGS=""
+          if [ "${{ github.event_name }}" = "schedule" ]; then ARGS="--if-missing"; fi
+          if [ "${{ github.event.inputs.dry }}" = "true" ]; then ARGS="$ARGS --dry"; fi
+          for attempt in 1 2 3; do
+            if npx tsx weekly_strategy.ts $ARGS; then exit 0; fi
+            echo "attempt $attempt failed"; if [ "$attempt" -lt 3 ]; then sleep 120; fi
+          done
+          exit 1

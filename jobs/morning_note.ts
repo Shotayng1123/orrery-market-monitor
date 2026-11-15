@@ -13,7 +13,7 @@ import { buildPack, buildWeeklyPack, type Pack, type WeeklyPack } from "./lib/pa
 
 const MODEL = "claude-opus-5-5";
 const arg = (k: string, d = ""): string => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] ?? d : d; };
-const DRY = process.argv.includes("--dry");
+const DRY = process.argv.includes("--dry"), IF_MISSING = process.argv.includes("--if-missing");
 
 const TAG_RULE = `Name tags: the first time a paragraph mentions an index, a stock, a currency pair, a yield or a commodity that has a symbol, write it as [[SYMBOL|Name as it reads in the sentence]], for example [[AMD|AMD]], [[^SOX|the SOX]], [[8035.T|Tokyo Electron]], [[USDJPY=X|USD/JPY]]. Use the symbol exactly as it appears in the pack; for a company that is not in the pack use its exchange ticker (US ticker, or the four-character Tokyo code followed by .T) only when you are certain of it, otherwise write the name without a tag. The page turns each tag into a link to that instrument's page.`;
 
@@ -95,6 +95,10 @@ async function main() {
   const weekday = new Date(`${date}T12:00:00+08:00`).getUTCDay();   // 0 = Sunday in Singapore
   const kind: "daily" | "weekly" = arg("kind") === "weekly" || (arg("kind") !== "daily" && weekday === 0) ? "weekly" : "daily";
   console.log(`${kind === "weekly" ? "Weekly Wrap-up" : "Morning Notes"} for ${date} (SGT)`);
+  if (IF_MISSING && !DRY) {
+    const { data: have } = await sb.from("notes").select("id,generated_at").eq("d", date).limit(1);
+    if (have?.length) { console.log(`already stored for ${date} (generated ${have[0].generated_at}): nothing to do.`); return; }
+  }
   const pack: Pack | WeeklyPack = kind === "weekly" ? await buildWeeklyPack(sb) : await buildPack(sb);
   if (pack.kind === "weekly") console.log(`weekly pack: ${pack.table.length} table rows, US ${pack.us.breadth?.n ?? 0} names, JP ${pack.jp.breadth?.n ?? 0} names, ${pack.actuals.length} actuals, ${pack.weekAhead.length} ahead, ${pack.headlines.length} headlines${pack.notes.length ? "; notes: " + pack.notes.join("; ") : ""}`);
   else console.log(`pack: ${pack.table.length} table rows, US ${pack.us.breadth?.n ?? 0} names, JP ${pack.jp.breadth?.n ?? 0} names, ${pack.calendar.length} events, ${pack.headlines.length} headlines${pack.notes.length ? "; notes: " + pack.notes.join("; ") : ""}`);

@@ -114,7 +114,7 @@ export async function buildPack(sb: SupabaseClient, log: (s: string) => void = c
 // ---------- the Sunday weekly wrap-up ----------
 export interface WeeklyPack {
   kind: "weekly"; generatedAt: string; dateSgt: string; weekStart: string; weekEnd: string;
-  table: Array<{ symbol: string; name: string; cls: string; last: number | null; w1Pct: number | null; w1Chg: number | null; m1Pct: number | null; unit: "pct" | "bp" }>;
+  table: Array<{ symbol: string; name: string; cls: string; last: number | null; w1Pct: number | null; w1Chg: number | null; m1Pct: number | null; unit: "pct" | "bp"; z1m?: number | null; pos52?: number | null; vs200?: number | null }>;
   us: { sectors: SectorMove[]; top: Move[]; bottom: Move[]; big: Move[]; breadth: { n: number; up: number; down: number } | null };
   jp: { sectors: SectorMove[]; top: Move[]; bottom: Move[]; big: Move[]; breadth: { n: number; up: number; down: number } | null };
   actuals: Array<{ atSgt: string; country: string; title: string; impact: string; actual: string | null; forecast: string | null; previous: string | null; better: boolean | null }>;
@@ -130,10 +130,10 @@ export async function buildWeeklyPack(sb: SupabaseClient, log: (s: string) => vo
   const now = new Date();
   const dateSgt = ymdIn(SGT, now);
   const { data: snap } = await sb.from("snapshots").select("payload").eq("key", "table").maybeSingle();
-  type Row = { symbol: string; name: string; cls: string; group: string; last: number | null; pct: Record<string, number | null>; chg: Record<string, number | null> };
+  type Row = { symbol: string; name: string; cls: string; group: string; last: number | null; pct: Record<string, number | null>; chg: Record<string, number | null>; z1m?: number | null; pos52?: number | null; vs200?: number | null };
   const rows: Row[] = (snap?.payload as { rows?: Row[] } | null)?.rows ?? [];
   if (!rows.length) notes.push("market table snapshot missing");
-  const table: WeeklyPack["table"] = rows.map((r) => ({ symbol: r.symbol, name: r.name, cls: r.cls, last: r.last, w1Pct: r.pct?.w1 ?? null, w1Chg: r.chg?.w1 ?? null, m1Pct: r.pct?.m1 ?? null, unit: r.group === "rates" ? "bp" : "pct" }));
+  const table: WeeklyPack["table"] = rows.map((r) => ({ symbol: r.symbol, name: r.name, cls: r.cls, last: r.last, w1Pct: r.pct?.w1 ?? null, w1Chg: r.chg?.w1 ?? null, m1Pct: r.pct?.m1 ?? null, unit: r.group === "rates" ? "bp" : "pct", z1m: r.z1m == null ? null : r2(r.z1m), pos52: r.pos52 == null ? null : Math.round(r.pos52), vs200: r.vs200 == null ? null : r2(r.vs200) }));   // z1m = sigmas from the 21-day mean, pos52 = place in the 52-week range (0-100), vs200 = % (points for yields) from the 200-day average
   type Stat = { symbol: string; name: string; sector: string | null; weight: number | null; close: number; pct1w: number | null; d: string };
   const weekly = async (idx: string, weighted: boolean) => {
     log(`${idx} weekly moves…`);
@@ -143,8 +143,10 @@ export async function buildWeeklyPack(sb: SupabaseClient, log: (s: string) => vo
     return { sectors: sectorAgg(moves, weighted), top: sorted.slice(0, 10), bottom: sorted.slice(-10).reverse(), big: moves.filter((m) => Math.abs(m.pct) >= 10), breadth: moves.length ? { n: moves.length, up: moves.filter((m) => m.pct > 0).length, down: moves.filter((m) => m.pct < 0).length } : null, asOf: st[0]?.d ?? null };
   };
   const us = await weekly("SP500", false), jp = await weekly("NK225", true);
-  // the week just ended (Mon–Fri before this Sunday, SGT) and the week ahead
-  const sunday = new Date(`${dateSgt}T00:00:00+08:00`);
+  // the week under review ends on the Sunday on or after today (SGT): on a Sunday that is the week just ended,
+  // on a Friday (the Weekly Strategy) it is Monday to today; the week ahead starts on that Sunday
+  const dow = new Date(`${dateSgt}T12:00:00+08:00`).getUTCDay();
+  const sunday = new Date(new Date(`${dateSgt}T00:00:00+08:00`).getTime() + ((7 - dow) % 7) * 86400e3);
   const weekStartD = new Date(sunday.getTime() - 6 * 86400e3), weekEndD = new Date(sunday.getTime() - 1 * 86400e3);
   const fmtSgt = (iso: string) => new Intl.DateTimeFormat("en-GB", { timeZone: SGT, weekday: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso));
   const { data: past } = await sb.from("econ_events").select("at,country,title,impact,actual,forecast,previous,better").gte("at", weekStartD.toISOString()).lt("at", sunday.toISOString()).eq("impact", "High").not("actual", "is", null).order("at");

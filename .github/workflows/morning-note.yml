@@ -1,11 +1,17 @@
 name: morning-note
 
+# The note is due at 07:00 SGT (23:00 UTC) every day: weekday and Saturday notes, the weekly wrap-up on Sunday.
+# It must arrive without anyone opening anything, so the schedule is built for GitHub's habits:
+#   - GitHub starts this repository's scheduled runs 3.5 to 6.5 hours late (measured 9-15 Nov 2026). The main run
+#     is requested at 17:10 UTC and its first step waits until 22:50 UTC; a run that starts later goes at once.
+#   - Two backup requests (22:40 and 01:30 UTC). Each run first checks whether today's note is already stored
+#     (--if-missing) and stops if it is, so a backup only writes when the main run failed or never started.
+#   - The writing step is tried up to three times, two minutes apart, before the run is marked failed.
 on:
   schedule:
-    # The note is due at 07:00 SGT (23:00 UTC) every day: weekday and Saturday notes, the weekly wrap-up on Sunday.
-    # GitHub starts this repository's scheduled runs 3.5 to 6.5 hours late (measured 9-15 Nov 2026), so the run is
-    # requested at 17:10 UTC and its first step waits until 22:50 UTC; a run that starts later than that goes at once.
     - cron: "10 17 * * *"
+    - cron: "40 22 * * *"
+    - cron: "30 1 * * *"
   workflow_dispatch:
     inputs:
       date:
@@ -53,6 +59,11 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           ARGS=""
+          if [ "${{ github.event_name }}" = "schedule" ]; then ARGS="--if-missing"; fi
           if [ -n "${{ github.event.inputs.date }}" ]; then ARGS="$ARGS --date ${{ github.event.inputs.date }}"; fi
           if [ "${{ github.event.inputs.dry }}" = "true" ]; then ARGS="$ARGS --dry"; fi
-          npx tsx morning_note.ts $ARGS
+          for attempt in 1 2 3; do
+            if npx tsx morning_note.ts $ARGS; then exit 0; fi
+            echo "attempt $attempt failed"; if [ "$attempt" -lt 3 ]; then sleep 120; fi
+          done
+          exit 1

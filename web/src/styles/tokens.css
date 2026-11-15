@@ -703,3 +703,21 @@ table.repT{table-layout:fixed;width:100%}
 table.repT th:nth-child(1){width:4.2em}
 table.repT th:nth-child(2){width:9em}
 table.repT td{white-space:normal;overflow-wrap:anywhere}
+
+/* RESEARCH list (Shota, 15 Nov): date as 15-Nov-26 on one line, the kind as a chip, daily notes and weekly reports together */
+table.repT col.dt{width:6.6em} table.repT col.kd{width:6.4em}
+table.repT th:nth-child(1),table.repT th:nth-child(2){width:auto}
+table.repT td.dt{white-space:nowrap;overflow-wrap:normal}
+.kchip{display:inline-block;border:1px solid var(--bord2);border-radius:3px;padding:0 6px;font-size:9.5px;letter-spacing:.06em;line-height:1.6;white-space:nowrap}
+.kchip.k-daily{color:var(--cyan);border-color:#17635c}
+.kchip.k-weekly{color:var(--amber);border-color:var(--amber-dim)}
+.kchip.k-alpha{color:#b7a4ff;border-color:#4b3f8a}
+.kchip.k-deep-dive{color:#e3c15a;border-color:#6d5a1e}
+.chip-sm.kind.tbu{opacity:.45;cursor:default;border-style:dashed}
+/* a note in RESEARCH: its tables first, then the text */
+.brnar.report.note .ntabs{font-size:11.5px;line-height:1.35;margin:6px 0 14px;padding:8px 10px;border:1px solid var(--bord);border-radius:4px;background:var(--panel2)}
+.brnar.report.note .ntabs table{width:100%}
+/* NEWS without the note: the calendar and the headlines side by side, full height in the one-screen layout */
+body.term #grid[data-view="news"] .panel[data-no="01"],body.term #grid[data-view="news"] .panel[data-no="02"]{grid-column:span 6;grid-row:span 1}
+body.term #grid[data-view="research"] .panel[data-k="replist"]{grid-column:span 4}
+body.term #grid[data-view="research"] .panel[data-k="report"]{grid-column:span 8}
