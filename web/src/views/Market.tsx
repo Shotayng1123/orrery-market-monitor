@@ -95,11 +95,11 @@ function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
   );
 }
 
-function ChartGroup({ no, title, rows, period, tick, sigmaWindow, children }: { no: string; title: string; rows: TableRow[]; period: ChartPeriod; tick: number; sigmaWindow: SigmaWindow; children?: React.ReactNode }) {
+function ChartGroup({ no, title, rows, period, tick, sigmaWindow, show, children }: { no: string; title: string; rows: TableRow[]; period: ChartPeriod; tick: number; sigmaWindow: SigmaWindow; show: number; children?: React.ReactNode }) {
   return (
     <Panel no={no} title={title} span={12} aux={`${rows.length} panels · ${period}`}>
       {children}
-      {rows.length ? <TileGrid n={rows.length}>{rows.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} />)}</TileGrid> : <Empty title="No instruments in this group yet" />}
+      {rows.length ? <TileGrid n={rows.length} rows={show} group="market">{rows.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} />)}</TileGrid> : <Empty title="No instruments in this group yet" />}
     </Panel>
   );
 }
@@ -143,16 +143,16 @@ export function MarketView({ tick }: { tick: number }) {
         {rows.length ? <MarketsTable rows={rows} /> : <Empty title="Awaiting the data feed">{table.error ?? "The market table fills once the Monitor backend is deployed and its first daily history run has completed."}</Empty>}
       </Panel>
       <div className="c12">{selector}</div>
-      <ChartGroup no="02" title="EQUITIES" rows={by("equity")} period={period} tick={tick} sigmaWindow={sigmaWindow} />
-      <ChartGroup no="03" title="RATES" rows={by("rates")} period={period} tick={tick} sigmaWindow={sigmaWindow}>
+      <ChartGroup no="02" title="EQUITIES" show={2} rows={by("equity")} period={period} tick={tick} sigmaWindow={sigmaWindow} />
+      <ChartGroup no="03" title="RATES" show={2} rows={by("rates")} period={period} tick={tick} sigmaWindow={sigmaWindow}>
         <div className="mkt-curves">
           <div className="minih">Yield curves · today vs {period === "1D" || period === "1W" ? "1M" : period} ago</div>
           <CurvePanel period={period} tick={tick} />
           <div className="minih" style={{ marginTop: 8 }}>Yields</div>
         </div>
       </ChartGroup>
-      <ChartGroup no="04" title="CURRENCY" rows={by("fx")} period={period} tick={tick} sigmaWindow={sigmaWindow} />
-      <ChartGroup no="05" title="COMMODITIES" rows={by("cmdty")} period={period} tick={tick} sigmaWindow={sigmaWindow} />
+      <ChartGroup no="04" title="CURRENCY" show={1} rows={by("fx")} period={period} tick={tick} sigmaWindow={sigmaWindow} />
+      <ChartGroup no="05" title="COMMODITIES" show={1} rows={by("cmdty")} period={period} tick={tick} sigmaWindow={sigmaWindow} />
     </>
   );
 }

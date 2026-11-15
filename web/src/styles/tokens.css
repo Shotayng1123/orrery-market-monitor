@@ -660,3 +660,10 @@ td[style*="background"]{color:#fff!important}
 }
 /* a name in the note that links to its page */
 .brnar .lnk.tag{font-weight:600}
+
+/* MARKET, one-screen layout (Shota, 15 Nov): every chart tile the size of UST 2Y yield. The four chart panels
+   stack beside the table, each as wide as RATES (three tiles across); EQUITIES and RATES show two rows,
+   CURRENCY and COMMODITIES one, and the rest scrolls. TileGrid gives all four the same tile height. */
+body.term #grid[data-view="market"]:has(>.c12:not(.panel)){grid-template-rows:auto minmax(0,2fr) minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)}   /* :has() to outrank the generic selector-strip rule above */
+body.term #grid[data-view="market"] .panel[data-no="01"]{grid-column:span 6;grid-row:span 4}
+body.term #grid[data-view="market"] .panel[data-no="02"],body.term #grid[data-view="market"] .panel[data-no="03"],body.term #grid[data-view="market"] .panel[data-no="04"],body.term #grid[data-view="market"] .panel[data-no="05"]{grid-column:span 6;grid-row:span 1}
