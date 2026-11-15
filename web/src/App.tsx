@@ -54,10 +54,24 @@ export default function App() {
     window.addEventListener("resize", apply);
     return () => window.removeEventListener("resize", apply);
   }, [prefs, full]);
+  // FULL is a real full screen (Shota, 15 Nov): the browser's own full-screen mode, so no tab strip or address
+  // bar, plus the header hidden. The browser leaves it on Esc by itself; the state follows `fullscreenchange`.
+  const goFull = (f: boolean) => {
+    setFull(f);
+    try {
+      if (f && !document.fullscreenElement) void document.documentElement.requestFullscreen?.().catch(() => { /* refused: the header is still hidden */ });
+      if (!f && document.fullscreenElement) void document.exitFullscreen?.().catch(() => { /* ignore */ });
+    } catch { /* no Fullscreen API: the header is still hidden */ }
+  };
+  useEffect(() => {
+    const f = () => { if (!document.fullscreenElement) setFull(false); };
+    document.addEventListener("fullscreenchange", f);
+    return () => document.removeEventListener("fullscreenchange", f);
+  }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement | null)?.tagName === "INPUT") return;
-      if (e.key === "Escape") setFull(false);
+      if (e.key === "Escape") goFull(false);
       if (e.key >= "1" && e.key <= "5" && e.key.length === 1) { const v = VIEWS[Number(e.key) - 1]; if (v) setHash(v.id); }
     };
     window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey);
@@ -101,8 +115,8 @@ export default function App() {
     <>
       {DEV_MOCK && <div id="mockbar">MOCK PREVIEW — synthetic data for layout checks only. Nothing here is real. The live Monitor is at https://shotayng1123.github.io/orrery-market-monitor/</div>}
       <CardLayer />
-      <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={userId} onSignOut={signOut} updatedAt={updatedAt} nextIn={nextIn} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={setFull} />
-      <div id="fsx" onClick={() => setFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–5 TABS · ESC</span><span>&#9974;</span></div>
+      <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={userId} onSignOut={signOut} updatedAt={updatedAt} nextIn={nextIn} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} />
+      <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–5 TABS · ESC</span><span>&#9974;</span></div>
       <div id="wrap">
         <div id="grid" data-view={view}>
           {view === "market" && <MarketView tick={tick} />}

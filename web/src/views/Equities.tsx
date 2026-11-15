@@ -168,6 +168,16 @@ function HeatMap({ s, rows }: { s: IndexStats; rows: StatRow[] }) {
 }
 
 // ---- Japan short selling (JPX) ----
+// JPX reports the short-selling share by its 33 industry groups, in Japanese; English names as JPX publishes them.
+const TSE33: Record<string, string> = {
+  "水産・農林業": "Fishery, Agriculture & Forestry", "鉱業": "Mining", "建設業": "Construction", "食料品": "Foods", "繊維製品": "Textiles & Apparels",
+  "パルプ・紙": "Pulp & Paper", "化学": "Chemicals", "医薬品": "Pharmaceutical", "石油・石炭製品": "Oil & Coal Products", "ゴム製品": "Rubber Products",
+  "ガラス・土石製品": "Glass & Ceramics Products", "鉄鋼": "Iron & Steel", "非鉄金属": "Nonferrous Metals", "金属製品": "Metal Products", "機械": "Machinery",
+  "電気機器": "Electric Appliances", "輸送用機器": "Transportation Equipment", "精密機器": "Precision Instruments", "その他製品": "Other Products",
+  "電気・ガス業": "Electric Power & Gas", "陸運業": "Land Transportation", "海運業": "Marine Transportation", "空運業": "Air Transportation",
+  "倉庫・運輸関連業": "Warehousing & Harbor Transportation Services", "情報・通信業": "Information & Communication", "卸売業": "Wholesale Trade", "小売業": "Retail Trade",
+  "銀行業": "Banks", "証券、商品先物取引業": "Securities & Commodity Futures", "保険業": "Insurance", "その他金融業": "Other Financing Business", "不動産業": "Real Estate", "サービス業": "Services",
+};
 function JpShortPanel({ idx }: { idx: string }) {
   const j = useApi<JpShorts>("jp_shorts", { idx }, 0);
   const d = j.data;
@@ -185,12 +195,6 @@ function JpShortPanel({ idx }: { idx: string }) {
       </div>
       <div className="minih">Short-selling share of TSE turnover, daily · 12 months</div>
       <Bars data={d.market.map((m) => ({ d: m.d, v: m.ratio }))} fmt={(v) => `${v.toFixed(1)}%`} baseline={avg(20)} height={120} />
-      {(d.positions.history ?? []).length > 1 && (
-        <>
-          <div className="minih" style={{ marginTop: 8 }}>Reported short positions ≥0.5%, index average, daily</div>
-          <Bars data={(d.positions.history ?? []).map((h) => ({ d: h.d, v: h.v == null ? null : h.v * 100 }))} fmt={(v) => `${v.toFixed(2)}%`} color="#ff6f61" height={90} />
-        </>
-      )}
       <div className="msg2">
         <div>
           <div className="minih">Largest reported short positions (sum of holders ≥0.5%)</div>
@@ -198,7 +202,7 @@ function JpShortPanel({ idx }: { idx: string }) {
         </div>
         <div>
           <div className="minih">Short selling share by sector · {d.sectorsAsOf ?? "–"}</div>
-          <table className="secT"><tbody>{[...d.sectors.slice(0, 6), ...d.sectors.slice(-4)].map((x, i) => <tr key={x.sector + i}><td className="l">{x.sector}</td><td className="num mut">{money(x.total == null ? null : x.total * 1e6)}</td><td className="num" style={{ background: shade((x.ratio ?? 0) - (last?.ratio ?? 0), 15) }}>{x.ratio == null ? "–" : `${x.ratio.toFixed(1)}%`}</td></tr>)}</tbody></table>
+          <table className="secT"><tbody>{[...d.sectors.slice(0, 6), ...d.sectors.slice(-4)].map((x, i) => <tr key={x.sector + i}><td className="l" title={x.sector}>{TSE33[x.sector] ?? x.sector}</td><td className="num mut">{money(x.total == null ? null : x.total * 1e6)}</td><td className="num" style={{ background: shade((x.ratio ?? 0) - (last?.ratio ?? 0), 15) }}>{x.ratio == null ? "–" : `${x.ratio.toFixed(1)}%`}</td></tr>)}</tbody></table>
           {mg0 && (
             <>
               <div className="minih" style={{ marginTop: 8 }}>Margin balances, market total · week to {mg0.d}</div>

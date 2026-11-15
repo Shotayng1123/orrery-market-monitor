@@ -620,3 +620,18 @@ body.term table.brT td,body.term table.brT th{padding-left:2px;padding-right:2px
 body.term table.brT td.l{max-width:100px}
 /* morning-note tables: a long company name gives way to the figures instead of pushing the panel sideways */
 .msg2 table.secT:not(.mvT) td.l{max-width:0;width:100%;overflow:hidden;text-overflow:ellipsis}
+
+/* one-screen layout, chart tiles (Shota, 15 Nov): never smaller than the RATES tiles on MARKET. A group that
+   does not fit keeps that size and scrolls inside its panel (TileGrid sets --c and, when scrolling, --rh). */
+body.term .cgrid.fit.scroll{align-content:flex-start;overflow-x:hidden;overflow-y:auto}
+body.term .cgrid.fit.scroll>.mtile.cp{flex:0 0 calc(100% / var(--c) - 3px);height:var(--rh);min-height:0}
+/* EQUITIES, scrolling layout: SHORT INTEREST takes the height of SECTOR PERFORMANCE beside it and scrolls inside */
+@media (min-width:1101px){
+  body:not(.term) #grid[data-view="equities"] .panel[data-no="06"]{contain:size;min-height:220px}
+  body:not(.term) #grid[data-view="equities"] .panel[data-no="06"]>.pbody{flex:1 1 0;min-height:0;overflow:auto}
+}
+body.term .cgrid.fit:not(.scroll){align-content:flex-start;overflow:hidden}
+body.term .cgrid.fit:not(.scroll)>.mtile.cp{height:var(--rh);min-height:0}
+/* conditional formatting (Shota, 15 Nov): a cell that carries a shade is lettered in white; the shade and the
+   sign in front of the figure say which way it moved */
+td[style*="background"]{color:#fff!important}
