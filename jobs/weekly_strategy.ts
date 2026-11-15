@@ -54,7 +54,7 @@ Hard rules:
 Length: 1,600 to 2,200 words (five to ten minutes of reading).
 
 Output format, exactly:
-TITLE: Weekly Strategy: <a short headline that states the stance>
+TITLE: <a punchy headline: one short sentence of at most seven words that states your stance. No "Weekly Strategy" prefix, no colon or semicolon, no figures. Example: "The AI trade lost its banker">
 SUMMARY: <two or three sentences: the week and your stance>
 
 <the report in markdown>
