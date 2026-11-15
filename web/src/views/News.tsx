@@ -5,6 +5,8 @@ import type { EconEvent, NewsItem } from "../lib/types";
 import { fmtClock, SGT } from "../lib/time";
 import { zoomNow } from "../lib/prefs";
 import { fmtStampSafe } from "./shared";
+import { EarningsCalendar } from "../components/Earnings";
+import { openAsset } from "../components/CompanyCard";
 
 export const NEWS_CATEGORIES = ["All", "US Equities", "JP Equities", "Asia Equities", "DM Rates", "EM Rates", "Currency", "Macro", "Commodities"] as const;
 const dayOf = (t: string) => new Date(t).toLocaleDateString("en-CA", { timeZone: SGT });
@@ -20,6 +22,7 @@ export function NewsView({ tick }: { tick: number }) {
   const [cat, setCat] = useState<(typeof NEWS_CATEGORIES)[number]>("All");
   const [imp, setImp] = useState<"high" | "hm" | "all">("hm");
   const [scope, setScope] = useState<"major" | "all">("major");
+  const [calMode, setCalMode] = useState<"macro" | "earnings">("macro");
   const news = useApi<{ rows: NewsItem[] }>("news", { category: cat === "All" ? undefined : cat, n: 150 }, Math.floor(tick / 5));
   const events = useMemo(() => (cal.data?.rows ?? []).filter((e) => (imp === "all" || e.impact === "High" || (imp === "hm" && e.impact === "Medium")) && (scope === "all" || MAJOR.has(e.country))), [cal.data, imp, scope]);
   const upcoming = events.some((e) => Date.parse(e.at) > Date.now());
@@ -39,8 +42,8 @@ export function NewsView({ tick }: { tick: number }) {
   const chip = (on: boolean, label: string, f: () => void, key?: string) => <span key={key ?? label} className={`chip-sm${on ? " on" : ""}`} onClick={f}>{label}</span>;
   return (
     <>
-      <Panel no="01" title="ECONOMIC CALENDAR" span={6} aux={<span className="chips" style={{ margin: 0 }}><span className="lbl">Impact</span>{chip(imp === "high", "High", () => setImp("high"))}{chip(imp === "hm", "High + Medium", () => setImp("hm"))}{chip(imp === "all", "All", () => setImp("all"))}<span className="lbl" style={{ marginLeft: 10 }}>Countries</span>{chip(scope === "major", "Major", () => setScope("major"))}{chip(scope === "all", "All", () => setScope("all"))}<span className="mut" style={{ marginLeft: 10 }}>times in SGT{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""}</span></span>}>
-        {events.length ? (
+      <Panel no="01" title={calMode === "macro" ? "ECONOMIC CALENDAR" : "EARNINGS CALENDAR"} span={6} aux={<span className="chips" style={{ margin: 0 }}>{chip(calMode === "macro", "Macro", () => setCalMode("macro"))}{chip(calMode === "earnings", "Earnings", () => setCalMode("earnings"))}{calMode === "macro" && <><span className="lbl" style={{ marginLeft: 10 }}>Impact</span>{chip(imp === "high", "High", () => setImp("high"))}{chip(imp === "hm", "High + Medium", () => setImp("hm"))}{chip(imp === "all", "All", () => setImp("all"))}<span className="lbl" style={{ marginLeft: 10 }}>Countries</span>{chip(scope === "major", "Major", () => setScope("major"))}{chip(scope === "all", "All", () => setScope("all"))}<span className="mut" style={{ marginLeft: 10 }}>times in SGT{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""}</span></>}</span>}>
+        {calMode === "earnings" ? <EarningsCalendar tick={tick} /> : events.length ? (
           <div className="calwrap" ref={calBox}><table className="mini calT">
             <colgroup><col className="tm" /><col className="cy" /><col /><col className="dot" /><col className="nv" /><col className="nv" /><col className="nv" /></colgroup>
             <thead><tr><th className="l">SGT</th><th className="l">Ccy</th><th className="l">Event</th><th className="l" title="Impact: red high, amber medium, grey low" aria-label="Impact"></th><th>Actual</th><th>Consensus</th><th>Previous</th></tr></thead>
@@ -65,6 +68,7 @@ export function NewsView({ tick }: { tick: number }) {
             <span className="nwt">{fmtStampSafe(it.publishedAt)}</span>
             <span className="nwc cat">{it.category}</span>
             <span className="nwh"><a href={it.url} target="_blank" rel="noreferrer">{decodeEntities(it.title)}</a></span>
+            {it.tickers?.length > 0 && <span className="nwtk">{it.tickers.slice(0, 3).map((t) => <span key={t.s} className="tk" title={`Open ${t.n} (${t.s})`} onClick={() => openAsset(t.s)}>{t.n}</span>)}</span>}
             <span className="nwsrc">{it.source}</span>
           </div>
         ))}</div> : <Empty title="No headlines">{news.error ?? "The news job runs every ten minutes."}</Empty>}

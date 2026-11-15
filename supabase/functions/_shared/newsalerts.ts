@@ -15,24 +15,36 @@ const BUYBACK = /\b(buy-?backs?|share repurchases?|stock repurchases?|repurchase
 const REVISION = /\b(rais(es?|ed|ing)|lift(s|ed|ing)?|hik(es?|ed|ing)|boost(s|ed|ing)?|upgrad(es?|ed|ing)|cut(s|ting)?|lower(s|ed|ing)?|slash(es|ed|ing)?|trim(s|med|ming)?|downgrad(es?|ed|ing)|withdr(aws?|ew|awn)|revis(es?|ed|ing))\b[^.;:]{0,60}\b(forecasts?|guidance|outlook|profit (targets?|estimates?|view)|sales (targets?|view)|earnings (targets?|view))\b|\bprofit warning\b|\bwarns? on profit\b/i;
 const MNA = /\b(acquir(e|es|ed|ing)|acquisition|takeover|buyout|merger|to merge|merg(es?|ing) with|(agree(s|d)?|set|plans?|poised|in talks|nears? (a )?deal|close to (a )?deal|offers?|bids?) to (buy|acquire|purchase)|bid for|offer for|take[- ]private|tak(e|es|ing) .{1,40} private|deal for|to sell .{1,60} (unit|business|arm|stake|division))\b/i;
 
-export interface Company { symbol: string; name: string; short: string; mcapUsd: number | null }
+export interface Company { symbol: string; name: string; short: string; mcapUsd: number | null; idxs: string[] }
 export interface Fx { JPY: number; KRW: number; HKD: number; CNY: number; EURUSD: number; GBPUSD: number }
 
 const SUFFIX = /[,.]?\s+(&\s+)?(Corporation|Corp\.?|Company|Co\.,? Ltd\.?|Co\.?|Holdings?|Hldgs\.?|Group|Inc\.?|Incorporated|Ltd\.?|Limited|plc|PLC|AG|SE|N\.?V\.?|S\.?A\.?|K\.?K\.?|Class [A-C]|\(Class [A-C]\)|Financial Group,?)\s*$/i;
 /** The name a headline would use: legal suffixes dropped ("Toyota Motor Corporation" -> "Toyota Motor"). */
 export function shortName(n: string): string { let s = n.trim(); for (let i = 0; i < 3; i++) s = s.replace(SUFFIX, "").trim(); return s; }
 // single words that are also ordinary English: never matched on their own
-const AMBIGUOUS = new Set(["Target", "Visa", "Block", "Gap", "Ball", "Dow", "Match", "Arch", "Best", "Global", "General", "First", "United", "American", "National", "International", "Western", "Southern", "Public", "Progressive", "Loews", "Fox", "News", "Ross", "Garmin", "Fair", "Fast", "Corning", "Realty", "Prudential", "Principal", "Invesco", "Viatris", "Assurant", "Globe", "Apple", "Amazon", "Meta", "Oracle", "Intuit", "Linde", "Nucor", "Paychex", "Sysco", "Welltower", "Mosaic", "Insulet"].filter((w) => ["Target", "Visa", "Block", "Gap", "Ball", "Dow", "Match", "Arch", "Best", "Global", "General", "First", "United", "American", "National", "International", "Western", "Southern", "Public", "Progressive", "Fox", "News", "Fair", "Fast", "Realty", "Principal", "Globe", "Meta", "Mosaic"].includes(w)));
+const AMBIGUOUS = new Set(["Target", "Visa", "Block", "Ball", "Match", "Arch", "Best", "Global", "General", "First", "United", "American", "National", "International", "Western", "Southern", "Public", "Progressive", "News", "Fair", "Fast", "Realty", "Principal", "Globe", "Mosaic", "Nasdaq", "Mars", "Strategy", "World", "Will", "Gold", "Open", "Life", "Money", "Trust", "Green", "Link", "Prime", "Vision", "Focus", "Core", "Wave", "Create", "Value", "Next", "Hope", "Sharp", "Disco", "Lion", "Coach", "Snap", "Unity", "Square", "Nice", "Shell", "Power", "Future", "Change", "Vector", "Rise", "Signal", "Relief", "Alpha", "Delta", "Omega", "Sigma", "Cover", "Base", "Sprout", "Mark", "Smith", "Welcia", "Kura", "Ichigo", "Aeon"]);
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Companies named in a headline: whole-word, case-sensitive match on the short name (at least four letters). */
 export function companiesIn(title: string, companies: Company[]): Company[] {
   const out: Company[] = [];
   for (const c of companies) {
-    if (c.short.length < 4 || AMBIGUOUS.has(c.short) || !title.includes(c.short)) continue;
-    if (new RegExp(`(^|[^A-Za-z0-9])${esc(c.short)}($|[^A-Za-z0-9])`).test(title) && !out.some((o) => o.short === c.short)) out.push(c);
+    // a name stored in capitals ("NVIDIA") is written "Nvidia" in the press
+    const form = /^[A-Z]{5,}$/.test(c.short) && !title.includes(c.short) ? c.short[0] + c.short.slice(1).toLowerCase() : c.short;
+    if (c.short.length < 4 || AMBIGUOUS.has(c.short) || !title.includes(form)) continue;
+    if (!c.short.includes(" ") && (c.mcapUsd ?? 0) < MIN_MCAP_USD) continue;   // a one-word name of a small company is too often an ordinary word ("Will", "World")
+    if (new RegExp(`(^|[^A-Za-z0-9])${esc(form)}($|[^A-Za-z0-9])`).test(title) && !out.some((o) => o.short === c.short)) out.push(c);
   }
-  return out.sort((a, b) => b.short.length - a.short.length);
+  out.sort((a, b) => b.short.length - a.short.length);
+  // "Sumitomo Mitsui" in a headline is one bank, not also Sumitomo and Mitsui: a name that only occurs inside a
+  // longer matched name is dropped
+  return out.filter((c) => {
+    const longer = out.filter((o) => o !== c && o.short.includes(c.short));
+    if (!longer.length) return true;
+    let rest = title;
+    for (const o of longer) rest = rest.split(o.short).join(" ");
+    return rest.includes(c.short);
+  });
 }
 
 /** The largest amount of a billion or more stated in a headline, in USD ("$3.2bn", "¥400bn", "€2.5 billion",
@@ -58,6 +70,32 @@ export function dealSizeUsd(title: string, fx: Fx): number | null {
   return best;
 }
 
+// First words that many unrelated companies share, or that are ordinary words: never used as a company's short form.
+const GENERIC_FIRST = new Set(["First", "United", "American", "General", "National", "International", "Western", "Southern", "Northern", "Eastern", "Central", "Pacific", "Atlantic", "Global", "Public", "Bank", "China", "Japan", "Tokyo", "Nippon", "Korea", "Hong", "Shanghai", "Mitsubishi", "Mitsui", "Sumitomo", "Hyundai", "Daiwa", "Royal", "Texas", "Dollar", "Capital", "Digital", "Old", "New", "Fair", "Best", "Sharp", "Disco", "Lion", "Link", "Coach", "Snap", "Unity", "Square", "Nice", "Shell", "Target", "Block", "Match", "Universal", "Simon", "Martin", "Charles", "Morgan", "Wells", "Kansas", "Monster", "Edison", "Marathon", "Advanced", "Applied", "Analog", "Automatic", "Consolidated", "Constellation", "Dominion", "Emerson", "Federal", "Fifth", "Host", "Jack", "Live", "Mid-America", "Motorola", "Occidental", "Regions", "Republic", "Southwest", "State", "Take-Two", "Union", "Waste", "West", "Zimmer", "East", "Central", "Kyushu", "Kansai", "Chubu", "Tohoku", "Chugoku", "Shikoku", "Hokkaido", "Osaka", "Keio", "Great", "Hang", "Bank", "Ping", "Industrial", "Agricultural", "Postal", "Citic", "CITIC", "Orient", "Sino", "Want", "Power", "Sun", "Swire", "Standard", "Trip.com", "Washington", "Beijing", "Shenzhen", "London", "Singapore", "India", "Europe", "America", "Asia", "Africa", "Arab", "Gulf", "Trade", "Trump", "Wall", "Street", "Treasury", "House", "Senate", "Congress", "White", "Black", "Blue", "Green", "Silver", "Golden", "Energy", "Health", "Total", "Super", "Micro", "Sales", "Stock", "Stocks", "Shares", "Bonds", "Dollar", "Rates", "Prices", "Markets", "Market", "Investors", "Traders", "After", "Before", "While", "Where", "These", "There", "Their", "Which", "Could", "Would", "Should", "Might", "About", "Under", "Above", "Still", "Again", "Every", "Other", "Early", "Later", "Weeks", "Years", "Month", "Today", "Analysts", "Chief", "Chair", "President", "Minister", "Governor", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", "January", "February", "March", "April", "August", "September", "October", "November", "December", "Dover", "Garmin", "Paycom", "Copart", "Equinix", "Entergy"].filter((w) => !["Dover", "Garmin", "Paycom", "Copart", "Equinix", "Entergy"].includes(w)));
+
+/** Symbols of the companies a headline names, for the chips beside it (up to four). On top of the strict match
+ *  used for alerts, a headline is allowed to call a large company by the first word of its name ("Toyota" for
+ *  Toyota Motor) when that word is distinctive: at least five letters, not a generic or shared word, and the
+ *  largest company carrying it is worth USD 10bn or more. */
+const ALIAS_INDICES = new Set(["SP500", "NDX", "NK225", "KOSPI200"]);
+let aliasCache: { src: Company[]; map: Map<string, Company> } | null = null;
+export function tagHeadline(rawTitle: string, companies: Company[]): string[] {
+  const title = rawTitle.replace(/&amp;/g, "&").replace(/&#x([0-9a-f]+);/gi, (_m, h: string) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_m, d: string) => String.fromCodePoint(Number(d)));
+  if (!aliasCache || aliasCache.src !== companies) {
+    const map = new Map<string, Company>();
+    for (const c of companies) {   // companies arrive largest first, so the first holder of a word is the largest
+      const w = c.short.split(/[\s,&]+/)[0].replace(/\.com$/i, "");
+      if (w.length < 5 || !/^[A-Z]/.test(w) || GENERIC_FIRST.has(w) || AMBIGUOUS.has(w) || (c.mcapUsd ?? 0) < 1e10 || map.has(w)) continue;
+      if (!c.idxs.some((x) => ALIAS_INDICES.has(x))) continue;   // only the indices whose members the press calls by one word
+      map.set(w, c);
+    }
+    aliasCache = { src: companies, map };
+  }
+  const out: string[] = companiesIn(title, companies).map((c) => c.symbol);
+  for (const w of new Set(title.match(/[A-Z][A-Za-z0-9.-]{4,}/g) ?? [])) { const c = aliasCache.map.get(w.replace(/[.'’]s?$/, "")); if (c && !out.includes(c.symbol)) out.push(c.symbol); }
+  return out.slice(0, 4);
+}
+
 export interface NewsAlert { kind: NewsKind; symbol: string; name: string; msg: string; usd?: number }
 /** What one headline raises: at most one alert per kind. */
 export function classifyHeadline(id: number, rawTitle: string, companies: Company[], fx: Fx): NewsAlert[] {
@@ -80,7 +118,7 @@ export function classifyHeadline(id: number, rawTitle: string, companies: Compan
   return out;
 }
 
-const CCY: Record<string, keyof Fx | "USD"> = { SP500: "USD", NDX: "USD", NK225: "JPY", TOPIX: "JPY", KOSPI200: "KRW", HSI: "HKD", SSE180: "CNY" };
+export const CCY: Record<string, keyof Fx | "USD"> = { SP500: "USD", NDX: "USD", NK225: "JPY", TOPIX: "JPY", KOSPI200: "KRW", HSI: "HKD", SSE180: "CNY" };
 let cache: { at: number; companies: Company[]; fx: Fx } | null = null;
 /** Index constituents with their market cap in USD, and the exchange rates used. Refreshed every six hours. */
 export async function loadUniverse(): Promise<{ companies: Company[]; fx: Fx }> {
@@ -95,7 +133,8 @@ export async function loadUniverse(): Promise<{ companies: Company[]; fx: Fx }> 
     const ccy = CCY[r.idx];
     const mcapUsd = r.mcap == null || !ccy ? null : ccy === "USD" ? r.mcap : r.mcap / fx[ccy];
     const prev = by.get(r.symbol);
-    if (!prev || (mcapUsd ?? 0) > (prev.mcapUsd ?? 0)) by.set(r.symbol, { symbol: r.symbol, name: r.name, short: shortName(r.name), mcapUsd });
+    if (!prev) by.set(r.symbol, { symbol: r.symbol, name: r.name, short: shortName(r.name), mcapUsd, idxs: [r.idx] });
+    else { prev.idxs.push(r.idx); if ((mcapUsd ?? 0) > (prev.mcapUsd ?? 0)) prev.mcapUsd = mcapUsd; }
   }
   cache = { at: Date.now(), companies: [...by.values()].sort((a, b) => (b.mcapUsd ?? 0) - (a.mcapUsd ?? 0)), fx };
   return cache;

@@ -5,6 +5,7 @@ import { PeriodBar } from "../components/PeriodBar";
 import type { SigmaWindow } from "../components/SigmaChart";
 import { money, StatementSummary, type AssetLite, type StatementRow } from "../components/CompanyCard";
 import { useApi } from "../lib/useApi";
+import { Star } from "../components/Star";
 import type { TableRow } from "../lib/types";
 import type { MarketId } from "../lib/sessions";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
@@ -53,7 +54,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
   return (
     <>
       <div className="c12"><PeriodBar period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} /></div>
-      <Panel no="01" title={d.name.toUpperCase()} span={8} aux={<>{d.symbol}{d.exchange ? ` · ${d.exchange}` : ""}{d.sector ? ` · ${d.sector}` : ""}{d.industry ? ` · ${d.industry}` : ""} · Yahoo Finance</>}>
+      <Panel no="01" title={d.name.toUpperCase()} span={8} aux={<><Star symbol={d.symbol} name={d.name} /> {d.symbol}{d.exchange ? ` · ${d.exchange}` : ""}{d.sector ? ` · ${d.sector}` : ""}{d.industry ? ` · ${d.industry}` : ""} · Yahoo Finance</>}>
         <div className="bigwrap"><ChartPanel row={row} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes /></div>
       </Panel>
       <Panel no="02" title="QUOTE" span={4} aux={d.asOf ? `as of ${fmtStamp(d.asOf)}` : ""}>

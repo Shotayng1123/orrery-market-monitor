@@ -20,7 +20,7 @@ interface Item { key: string; src: "note" | "report"; id: number; d: string; sor
 
 /** RESEARCH: everything the desk writes, in one list (date, kind, title), and the selected piece as a document.
  *  A note opens with its tables on top and the text below; a report with title, standfirst, sections and sources. */
-export function ResearchView({ tick }: { tick: number }) {
+export function ResearchView({ tick, sub }: { tick: number; sub?: string }) {
   const reports = useApi<{ rows: Report[] }>("reports", { n: 1000 }, Math.floor(tick / 10));
   const notes = useApi<{ rows: Array<{ id: number; d: string; title: string; generatedAt: string; kind?: string }> }>("notes", { n: 1000 }, Math.floor(tick / 10));   // the whole archive
   const [find, setFind] = useState("");
@@ -35,6 +35,8 @@ export function ResearchView({ tick }: { tick: number }) {
   const words = find.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const shown = items.filter((i) => (filter === "All" || i.kind === filter) && (!words.length || words.every((w) => `${i.title} ${ddMmmYy(i.d)} ${i.kind}`.toLowerCase().includes(w))));
   useEffect(() => { if ((open == null || !shown.some((i) => i.key === open)) && shown.length) setOpen(shown[0].key); }, [shown.map((i) => i.key).join("|"), open]);
+  // a link from elsewhere (#research/report:1, #research/note:2026-11-14) opens that piece once the list is in
+  useEffect(() => { if (sub && items.some((i) => i.key === sub)) { setFilter("All"); setFind(""); setOpen(sub); } }, [sub, items.length]);
   const sel = items.find((i) => i.key === open) ?? null;
   const rep = useApi<{ report: Report }>(sel?.src === "report" ? "report" : null, { id: sel?.id }, Math.floor(tick / 10));
   const note = useApi<{ note: (Note & { pack?: Pack | WeeklyPack }) | null }>(sel?.src === "note" ? "note" : null, { d: sel?.d }, Math.floor(tick / 10));

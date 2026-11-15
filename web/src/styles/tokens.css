@@ -765,3 +765,25 @@ body.term .csvbtn{font-size:8px;padding:0 4px;margin-left:5px}
   .brnar.report a{text-decoration:none}
   .brnar.report .ntabs{border:1px solid #999!important}
 }
+
+/* ===== watchlist, earnings calendar, names on headlines (15 Nov 2026) ===== */
+.star{cursor:pointer;color:var(--mut);font-size:12px;line-height:1;user-select:none}
+.star:hover{color:var(--amber)}
+.star.on{color:#f2c94c}
+.nwtk{flex:none;display:inline-flex;gap:4px;max-width:46%;overflow:hidden}
+.nwtk .tk{border:1px solid #17635c;color:var(--cyan);border-radius:3px;padding:0 5px;font-size:9.5px;line-height:1.55;cursor:pointer;white-space:nowrap}
+.nwtk .tk:hover{background:rgba(31,209,193,.14)}
+.ernchips{margin:0 0 4px!important;flex-wrap:wrap}
+table.ernT col.tm{width:6.4em} table.ernT col.st{width:1.6em} table.ernT col.ix{width:24%} table.ernT col.mc{width:6.5em}
+table.wlT td.nm{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+table.wlT th,table.wlT td{white-space:nowrap}
+body.term #grid[data-view="watch"]{grid-template-rows:minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr)}
+body.term #grid[data-view="watch"] .panel[data-k="wl"]{grid-column:span 8;grid-row:span 2}
+body.term #grid[data-view="watch"] .panel[data-k="wl-earn"],body.term #grid[data-view="watch"] .panel[data-k="wl-alerts"]{grid-column:span 4;grid-row:span 1}
+body.term #grid[data-view="watch"] .panel[data-k="wl-news"]{grid-column:span 8}
+body.term #grid[data-view="watch"] .panel[data-k="wl-research"]{grid-column:span 4}
+body.term .nwtk .tk{font-size:8.5px;padding:0 4px}
+@media (max-width:720px){.nwtk{display:none}}
+table.wlT td.nm{max-width:210px}
+table.wlT td,table.wlT th{padding-left:4px;padding-right:4px}
+table.ernT col.tm{width:8.2em}

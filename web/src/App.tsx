@@ -12,6 +12,7 @@ import { ResearchView } from "./views/Research";
 import { EquitiesView } from "./views/Equities";
 import { RatesFxView } from "./views/RatesFx";
 import { AssetView } from "./views/Asset";
+import { WatchlistView } from "./views/Watchlist";
 import { CardLayer } from "./components/CompanyCard";
 
 interface Route { view: ViewId; sub: string }
@@ -72,7 +73,7 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement | null)?.tagName === "INPUT") return;
       if (e.key === "Escape") goFull(false);
-      if (e.key >= "1" && e.key <= "5" && e.key.length === 1) { const v = VIEWS[Number(e.key) - 1]; if (v) setHash(v.id); }
+      if (e.key >= "1" && e.key <= "6" && e.key.length === 1) { const v = VIEWS[Number(e.key) - 1]; if (v) setHash(v.id); }
     };
     window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey);
   }, []);
@@ -116,12 +117,13 @@ export default function App() {
       {DEV_MOCK && <div id="mockbar">MOCK PREVIEW — synthetic data for layout checks only. Nothing here is real. The live Monitor is at https://shotayng1123.github.io/orrery-market-monitor/</div>}
       <CardLayer />
       <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={userId} onSignOut={signOut} updatedAt={updatedAt} nextIn={nextIn} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} />
-      <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–5 TABS · ESC</span><span>&#9974;</span></div>
+      <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–6 TABS · ESC</span><span>&#9974;</span></div>
       <div id="wrap">
         <div id="grid" data-view={view}>
           {view === "market" && <MarketView tick={tick} />}
           {view === "news" && <NewsView tick={tick} />}
-          {view === "research" && <ResearchView tick={tick} />}
+          {view === "research" && <ResearchView tick={tick} sub={sub} />}
+          {view === "watch" && <WatchlistView tick={tick} />}
           {view === "equities" && <EquitiesView sub={sub} onSub={(s) => setHash("equities", s)} tick={tick} />}
           {view === "rates" && <RatesFxView sub={sub} onSub={(s) => setHash("rates", s)} tick={tick} />}
           {view === "asset" && <AssetView symbol={sub} tick={tick} />}

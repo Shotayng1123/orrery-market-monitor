@@ -7,9 +7,9 @@ import { allStatuses, haveHolidays, type MarketId } from "../lib/sessions";
 import { fmtClock, fmtStamp, SGT, TZ_ABBR } from "../lib/time";
 import { SIZES, type Prefs, type SizeKey } from "../lib/prefs";
 
-export type ViewId = "market" | "news" | "research" | "equities" | "rates" | "asset";
+export type ViewId = "market" | "news" | "research" | "equities" | "rates" | "watch" | "asset";
 export const VIEWS: Array<{ id: ViewId; label: string }> = [
-  { id: "market", label: "MARKET" }, { id: "news", label: "NEWS" }, { id: "research", label: "RESEARCH" }, { id: "equities", label: "EQUITIES" }, { id: "rates", label: "RATES & CURRENCY" },
+  { id: "market", label: "MARKET" }, { id: "news", label: "NEWS" }, { id: "research", label: "RESEARCH" }, { id: "equities", label: "EQUITIES" }, { id: "rates", label: "RATES & CURRENCY" }, { id: "watch", label: "WATCHLIST" },
 ];
 const CHIP_MARKETS: MarketId[] = ["TSE", "HKEX", "SSE", "KRX", "SGX", "LSE", "NYSE"];
 
@@ -60,7 +60,7 @@ export function Topbar(p: TopbarProps) {
         <Help />
         <span id="sz-ctl">{SIZES.map((s) => <span key={s.k} className={`chip-sm${p.prefs.size === s.k ? " on" : ""}`} title={s.k === "AUTO" ? "Text and layout scale to this window automatically" : `Fixed text size ${s.k}`} onClick={() => p.onPrefs({ ...p.prefs, size: s.k as SizeKey })}>{s.k}</span>)}</span>
         <span id="cmp-ctl" className={`chip-sm${p.prefs.compact ? " on" : ""}`} title="Terminal layout: one screen per tab, sized to the window" onClick={() => p.onPrefs({ ...p.prefs, compact: !p.prefs.compact })}>COMPACT</span>
-        <span id="fs-ctl" className="chip-sm" title="Full screen: no browser tabs or address bar, header hidden (Esc or the corner strip to leave; keys 1 to 5 switch tabs)" onClick={() => p.onFull(true)}>&#9974; FULL</span>
+        <span id="fs-ctl" className="chip-sm" title="Full screen: no browser tabs or address bar, header hidden (Esc or the corner strip to leave; keys 1 to 6 switch tabs)" onClick={() => p.onFull(true)}>&#9974; FULL</span>
         {p.userId && <span className="chip" id="userchip" title="Signed in. Click to sign out" onClick={p.onSignOut}>{p.userId.toUpperCase()}<span className="so"> · SIGN OUT</span></span>}
       </span>
     </div>

@@ -89,7 +89,7 @@ export async function computeIndexStats(idx: IndexId, log: (s: string) => void =
     for (const r of rows) {
       const x = q[r.symbol as string]; if (!x) continue;
       const px = x.price ?? (r.close as number);
-      Object.assign(r, { mcap: x.marketCap, volume: x.volume, adv3m: x.adv3m, turnover: x.volume != null ? x.volume * px : null, adv_turnover: x.adv3m != null ? x.adv3m * px : null, quote_at: at, ...flowFromQuote(x, px), mf_at: at });
+      Object.assign(r, { mcap: x.marketCap, volume: x.volume, adv3m: x.adv3m, turnover: x.volume != null ? x.volume * px : null, adv_turnover: x.adv3m != null ? x.adv3m * px : null, quote_at: at, ...flowFromQuote(x, px), mf_at: at, earnings_at: x.earningsAt ? new Date(x.earningsAt * 1000).toISOString() : null, earnings_est: x.earningsEst });
       quoted++;
     }
   } catch (e) { log(`quotes failed: ${e instanceof Error ? e.message : e}`); }
@@ -115,7 +115,7 @@ export async function refreshQuotes(idx: IndexId): Promise<string> {
   for (const r of rows) {
     const x = q[r.symbol]; if (!x) continue;
     const px = x.price ?? r.close;
-    upd.push({ idx, symbol: r.symbol, name: r.name, d: r.d, close: r.close, mcap: x.marketCap, volume: x.volume, adv3m: x.adv3m, turnover: x.volume != null ? x.volume * px : null, adv_turnover: x.adv3m != null ? x.adv3m * px : null, quote_at: at, ...flowFromQuote(x, px), mf_at: at });
+    upd.push({ idx, symbol: r.symbol, name: r.name, d: r.d, close: r.close, mcap: x.marketCap, volume: x.volume, adv3m: x.adv3m, turnover: x.volume != null ? x.volume * px : null, adv_turnover: x.adv3m != null ? x.adv3m * px : null, quote_at: at, ...flowFromQuote(x, px), mf_at: at, earnings_at: x.earningsAt ? new Date(x.earningsAt * 1000).toISOString() : null, earnings_est: x.earningsEst });
   }
   for (const part of chunk(upd, 500)) { const { error: ue } = await db.from("constituent_stats").upsert(part, { onConflict: "idx,symbol" }); if (ue) throw new Error("constituent_stats: " + ue.message); }
   return `${idx}: ${upd.length} of ${rows.length} quoted`;

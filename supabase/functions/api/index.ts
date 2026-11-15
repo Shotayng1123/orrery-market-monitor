@@ -7,6 +7,8 @@ import { computeTable } from "../_shared/table.ts";
 import { CURVE_LABELS } from "../_shared/curves.ts";
 import { homeIndex, quoteFor, relativeLine, statementsFor, yahooSeries } from "../_shared/assets.ts";
 import { fetchText } from "../_shared/http.ts";
+import { CCY, loadUniverse } from "../_shared/newsalerts.ts";
+import { quotes } from "../_shared/yahoo.ts";
 
 const RANGES: Record<string, number> = { "1W": 7, "1M": 31, "3M": 93, "12M": 366, "36M": 1096 };
 const SIGMA_LOOKBACK_DAYS = 1120;   // 756 trading days ≈ 1,100 calendar days, so the 36M band is defined from the first point shown
@@ -83,6 +85,25 @@ Deno.serve(async (req) => {
       case "policy": {
         const { data } = await db.from("policy_rates").select("bank,name,rate_label,rate,as_of,last_change,next_meeting,source_url,source_note,updated_at").order("bank");
         return json(req, { rows: (data ?? []).map((r) => ({ bank: r.bank, name: r.name, rateLabel: r.rate_label, rate: r.rate, asOf: r.as_of, lastChange: r.last_change, nextMeeting: r.next_meeting, sourceUrl: r.source_url, sourceNote: r.source_note, updatedAt: r.updated_at })) });
+      }
+      case "earnings": return json(req, await earnings(Math.min(60, Math.max(1, Number(q("days") ?? 21)))));
+      case "watch_syms": return json(req, { symbols: (await watchSymbols(user.id)).map((w) => w.symbol) });
+      case "watch_list": return json(req, await watchList(user.id));
+      case "watch_feed": return json(req, await watchFeed(user.id));
+      case "watch_set": {
+        if (req.method !== "POST") return json(req, { error: "POST required" }, 405);
+        const b = (await req.json().catch(() => ({}))) as { symbol?: string; on?: boolean; name?: string };
+        const symbol = String(b.symbol ?? "").trim().slice(0, 24);
+        if (!/^[A-Za-z0-9^.=&-]{1,24}$/.test(symbol)) return json(req, { error: "bad symbol" }, 400);
+        if (b.on === false) { const { error } = await db.from("watchlists").delete().eq("user_id", user.id).eq("symbol", symbol); if (error) return json(req, { error: error.message }, 500); }
+        else {
+          const { count } = await db.from("watchlists").select("*", { count: "exact", head: true }).eq("user_id", user.id);
+          if ((count ?? 0) >= 200) return json(req, { error: "A watchlist holds up to 200 names" }, 400);
+          const { error } = await db.from("watchlists").upsert({ user_id: user.id, symbol, name: b.name ? String(b.name).slice(0, 120) : null }, { onConflict: "user_id,symbol" });
+          if (error) return json(req, { error: error.message }, 500);
+        }
+        const { data } = await db.from("watchlists").select("symbol").eq("user_id", user.id);
+        return json(req, { symbols: (data ?? []).map((r) => r.symbol) });
       }
       case "instruments": {
         const { data } = await db.from("instruments").select("*").eq("active", true).order("ord");
@@ -282,8 +303,15 @@ async function news(category: string | null, n: number) {
   let qb = db.from("news_items").select("id,published_at,source,title,url,category,tickers").order("published_at", { ascending: false }).limit(Math.min(300, Math.max(1, n || 120)));
   if (category) qb = qb.eq("category", category);
   const { data } = await qb;
-  return { rows: (data ?? []).map((r) => ({ id: r.id, publishedAt: r.published_at, source: r.source, title: r.title, url: r.url, category: r.category, tickers: r.tickers })) };
+  const names = await tickerNames();
+  return { rows: (data ?? []).map((r) => ({ id: r.id, publishedAt: r.published_at, source: r.source, title: r.title, url: r.url, category: r.category, tickers: named(r.tickers, names) })) };
 }
+/** Symbol -> the short company name shown on a headline's chips. */
+async function tickerNames(): Promise<Map<string, string>> {
+  const u = await loadUniverse().catch(() => null);
+  return new Map((u?.companies ?? []).map((c) => [c.symbol, c.short]));
+}
+const named = (tickers: string[] | null, names: Map<string, string>) => (tickers ?? []).map((s) => ({ s, n: names.get(s) ?? s }));
 
 // ---------- Japan short selling (JPX) ----------
 async function jpShorts(idx: string) {
@@ -359,4 +387,77 @@ async function search(qs: string) {
     for (const r of j.quotes ?? []) if (r.symbol && !seen.has(r.symbol)) { seen.add(r.symbol); rows.push({ symbol: r.symbol, name: r.longname ?? r.shortname ?? r.symbol, kind: r.typeDisp ?? "", note: [r.exchDisp, r.sector].filter(Boolean).join(" · ") }); }
   } catch { /* Yahoo search is best effort */ }
   return { rows: rows.slice(0, 20) };
+}
+
+// ---------- earnings calendar ----------
+interface EarnRow { idx: string; symbol: string; name: string; sector: string | null; mcap: number | null; earnings_at: string; earnings_est: boolean | null }
+/** Index constituents reporting from yesterday to `days` ahead, each once, with its market cap in USD. */
+async function earnings(days: number) {
+  const from = new Date(Date.now() - 86400e3).toISOString(), to = new Date(Date.now() + days * 86400e3).toISOString();
+  const rows = await selectAll<EarnRow>(() => db.from("constituent_stats").select("idx,symbol,name,sector,mcap,earnings_at,earnings_est").gte("earnings_at", from).lte("earnings_at", to).order("earnings_at").order("symbol"));
+  const fx = await loadUniverse().then((u) => u.fx).catch(() => null);
+  const seen = new Map<string, { symbol: string; name: string; sector: string | null; indices: string[]; mcapUsd: number | null; at: string; estimate: boolean }>();
+  for (const r of rows) {
+    const e = seen.get(r.symbol);
+    if (e) { if (!e.indices.includes(r.idx)) e.indices.push(r.idx); continue; }
+    const ccy = CCY[r.idx];
+    const mcapUsd = r.mcap == null || !ccy ? null : ccy === "USD" ? r.mcap : fx ? r.mcap / fx[ccy] : null;
+    seen.set(r.symbol, { symbol: r.symbol, name: r.name, sector: r.sector, indices: [r.idx], mcapUsd, at: r.earnings_at, estimate: r.earnings_est === true });
+  }
+  return { rows: [...seen.values()], source: "Yahoo Finance earnings dates; an estimated date has not been confirmed by the company" };
+}
+
+// ---------- watchlist ----------
+interface WatchStat { idx: string; symbol: string; name: string; sector: string | null; d: string; close: number; pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct12m: number | null; dma50: number | null; dma200: number | null; hi52: number | null; lo52: number | null; mcap: number | null; earnings_at: string | null; earnings_est: boolean | null }
+async function watchSymbols(userId: string): Promise<Array<{ symbol: string; name: string | null }>> {
+  const { data } = await db.from("watchlists").select("symbol,name,added_at").eq("user_id", userId).order("added_at");
+  return (data ?? []).map((r) => ({ symbol: r.symbol as string, name: (r.name as string | null) ?? null }));
+}
+/** The user's names with the figures the Monitor holds for them: the market table for its instruments, the
+ *  constituent statistics for index members, a plain quote for anything else. */
+async function watchList(userId: string) {
+  const wl = await watchSymbols(userId);
+  if (!wl.length) return { rows: [] };
+  const syms = wl.map((w) => w.symbol);
+  const [{ data: snap }, stats] = await Promise.all([
+    db.from("snapshots").select("payload").eq("key", "table").maybeSingle(),
+    selectAll<WatchStat>(() => db.from("constituent_stats").select("idx,symbol,name,sector,d,close,pct1d,pct1w,pct1m,pct3m,pct12m,dma50,dma200,hi52,lo52,mcap,earnings_at,earnings_est").in("symbol", syms).order("symbol")),
+  ]);
+  type Trow = { symbol: string; name: string; cls: string; group: string; last: number | null; lastAt: string | null; currency: string; pct: Record<string, number | null>; pos52?: number | null; vs200?: number | null };
+  const tBy = new Map((((snap?.payload as { rows?: Trow[] } | null)?.rows) ?? []).map((r) => [r.symbol, r]));
+  const sBy = new Map<string, WatchStat>();
+  for (const s of stats) if (!sBy.has(s.symbol)) sBy.set(s.symbol, s);
+  const missing = syms.filter((s) => !tBy.has(s) && !sBy.has(s));
+  const qBy = missing.length ? await quotes(missing).catch(() => ({} as Awaited<ReturnType<typeof quotes>>)) : {};
+  const pctOf = (a: number | null, b: number | null) => (a != null && b ? (a / b - 1) * 100 : null);
+  const rows = wl.map((w) => {
+    const t = tBy.get(w.symbol), s = sBy.get(w.symbol), q = qBy[w.symbol];
+    if (t) return { symbol: w.symbol, name: t.name, kind: t.cls, sector: null, ccy: t.currency, last: t.last, asOf: t.lastAt, pct1d: t.pct.d1 ?? null, pct1w: t.pct.w1 ?? null, pct1m: t.pct.m1 ?? null, pct3m: t.pct.m3 ?? null, pct12m: t.pct.m12 ?? null, vs50: null, vs200: t.group === "rates" ? null : t.vs200 ?? null, pos52: t.pos52 ?? null, mcap: null, earningsAt: null, earningsEst: null, isYield: t.group === "rates" && !w.symbol.endsWith("=F") };
+    if (s) return { symbol: w.symbol, name: s.name, kind: "Stock", sector: s.sector, ccy: CCY[s.idx] ?? null, last: s.close, asOf: s.d, pct1d: s.pct1d, pct1w: s.pct1w, pct1m: s.pct1m, pct3m: s.pct3m, pct12m: s.pct12m, vs50: pctOf(s.close, s.dma50), vs200: pctOf(s.close, s.dma200), pos52: s.hi52 != null && s.lo52 != null && s.hi52 > s.lo52 ? ((s.close - s.lo52) / (s.hi52 - s.lo52)) * 100 : null, mcap: s.mcap, earningsAt: s.earnings_at, earningsEst: s.earnings_est, isYield: false };
+    return { symbol: w.symbol, name: q?.name ?? w.name ?? w.symbol, kind: q?.quoteType ?? "–", sector: null, ccy: q?.currency ?? null, last: q?.price ?? null, asOf: q?.time ? new Date(q.time * 1000).toISOString() : null, pct1d: pctOf(q?.price ?? null, q?.prevClose ?? null), pct1w: null, pct1m: null, pct3m: null, pct12m: null, vs50: null, vs200: null, pos52: null, mcap: q?.marketCap ?? null, earningsAt: q?.earningsAt ? new Date(q.earningsAt * 1000).toISOString() : null, earningsEst: q?.earningsEst ?? null, isYield: false };
+  });
+  return { rows };
+}
+/** What happened around the user's names: alerts, headlines that name them, and research pieces that mention them. */
+async function watchFeed(userId: string) {
+  const wl = await watchSymbols(userId);
+  if (!wl.length) return { alerts: [], news: [], research: [] };
+  const syms = wl.map((w) => w.symbol);
+  const [{ data: al }, { data: nw }, { data: nt }, { data: rp }] = await Promise.all([
+    db.from("alerts").select("id,at,d,symbol,name,kind,pct,market,msg,url").in("symbol", syms).order("at", { ascending: false }).limit(40),
+    db.from("news_items").select("id,published_at,source,title,url,category,tickers").overlaps("tickers", syms).order("published_at", { ascending: false }).limit(60),
+    db.from("notes").select("d,title,kind,sections,generated_at").order("d", { ascending: false }).limit(40),
+    db.from("reports").select("id,title,kind,md,published_at").order("published_at", { ascending: false }).limit(40),
+  ]);
+  const names = await tickerNames();
+  const tagged = (text: string) => syms.filter((s) => text.includes("[[" + s + "|"));
+  const research: Array<{ key: string; d: string; kind: string; title: string; symbols: string[] }> = [];
+  for (const n of nt ?? []) { if ((n.kind ?? "daily") === "weekly") continue; const hit = tagged(JSON.stringify(n.sections ?? [])); if (hit.length) research.push({ key: "note:" + n.d, d: n.generated_at ?? n.d, kind: "Daily", title: n.title, symbols: hit }); }
+  for (const r of rp ?? []) { const hit = tagged(r.md ?? ""); if (hit.length) research.push({ key: "report:" + r.id, d: r.published_at, kind: r.kind, title: r.title, symbols: hit }); }
+  research.sort((a, b) => b.d.localeCompare(a.d));
+  return {
+    alerts: (al ?? []).map((a) => ({ id: a.id, at: a.at, d: a.d, symbol: a.symbol, name: a.name, kind: a.kind, pct: a.pct, market: a.market, msg: a.msg, url: a.url ?? null })),
+    news: (nw ?? []).map((r) => ({ id: r.id, publishedAt: r.published_at, source: r.source, title: r.title, url: r.url, category: r.category, tickers: named(r.tickers, names) })),
+    research,
+  };
 }

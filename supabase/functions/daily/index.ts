@@ -16,7 +16,7 @@ import { fetchHsi, fetchKospi200, fetchNikkei225, fetchSp500, fetchSse180, fetch
 import { fetchBoc, fetchBoe, fetchBundesbank, fetchEcb } from "../_shared/curves.ts";
 import { computeIndexStats, computeMoneyFlow, loadShortVolume, refreshQuotes } from "../_shared/istats.ts";
 import { loadMarginTotals, loadShortPositions, loadShortRatio } from "../_shared/jpx.ts";
-import { scanNewsAlerts } from "../_shared/newsalerts.ts";
+import { loadUniverse, scanNewsAlerts, tagHeadline } from "../_shared/newsalerts.ts";
 import { fetchNasdaq100 } from "../_shared/constituents.ts";
 
 Deno.serve(async (req) => {
@@ -357,6 +357,8 @@ function parseRss(xml: string): Array<{ title: string; link: string; pubDate: st
 }
 async function news(): Promise<string> {
   const rows: Array<Record<string, unknown>> = [];
+  // the companies each headline names, for the chips beside it and for "headlines about my names"
+  const companies = await loadUniverse().then((u) => u.companies).catch(() => []);
   const since = Date.now() - 7 * 86400e3;
   const report: string[] = [];
   for (const f of FEEDS) {
@@ -370,7 +372,7 @@ async function news(): Promise<string> {
         if (f.only && !f.only.test(it.link)) continue;
         const gm = f.source === "Bing News" && !it.src ? it.title.match(/^(.*)\s+-\s+([^-]{2,40})$/) : null;
         if (gm) it.title = gm[1].trim();
-        rows.push({ url: it.link.slice(0, 1000), published_at: new Date(t).toISOString(), source: f.source === "Bing News" ? (it.src ?? gm?.[2]?.trim() ?? f.source) : f.source, title: it.title.slice(0, 400), category: categorise(it.title, f.cat ?? "Macro"), tagged_by: f.cat ? "rules+feed" : "rules" });
+        rows.push({ url: it.link.slice(0, 1000), published_at: new Date(t).toISOString(), source: f.source === "Bing News" ? (it.src ?? gm?.[2]?.trim() ?? f.source) : f.source, title: it.title.slice(0, 400), category: categorise(it.title, f.cat ?? "Macro"), tagged_by: f.cat ? "rules+feed" : "rules", tickers: tagHeadline(it.title, companies) });
         n++;
       }
       report.push(`${f.source} ${n}`);
