@@ -841,3 +841,10 @@ body.term .pick::after{right:5px;border-width:3px;margin-top:-1px}
   .phead .aux:has(.pick~.pick){flex:1 1 100%;margin-left:0;justify-content:flex-start}
   .phead .aux:has(.pick~.pick)>.chips{flex:1 1 auto}
 }
+
+/* RESEARCH on a phone: the list of titles alone, or one piece alone with a way back (Shota, 16 Nov) */
+.rsback{margin:2px 0 8px}
+.rsback .chip-sm{margin:0;border-color:var(--amber);color:var(--amber);background:var(--sel);font-weight:700}
+.brnar~.rsback{margin:14px 0 6px}
+.rsback .chip-sm{padding:6px 12px;font-size:11.5px}
+@media print{.rsback{display:none!important}}

@@ -8,6 +8,7 @@ import { fmtStampSafe } from "./shared";
 import { EarningsCalendar } from "../components/Earnings";
 import { openAsset } from "../components/CompanyCard";
 import { Pick, type PickOption } from "../components/Pick";
+import { useRowCap } from "../lib/useRowCap";
 
 export const NEWS_CATEGORIES = ["All", "US Equities", "JP Equities", "Asia Equities", "DM Rates", "EM Rates", "Currency", "Macro", "Commodities"] as const;
 const CAL_MODES: PickOption<"macro" | "earnings">[] = [{ value: "macro", label: "Macro" }, { value: "earnings", label: "Earnings" }];
@@ -33,16 +34,24 @@ export function NewsView({ tick }: { tick: number }) {
   // The list starts five days back; open it at the next event (the last few results stay in view above it).
   const nextIdx = events.findIndex((e) => Date.parse(e.at) > Date.now());
   const nextRow = useRef<HTMLTableRowElement>(null), calBox = useRef<HTMLDivElement>(null), placed = useRef("");
+  useRowCap(calBox, 10, "tr.ecrow", "tr.cls", [events.length > 0, calMode]);   // phone: ten events at a time, the rest by scrolling inside the panel
   useEffect(() => {
     const row = nextRow.current, box = calBox.current;
-    const key = `${imp}|${scope}|${events.length}`;
-    if (!row || !box || placed.current === key) return;
+    const key = `${calMode}|${imp}|${scope}|${events.length}`;   // coming back from the earnings calendar places the list again
+    if (!row || !box) { if (calMode !== "macro") placed.current = ""; return; }
+    if (placed.current === key) return;
     placed.current = key;
     const sc = box.scrollHeight > box.clientHeight + 4 ? box : (box.closest(".pbody") as HTMLElement | null);
     if (!sc) return;
     // rectangles are in visual pixels, scroll offsets in the zoomed layout's pixels
     sc.scrollTop = Math.max(0, sc.scrollTop + (row.getBoundingClientRect().top - sc.getBoundingClientRect().top) / zoomNow() - 64);
-  }, [events.length, imp, scope, nextIdx]);
+    if (sc === box) {
+      // the calendar's own box (the phone's ten-row box): start on a whole row under the column heads, not on a cut one
+      const headBottom = box.querySelector("th")?.getBoundingClientRect().bottom ?? box.getBoundingClientRect().top;
+      const first = [...box.querySelectorAll("tbody tr")].find((tr) => tr.getBoundingClientRect().bottom > headBottom + 1);
+      if (first) sc.scrollTop = Math.max(0, sc.scrollTop + (first.getBoundingClientRect().top - headBottom) / zoomNow());
+    }
+  }, [events.length, imp, scope, nextIdx, calMode]);
   return (
     <>
       <Panel no="01" title={calMode === "macro" ? "ECONOMIC CALENDAR" : "EARNINGS CALENDAR"} span={6} aux={<span className="chips" style={{ margin: 0 }}><Pick label="Type" value={calMode} options={CAL_MODES} onChange={setCalMode} />{calMode === "macro" && <><Pick label="Impact" value={imp} options={IMPACTS} onChange={setImp} /><Pick label="Countries" value={scope} options={SCOPES} onChange={setScope} /><span className="mut" style={{ marginLeft: 4 }}>times in SGT{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""}</span></>}</span>}>

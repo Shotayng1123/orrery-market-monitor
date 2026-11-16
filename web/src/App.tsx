@@ -122,7 +122,7 @@ export default function App() {
         <div id="grid" data-view={view}>
           {view === "market" && <MarketView tick={tick} />}
           {view === "news" && <NewsView tick={tick} />}
-          {view === "research" && <ResearchView tick={tick} sub={sub} />}
+          {view === "research" && <ResearchView tick={tick} sub={sub} onSub={(s) => setHash("research", s)} />}
           {view === "watch" && <WatchlistView tick={tick} />}
           {view === "equities" && <EquitiesView sub={sub} onSub={(s) => setHash("equities", s)} tick={tick} />}
           {view === "rates" && <RatesFxView sub={sub} onSub={(s) => setHash("rates", s)} tick={tick} />}
