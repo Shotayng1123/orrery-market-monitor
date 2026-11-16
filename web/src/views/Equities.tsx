@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Empty, Panel } from "../components/Panel";
 import { ChartPanel, type ChartPeriod } from "../components/ChartPanel";
 import { PeriodBar } from "../components/PeriodBar";
+import { Pick } from "../components/Pick";
 import type { SigmaWindow } from "../components/SigmaChart";
 import { Treemap, type TreeGroup } from "../components/Treemap";
 import { hideCard, money, openAsset, showCard } from "../components/CompanyCard";
@@ -276,8 +277,7 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
   const jp = ix.stats === "NK225" || ix.stats === "TOPIX", us = ix.stats === "SP500" || ix.stats === "NDX";
   const toggle = (
     <div className="chips">
-      <span className="lbl">Index</span>
-      {INDICES.map((i) => <span key={i.id} className={`chip-sm${i.id === ix.id ? " on" : ""}`} onClick={() => onSub(i.id)}>{i.label}</span>)}
+      <Pick label="Index" value={ix.id} options={INDICES.map((i) => ({ value: i.id, label: i.label }))} onChange={onSub} />
     </div>
   );
   const standIn = ix.statsNote ? <span className="badge proxy" title={ix.statsNote}>STAND-IN</span> : null;

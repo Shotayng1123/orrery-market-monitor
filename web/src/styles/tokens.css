@@ -411,8 +411,6 @@ body.term .c12 .chips,body.term .c12 .pbar{margin:0}
 .flash-up{animation:flashUp 1.8s ease-out;border-radius:2px;padding:0 2px}
 .flash-dn{animation:flashDn 1.8s ease-out;border-radius:2px;padding:0 2px}
 /* equal-width chips (news categories) */
-.chips.eq .chip-sm{min-width:98px;text-align:center}
-body.term .chips.eq .chip-sm{min-width:84px}
 
 /* ===== COMPACT, dense (Shota): one screen per tab, every panel visible, tables showing their rows; type ~10px ===== */
 body.term{font-size:10.5px;line-height:1.2}
@@ -713,7 +711,6 @@ table.repT td.dt{white-space:nowrap;overflow-wrap:normal}
 .kchip.k-weekly{color:var(--amber);border-color:var(--amber-dim)}
 .kchip.k-alpha{color:#b7a4ff;border-color:#4b3f8a}
 .kchip.k-deep-dive{color:#e3c15a;border-color:#6d5a1e}
-.chip-sm.kind.tbu{opacity:.45;cursor:default;border-style:dashed}
 /* a note in RESEARCH: its tables first, then the text */
 .brnar.report.note .ntabs{font-size:11.5px;line-height:1.35;margin:6px 0 14px;padding:8px 10px;border:1px solid var(--bord);border-radius:4px;background:var(--panel2)}
 .brnar.report.note .ntabs table{width:100%}
@@ -806,3 +803,37 @@ body.term .nwtk .tk{font-size:8.5px;padding:0 4px}
 table.wlT td.nm{max-width:210px}
 table.wlT td,table.wlT th{padding-left:4px;padding-right:4px}
 table.ernT col.tm{width:8.2em}
+
+/* ===== pick-one selections as drop-downs (Shota, 16 Nov 2026) =====
+   One button per selection: label, current choice, arrow; a click or tap opens the list (components/Pick.tsx).
+   The rows of chips they replace wrapped over several lines on a phone. A transparent native <select> covers the
+   button, so the list is the browser's own: never clipped by a panel, and a phone shows its picker. */
+.pick{position:relative;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--bord2);border-radius:2px;background:#0f1013;padding:1px 19px 1px 8px;margin:2px 6px 2px 0;font-size:10px;line-height:1.6;letter-spacing:.05em;white-space:nowrap;cursor:pointer;user-select:none;min-width:0;max-width:100%;vertical-align:middle}
+.pick:last-child{margin-right:0}
+.pick:hover{border-color:var(--amber)}
+.pick:focus-within{outline:1px solid var(--amber);outline-offset:0}
+.pick .lbl{color:var(--mut);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;margin:0;flex:0 0 auto}
+.pick .val{color:var(--amber);font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.pick::after{content:"";position:absolute;right:7px;top:50%;margin-top:-2px;border:4px solid transparent;border-top-color:var(--txt2);pointer-events:none}
+.pick select{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;border:0;opacity:0;cursor:pointer;font-size:12px;appearance:none;-webkit-appearance:none}
+.pick select option{background:#0f1013;color:var(--txt)}
+.pick select option:disabled{color:var(--mut)}
+.phead .aux .pick{margin-top:0;margin-bottom:0}
+#topbar .pick{margin:0}
+/* the selector strip above the panels: its groups share one line where they fit (Index beside Period on a wide window) */
+#grid>.c12:not(.panel){display:flex;flex-wrap:wrap;align-items:center;column-gap:8px;min-width:0}
+#grid>.c12:not(.panel)>.chips{margin:0 0 6px!important}
+body.term .pick{padding:0 15px 0 5px;gap:4px;font-size:8.5px;line-height:1.5;margin:0 4px 0 0}
+body.term .pick .lbl{font-size:8px;letter-spacing:.06em}
+body.term .pick::after{right:5px;border-width:3px;margin-top:-1px}
+@media (max-width:720px){
+  /* a finger-sized target; the hidden select's type is 17px or more on the screen, under which iOS zooms the page when a field takes focus */
+  .pick{padding:7px 22px 7px 9px;font-size:11.5px;margin:3px 6px 3px 0}
+  .pick .lbl{font-size:10px}
+  .pick select{font-size:calc(17px / var(--z,1))}
+  .phead .aux .pick{margin-top:2px;margin-bottom:2px}
+  /* a panel head with several drop-downs (the calendar): they take their own line under the title, side by side */
+  .phead:has(.pick~.pick){flex-wrap:wrap;row-gap:2px}
+  .phead .aux:has(.pick~.pick){flex:1 1 100%;margin-left:0;justify-content:flex-start}
+  .phead .aux:has(.pick~.pick)>.chips{flex:1 1 auto}
+}

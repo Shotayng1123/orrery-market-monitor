@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Empty, Panel } from "../components/Panel";
 import { Md } from "../components/Md";
+import { Pick } from "../components/Pick";
 import { Overnight, WeeklyTables, type Pack, type WeeklyPack } from "../components/NoteTables";
 import { useApi } from "../lib/useApi";
 import type { Note, Report } from "../lib/types";
@@ -49,7 +50,7 @@ export function ResearchView({ tick, sub }: { tick: number; sub?: string }) {
   const err = reports.error ?? notes.error;
   return (
     <>
-      <Panel no="01" title="RESEARCH" span={4} k="replist" aux={<span className="chips" style={{ margin: 0 }}><span className={`chip-sm${filter === "All" ? " on" : ""}`} onClick={() => setFilter("All")}>All</span>{KINDS.map((k) => <span key={k} className={`chip-sm kind k-${k.toLowerCase()}${filter === k ? " on" : ""}${has(k) ? "" : " tbu"}`} title={has(k) ? `${k} only` : `${k}: to be added`} onClick={() => has(k) && setFilter(k)}>{k}</span>)}</span>}>
+      <Panel no="01" title="RESEARCH" span={4} k="replist" aux={<span className="chips" style={{ margin: 0 }}><Pick<Kind | "All"> label="Kind" value={filter} options={[{ value: "All" }, ...KINDS.map((k) => ({ value: k, label: has(k) ? k : `${k} (to be added)`, disabled: !has(k) }))]} onChange={setFilter} /></span>}>
         <div className="searchrow"><input type="text" placeholder="search titles, e.g. nvidia or nov-26" value={find} onChange={(e) => setFind(e.target.value)} /><span className="cnt">{shown.length} of {items.length}</span></div>
         <div className="reprows">{shown.length ? (
           <table className="mini repT">

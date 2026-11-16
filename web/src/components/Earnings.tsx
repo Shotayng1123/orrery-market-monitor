@@ -1,12 +1,15 @@
 import { Fragment, useMemo, useState } from "react";
 import { Empty } from "./Panel";
 import { Star } from "./Star";
+import { Pick, type PickOption } from "./Pick";
 import { hideCard, money, openAsset, showCard } from "./CompanyCard";
 import { useApi } from "../lib/useApi";
 import { fmtClock, SGT } from "../lib/time";
 
 export interface EarningsRow { symbol: string; name: string; sector: string | null; indices: string[]; mcapUsd: number | null; at: string; estimate: boolean }
 const REGION = (r: EarningsRow): "US" | "Japan" | "Asia" => (r.indices.some((i) => i === "SP500" || i === "NDX") ? "US" : r.indices.some((i) => i === "NK225" || i === "TOPIX") ? "Japan" : "Asia");
+const REGIONS = ["All", "US", "Japan", "Asia"] as const;
+const SIZES: PickOption<"big" | "all">[] = [{ value: "big", label: "USD 10bn+" }, { value: "all", label: "All" }];
 const dayOf = (t: string) => new Date(t).toLocaleDateString("en-CA", { timeZone: SGT });
 const dayLabel = (t: string) => new Date(t).toLocaleDateString("en-GB", { timeZone: SGT, weekday: "long", day: "numeric", month: "short" });
 
@@ -14,16 +17,15 @@ const dayLabel = (t: string) => new Date(t).toLocaleDateString("en-GB", { timeZo
  *  Dates come from the quote feed; one marked "est." has not been confirmed by the company. */
 export function EarningsCalendar({ tick }: { tick: number }) {
   const e = useApi<{ rows: EarningsRow[]; source: string }>("earnings", { days: 21 }, Math.floor(tick / 30));
-  const [region, setRegion] = useState<"All" | "US" | "Japan" | "Asia">("All");
+  const [region, setRegion] = useState<(typeof REGIONS)[number]>("All");
   const [big, setBig] = useState(true);
   const rows = useMemo(() => (e.data?.rows ?? []).filter((r) => (region === "All" || REGION(r) === region) && (!big || (r.mcapUsd ?? 0) >= 1e10)), [e.data, region, big]);
-  const chip = (on: boolean, label: string, f: () => void) => <span key={label} className={`chip-sm${on ? " on" : ""}`} onClick={f}>{label}</span>;
   return (
     <>
       <div className="chips ernchips">
-        <span className="lbl">Region</span>{(["All", "US", "Japan", "Asia"] as const).map((x) => chip(region === x, x, () => setRegion(x)))}
-        <span className="lbl" style={{ marginLeft: 10 }}>Size</span>{chip(big, "USD 10bn+", () => setBig(true))}{chip(!big, "All", () => setBig(false))}
-        <span className="mut" style={{ marginLeft: 10 }}>{rows.length} companies · times in SGT · est. = date not confirmed</span>
+        <Pick label="Region" value={region} options={REGIONS} onChange={setRegion} />
+        <Pick label="Market cap" value={big ? "big" : "all"} options={SIZES} onChange={(v) => setBig(v === "big")} />
+        <span className="mut" style={{ marginLeft: 4 }}>{rows.length} companies · times in SGT · est. = date not confirmed</span>
       </div>
       {rows.length ? (
         <div className="calwrap"><table className="mini calT ernT">
