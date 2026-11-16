@@ -25,7 +25,7 @@ const decodeEntities = (t: string): string => t.replace(/&amp;/g, "&").replace(/
 export function NewsView({ tick }: { tick: number }) {
   const cal = useApi<{ rows: EconEvent[] }>("calendar", undefined, Math.floor(tick / 5));   // the calendar syncs hourly, the headlines every ten minutes
   const [cat, setCat] = useState<(typeof NEWS_CATEGORIES)[number]>("All");
-  const [imp, setImp] = useState<"high" | "hm" | "all">("hm");
+  const [imp, setImp] = useState<"high" | "hm" | "all">("high");   // high-impact events only to start with (Shota, 16 Nov); Medium and Low are one pick away
   const [scope, setScope] = useState<"major" | "all">("major");
   const [calMode, setCalMode] = useState<"macro" | "earnings">("macro");
   const news = useApi<{ rows: NewsItem[] }>("news", { category: cat === "All" ? undefined : cat, n: 150 }, Math.floor(tick / 5));
