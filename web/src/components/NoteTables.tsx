@@ -94,7 +94,7 @@ export function Overnight({ pack }: { pack: Pack }) {
           if (!rs.length) return null;
           return [
             <tr key={cls} className="ncls"><td colSpan={3}>{cls}</td></tr>,
-            ...rs.map((r) => <tr key={r.symbol}><td className="l" title={r.name}>{shortName(r.symbol, r.name)}</td><td className="num">{fmtNum(r.last, r.unit === "bp" ? 3 : r.last != null && r.last >= 1000 ? 1 : 2)}</td><td className={`num ${signCls(r.unit === "bp" ? r.d1Chg : r.d1Pct)}`}>{chg(r)}</td></tr>),
+            ...rs.map((r) => <tr key={r.symbol}><td className="l" title={r.name}>{shortName(r.symbol, r.name)}</td><td className="num">{fmtNum(r.last, r.unit === "bp" ? 3 : r.cls === "Currency" && r.last != null && r.last < 10 ? 4 : r.last != null && r.last >= 1000 ? 1 : 2)}</td><td className={`num ${signCls(r.unit === "bp" ? r.d1Chg : r.d1Pct)}`}>{chg(r)}</td></tr>),
           ];
         })}
       </tbody></table>
