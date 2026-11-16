@@ -859,3 +859,9 @@ table.mkt tr.cls td>span{position:sticky;left:10px;display:inline-block}
   table.mkt col.nm{width:104px} table.mkt col.lv{width:76px} table.mkt col.n{width:67px}
   table.mkt td:first-child .badge{display:none}
 }
+/* the daily note (Shota, 16 Nov 2026): section bars that split the tables clearly, the major-markets table, and
+   the opening summary under the title */
+.nsec{margin:14px 0 6px;padding:5px 9px;border-left:3px solid var(--coral,#ff6a5c);background:linear-gradient(90deg,#1d1e23,#141518);color:var(--amber);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.ntabs>.nsec:first-child{margin-top:4px}
+table.nmaj tr.ncls td{color:var(--mut);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;text-align:left;padding-top:6px;border-bottom:1px solid var(--bord)}
+@media print{.nsec{background:none;color:#000;border-left-color:#000}}

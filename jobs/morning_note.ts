@@ -34,9 +34,11 @@ Hard rules:
 7. If dateSgt is a Saturday there is no Tokyo session today or tomorrow: write the Japan section as the read-across for Monday's open, and say so. If dateSgt is a Monday, cover weekend news that matters for the open, with citations.
 8. ${TAG_RULE}
 
-Length and style: 400 to 650 words in all. Short sentences, one cause and one effect each. Bullets ("- ") rather than long paragraphs. No sentence that only restates a move.
+Length and style: 450 to 700 words in all. Short sentences, one cause and one effect each. Bullets ("- ") rather than long paragraphs. No sentence that only restates a move.
 
 Structure (markdown, H2 headings exactly as written):
+## In brief
+Write this section last, place it first (Shota, 16 Nov 2026). One plain paragraph of three to four sentences, no bullets, no citations, no name tags: first what yesterday was (what led equities, what rates, the dollar and commodities did in words, and whether that adds up to risk-on, risk-off or a rotation), then today's view for the Tokyo session and whether the trend is likely to continue (E). The model to follow: "Strong equity rally led by AI names, with yields higher: a clear sign of risk-on. The trend is expected to continue today (E)." Directions in words only, no figures. Nothing here that the sections below do not support.
 ## What moved markets
 Three to six bullets, the most important first. Each: the event or headline, then what it moved and in which direction (sectors and names rather than index figures), with a citation. For the main story, add the second-order point your digging reached: why it matters beyond the day, and who is exposed next. End with one line that characterises the session ("broad risk-off led by semis after ...") (E).
 ## Stocks: movers and why
