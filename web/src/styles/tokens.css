@@ -807,14 +807,15 @@ table.ernT col.tm{width:8.2em}
 /* ===== pick-one selections as drop-downs (Shota, 16 Nov 2026) =====
    One button per selection: label, current choice, arrow; a click or tap opens the list (components/Pick.tsx).
    The rows of chips they replace wrapped over several lines on a phone. A transparent native <select> covers the
-   button, so the list is the browser's own: never clipped by a panel, and a phone shows its picker. */
-.pick{position:relative;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--bord2);border-radius:2px;background:#0f1013;padding:1px 19px 1px 8px;margin:2px 6px 2px 0;font-size:10px;line-height:1.6;letter-spacing:.05em;white-space:nowrap;cursor:pointer;user-select:none;min-width:0;max-width:100%;vertical-align:middle}
+   button, so the list is the browser's own: never clipped by a panel, and a phone shows its picker.
+   Made to be noticed (Shota): a coral frame, and the current choice on solid coral, the look the selected chip had. */
+.pick{position:relative;display:inline-flex;align-items:stretch;border:1px solid var(--amber);border-radius:2px;background:var(--sel);margin:2px 6px 2px 0;font-size:10px;line-height:1.6;letter-spacing:.05em;white-space:nowrap;cursor:pointer;user-select:none;min-width:0;max-width:100%;vertical-align:middle;overflow:hidden}
 .pick:last-child{margin-right:0}
-.pick:hover{border-color:var(--amber)}
-.pick:focus-within{outline:1px solid var(--amber);outline-offset:0}
-.pick .lbl{color:var(--mut);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;margin:0;flex:0 0 auto}
-.pick .val{color:var(--amber);font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis}
-.pick::after{content:"";position:absolute;right:7px;top:50%;margin-top:-2px;border:4px solid transparent;border-top-color:var(--txt2);pointer-events:none}
+.pick:hover .val{background:#ff8a7e}
+.pick:focus-within{outline:2px solid var(--txt);outline-offset:1px}
+.pick .lbl{display:flex;align-items:center;color:var(--txt);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;margin:0;padding:1px 7px 1px 8px;flex:0 0 auto}
+.pick .val{background:var(--amber);color:#000;font-weight:700;padding:1px 20px 1px 7px;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.pick::after{content:"";position:absolute;right:7px;top:50%;margin-top:-2px;border:4px solid transparent;border-top-color:#000;pointer-events:none}
 .pick select{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;border:0;opacity:0;cursor:pointer;font-size:12px;appearance:none;-webkit-appearance:none}
 .pick select option{background:#0f1013;color:var(--txt)}
 .pick select option:disabled{color:var(--mut)}
@@ -823,13 +824,16 @@ table.ernT col.tm{width:8.2em}
 /* the selector strip above the panels: its groups share one line where they fit (Index beside Period on a wide window) */
 #grid>.c12:not(.panel){display:flex;flex-wrap:wrap;align-items:center;column-gap:8px;min-width:0}
 #grid>.c12:not(.panel)>.chips{margin:0 0 6px!important}
-body.term .pick{padding:0 15px 0 5px;gap:4px;font-size:8.5px;line-height:1.5;margin:0 4px 0 0}
-body.term .pick .lbl{font-size:8px;letter-spacing:.06em}
+body.term .pick{font-size:8.5px;line-height:1.5;margin:0 4px 0 0}
+body.term .pick .lbl{font-size:8px;letter-spacing:.06em;padding:0 4px 0 5px}
+body.term .pick .val{padding:0 14px 0 4px}
 body.term .pick::after{right:5px;border-width:3px;margin-top:-1px}
 @media (max-width:720px){
   /* a finger-sized target; the hidden select's type is 17px or more on the screen, under which iOS zooms the page when a field takes focus */
-  .pick{padding:7px 22px 7px 9px;font-size:11.5px;margin:3px 6px 3px 0}
-  .pick .lbl{font-size:10px}
+  .pick{font-size:11.5px;margin:3px 6px 3px 0}
+  .pick .lbl{font-size:10px;padding:7px 8px 7px 9px}
+  .pick .val{padding:7px 23px 7px 8px}
+  .pick::after{right:8px}
   .pick select{font-size:calc(17px / var(--z,1))}
   .phead .aux .pick{margin-top:2px;margin-bottom:2px}
   /* a panel head with several drop-downs (the calendar): they take their own line under the title, side by side */
