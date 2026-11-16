@@ -11,6 +11,7 @@ import { Flash } from "../components/Flash";
 import { PERIODS, type Curve, type TableRow } from "../lib/types";
 import { marketById } from "../lib/sessions";
 import { filterCurve } from "../lib/curveTenors";
+import { shortName } from "../lib/short";
 
 function Badges({ r }: { r: TableRow }) {
   const m = marketById(r.market);
@@ -73,12 +74,12 @@ function changeShade(v: number | null | undefined, full: number): string | undef
 function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
   return (
     <>
-      <tr className="cls"><td colSpan={5 + PERIODS.length}>{cls}</td></tr>
+      <tr className="cls"><td colSpan={5 + PERIODS.length}><span>{cls}</span></td></tr>
       {rs.map((r) => {
         const isRate = isYield(r);
         return (
           <tr key={r.symbol} className={r.live ? "live" : undefined} title={`${r.symbol} · last ${fmtStampSafe(r.lastAt)}${r.live ? " · market open" : ""}`}>
-            <td className="l">{r.name}<Badges r={r} /></td>
+            <td className="l" title={`${r.name} (${r.symbol})`}>{shortName(r.symbol, r.name)}<Badges r={r} /></td>
             <td className="num"><Flash value={r.last}><b>{fmtNum(r.last, lvlDec(r.last, r.decimals))}</b></Flash></td>
             {PERIODS.map((p) => {
               const c = r.closes[p.key];
