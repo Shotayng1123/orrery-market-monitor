@@ -7,8 +7,12 @@ import { zoomNow } from "../lib/prefs";
 import { fmtStampSafe } from "./shared";
 import { EarningsCalendar } from "../components/Earnings";
 import { openAsset } from "../components/CompanyCard";
+import { Pick, type PickOption } from "../components/Pick";
 
 export const NEWS_CATEGORIES = ["All", "US Equities", "JP Equities", "Asia Equities", "DM Rates", "EM Rates", "Currency", "Macro", "Commodities"] as const;
+const CAL_MODES: PickOption<"macro" | "earnings">[] = [{ value: "macro", label: "Macro" }, { value: "earnings", label: "Earnings" }];
+const IMPACTS: PickOption<"high" | "hm" | "all">[] = [{ value: "high", label: "High" }, { value: "hm", label: "High + Medium" }, { value: "all", label: "All" }];
+const SCOPES: PickOption<"major" | "all">[] = [{ value: "major", label: "Major" }, { value: "all", label: "All" }];
 const dayOf = (t: string) => new Date(t).toLocaleDateString("en-CA", { timeZone: SGT });
 const dayLabel = (t: string) => new Date(t).toLocaleDateString("en-GB", { timeZone: SGT, weekday: "long", day: "numeric", month: "short" });
 const MAJOR = new Set(["US", "JP", "EUR", "DE", "FR", "UK", "CN", "HK", "KR", "TW", "AU", "CA", "CH", "IN", "SG"]);   // major markets only (Shota); everything else behind the All chip
@@ -39,10 +43,9 @@ export function NewsView({ tick }: { tick: number }) {
     // rectangles are in visual pixels, scroll offsets in the zoomed layout's pixels
     sc.scrollTop = Math.max(0, sc.scrollTop + (row.getBoundingClientRect().top - sc.getBoundingClientRect().top) / zoomNow() - 64);
   }, [events.length, imp, scope, nextIdx]);
-  const chip = (on: boolean, label: string, f: () => void, key?: string) => <span key={key ?? label} className={`chip-sm${on ? " on" : ""}`} onClick={f}>{label}</span>;
   return (
     <>
-      <Panel no="01" title={calMode === "macro" ? "ECONOMIC CALENDAR" : "EARNINGS CALENDAR"} span={6} aux={<span className="chips" style={{ margin: 0 }}>{chip(calMode === "macro", "Macro", () => setCalMode("macro"))}{chip(calMode === "earnings", "Earnings", () => setCalMode("earnings"))}{calMode === "macro" && <><span className="lbl" style={{ marginLeft: 10 }}>Impact</span>{chip(imp === "high", "High", () => setImp("high"))}{chip(imp === "hm", "High + Medium", () => setImp("hm"))}{chip(imp === "all", "All", () => setImp("all"))}<span className="lbl" style={{ marginLeft: 10 }}>Countries</span>{chip(scope === "major", "Major", () => setScope("major"))}{chip(scope === "all", "All", () => setScope("all"))}<span className="mut" style={{ marginLeft: 10 }}>times in SGT{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""}</span></>}</span>}>
+      <Panel no="01" title={calMode === "macro" ? "ECONOMIC CALENDAR" : "EARNINGS CALENDAR"} span={6} aux={<span className="chips" style={{ margin: 0 }}><Pick label="Type" value={calMode} options={CAL_MODES} onChange={setCalMode} />{calMode === "macro" && <><Pick label="Impact" value={imp} options={IMPACTS} onChange={setImp} /><Pick label="Countries" value={scope} options={SCOPES} onChange={setScope} /><span className="mut" style={{ marginLeft: 4 }}>times in SGT{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""}</span></>}</span>}>
         {calMode === "earnings" ? <EarningsCalendar tick={tick} /> : events.length ? (
           <div className="calwrap" ref={calBox}><table className="mini calT">
             <colgroup><col className="tm" /><col className="cy" /><col /><col className="dot" /><col className="nv" /><col className="nv" /><col className="nv" /></colgroup>
@@ -62,7 +65,7 @@ export function NewsView({ tick }: { tick: number }) {
           </table></div>
         ) : <Empty title="No calendar loaded">{cal.error ?? "The calendar sync runs every hour."}</Empty>}
       </Panel>
-      <Panel no="02" title="NEWS" span={6} aux={<span className="chips eq" style={{ margin: 0 }}>{NEWS_CATEGORIES.map((c) => <span key={c} className={`chip-sm${c === cat ? " on" : ""}`} onClick={() => setCat(c)}>{c}</span>)}</span>}>
+      <Panel no="02" title="NEWS" span={6} aux={<span className="chips" style={{ margin: 0 }}><Pick label="Category" value={cat} options={NEWS_CATEGORIES} onChange={setCat} /></span>}>
         {news.data?.rows.length ? <div className="nwlist">{news.data.rows.map((it) => (
           <div className="nwrow" key={it.id}>
             <span className="nwt">{fmtStampSafe(it.publishedAt)}</span>
