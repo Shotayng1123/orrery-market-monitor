@@ -687,7 +687,7 @@ body.term #grid[data-view="news"]:has(.panel[data-k="note-closed"]) .panel[data-
 .brnar h3{margin:16px 0 6px;color:var(--amber);font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;border-bottom:1px solid var(--bord);padding-bottom:3px}
 .brnar hr{border:0;border-top:1px solid var(--bord2);margin:14px 0}
 .brnar i{color:var(--txt2)}
-.brnar.report{max-width:84ch;font-size:13px;line-height:1.6;padding:4px 6px 16px}
+.brnar.report{max-width:none;font-size:13px;line-height:1.6;padding:4px 6px 16px}   /* fills its panel (Shota, 16 Nov): the 84ch column left a third of the box empty */
 .brnar.report h2{font-family:"Cormorant Garamond",serif;font-size:25px;line-height:1.15;margin:4px 0 6px;font-weight:700;color:var(--txt);letter-spacing:.01em}
 .brnar.report .stand{color:var(--txt2);font-size:13px;border-left:2px solid var(--amber);padding-left:10px;margin:0 0 12px}
 .brnar.report h4{margin:14px 0 4px;font-size:11px}
@@ -721,6 +721,25 @@ table.repT td.dt{white-space:nowrap;overflow-wrap:normal}
 body.term #grid[data-view="news"] .panel[data-no="01"],body.term #grid[data-view="news"] .panel[data-no="02"]{grid-column:span 6;grid-row:span 1}
 body.term #grid[data-view="research"] .panel[data-k="replist"]{grid-column:span 4}
 body.term #grid[data-view="research"] .panel[data-k="report"]{grid-column:span 8}
+/* RESEARCH (Shota, 16 Nov): the list and the document scroll separately. On a window wide enough for the two panels
+   side by side the tab fills the window height, as the one-screen layout does, and each panel scrolls inside itself:
+   scrolling the document leaves the list where it is. Narrower windows stack the panels and scroll as one page. */
+@media screen and (min-width:1101px){
+  body:not(.term):has(#grid[data-view="research"]){height:calc(100vh / var(--z,1));overflow:auto;display:flex;flex-direction:column}
+  body:not(.term):has(#grid[data-view="research"]) #root{flex:1 1 auto;min-height:480px;display:flex;flex-direction:column}   /* a very short window scrolls as a page instead of squeezing the panels */
+  body:not(.term):has(#grid[data-view="research"]) #topbar,body:not(.term):has(#grid[data-view="research"]) #mockbar{flex:0 0 auto}
+  body:not(.term):has(#grid[data-view="research"]) #wrap{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding-bottom:6px}
+  body:not(.term):has(#grid[data-view="research"]) footer{flex:0 0 auto;margin-bottom:0}
+  body:not(.term) #grid[data-view="research"]{flex:1 1 auto;min-height:0;grid-template-rows:minmax(0,1fr)}
+  body:not(.term) #grid[data-view="research"]>.panel{min-height:0}
+  body:not(.term) #grid[data-view="research"]>.panel>.pbody{flex:1 1 auto;min-height:0;overscroll-behavior:contain}
+  /* the list: the search box and the column heads stay put, only the rows scroll */
+  body:not(.term) #grid[data-view="research"]>.panel[data-k="replist"]>.pbody{display:flex;flex-direction:column;overflow:hidden}
+  body:not(.term) #grid[data-view="research"] .searchrow{flex:0 0 auto}
+  body:not(.term) #grid[data-view="research"] .reprows{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}
+}
+body.term #grid[data-view="research"]>.panel[data-k="replist"]>.pbody{overflow:hidden}
+body.term #grid[data-view="research"] .reprows{flex:1 1 auto;min-height:0;overflow:auto}
 
 /* audit of 15 Nov 2026 */
 /* POLICY RATES: the source column wraps instead of pushing the table past the panel */
