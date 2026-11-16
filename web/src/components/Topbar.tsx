@@ -62,7 +62,7 @@ export function Topbar(p: TopbarProps) {
         <Pick<SizeKey> id="sz-ctl" label="Text size" value={p.prefs.size} options={SIZES.map((s) => s.k)} onChange={(k) => p.onPrefs({ ...p.prefs, size: k })} title="Text size. AUTO scales the text and layout to this window; S, M, L and XL fix the size" />
         <span id="cmp-ctl" className={`chip-sm${p.prefs.compact ? " on" : ""}`} title="Terminal layout: one screen per tab, sized to the window" onClick={() => p.onPrefs({ ...p.prefs, compact: !p.prefs.compact })}>COMPACT</span>
         <span id="fs-ctl" className="chip-sm" title="Full screen: no browser tabs or address bar, header hidden (Esc or the corner strip to leave; keys 1 to 6 switch tabs)" onClick={() => p.onFull(true)}>&#9974; FULL</span>
-        {p.userId && <span className="chip" id="userchip" title="Signed in. Click to sign out" onClick={p.onSignOut}>{p.userId.toUpperCase()}<span className="so"> · SIGN OUT</span></span>}
+        {p.userId && <span className="chip" id="userchip" title={`Signed in as ${p.userId}. Click for your account: change password, sign out`} onClick={p.onSignOut}>{p.userId.split("@")[0].slice(0, 14).toUpperCase()}<span className="so"> · ACCOUNT</span></span>}
       </span>
     </div>
   );

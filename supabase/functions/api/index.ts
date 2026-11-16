@@ -1,8 +1,9 @@
 // api — everything the page reads, one function, `?action=`. Sign-in issues an HMAC token; every other action
 // needs it as a bearer. The research desk publishes with POST report_put and the x-report-secret header.
 import { db, selectAll } from "../_shared/db.ts";
-import { bearer, signToken, verifyToken } from "../_shared/auth.ts";
-import { clientIp, corsHeaders, json, timingSafeEqual } from "../_shared/http.ts";
+import { bearer, verifyToken } from "../_shared/auth.ts";
+import { accountFor, adminSet, adminUsers, changePassword, login, signup } from "../_shared/accounts.ts";
+import { corsHeaders, json, timingSafeEqual } from "../_shared/http.ts";
 import { computeTable } from "../_shared/table.ts";
 import { CURVE_LABELS } from "../_shared/curves.ts";
 import { homeIndex, quoteFor, relativeLine, statementsFor, yahooSeries } from "../_shared/assets.ts";
@@ -21,8 +22,18 @@ Deno.serve(async (req) => {
   try {
     if (action === "login") return await login(req);
     if (action === "report_put") return await reportPut(req);
+    if (action === "signup") return await signup(req);
     const user = await verifyToken(bearer(req));
-    if (!user) return json(req, { error: "unauthorised" }, 401);
+    const account = user ? await accountFor(user) : null;
+    if (!user || !account) return json(req, { error: "unauthorised" }, 401);
+    if (action === "me") return json(req, { email: account.email, role: account.role, mustChange: account.must_change });
+    if (action === "change_password") return await changePassword(req, account);
+    // a password set by the manager opens nothing until its owner has replaced it
+    if (account.must_change) return json(req, { error: "Change your password first" }, 403);
+    if (action === "admin_users" || action === "admin_set") {
+      if (account.role !== "manager") return json(req, { error: "forbidden" }, 403);
+      return action === "admin_users" ? await adminUsers(req) : await adminSet(req, account);
+    }
     switch (action) {
       case "health": return json(req, await health());
       case "table": {
@@ -117,30 +128,6 @@ Deno.serve(async (req) => {
 });
 
 // ---------- sign-in ----------
-async function login(req: Request): Promise<Response> {
-  if (req.method !== "POST") return json(req, { error: "POST required" }, 405);
-  const ip = clientIp(req);
-  const windowStart = new Date(Date.now() - 10 * 60e3).toISOString();
-  const { count } = await db.from("login_attempts").select("*", { count: "exact", head: true }).eq("ip", ip).eq("ok", false).gte("at", windowStart);
-  if ((count ?? 0) >= 10) return json(req, { error: "Too many attempts; wait ten minutes" }, 429);
-  const body = (await req.json().catch(() => ({}))) as { id?: string; password?: string; remember?: boolean };
-  const id = String(body.id ?? "").trim();
-  const pw = String(body.password ?? "");
-  const shared = Deno.env.get("MONITOR_PASSWORD") ?? "";
-  if (!/^[A-Za-z0-9_.-]{2,32}$/.test(id)) return json(req, { error: "ID: 2 to 32 letters, digits, . _ -" }, 400);
-  if (!shared || !pw || !timingSafeEqual(shared, pw)) {
-    await db.from("login_attempts").insert({ ip, ok: false });
-    return json(req, { error: "Wrong password" }, 401);
-  }
-  const remember = body.remember === true;
-  const ttl = remember ? 30 * 86400 : 12 * 3600;
-  const token = await signToken(id, ttl);
-  await db.from("login_attempts").insert({ ip, ok: true });
-  const { data: u } = await db.from("users").select("logins").eq("id", id).maybeSingle();
-  await db.from("users").upsert({ id, last_seen: new Date().toISOString(), logins: (u?.logins ?? 0) + 1, remember }, { onConflict: "id" });
-  return json(req, { token, id, expiresIn: ttl });
-}
-
 // ---------- publishing (research desk) ----------
 async function reportPut(req: Request): Promise<Response> {
   if (req.method !== "POST") return json(req, { error: "POST required" }, 405);

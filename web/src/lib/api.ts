@@ -45,15 +45,56 @@ export async function api<T>(action: string, params?: Params, init?: RequestInit
   return body as T;
 }
 
-export async function login(id: string, password: string, remember: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
+type Result = { ok: true } | { ok: false; error: string };
+async function post(action: string, body: unknown, auth = false): Promise<{ status: number; j: Record<string, unknown> }> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  const token = auth ? getToken() : null;
+  if (token) headers.authorization = `Bearer ${token}`;
+  const r = await fetch(url(action), { method: "POST", headers, body: JSON.stringify(body) });
+  return { status: r.status, j: (await r.json().catch(() => ({}))) as Record<string, unknown> };
+}
+const failed = (status: number, j: Record<string, unknown>, what: string): string => (typeof j.error === "string" ? j.error : status === 429 ? "Too many attempts; wait ten minutes" : `${what} failed (${status})`);
+
+/** Sign in with the account's email and its own password. */
+export async function login(email: string, password: string, remember: boolean): Promise<Result> {
   if (!apiConfigured) return { ok: false, error: "The Monitor API is not configured yet (VITE_API_URL)." };
   try {
-    const r = await fetch(url("login"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, password, remember }) });
-    const j = (await r.json().catch(() => ({}))) as { token?: string; error?: string };
-    if (!r.ok || !j.token) return { ok: false, error: j.error ?? (r.status === 429 ? "Too many attempts, wait a minute" : `Sign-in failed (${r.status})`) };
+    const { status, j } = await post("login", { email, password, remember });
+    if (status !== 200 || typeof j.token !== "string") return { ok: false, error: failed(status, j, "Sign-in") };
     setToken(j.token, remember);
     return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Network error" };
-  }
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Network error" }; }
+}
+
+/** Create an account. It can sign in once the manager has approved it. */
+export async function signup(email: string, password: string): Promise<Result> {
+  if (!apiConfigured) return { ok: false, error: "The Monitor API is not configured yet (VITE_API_URL)." };
+  try {
+    const { status, j } = await post("signup", { email, password });
+    return status === 200 ? { ok: true } : { ok: false, error: failed(status, j, "Sign-up") };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Network error" }; }
+}
+
+/** Replace the signed-in person's password. Older sessions end; this browser gets a fresh token. */
+export async function changePassword(current: string, next: string): Promise<Result> {
+  try {
+    let remember = false;
+    try { remember = localStorage.getItem(KEY) != null; } catch { /* ignore */ }
+    const { status, j } = await post("change_password", { current, next, remember }, true);
+    if (status !== 200 || typeof j.token !== "string") return { ok: false, error: failed(status, j, "Password change") };
+    setToken(j.token, remember);
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Network error" }; }
+}
+
+export interface Me { email: string; role: "manager" | "user"; mustChange: boolean }
+export interface AccountRow { email: string; role: "manager" | "user"; status: "pending" | "active" | "disabled"; mustChange: boolean; createdAt: string; lastSeen: string | null; logins: number; watch: number }
+
+/** Manager only: approve, enable, disable, or reset a password (the reply carries the temporary password once). */
+export async function adminSet(email: string, op: "approve" | "enable" | "disable" | "reset"): Promise<{ ok: true; tempPassword?: string } | { ok: false; error: string }> {
+  try {
+    const { status, j } = await post("admin_set", { email, op }, true);
+    if (status !== 200) return { ok: false, error: failed(status, j, "Change") };
+    return { ok: true, tempPassword: typeof j.tempPassword === "string" ? j.tempPassword : undefined };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Network error" }; }
 }
