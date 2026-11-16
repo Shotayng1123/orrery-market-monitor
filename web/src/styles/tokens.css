@@ -842,6 +842,8 @@ body.term .pick::after{right:5px;border-width:3px;margin-top:-1px}
   .phead .aux:has(.pick~.pick)>.chips{flex:1 1 auto}
 }
 
+/* calendars: the column heads stay above the rows scrolling under them (a dimmed past row is its own layer and was drawn over the heads) */
+table.calT th,table.mini.calT th:first-child{z-index:3}   /* the second selector outranks the phone rule that pins the first column at z-index 1 */
 /* RESEARCH on a phone: the list of titles alone, or one piece alone with a way back (Shota, 16 Nov) */
 .rsback{margin:2px 0 8px}
 .rsback .chip-sm{margin:0;border-color:var(--amber);color:var(--amber);background:var(--sel);font-weight:700}

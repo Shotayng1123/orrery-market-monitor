@@ -41,16 +41,27 @@ export function NewsView({ tick }: { tick: number }) {
     if (!row || !box) { if (calMode !== "macro") placed.current = ""; return; }
     if (placed.current === key) return;
     placed.current = key;
-    const sc = box.scrollHeight > box.clientHeight + 4 ? box : (box.closest(".pbody") as HTMLElement | null);
-    if (!sc) return;
-    // rectangles are in visual pixels, scroll offsets in the zoomed layout's pixels
-    sc.scrollTop = Math.max(0, sc.scrollTop + (row.getBoundingClientRect().top - sc.getBoundingClientRect().top) / zoomNow() - 64);
-    if (sc === box) {
-      // the calendar's own box (the phone's ten-row box): start on a whole row under the column heads, not on a cut one
-      const headBottom = box.querySelector("th")?.getBoundingClientRect().bottom ?? box.getBoundingClientRect().top;
-      const first = [...box.querySelectorAll("tbody tr")].find((tr) => tr.getBoundingClientRect().bottom > headBottom + 1);
-      if (first) sc.scrollTop = Math.max(0, sc.scrollTop + (first.getBoundingClientRect().top - headBottom) / zoomNow());
-    }
+    let scroller: HTMLElement | null = null, given = -1;   // where the list was put, to tell a reader's scroll from ours
+    const place = () => {
+      const sc = box.scrollHeight > box.clientHeight + 4 ? box : (box.closest(".pbody") as HTMLElement | null);
+      if (!sc) return;
+      // rectangles are in visual pixels, scroll offsets in the zoomed layout's pixels
+      sc.scrollTop = Math.max(0, sc.scrollTop + (row.getBoundingClientRect().top - sc.getBoundingClientRect().top) / zoomNow() - 64);
+      if (sc === box) {
+        // the calendar's own box (the phone's ten-row box): start on a whole row under the column heads, not on a cut one
+        const headBottom = box.querySelector("th")?.getBoundingClientRect().bottom ?? box.getBoundingClientRect().top;
+        const first = [...box.querySelectorAll("tbody tr")].find((tr) => tr.getBoundingClientRect().bottom > headBottom + 1);
+        if (first) sc.scrollTop = Math.max(0, sc.scrollTop + (first.getBoundingClientRect().top - headBottom) / zoomNow());
+      }
+      scroller = sc; given = sc.scrollTop;
+    };
+    place();
+    // The rows change height when the web font lands, which moves everything below the many rows above the next
+    // event: place the list again, unless the reader has scrolled it since.
+    const table = box.querySelector("table");
+    const ro = table && typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => { if (!scroller || Math.abs(scroller.scrollTop - given) < 2) place(); }) : null;
+    if (ro && table) ro.observe(table);
+    return () => ro?.disconnect();
   }, [events.length, imp, scope, nextIdx, calMode]);
   return (
     <>
