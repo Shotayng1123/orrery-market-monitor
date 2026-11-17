@@ -33,17 +33,20 @@ export function autoZoom(term: boolean): number {
 }
 
 /** Applies the prefs to <body>: zoom via the CSS `zoom` property plus --z, and the density classes.
- *  Returns whether the one-screen layout is on, so the caller can re-render when it changes. */
-export function applyPrefs(p: Prefs, full: boolean): boolean {
-  const term = p.compact && termFits();
+ *  Returns whether the one-screen layout is on, so the caller can re-render when it changes.
+ *  `phoneApp` is the phone preview (lib/phone.ts): the page is drawn at its true size, since that layout is made
+ *  for a phone and has nothing to shrink, and <body> carries the class `pv2`. */
+export function applyPrefs(p: Prefs, full: boolean, phoneApp = false): boolean {
+  const term = !phoneApp && p.compact && termFits();
   const fixed = SIZES.find((s) => s.k === p.size)?.z ?? 0;
-  const z = Math.round((fixed || autoZoom(term)) * 1000) / 1000;
+  const z = phoneApp ? 1 : Math.round((fixed || autoZoom(term)) * 1000) / 1000;
   const b = document.body;
   b.style.setProperty("--z", String(z));
   (b.style as CSSStyleDeclaration & { zoom?: string }).zoom = String(z);
   b.classList.toggle("cmp", p.compact);
   b.classList.toggle("term", term);
   b.classList.toggle("full", full && term);
+  b.classList.toggle("pv2", phoneApp);
   return term;
 }
 

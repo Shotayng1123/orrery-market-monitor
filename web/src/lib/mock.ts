@@ -76,7 +76,12 @@ export function mockTable(): { rows: TableRow[]; asOf: string } {
     const a = { d1: at(1), w1: at(5), m1: at(21), m3: at(63), m12: at(252), m36: at(756) };
     const closes: TableRow["closes"] = {}, closeDates: TableRow["closeDates"] = {}, pct: TableRow["pct"] = {};
     for (const [k, p] of Object.entries(a) as Array<[keyof typeof a, { t: number; v: number }]>) { closes[k] = p.v; closeDates[k] = new Date(p.t * 1000).toISOString().slice(0, 10); pct[k] = (last / p.v - 1) * 100; }
-    return { ...m, proxyFor: m.proxyFor, last, lastAt: new Date().toISOString(), live: m.market === "FX" || m.market === "CME", closes, closeDates, pct };
+    // σ 1M, 52-week position and distance to the 200-day average from the same synthetic closes, so those columns are not blank in the preview
+    const tail = (n: number) => s.slice(-n).map((p) => p.v), mean = (xs: number[]) => xs.reduce((x, y) => x + y, 0) / xs.length;
+    const m21 = tail(21), mu = mean(m21), sd = Math.sqrt(mean(m21.map((v) => (v - mu) ** 2))), y = tail(252), lo = Math.min(...y, last), hi = Math.max(...y, last), m200 = mean(tail(200));
+    const rate = m.group === "rates" && !m.symbol.endsWith("=F");
+    return { ...m, proxyFor: m.proxyFor, last, lastAt: new Date().toISOString(), live: m.market === "FX" || m.market === "CME", closes, closeDates, pct,
+      z1m: sd > 0 ? (last - mu) / sd : null, pos52: hi > lo ? ((last - lo) / (hi - lo)) * 100 : null, vs200: rate ? last - m200 : (last / m200 - 1) * 100 };
   });
   return { rows, asOf: new Date().toISOString() };
 }

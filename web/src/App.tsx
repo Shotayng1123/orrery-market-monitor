@@ -9,6 +9,9 @@ import { anyOpen, setHolidays } from "./lib/sessions";
 import { applyPrefs, loadPrefs, savePrefs, type Prefs } from "./lib/prefs";
 import type { Health } from "./lib/types";
 import { MarketView } from "./views/Market";
+import { MarketPhone } from "./views/MarketPhone";
+import { PhoneNav } from "./components/PhoneNav";
+import { usePhone, usePhoneV2 } from "./lib/phone";
 import { NewsView } from "./views/News";
 import { ResearchView } from "./views/Research";
 import { EquitiesView } from "./views/Equities";
@@ -61,12 +64,13 @@ export default function App() {
   useEffect(() => { const f = () => setRoute(parseHash()); window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
   useEffect(() => { const f = () => setTok(null); window.addEventListener("om:unauth", f); return () => window.removeEventListener("om:unauth", f); }, []);
   // The scale and the one-screen layout follow the window: re-applied on every resize (and on monitor changes).
+  const phone = usePhone(), pv2 = usePhoneV2();   // pv2: the phone preview is on (lib/phone.ts)
   useEffect(() => {
-    const apply = () => setTerm(applyPrefs(prefs, full));
+    const apply = () => setTerm(applyPrefs(prefs, full, pv2));
     apply();
     window.addEventListener("resize", apply);
     return () => window.removeEventListener("resize", apply);
-  }, [prefs, full]);
+  }, [prefs, full, pv2]);
   // FULL is a real full screen (Shota, 15 Nov): the browser's own full-screen mode, so no tab strip or address
   // bar, plus the header hidden. The browser leaves it on Esc by itself; the state follows `fullscreenchange`.
   const goFull = (f: boolean) => {
@@ -137,11 +141,11 @@ export default function App() {
       {DEV_MOCK && <div id="mockbar">MOCK PREVIEW — synthetic data for layout checks only. Nothing here is real. The live Monitor is at https://shotayng1123.github.io/orrery-market-monitor/</div>}
       <CardLayer />
       {acct && me && <AccountModal me={me} onClose={() => setAcct(false)} onSignOut={signOut} onChanged={() => setTok(getToken())} />}
-      <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={me?.email ?? userId} onSignOut={() => (me ? setAcct(true) : signOut())} updatedAt={updatedAt} nextIn={nextIn} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} />
+      <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={me?.email ?? userId} onSignOut={() => (me ? setAcct(true) : signOut())} updatedAt={updatedAt} nextIn={nextIn} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} pv2={pv2} canPreview={phone && (me?.role === "manager" || DEV_BYPASS)} />
       <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–6 TABS · ESC</span><span>&#9974;</span></div>
       <div id="wrap">
         <div id="grid" data-view={view}>
-          {view === "market" && <MarketView tick={tick} />}
+          {view === "market" && (pv2 ? <MarketPhone tick={tick} /> : <MarketView tick={tick} />)}
           {view === "news" && <NewsView tick={tick} />}
           {view === "research" && <ResearchView tick={tick} sub={sub} onSub={(s) => setHash("research", s)} />}
           {view === "watch" && <WatchlistView tick={tick} />}
@@ -151,6 +155,7 @@ export default function App() {
         </div>
         <footer>Orrery Monitor shows market data from third-party feeds (Yahoo Finance; US Treasury; Japan MOF; exchange and central-bank publications) that may be delayed or incomplete; every panel states its source and as-of time. Information only; nothing here is investment advice. Default time zone: Singapore.</footer>
       </div>
+      {pv2 && <PhoneNav view={view} onNav={(v) => setHash(v)} />}
     </>
   );
 }

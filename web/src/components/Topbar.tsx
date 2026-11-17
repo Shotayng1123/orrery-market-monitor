@@ -4,6 +4,7 @@ import { Alerts } from "./Alerts";
 import { Help } from "./Help";
 import { Search } from "./Search";
 import { Pick } from "./Pick";
+import { setPhoneV2 } from "../lib/phone";
 import { allStatuses, haveHolidays, type MarketId } from "../lib/sessions";
 import { fmtClock, fmtStamp, SGT, TZ_ABBR } from "../lib/time";
 import { SIZES, type Prefs, type SizeKey } from "../lib/prefs";
@@ -29,6 +30,8 @@ export interface TopbarProps {
   prefs: Prefs;
   onPrefs: (p: Prefs) => void;
   onFull: (f: boolean) => void;
+  pv2?: boolean;                  // the phone preview is on: slim header, the rest opens as a menu, tabs move to the bottom bar
+  canPreview?: boolean;           // show the switch into the phone preview (a manager on a phone)
 }
 
 export function Topbar(p: TopbarProps) {
@@ -36,9 +39,19 @@ export function Topbar(p: TopbarProps) {
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
   const statuses = allStatuses(now).filter((s) => CHIP_MARKETS.includes(s.market.id));
   const hol = haveHolidays() ? "" : " (holiday calendar not loaded yet)";
+  // phone preview: search, clocks, data status and the account sit in a menu under the header
+  const [menu, setMenu] = useState(false);
+  useEffect(() => { setMenu(false); }, [p.view, p.pv2]);
+  const ico = (d: string) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>;
   return (
-    <div id="topbar">
+    <div id="topbar" className={p.pv2 && menu ? "open" : undefined}>
       <span className="brand"><Logo />Orrery Monitor</span>
+      {p.pv2 && (
+        <span id="pv2-btns">
+          <button type="button" aria-label="Search stocks, bonds, currencies" onClick={() => { setMenu(true); setTimeout(() => document.querySelector<HTMLInputElement>("#search input")?.focus(), 30); }}>{ico("M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13ZM20 20l-4.6-4.6")}</button>
+          <button type="button" aria-label={menu ? "Close the menu" : "Menu: search, clocks, data status, account"} aria-expanded={menu} onClick={() => setMenu((m) => !m)}>{ico(menu ? "M6 6l12 12M18 6L6 18" : "M4 7h16M4 12h16M4 17h16")}</button>
+        </span>
+      )}
       <nav id="nav">
         {VIEWS.map((v) => <a key={v.id} href={`#${v.id}`} className={v.id === p.view ? "on" : ""} onClick={(e) => { e.preventDefault(); p.onNav(v.id); }}>{v.label}</a>)}
       </nav>
@@ -59,6 +72,8 @@ export function Topbar(p: TopbarProps) {
         </span>
         <span id="hlth" className={`chip-sm hl hl-${p.health}`} title={p.healthTitle}>DATA {p.health === "ok" ? "OK" : p.health === "warn" ? "!" : p.health === "bad" ? "✕" : "?"}</span>
         <Help />
+        {p.canPreview && !p.pv2 && <span id="pv2-on" className="chip-sm" title="Preview of a layout made for phones. Only this browser changes; switch back from its menu" onClick={() => setPhoneV2(true)}>NEW LAYOUT</span>}
+        {p.pv2 && <span id="pv2-off" className="chip-sm" title="Back to the layout used before the phone preview" onClick={() => setPhoneV2(false)}>CLASSIC LAYOUT</span>}
         <Pick<SizeKey> id="sz-ctl" label="Text size" value={p.prefs.size} options={SIZES.map((s) => s.k)} onChange={(k) => p.onPrefs({ ...p.prefs, size: k })} title="Text size. AUTO scales the text and layout to this window; S, M, L and XL fix the size" />
         <span id="cmp-ctl" className={`chip-sm${p.prefs.compact ? " on" : ""}`} title="Terminal layout: one screen per tab, sized to the window" onClick={() => p.onPrefs({ ...p.prefs, compact: !p.prefs.compact })}>COMPACT</span>
         <span id="fs-ctl" className="chip-sm" title="Full screen: no browser tabs or address bar, header hidden (Esc or the corner strip to leave; keys 1 to 6 switch tabs)" onClick={() => p.onFull(true)}>&#9974; FULL</span>
