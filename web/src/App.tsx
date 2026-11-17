@@ -12,6 +12,7 @@ import { MarketView } from "./views/Market";
 import { MarketPhone } from "./views/MarketPhone";
 import { NewsPhone } from "./views/NewsPhone";
 import { ResearchPhone } from "./views/ResearchPhone";
+import { EquitiesPhone } from "./views/EquitiesPhone";
 import { PhoneNav } from "./components/PhoneNav";
 import { usePhone, usePhoneV2 } from "./lib/phone";
 import { NewsView } from "./views/News";
@@ -151,7 +152,7 @@ export default function App() {
           {view === "news" && (pv2 ? <NewsPhone tick={tick} /> : <NewsView tick={tick} />)}
           {view === "research" && (pv2 ? <ResearchPhone tick={tick} sub={sub} onSub={(s) => setHash("research", s)} /> : <ResearchView tick={tick} sub={sub} onSub={(s) => setHash("research", s)} />)}
           {view === "watch" && <WatchlistView tick={tick} />}
-          {view === "equities" && <EquitiesView sub={sub} onSub={(s) => setHash("equities", s)} tick={tick} />}
+          {view === "equities" && (pv2 ? <EquitiesPhone sub={sub} onSub={(s) => setHash("equities", s)} tick={tick} /> : <EquitiesView sub={sub} onSub={(s) => setHash("equities", s)} tick={tick} />)}
           {view === "rates" && <RatesFxView sub={sub} onSub={(s) => setHash("rates", s)} tick={tick} />}
           {view === "asset" && <AssetView symbol={sub} tick={tick} />}
         </div>
