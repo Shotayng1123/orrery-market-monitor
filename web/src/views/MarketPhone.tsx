@@ -4,6 +4,7 @@ import { ChartPanel, CHART_PERIODS, type ChartPeriod } from "../components/Chart
 import { Pick } from "../components/Pick";
 import { Flash } from "../components/Flash";
 import { openAsset } from "../components/CompanyCard";
+import { Screen } from "../components/PhoneKit";
 import { useApi, DEV_MOCK } from "../lib/useApi";
 import { fmtNum, fmtPct, fmtChg, fmtStampSafe, isYield, signCls } from "./shared";
 import { PERIODS, type PeriodKey, type TableRow } from "../lib/types";
@@ -64,14 +65,9 @@ export function MarketPhone({ tick }: { tick: number }) {
   for (const r of rows) groups.set(r.cls, [...(groups.get(r.cls) ?? []), r]);
   const k = KEY[period];
   return (
-    <div className="mp">
-      <header className="mp-head">
-        <div>
-          <h1>Markets</h1>
-          <div className="mp-asof">{table.data ? <>as of {fmtStampSafe(table.data.asOf)}</> : table.error ? <span className="warn">{table.error}</span> : "loading…"}{DEV_MOCK && <span className="badge est">MOCK</span>}</div>
-        </div>
-        <Pick label="Change" value={period} options={CHART_PERIODS} onChange={setPeriod} title="The change shown on every line: from the close at the start of this period to the last print (bp for yields)" />
-      </header>
+    <Screen title="Markets"
+      sub={<>{table.data ? <>as of {fmtStampSafe(table.data.asOf)}</> : table.error ? <span className="warn">{table.error}</span> : "loading…"}{DEV_MOCK && <span className="badge est">MOCK</span>}</>}
+      right={<Pick label="Change" value={period} options={CHART_PERIODS} onChange={setPeriod} title="The change shown on every line: from the close at the start of this period to the last print (bp for yields)" />}>
       {rows.length ? [...groups.entries()].map(([cls, rs]) => (
         <section key={cls} className="mp-sec">
           <h2>{cls}</h2>
@@ -99,6 +95,6 @@ export function MarketPhone({ tick }: { tick: number }) {
         </section>
       )}
       <p className="mp-src">Yahoo Finance, US Treasury, Japan MOF. Delayed and stand-in feeds are marked on their line.</p>
-    </div>
+    </Screen>
   );
 }

@@ -10,6 +10,8 @@ import { applyPrefs, loadPrefs, savePrefs, type Prefs } from "./lib/prefs";
 import type { Health } from "./lib/types";
 import { MarketView } from "./views/Market";
 import { MarketPhone } from "./views/MarketPhone";
+import { NewsPhone } from "./views/NewsPhone";
+import { ResearchPhone } from "./views/ResearchPhone";
 import { PhoneNav } from "./components/PhoneNav";
 import { usePhone, usePhoneV2 } from "./lib/phone";
 import { NewsView } from "./views/News";
@@ -146,8 +148,8 @@ export default function App() {
       <div id="wrap">
         <div id="grid" data-view={view}>
           {view === "market" && (pv2 ? <MarketPhone tick={tick} /> : <MarketView tick={tick} />)}
-          {view === "news" && <NewsView tick={tick} />}
-          {view === "research" && <ResearchView tick={tick} sub={sub} onSub={(s) => setHash("research", s)} />}
+          {view === "news" && (pv2 ? <NewsPhone tick={tick} /> : <NewsView tick={tick} />)}
+          {view === "research" && (pv2 ? <ResearchPhone tick={tick} sub={sub} onSub={(s) => setHash("research", s)} /> : <ResearchView tick={tick} sub={sub} onSub={(s) => setHash("research", s)} />)}
           {view === "watch" && <WatchlistView tick={tick} />}
           {view === "equities" && <EquitiesView sub={sub} onSub={(s) => setHash("equities", s)} tick={tick} />}
           {view === "rates" && <RatesFxView sub={sub} onSub={(s) => setHash("rates", s)} tick={tick} />}

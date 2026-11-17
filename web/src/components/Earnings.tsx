@@ -8,9 +8,9 @@ import { fmtClock, SGT } from "../lib/time";
 import { useRowCap } from "../lib/useRowCap";
 
 export interface EarningsRow { symbol: string; name: string; sector: string | null; indices: string[]; mcapUsd: number | null; at: string; estimate: boolean }
-const REGION = (r: EarningsRow): "US" | "Japan" | "Asia" => (r.indices.some((i) => i === "SP500" || i === "NDX") ? "US" : r.indices.some((i) => i === "NK225" || i === "TOPIX") ? "Japan" : "Asia");
-const REGIONS = ["All", "US", "Japan", "Asia"] as const;
-const SIZES: PickOption<"big" | "all">[] = [{ value: "big", label: "USD 10bn+" }, { value: "all", label: "All" }];
+export const REGION = (r: EarningsRow): "US" | "Japan" | "Asia" => (r.indices.some((i) => i === "SP500" || i === "NDX") ? "US" : r.indices.some((i) => i === "NK225" || i === "TOPIX") ? "Japan" : "Asia");
+export const REGIONS = ["All", "US", "Japan", "Asia"] as const;
+export const SIZES: PickOption<"big" | "all">[] = [{ value: "big", label: "USD 10bn+" }, { value: "all", label: "All" }];
 const dayOf = (t: string) => new Date(t).toLocaleDateString("en-CA", { timeZone: SGT });
 const dayLabel = (t: string) => new Date(t).toLocaleDateString("en-GB", { timeZone: SGT, weekday: "long", day: "numeric", month: "short" });
 

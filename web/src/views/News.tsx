@@ -11,16 +11,16 @@ import { Pick, type PickOption } from "../components/Pick";
 import { useRowCap } from "../lib/useRowCap";
 
 export const NEWS_CATEGORIES = ["All", "US Equities", "JP Equities", "Asia Equities", "DM Rates", "EM Rates", "Currency", "Macro", "Commodities"] as const;
-const CAL_MODES: PickOption<"macro" | "earnings">[] = [{ value: "macro", label: "Macro" }, { value: "earnings", label: "Earnings" }];
-const IMPACTS: PickOption<"high" | "hm" | "all">[] = [{ value: "high", label: "High" }, { value: "hm", label: "High + Medium" }, { value: "all", label: "All" }];
-const SCOPES: PickOption<"major" | "all">[] = [{ value: "major", label: "Major" }, { value: "all", label: "All" }];
-const dayOf = (t: string) => new Date(t).toLocaleDateString("en-CA", { timeZone: SGT });
-const dayLabel = (t: string) => new Date(t).toLocaleDateString("en-GB", { timeZone: SGT, weekday: "long", day: "numeric", month: "short" });
-const MAJOR = new Set(["US", "JP", "EUR", "DE", "FR", "UK", "CN", "HK", "KR", "TW", "AU", "CA", "CH", "IN", "SG"]);   // major markets only (Shota); everything else behind the All chip
+export const CAL_MODES: PickOption<"macro" | "earnings">[] = [{ value: "macro", label: "Macro" }, { value: "earnings", label: "Earnings" }];
+export const IMPACTS: PickOption<"high" | "hm" | "all">[] = [{ value: "high", label: "High" }, { value: "hm", label: "High + Medium" }, { value: "all", label: "All" }];
+export const SCOPES: PickOption<"major" | "all">[] = [{ value: "major", label: "Major" }, { value: "all", label: "All" }];
+export const dayOf = (t: string) => new Date(t).toLocaleDateString("en-CA", { timeZone: SGT });
+export const dayLabel = (t: string) => new Date(t).toLocaleDateString("en-GB", { timeZone: SGT, weekday: "long", day: "numeric", month: "short" });
+export const MAJOR = new Set(["US", "JP", "EUR", "DE", "FR", "UK", "CN", "HK", "KR", "TW", "AU", "CA", "CH", "IN", "SG"]);   // major markets only (Shota); everything else behind the All chip
 
 /** Some feeds send headlines with HTML entities left in ("Anthropic&#x2019;s"); shown as the characters they stand for. */
 const NAMED: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
-const decodeEntities = (t: string): string => t.replace(/&amp;/g, "&").replace(/&#x([0-9a-f]+);/gi, (_m, h: string) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_m, d: string) => String.fromCodePoint(Number(d))).replace(/&(lt|gt|quot|apos|nbsp);/g, (_m, n: string) => NAMED[n]);
+export const decodeEntities = (t: string): string => t.replace(/&amp;/g, "&").replace(/&#x([0-9a-f]+);/gi, (_m, h: string) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_m, d: string) => String.fromCodePoint(Number(d))).replace(/&(lt|gt|quot|apos|nbsp);/g, (_m, n: string) => NAMED[n]);
 
 export function NewsView({ tick }: { tick: number }) {
   const cal = useApi<{ rows: EconEvent[] }>("calendar", undefined, Math.floor(tick / 5));   // the calendar syncs hourly, the headlines every ten minutes
