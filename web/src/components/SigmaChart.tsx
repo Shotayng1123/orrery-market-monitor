@@ -90,6 +90,10 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
     const nAll = xsAll.length, lastT = ts[nAll - 1];
     let i1 = nAll - 1, i0 = 0;
     if (windowSec) { i0 = i1; while (i0 > 0 && lastT - ts[i0 - 1] <= windowSec) i0--; }
+    // never a window of one bar: uPlot cannot divide an axis of zero width into ticks ("Invalid array length").
+    // It happens for the first bar of a session on 1D, and for the moment a daily history is still held after
+    // the period is switched to 1D (found 17 Nov 2026 on the charts that show axes).
+    if (i0 >= i1) i0 = i1 - 1;
     const winN = Math.max(1, i1 - i0);
     const hourly = intraday && (ts[nAll - 1] - ts[Math.max(0, nAll - 2)]) >= 1800;
     const xLabel = (x: number) => { const t = intraday ? ts[Math.min(nAll - 1, Math.max(0, Math.round(x)))] : x; if (t == null) return ""; return intraday ? fmtStamp(t * 1000, SGT).replace(" SGT", "").slice(hourly ? 0 : 6) : new Date(t * 1000).toISOString().slice(0, 7); };
@@ -98,7 +102,7 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
       ...size(),
       padding: axes ? [6, 8, 0, 0] : [4, 2, 4, 2],
       tzDate: (t) => uPlot.tzDate(new Date(t * 1e3), "UTC"),
-      scales: { x: { time: !intraday, range: () => [xsAll[i0], xsAll[i1]] }, y: { range: (_u, min, max) => [min - (max - min) * 0.03, max + (max - min) * 0.03] } },
+      scales: { x: { time: !intraday, range: () => [xsAll[i0], xsAll[i1]] }, y: { range: (_u, min, max) => { const pad = (max - min) * 0.03 || Math.abs(max) * 0.002 || 1; return [min - pad, max + pad]; } } },   // a flat window still gets a height
       axes: axes
         ? [{ ...AXIS, space: 80, ...(intraday ? { values: (_u, vals) => vals.map(xLabel) } : {}) }, { ...AXIS, size: axisSize, values: (_u, vals) => vals.map(axisFmt) }]
         : [{ show: false }, { show: false }],

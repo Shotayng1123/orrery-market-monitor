@@ -11,11 +11,11 @@ import type { MarketId } from "../lib/sessions";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtStamp } from "../lib/time";
 
-interface AssetFull extends AssetLite { adv10d: number | null; series: unknown }
+export interface AssetFull extends AssetLite { adv10d: number | null; series: unknown }
 
-const marketOf = (symbol: string): MarketId => (/\.T$/.test(symbol) ? "TSE" : /\.KS$/.test(symbol) ? "KRX" : /\.HK$/.test(symbol) ? "HKEX" : /\.SS$|\.SZ$/.test(symbol) ? "SSE" : /\.L$/.test(symbol) ? "LSE" : /\.SI$/.test(symbol) ? "SGX" : "NYSE");
+export const marketOf = (symbol: string): MarketId => (/\.T$/.test(symbol) ? "TSE" : /\.KS$/.test(symbol) ? "KRX" : /\.HK$/.test(symbol) ? "HKEX" : /\.SS$|\.SZ$/.test(symbol) ? "SSE" : /\.L$/.test(symbol) ? "LSE" : /\.SI$/.test(symbol) ? "SGX" : "NYSE");
 
-function StatementTable({ rows, title, ccy }: { rows: StatementRow[]; title: string; ccy: string | null }) {
+export function StatementTable({ rows, title, ccy }: { rows: StatementRow[]; title: string; ccy: string | null }) {
   if (!rows.length) return null;
   const has = (k: keyof StatementRow) => rows.some((r) => r[k] != null);
   return (
