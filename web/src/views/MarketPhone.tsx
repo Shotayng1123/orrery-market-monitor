@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Empty } from "../components/Panel";
 import { ChartPanel, CHART_PERIODS, type ChartPeriod } from "../components/ChartPanel";
+import type { SigmaWindow } from "../components/SigmaChart";
 import { Pick } from "../components/Pick";
 import { Flash } from "../components/Flash";
 import { openAsset } from "../components/CompanyCard";
@@ -37,12 +38,12 @@ function Status({ r }: { r: TableRow }) {
   );
 }
 
-function Detail({ r, period, tick }: { r: TableRow; period: ChartPeriod; tick: number }) {
+function Detail({ r, period, tick, sigmaWindow }: { r: TableRow; period: ChartPeriod; tick: number; sigmaWindow?: SigmaWindow }) {
   const rate = isYield(r);
   return (
     <div className="mp-det">
       <div className="mp-full">{r.name} · {r.symbol} · last print {fmtStampSafe(r.lastAt)}</div>
-      <ChartPanel row={r} period={period} tick={tick} axes />
+      <ChartPanel row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} axes />
       <div className="mp-grid">
         {PERIODS.map((p) => { const v = move(r, p.key); return <div key={p.key} className={p.label === period ? "cur" : undefined}><span className="k">{p.label}</span><span className={`v ${signCls(v)}`}>{fmtMove(r, v)}</span></div>; })}
       </div>
@@ -56,6 +57,20 @@ function Detail({ r, period, tick }: { r: TableRow; period: ChartPeriod; tick: n
   );
 }
 
+/** One instrument as a line: name and status, the last level, the change over `period`. Opened, it shows the chart,
+ *  every period and the statistics under the line. `fixed` keeps it open and makes the line a plain heading (the
+ *  index at the top of EQUITIES). Shared by every phone tab that lists instruments from the market table. */
+export function InstrumentRow({ r, period, tick, open, onToggle, fixed = false, sigmaWindow }: { r: TableRow; period: ChartPeriod; tick: number; open: boolean; onToggle?: () => void; fixed?: boolean; sigmaWindow?: SigmaWindow }) {
+  const v = move(r, KEY[period]);
+  const line = <><span className="mp-nm"><span className="n">{shortName(r.symbol, r.name)}</span><Status r={r} /></span><span className="mp-px"><Flash value={r.last}>{level(r)}</Flash></span><span className={`mp-chg ${signCls(v)}`}>{fmtMove(r, v)}</span></>;
+  return (
+    <div className={`mp-item${open || fixed ? " open" : ""}`}>
+      {fixed ? <div className="mp-row fixed">{line}</div> : <button type="button" className="mp-row" aria-expanded={open} onClick={onToggle}>{line}</button>}
+      {(open || fixed) && <Detail r={r} period={period} tick={tick} sigmaWindow={sigmaWindow} />}
+    </div>
+  );
+}
+
 export function MarketPhone({ tick }: { tick: number }) {
   const table = useApi<{ rows: TableRow[]; asOf: string }>("table", undefined, tick);
   const [period, setPeriod] = useState<ChartPeriod>("1D");
@@ -63,7 +78,6 @@ export function MarketPhone({ tick }: { tick: number }) {
   const rows = (table.data?.rows ?? []).filter((r) => r.marketTab !== false).sort((a, b) => a.order - b.order);   // the curated table set
   const groups = new Map<string, TableRow[]>();
   for (const r of rows) groups.set(r.cls, [...(groups.get(r.cls) ?? []), r]);
-  const k = KEY[period];
   return (
     <Screen title="Markets"
       sub={<>{table.data ? <>as of {fmtStampSafe(table.data.asOf)}</> : table.error ? <span className="warn">{table.error}</span> : "loading…"}{DEV_MOCK && <span className="badge est">MOCK</span>}</>}
@@ -73,17 +87,8 @@ export function MarketPhone({ tick }: { tick: number }) {
           <h2>{cls}</h2>
           <div className="mp-card">
             {rs.map((r) => {
-              const v = move(r, k), isOpen = open === r.symbol;
-              return (
-                <div key={r.symbol} className={`mp-item${isOpen ? " open" : ""}`}>
-                  <button type="button" className="mp-row" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : r.symbol)}>
-                    <span className="mp-nm"><span className="n">{shortName(r.symbol, r.name)}</span><Status r={r} /></span>
-                    <span className="mp-px"><Flash value={r.last}>{level(r)}</Flash></span>
-                    <span className={`mp-chg ${signCls(v)}`}>{fmtMove(r, v)}</span>
-                  </button>
-                  {isOpen && <Detail r={r} period={period} tick={tick} />}
-                </div>
-              );
+              const isOpen = open === r.symbol;
+              return <InstrumentRow key={r.symbol} r={r} period={period} tick={tick} open={isOpen} onToggle={() => setOpen(isOpen ? null : r.symbol)} />;
             })}
           </div>
         </section>

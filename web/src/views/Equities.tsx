@@ -27,40 +27,40 @@ export const INDICES = [
 ] as const;
 export type IndexId = (typeof INDICES)[number]["id"];
 
-interface StatRow {
+export interface StatRow {
   symbol: string; name: string; sector: string | null; weight: number | null; d: string; close: number; prev: number | null;
   pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct6m?: number | null; pct12m: number | null; pct36m?: number | null;
   industry?: string | null; dma50: number | null; dma200: number | null; hi52: number | null; lo52: number | null; shortRatio?: number | null; shortHolders?: number | null;
   mcap?: number | null; volume?: number | null; adv3m?: number | null; turnover?: number | null; adv_turnover?: number | null; mf_up?: number | null; mf_down?: number | null; mf_net?: number | null; mf_d?: string | null;
 }
-interface SectorRow { sector: string; n: number; weight: number | null; mcapShare?: number | null; pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct12m: number | null; above200: number; turnover?: number | null; turnoverShare?: number | null; flow?: number | null; mfUp?: number | null; mfDown?: number | null; mfNet?: number | null }
-interface IndexStats {
+export interface SectorRow { sector: string; n: number; weight: number | null; mcapShare?: number | null; pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct12m: number | null; above200: number; turnover?: number | null; turnoverShare?: number | null; flow?: number | null; mfUp?: number | null; mfDown?: number | null; mfNet?: number | null }
+export interface IndexStats {
   idx: string; asOf: string | null; quoteAt?: string | null; mfAt?: string | null; mfD?: string | null; rows: StatRow[];
   breadth: { n: number; adv: number; dec: number; above50: number; above200: number; newHi: number; newLo: number; over2: number; under2: number } | null;
   sectors: SectorRow[]; movers: { top: StatRow[]; bottom: StatRow[] };
   shorts: { d: string; avgRatio: number; top: Array<{ symbol: string; name: string; ratio: number }>; history?: Array<{ d: string; v: number | null }> } | null;
 }
-interface BreadthRow { d: string; n: number; adv: number; dec: number; above50: number; above200: number; new_hi: number; new_lo: number }
-interface JpShorts {
+export interface BreadthRow { d: string; n: number; adv: number; dec: number; above50: number; above200: number; new_hi: number; new_lo: number }
+export interface JpShorts {
   idx: string; market: Array<{ d: string; ratio: number | null; restricted: number | null; total: number | null }>; sectorsAsOf: string | null; sectors: Array<{ sector: string; ratio: number | null; total: number | null }>;
   positions: { asOf: string | null; names: number; covered: number; avgRatio: number | null; top: Array<{ symbol: string; name: string; sector: string | null; holders: number; ratio: number; d: string }>; history?: Array<{ d: string; v: number | null }>; namesHistory?: Array<{ d: string; v: number | null }> };
   margin: Array<{ d: string; sellShares: number | null; sellValue: number | null; buyShares: number | null; buyValue: number | null }>;
 }
 
-const CCY: Record<string, string> = { SP500: "USD", NDX: "USD", NK225: "JPY", TOPIX: "JPY", KOSPI200: "KRW", HSI: "HKD", SSE180: "CNY" };
+export const CCY: Record<string, string> = { SP500: "USD", NDX: "USD", NK225: "JPY", TOPIX: "JPY", KOSPI200: "KRW", HSI: "HKD", SSE180: "CNY" };
 const UP_RGB = "63,208,126", DN_RGB = "255,77,66";
 const shade = (v: number | null | undefined, full = 6) => (v == null || v === 0 ? undefined : `rgba(${v > 0 ? UP_RGB : DN_RGB},${(Math.min(1, Math.abs(v) / full) * 0.55).toFixed(3)})`);
 const flowShade = (v: number | null | undefined, full = 3) => (v == null || v === 0 ? undefined : v > 0 ? `rgba(31,209,193,${(Math.min(1, v / full) * 0.5).toFixed(3)})` : `rgba(138,135,126,${(Math.min(1, -v / full) * 0.4).toFixed(3)})`);
-const pos52 = (r: StatRow) => (r.hi52 != null && r.lo52 != null && r.hi52 > r.lo52 ? ((r.close - r.lo52) / (r.hi52 - r.lo52)) * 100 : null);
-const vs = (close: number, dma: number | null) => (dma == null || dma === 0 ? null : (close / dma - 1) * 100);
+export const pos52 = (r: StatRow) => (r.hi52 != null && r.lo52 != null && r.hi52 > r.lo52 ? ((r.close - r.lo52) / (r.hi52 - r.lo52)) * 100 : null);
+export const vs = (close: number, dma: number | null) => (dma == null || dma === 0 ? null : (close / dma - 1) * 100);
 /** A tile-sized company name: drops legal suffixes and keeps the first words. */
-const shortName = (n: string) => n.replace(/[,.]?\s*(Corporation|Corp\.?|Co\.,? Ltd\.?|Co\.?|Company|Holdings?|Hldgs\.?|Group|Inc\.?|Incorporated|Ltd\.?|Limited|plc|PLC|AG|SE|NV|N\.V\.|S\.A\.|SA|KK|K\.K\.|株式会社|ホールディングス)\s*$/i, "").replace(/[,.]?\s*(Corporation|Corp\.?|Co\.,? Ltd\.?|Holdings?|Inc\.?|Ltd\.?|Limited)\s*$/i, "").trim().slice(0, 18);
-const signed = (v: number | null | undefined) => (v == null ? "–" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${money(Math.abs(v))}`);
+export const shortName = (n: string) => n.replace(/[,.]?\s*(Corporation|Corp\.?|Co\.,? Ltd\.?|Co\.?|Company|Holdings?|Hldgs\.?|Group|Inc\.?|Incorporated|Ltd\.?|Limited|plc|PLC|AG|SE|NV|N\.V\.|S\.A\.|SA|KK|K\.K\.|株式会社|ホールディングス)\s*$/i, "").replace(/[,.]?\s*(Corporation|Corp\.?|Co\.,? Ltd\.?|Holdings?|Inc\.?|Ltd\.?|Limited)\s*$/i, "").trim().slice(0, 18);
+export const signed = (v: number | null | undefined) => (v == null ? "–" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${money(Math.abs(v))}`);
 
 const Name = ({ r }: { r: { symbol: string; name: string }; sub?: boolean }) => <span className="lnk" title={r.symbol} onMouseEnter={(e) => showCard(r.symbol, e)} onMouseLeave={hideCard} onClick={() => openAsset(r.symbol)}>{r.name}</span>;
 
 // ---- market breadth as a table by period ----
-const PERIODS = [["1D", "pct1d", 1], ["1W", "pct1w", 7], ["1M", "pct1m", 31], ["3M", "pct3m", 92], ["6M", "pct6m", 183], ["12M", "pct12m", 366], ["36M", "pct36m", 1096]] as const;
+export const PERIODS = [["1D", "pct1d", 1], ["1W", "pct1w", 7], ["1M", "pct1m", 31], ["3M", "pct3m", 92], ["6M", "pct6m", 183], ["12M", "pct12m", 366], ["36M", "pct36m", 1096]] as const;
 function BreadthTable({ s, hist }: { s: IndexStats; hist: BreadthRow[] }) {
   const b = s.breadth!;
   const cols = PERIODS.map(([label, key, days]) => {
@@ -157,7 +157,7 @@ function Movers({ rows, title }: { rows: StatRow[]; title: string }) {
 }
 
 /** Market-cap-weighted treemap: names grouped by sector, no gaps, solid white text. Hover = company card, click = asset page. */
-function HeatMap({ s, rows }: { s: IndexStats; rows: StatRow[] }) {
+export function HeatMap({ s, rows, height }: { s: IndexStats; rows: StatRow[]; height?: number }) {
   const groups = useMemo<TreeGroup[]>(() => {
     const hasM = rows.some((r) => r.mcap != null && r.mcap > 0), hasW = rows.some((r) => r.weight != null && r.weight > 0);
     const minM = hasM ? Math.min(...rows.filter((r) => r.mcap != null && r.mcap > 0).map((r) => r.mcap!)) : 1;
@@ -166,7 +166,7 @@ function HeatMap({ s, rows }: { s: IndexStats; rows: StatRow[] }) {
     for (const r of rows) { const k = r.sector ?? "Other"; by.set(k, [...(by.get(k) ?? []), r]); }
     return [...by.entries()].map(([sector, rs]) => ({ id: sector, label: sector, leaves: rs.map((r) => ({ id: r.symbol, label: shortName(r.name), name: shortName(r.name), value: size(r), pct: r.pct1d, title: r.name })) }));
   }, [rows, s.idx]);
-  return <Treemap groups={groups} height={document.body.classList.contains("term") ? "fill" : Math.max(640, Math.min(900, Math.round((window.innerWidth / zoomNow()) * 0.42)))} onEnter={(id, e) => showCard(id, e)} onLeave={hideCard} onClick={openAsset} />;
+  return <Treemap groups={groups} height={height ?? (document.body.classList.contains("term") ? "fill" : Math.max(640, Math.min(900, Math.round((window.innerWidth / zoomNow()) * 0.42))))} onEnter={(id, e) => showCard(id, e)} onLeave={hideCard} onClick={openAsset} />;
 }
 
 // ---- Japan short selling (JPX) ----
@@ -180,7 +180,7 @@ const TSE33: Record<string, string> = {
   "倉庫・運輸関連業": "Warehousing & Harbor Transportation Services", "情報・通信業": "Information & Communication", "卸売業": "Wholesale Trade", "小売業": "Retail Trade",
   "銀行業": "Banks", "証券、商品先物取引業": "Securities & Commodity Futures", "保険業": "Insurance", "その他金融業": "Other Financing Business", "不動産業": "Real Estate", "サービス業": "Services",
 };
-function JpShortPanel({ idx }: { idx: string }) {
+export function JpShortPanel({ idx }: { idx: string }) {
   const j = useApi<JpShorts>("jp_shorts", { idx }, 0);
   const d = j.data;
   if (!d) return <Empty title="Loading JPX short data">{j.error ?? ""}</Empty>;

@@ -1,5 +1,6 @@
-import { useLayoutEffect, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useState, type ReactNode, type RefObject } from "react";
 import { signCls } from "../lib/fmt";
+import { Pick } from "./Pick";
 
 /** The building blocks of the phone layout (preview, lib/phone.ts; Shota, 17 Nov 2026), shared by every tab so they
  *  read as one app: a screen whose title stays at the top, sections as cards, the coloured change, small statistics. */
@@ -58,4 +59,24 @@ export function usePlaceAtNext(box: RefObject<HTMLElement | null>, key: string):
     return () => ro?.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
+}
+
+/** "Go to" for a long screen: a drop-down of the screen's sections that scrolls to the one picked, under the pinned
+ *  title. The list is read from the page, so it always matches what is shown; `dep` changes when the sections do. */
+export function JumpPick({ dep }: { dep?: string }) {
+  const [names, setNames] = useState<string[]>([]);
+  useEffect(() => {
+    const read = () => setNames([...document.querySelectorAll<HTMLElement>(".mp .mp-sec > h2 > span:first-child")].map((e) => e.textContent ?? "").filter(Boolean));
+    read();
+    const t = setTimeout(read, 600);   // sections that wait for data appear a moment later
+    return () => clearTimeout(t);
+  }, [dep]);
+  const go = (name: string) => {
+    const h2 = [...document.querySelectorAll<HTMLElement>(".mp .mp-sec > h2")].find((e) => e.querySelector("span")?.textContent === name);
+    if (!h2) return;
+    const head = document.querySelector<HTMLElement>(".mp-head")?.getBoundingClientRect().height ?? 0;
+    window.scrollTo({ top: h2.getBoundingClientRect().top + window.scrollY - head - 8 });
+  };
+  if (names.length < 3) return null;
+  return <Pick label="Go to" value="" options={[{ value: "", label: "Section" }, ...names.map((n) => ({ value: n }))]} onChange={go} title="Jump to a section of this screen" />;
 }
