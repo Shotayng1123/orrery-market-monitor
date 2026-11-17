@@ -929,11 +929,12 @@ body.pv2 #topbar .bmq #nxt{min-width:74px}
 #pnav a.on{color:var(--amber)}
 @media print{#pnav{display:none!important}}
 /* drop-downs at a size a finger can hit */
-body.pv2 .pick{font-size:14px;line-height:1.4;border-radius:9px;margin:3px 8px 3px 0}
-body.pv2 .pick .lbl{font-size:11.5px;padding:12px 9px 12px 12px}
-body.pv2 .pick .val{padding:12px 28px 12px 10px}
-body.pv2 .pick::after{right:10px;border-width:5px;margin-top:-2px}
-body.pv2 .pick select{font-size:17px}
+/* 36px tall to the eye (Shota, 17 Nov: "a bit smaller"; it was 46px), 44px to the finger: the list that takes the tap reaches 4px past the frame above and below */
+body.pv2 .pick{font-size:13px;line-height:1.4;border-radius:8px;margin:3px 8px 3px 0;overflow:visible}
+body.pv2 .pick .lbl{font-size:11px;letter-spacing:.07em;padding:8px 6px 8px 9px}
+body.pv2 .pick .val{padding:8px 23px 8px 8px;border-radius:0 7px 7px 0}
+body.pv2 .pick::after{right:8px;border-width:4px;margin-top:-2px}
+body.pv2 .pick select{font-size:17px;top:-5px;bottom:auto;height:calc(100% + 10px)}
 /* MARKET as a list */
 .mp{grid-column:1/-1;min-width:0;font-family:var(--sans);color:var(--txt)}
 .mp-head{position:sticky;top:0;z-index:6;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:-8px -8px 0;padding:12px 8px 10px 16px;background:var(--bg);border-bottom:1px solid var(--bord)}
@@ -1089,7 +1090,8 @@ table.mp-t.left td:first-child{font-family:var(--sans);font-size:14.5px;white-sp
 .fl-row .b .v{font-size:14.5px;font-weight:600}
 .fl-row .b .p{font-size:12.5px}
 /* on/off filters */
-.mp-tog{min-height:44px;padding:0 13px;border:1px solid var(--bord2);border-radius:10px;background:transparent;color:var(--txt2);font-family:var(--sans);font-size:13.5px;cursor:pointer}
+.mp-tog{position:relative;min-height:36px;padding:0 11px;border:1px solid var(--bord2);border-radius:8px;background:transparent;color:var(--txt2);font-family:var(--sans);font-size:13px;cursor:pointer}
+.mp-tog::before,.mp-legacy .chips .chip-sm::before{content:"";position:absolute;inset:-5px -1px}   /* as the drop-downs: 36px to the eye, 44px to the finger */
 .mp-tog.on{border-color:var(--amber);background:var(--amber);color:#000;font-weight:600}
 .mp-tog:focus{outline:none}
 /* panels reused from the desktop tab inside a card: their small type brought up to reading size */
@@ -1123,7 +1125,7 @@ a.pl-row:active{background:var(--panel2)}
 .pl-row .s.src{color:var(--txt2)}
 .pl-row .v{font-family:var(--mono);font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 .mp-legacy .chips{gap:8px;margin:0 0 8px}
-.mp-legacy .chips .chip-sm{display:inline-flex;align-items:center;justify-content:center;min-width:58px;min-height:44px;margin:0;padding:0 10px;border-radius:9px;font-family:var(--mono);font-size:13px;line-height:1.2}
+.mp-legacy .chips .chip-sm{position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:52px;min-height:36px;margin:0;padding:0 9px;border-radius:8px;font-family:var(--mono);font-size:12.5px;line-height:1.2}
 .mp-legacy .chips .chartnote{display:none}
 .mp-add{display:flex;gap:8px;margin:12px 0 0}
 .mp-add .mp-find{flex:1 1 auto;min-width:0;margin:0}
