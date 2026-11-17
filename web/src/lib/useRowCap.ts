@@ -22,7 +22,7 @@ export function useRowCap(box: RefObject<HTMLElement | null>, n: number, rowSele
     mq.addEventListener("change", apply);
     window.addEventListener("resize", apply);
     // the rows change height when the web font lands or the text size changes: measure again (the cap does not resize the table, so this cannot loop)
-    const table = el.querySelector("table");
+    const table = el.querySelector("table") ?? el.firstElementChild;   // a table, or the wrapper of a plain list
     const ro = table && typeof ResizeObserver !== "undefined" ? new ResizeObserver(apply) : null;
     if (ro && table) ro.observe(table);
     return () => { ro?.disconnect(); mq.removeEventListener("change", apply); window.removeEventListener("resize", apply); el.style.maxHeight = ""; };

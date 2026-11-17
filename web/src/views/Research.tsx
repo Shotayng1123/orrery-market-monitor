@@ -11,16 +11,16 @@ import { fmtStampSafe } from "./shared";
 
 /** Kinds of research (Shota, 15 Nov). Daily = the morning note, Weekly = Emma's Friday strategy report.
  *  Alpha and Deep-dive are reserved: shown, not yet published. */
-const KINDS = ["Daily", "Weekly", "Alpha", "Deep-dive"] as const;
-type Kind = (typeof KINDS)[number];
-const kindOf = (k: string | undefined): Kind => { const s = (k ?? "").toLowerCase(); return s.startsWith("week") ? "Weekly" : s.startsWith("alpha") ? "Alpha" : s.startsWith("deep") ? "Deep-dive" : "Daily"; };
+export const KINDS = ["Daily", "Weekly", "Alpha", "Deep-dive"] as const;
+export type Kind = (typeof KINDS)[number];
+export const kindOf = (k: string | undefined): Kind => { const s = (k ?? "").toLowerCase(); return s.startsWith("week") ? "Weekly" : s.startsWith("alpha") ? "Alpha" : s.startsWith("deep") ? "Deep-dive" : "Daily"; };
 /** The daily note's opening summary (yesterday in brief, then today's view): shown under the title, above the tables. */
 const IN_BRIEF = /^in brief/i;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** 15-Nov-26, from a date (YYYY-MM-DD) or a timestamp read in Singapore time. */
-const ddMmmYy = (t: string): string => { const d = /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : new Date(t).toLocaleDateString("en-CA", { timeZone: SGT }); const [y, m, day] = d.split("-"); return `${day}-${MONTHS[Number(m) - 1] ?? m}-${y.slice(2)}`; };
+export const ddMmmYy = (t: string): string => { const d = /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : new Date(t).toLocaleDateString("en-CA", { timeZone: SGT }); const [y, m, day] = d.split("-"); return `${day}-${MONTHS[Number(m) - 1] ?? m}-${y.slice(2)}`; };
 
-interface Item { key: string; src: "note" | "report"; id: number; d: string; sort: string; kind: Kind; title: string }
+export interface Item { key: string; src: "note" | "report"; id: number; d: string; sort: string; kind: Kind; title: string }
 
 /** RESEARCH: everything the desk writes, in one list (date, kind, title), and the selected piece as a document.
  *  A note opens with its tables on top and the text below; a report with title, standfirst, sections and sources.
