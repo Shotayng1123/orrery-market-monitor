@@ -7,16 +7,16 @@ import { setWatched, useWatch } from "../lib/watch";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtClock, fmtStamp, SGT } from "../lib/time";
 
-interface WatchRow { symbol: string; name: string; kind: string; sector: string | null; ccy: string | null; last: number | null; asOf: string | null; pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct12m: number | null; vs50: number | null; vs200: number | null; pos52: number | null; mcap: number | null; earningsAt: string | null; earningsEst: boolean | null; isYield: boolean }
-interface Feed {
+export interface WatchRow { symbol: string; name: string; kind: string; sector: string | null; ccy: string | null; last: number | null; asOf: string | null; pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct12m: number | null; vs50: number | null; vs200: number | null; pos52: number | null; mcap: number | null; earningsAt: string | null; earningsEst: boolean | null; isYield: boolean }
+export interface Feed {
   alerts: Array<{ id: number; at: string; symbol: string; name: string; kind: string; pct: number | null; msg: string; url: string | null }>;
   news: Array<{ id: number; publishedAt: string; source: string; title: string; url: string; tickers: Array<{ s: string; n: string }> }>;
   research: Array<{ key: string; d: string; kind: string; title: string; symbols: string[] }>;
 }
 const UP = "63,208,126", DN = "255,77,66";
 const shade = (v: number | null, full: number) => (v == null || v === 0 ? undefined : `rgba(${v > 0 ? UP : DN},${(Math.min(1, Math.abs(v) / full) * 0.5).toFixed(3)})`);
-const day = (t: string) => new Date(t).toLocaleDateString("en-GB", { timeZone: SGT, weekday: "short", day: "numeric", month: "short" });
-const decode = (t: string) => t.replace(/&amp;/g, "&").replace(/&#x([0-9a-f]+);/gi, (_m, h: string) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_m, d: string) => String.fromCodePoint(Number(d)));
+export const day = (t: string) => new Date(t).toLocaleDateString("en-GB", { timeZone: SGT, weekday: "short", day: "numeric", month: "short" });
+export const decode = (t: string) => t.replace(/&amp;/g, "&").replace(/&#x([0-9a-f]+);/gi, (_m, h: string) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_m, d: string) => String.fromCodePoint(Number(d)));
 
 /** WATCHLIST: the user's own names in one place: their figures, the earnings dates ahead, and what has happened
  *  around them (alerts, headlines that name them, research that mentions them). Names are added with the star

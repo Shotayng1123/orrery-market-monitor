@@ -13,7 +13,7 @@ import { PERIODS } from "../lib/types";
 import { filterCurve, type TenorSet } from "../lib/curveTenors";
 
 
-interface PolicyRow { bank: string; name: string; rateLabel: string; rate: number | null; asOf: string | null; lastChange: string | null; nextMeeting: string | null; sourceUrl: string | null; sourceNote: string | null }
+export interface PolicyRow { bank: string; name: string; rateLabel: string; rate: number | null; asOf: string | null; lastChange: string | null; nextMeeting: string | null; sourceUrl: string | null; sourceNote: string | null }
 
 function FxTable({ rows }: { rows: TableRow[] }) {
   return (
@@ -24,8 +24,8 @@ function FxTable({ rows }: { rows: TableRow[] }) {
   );
 }
 
-const CURVE_ORDER = ["US", "JP", "DE", "EA", "EB", "GB", "CA"];
-const CURVE_TITLES: Record<string, string> = { USB: "US T-BILLS (1Y AND UNDER)", US: "US TREASURY CURVE", JP: "JGB CURVE", DE: "GERMANY BUND CURVE", EA: "EURO AREA AAA CURVE", EB: "EURO AREA ALL-RATINGS CURVE", GB: "UK GILT CURVE", CA: "CANADA CURVE" };
+export const CURVE_ORDER = ["US", "JP", "DE", "EA", "EB", "GB", "CA"];
+export const CURVE_TITLES: Record<string, string> = { USB: "US T-BILLS (1Y AND UNDER)", US: "US TREASURY CURVE", JP: "JGB CURVE", DE: "GERMANY BUND CURVE", EA: "EURO AREA AAA CURVE", EB: "EURO AREA ALL-RATINGS CURVE", GB: "UK GILT CURVE", CA: "CANADA CURVE" };
 
 /** Column spans for n curve panels in the one-screen layout: at most four to a row, every row filled edge to edge. */
 function termSpans(n: number): number[] {

@@ -13,6 +13,9 @@ import { MarketPhone } from "./views/MarketPhone";
 import { NewsPhone } from "./views/NewsPhone";
 import { ResearchPhone } from "./views/ResearchPhone";
 import { EquitiesPhone } from "./views/EquitiesPhone";
+import { RatesPhone } from "./views/RatesPhone";
+import { WatchlistPhone } from "./views/WatchlistPhone";
+import { AssetPhone } from "./views/AssetPhone";
 import { PhoneNav } from "./components/PhoneNav";
 import { usePhone, usePhoneV2 } from "./lib/phone";
 import { NewsView } from "./views/News";
@@ -151,10 +154,10 @@ export default function App() {
           {view === "market" && (pv2 ? <MarketPhone tick={tick} /> : <MarketView tick={tick} />)}
           {view === "news" && (pv2 ? <NewsPhone tick={tick} /> : <NewsView tick={tick} />)}
           {view === "research" && (pv2 ? <ResearchPhone tick={tick} sub={sub} onSub={(s) => setHash("research", s)} /> : <ResearchView tick={tick} sub={sub} onSub={(s) => setHash("research", s)} />)}
-          {view === "watch" && <WatchlistView tick={tick} />}
+          {view === "watch" && (pv2 ? <WatchlistPhone tick={tick} /> : <WatchlistView tick={tick} />)}
           {view === "equities" && (pv2 ? <EquitiesPhone sub={sub} onSub={(s) => setHash("equities", s)} tick={tick} /> : <EquitiesView sub={sub} onSub={(s) => setHash("equities", s)} tick={tick} />)}
-          {view === "rates" && <RatesFxView sub={sub} onSub={(s) => setHash("rates", s)} tick={tick} />}
-          {view === "asset" && <AssetView symbol={sub} tick={tick} />}
+          {view === "rates" && (pv2 ? <RatesPhone tick={tick} /> : <RatesFxView sub={sub} onSub={(s) => setHash("rates", s)} tick={tick} />)}
+          {view === "asset" && (pv2 ? <AssetPhone symbol={sub} tick={tick} /> : <AssetView symbol={sub} tick={tick} />)}
         </div>
         <footer>Orrery Monitor shows market data from third-party feeds (Yahoo Finance; US Treasury; Japan MOF; exchange and central-bank publications) that may be delayed or incomplete; every panel states its source and as-of time. Information only; nothing here is investment advice. Default time zone: Singapore.</footer>
       </div>
