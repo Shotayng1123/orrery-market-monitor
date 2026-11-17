@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Topbar, VIEWS, type ViewId } from "./components/Topbar";
 import { Gate } from "./auth/Gate";
-import { api, apiConfigured, clearToken, getToken, tokenId } from "./lib/api";
+import { api, apiConfigured, clearToken, getToken, tokenId, type Me } from "./lib/api";
+import { AccountModal, ChangePassword } from "./auth/Account";
+import { Logo } from "./components/Logo";
 import { DEV_MOCK } from "./lib/useApi";
 import { anyOpen, setHolidays } from "./lib/sessions";
 import { applyPrefs, loadPrefs, savePrefs, type Prefs } from "./lib/prefs";
@@ -45,6 +47,16 @@ export default function App() {
 
   const signedIn = DEV_BYPASS || !!token;
   const userId = DEV_BYPASS ? "preview" : tokenId(token);
+  // Who is signed in (role, and whether a manager-set password still has to be replaced)
+  const [me, setMe] = useState<Me | null>(null);
+  const [acct, setAcct] = useState(false);
+  useEffect(() => {
+    if (!token || DEV_BYPASS) { setMe(null); return; }
+    if (DEV_MOCK) { setMe({ email: "preview@mock.local", role: "manager", mustChange: false }); return; }
+    let live = true;
+    api<Me>("me").then((m) => { if (live) setMe(m); }).catch(() => { /* a 401 signs out through om:unauth */ });
+    return () => { live = false; };
+  }, [token]);
 
   useEffect(() => { const f = () => setRoute(parseHash()); window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
   useEffect(() => { const f = () => setTok(null); window.addEventListener("om:unauth", f); return () => window.removeEventListener("om:unauth", f); }, []);
@@ -104,19 +116,28 @@ export default function App() {
   }, [signedIn, refresh]);
 
   const setPrefs = (p: Prefs) => { setPrefsState(p); savePrefs(p); };
-  const signOut = () => { clearToken(); setTok(null); };
+  const signOut = () => { clearToken(); setTok(null); setAcct(false); };
 
   const healthState: "ok" | "warn" | "bad" | "unk" = !apiConfigured ? "unk" : healthErr ? "bad" : !health ? "unk" : health.ok ? (health.tick.ok && health.daily.ok ? "ok" : "warn") : "bad";
   const healthTitle = !apiConfigured ? "DATA HEALTH: API not configured" : healthErr ? `DATA HEALTH: ${healthErr}` : health ? `DATA HEALTH: tick ${health.tick.ageMin ?? "?"} min old (${health.tick.ok ? "ok" : health.tick.note ?? "late"}), daily ${health.daily.ok ? "ok" : health.daily.note ?? "late"}${health.holidaysVerified ? "" : "; holiday calendar unverified"}` : "DATA HEALTH: loading";
 
   if (!signedIn) return <div className="gatewrap"><Gate onSignedIn={() => setTok(getToken())} /></div>;
+  if (me?.mustChange) return (
+    <div className="gatewrap"><div className="modal-bg"><div className="modal">
+      <h3><Logo />Choose a new password</h3>
+      <div className="sub2">You signed in as <b>{me.email}</b> with a password that was set for you. Replace it with your own before the Monitor opens.</div>
+      <ChangePassword forced onDone={() => setTok(getToken())} />
+      <button type="button" className="go ghost" onClick={signOut}>SIGN OUT</button>
+    </div></div></div>
+  );
 
   const { view, sub } = route;
   return (
     <>
       {DEV_MOCK && <div id="mockbar">MOCK PREVIEW — synthetic data for layout checks only. Nothing here is real. The live Monitor is at https://shotayng1123.github.io/orrery-market-monitor/</div>}
       <CardLayer />
-      <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={userId} onSignOut={signOut} updatedAt={updatedAt} nextIn={nextIn} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} />
+      {acct && me && <AccountModal me={me} onClose={() => setAcct(false)} onSignOut={signOut} onChanged={() => setTok(getToken())} />}
+      <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={me?.email ?? userId} onSignOut={() => (me ? setAcct(true) : signOut())} updatedAt={updatedAt} nextIn={nextIn} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} />
       <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–6 TABS · ESC</span><span>&#9974;</span></div>
       <div id="wrap">
         <div id="grid" data-view={view}>

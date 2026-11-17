@@ -14,6 +14,8 @@ import { fmtStampSafe } from "./shared";
 const KINDS = ["Daily", "Weekly", "Alpha", "Deep-dive"] as const;
 type Kind = (typeof KINDS)[number];
 const kindOf = (k: string | undefined): Kind => { const s = (k ?? "").toLowerCase(); return s.startsWith("week") ? "Weekly" : s.startsWith("alpha") ? "Alpha" : s.startsWith("deep") ? "Deep-dive" : "Daily"; };
+/** The daily note's opening summary (yesterday in brief, then today's view): shown under the title, above the tables. */
+const IN_BRIEF = /^in brief/i;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** 15-Nov-26, from a date (YYYY-MM-DD) or a timestamp read in Singapore time. */
 const ddMmmYy = (t: string): string => { const d = /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : new Date(t).toLocaleDateString("en-CA", { timeZone: SGT }); const [y, m, day] = d.split("-"); return `${day}-${MONTHS[Number(m) - 1] ?? m}-${y.slice(2)}`; };
@@ -90,8 +92,9 @@ export function ResearchView({ tick, sub, onSub }: { tick: number; sub?: string;
         ) : n ? (
           <div className="brnar report note">
             <h2>{n.title}</h2>
+            {n.sections.filter((s) => IN_BRIEF.test(s.heading)).map((s) => <div key={s.heading} className="stand"><Md text={s.md} sources={n.sources} /></div>)}
             <div className="ntabs">{n.pack ? (n.pack.kind === "weekly" ? <WeeklyTables pack={n.pack} /> : <Overnight pack={n.pack} />) : <Empty title="No data pack with this note" />}</div>
-            {n.sections.map((s) => <div key={s.heading}><h3>{s.heading}</h3><Md text={s.md} sources={n.sources} /></div>)}
+            {n.sections.filter((s) => !IN_BRIEF.test(s.heading)).map((s) => <div key={s.heading}><h3>{s.heading}</h3><Md text={s.md} sources={n.sources} /></div>)}
             {n.sources.length > 0 && <div className="src"><b>Sources</b><ol>{n.sources.map((s) => <li key={s.n} value={s.n}><a href={s.url} target="_blank" rel="noreferrer">{s.title}</a></li>)}</ol></div>}
           </div>
         ) : <Empty title={sel ? "Loading" : "Select a piece"}>{sel ? (rep.error ?? note.error ?? "") : "The full text opens here."}</Empty>}

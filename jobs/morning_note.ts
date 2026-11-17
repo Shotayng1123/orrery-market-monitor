@@ -34,17 +34,21 @@ Hard rules:
 7. If dateSgt is a Saturday there is no Tokyo session today or tomorrow: write the Japan section as the read-across for Monday's open, and say so. If dateSgt is a Monday, cover weekend news that matters for the open, with citations.
 8. ${TAG_RULE}
 
-Length and style: 400 to 650 words in all. Short sentences, one cause and one effect each. Bullets ("- ") rather than long paragraphs. No sentence that only restates a move.
+Length and style: 500 to 750 words in all. Short sentences, one cause and one effect each. Bullets ("- ") rather than long paragraphs. No sentence that only restates a move.
 
 Structure (markdown, H2 headings exactly as written):
+## In brief
+Write this section last, place it first (Shota, 16 Nov 2026). One plain paragraph of three to four sentences, no bullets, no citations, no name tags: first what yesterday was (what led equities, what rates, the dollar and commodities did in words, and whether that adds up to risk-on, risk-off or a rotation), then today's view for the Tokyo session and whether the trend is likely to continue (E). The model to follow: "Strong equity rally led by AI names, with yields higher: a clear sign of risk-on. The trend is expected to continue today (E)." Directions in words only, no figures. Nothing here that the sections below do not support.
 ## What moved markets
 Three to six bullets, the most important first. Each: the event or headline, then what it moved and in which direction (sectors and names rather than index figures), with a citation. For the main story, add the second-order point your digging reached: why it matters beyond the day, and who is exposed next. End with one line that characterises the session ("broad risk-off led by semis after ...") (E).
 ## Stocks: movers and why
 One bullet per name that moved 5% or more: the tagged name, its move, the reason found (with the reported figures when it is earnings or guidance) and a citation; then the related names moved by the same news. "reason not found" when nothing reliable was found.
 ## Japan: read-across and strategy
 Which of the overnight events matter for Tokyo and for which sectors and names (semis, autos and exporters, banks and insurers, China-linked names), each tied to its cause. What drove yesterday's Tokyo session, by news. Then the strategy, every sentence marked (E): the base case and what would change it, what to favour or avoid at sector level and why, how to treat the open, and a hedge when the news flow calls for one. At most two price levels in this section, and only when a level is itself the trigger.
+## Rates: US and Japan
+Always present, two bullets, US Treasuries then JGBs (Shota, 16 Nov 2026: "at least flattener/steepener, bull/bear, and the reason"). No other countries. For each: name the curve move as a bull steepener, bear steepener, bull flattener, bear flattener, or a parallel move up or down, read from the pack's 2Y, 10Y and 30Y changes (bull = yields fell, bear = yields rose; steepener = the long end rose more or fell less than the 2Y; say "little changed" when every point moved under 1.5bp). The tables show the figures, so name the shape and which end led rather than repeating each change. Then the reason, with a citation: the data print against consensus, the central-bank decision or speech, the auction result, supply or fiscal news, or the risk mood. If you find no reliable reason, say "reason not found". One clause on what it means for equities when it matters (banks, growth stocks, the yen) (E).
 ## Macro and today's events
-Rates, currencies and commodities: only the reasons (central bank decisions and speeches, data surprises against consensus, politics, supply news), each with a citation. Then today's High and Medium calendar items that can move the Tokyo session: time in SGT, what is expected, and why it matters, one line each.
+Currencies and commodities: only the reasons (central bank decisions and speeches, data surprises against consensus, politics, supply news), each with a citation; rates belong in the section above. Then today's High and Medium calendar items that can move the Tokyo session: time in SGT, what is expected, and why it matters, one line each.
 ## Sources`;
 
 const WEEKLY_RULES = `You write the Sunday Weekly Wrap-up of Orrery Monitor for professional investors (portfolio managers) in Singapore and Tokyo. British English, terse, no filler, no greetings.

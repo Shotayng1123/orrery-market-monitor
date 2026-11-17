@@ -1,6 +1,7 @@
 // The tables that belong to a note: the overnight and previous-session tables of a daily note (its data pack)
 // and the weekly tables of a wrap-up. Shown above the note's text on the RESEARCH tab.
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
+import { shortName } from "../lib/short";
 
 interface Move { symbol: string; name: string; last: number; prev: number; pct: number; sector?: string }
 interface SectorMove { sector: string; pct: number; n: number; weighted: boolean }
@@ -70,35 +71,48 @@ export function WeeklyTables({ pack }: { pack: WeeklyPack }) {
   );
 }
 
-/** The overnight and previous-session tables that belong to one day's note (its data pack). */
+// The major names of the daily note's first table (Shota, 16 Nov 2026): the full list lives on the MARKET tab.
+const MAJOR: Array<[string, string[]]> = [
+  ["Equities", ["^GSPC", "^IXIC", "^SOX", "^N225"]],
+  ["Volatility", ["^VIX"]],
+  ["Currency", ["USDJPY=X", "EURUSD=X", "GBPUSD=X"]],
+  ["Rates · US and Japan", ["UST2Y", "^TNX", "^TYX", "JGB2Y", "JGB10Y", "JGB30Y"]],
+  ["Commodities", ["GC=F", "CL=F"]],
+];
+
+/** The tables that belong to one day's note (its data pack): the major markets first, then the US and the Japan
+ *  blocks (sectors and the largest movers), each under a section bar. */
 export function Overnight({ pack }: { pack: Pack }) {
-  const macro = pack.table.filter((r) => ["Fixed income", "Currency", "Commodities", "Volatility"].includes(r.cls));
+  const by = new Map(pack.table.map((r) => [r.symbol, r]));
+  const chg = (r: Pack["table"][number]) => r.unit === "bp" ? (r.d1Chg == null ? "–" : `${r.d1Chg > 0 ? "+" : ""}${(r.d1Chg * 100).toFixed(0)}bp`) : fmtPct(r.d1Pct);
   return (
     <>
-      <div className="minih">US overnight · indices</div>
-      <table className="secT"><tbody>{pack.us.indices.map((m) => <tr key={m.symbol}><td className="l">{m.name}</td><td className="num">{fmtNum(m.last, 2)}</td><td className={`num ${signCls(m.pct)}`}>{fmtPct(m.pct)}</td></tr>)}</tbody></table>
-      {pack.us.breadth && <div className="mut" style={{ fontSize: 10.5, margin: "2px 0 6px" }}>{breadthLine(pack.us.breadth)}</div>}
+      <div className="nsec">Markets · 1D</div>
+      <table className="secT nmaj"><tbody>
+        {MAJOR.map(([cls, syms]) => {
+          const rs = syms.map((x) => by.get(x)).filter((r): r is Pack["table"][number] => !!r && r.last != null);
+          if (!rs.length) return null;
+          return [
+            <tr key={cls} className="ncls"><td colSpan={3}>{cls}</td></tr>,
+            ...rs.map((r) => <tr key={r.symbol}><td className="l" title={r.name}>{shortName(r.symbol, r.name)}</td><td className="num">{fmtNum(r.last, r.unit === "bp" ? 3 : r.cls === "Currency" && r.last != null && r.last < 10 ? 4 : r.last != null && r.last >= 1000 ? 1 : 2)}</td><td className={`num ${signCls(r.unit === "bp" ? r.d1Chg : r.d1Pct)}`}>{chg(r)}</td></tr>),
+          ];
+        })}
+      </tbody></table>
+
+      <div className="nsec">US overnight · sectors and movers</div>
+      {pack.us.breadth && <div className="mut" style={{ fontSize: 10.5, margin: "2px 0 6px" }}>S&P 500: {breadthLine(pack.us.breadth)}</div>}
       <div className="msg2">
         <div><SectorsTable rows={pack.us.sectorsEtf.map((m) => ({ sector: m.name, pct: m.pct, n: 0, weighted: true }))} title="US sectors (SPDR ETFs)" /></div>
         <div><MovesTable rows={[...pack.us.top.slice(0, 5), ...pack.us.bottom.slice(0, 5)]} title="S&P 500 top 5 / bottom 5" /></div>
       </div>
-      <div className="minih" style={{ marginTop: 10 }}>Japan · previous session</div>
-      <table className="secT"><tbody>{pack.jp.indices.map((m) => <tr key={m.symbol}><td className="l">{m.name}</td><td className="num">{fmtNum(m.last, 2)}</td><td className={`num ${signCls(m.pct)}`}>{fmtPct(m.pct)}</td></tr>)}
-        {pack.jp.impliedOpenPct != null && <tr><td className="l" title={pack.jp.impliedNote}>Implied open (CME future vs cash) <span className="e">(E)</span></td><td /><td className={`num ${signCls(pack.jp.impliedOpenPct)}`}>{fmtPct(pack.jp.impliedOpenPct)}</td></tr>}
-      </tbody></table>
-      {pack.jp.breadth && <div className="mut" style={{ fontSize: 10.5, margin: "2px 0 6px" }}>{breadthLine(pack.jp.breadth)}</div>}
+
+      <div className="nsec">Japan previous day · sectors and movers</div>
+      {pack.jp.breadth && <div className="mut" style={{ fontSize: 10.5, margin: "2px 0 6px" }}>Nikkei 225: {breadthLine(pack.jp.breadth)}{pack.jp.impliedOpenPct != null && <span title={pack.jp.impliedNote}> · implied open (CME future vs cash) <b className={signCls(pack.jp.impliedOpenPct)}>{fmtPct(pack.jp.impliedOpenPct)}</b> <span className="e">(E)</span></span>}</div>}
       <div className="msg2">
         <div><SectorsTable rows={pack.jp.sectors} title="Nikkei 225 sectors (weight-averaged)" /></div>
         <div><MovesTable rows={[...pack.jp.top.slice(0, 5), ...pack.jp.bottom.slice(0, 5)]} title="Nikkei 225 top 5 / bottom 5" /></div>
       </div>
-      {macro.length > 0 && (
-        <>
-          <div className="minih" style={{ marginTop: 10 }}>Other macro · 1D</div>
-          <table className="secT"><tbody>{macro.map((r) => <tr key={r.symbol}><td className="l">{r.name}</td><td className="num">{fmtNum(r.last, r.unit === "bp" ? 3 : 2)}</td><td className={`num ${signCls(r.unit === "bp" ? r.d1Chg : r.d1Pct)}`}>{r.unit === "bp" ? (r.d1Chg == null ? "–" : `${r.d1Chg > 0 ? "+" : ""}${(r.d1Chg * 100).toFixed(0)}bp`) : fmtPct(r.d1Pct)}</td></tr>)}</tbody></table>
-        </>
-      )}
       <div className="mut" style={{ fontSize: 10, marginTop: 6 }}>{pack.us.source} · {pack.jp.source}</div>
     </>
   );
 }
-
