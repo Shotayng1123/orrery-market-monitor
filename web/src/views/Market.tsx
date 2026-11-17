@@ -25,12 +25,12 @@ function Badges({ r }: { r: TableRow }) {
 }
 
 /** Levels in the table: one decimal from 100 up, two between 10 and 100, the instrument's own below 10 (FX crosses). */
-const lvlDec = (v: number | null | undefined, d: number) => (v == null ? d : Math.abs(v) >= 100 ? Math.min(d, 1) : Math.abs(v) >= 10 ? Math.min(d, 2) : d);
+export const lvlDec = (v: number | null | undefined, d: number) => (v == null ? d : Math.abs(v) >= 100 ? Math.min(d, 1) : Math.abs(v) >= 10 ? Math.min(d, 2) : d);
 
 /** Table cells are narrow: moves of 100% or 100bp and more drop one decimal so the figure is never cut off
  *  (the base level stays in the cell's tooltip). */
-const cellPct = (v: number | null | undefined) => (v != null && Math.abs(v) >= 100 ? fmtPct(v, 1) : fmtPct(v));
-const cellBp = (v: number | null | undefined) => (v != null && Math.abs(v) >= 1 ? `${v > 0 ? "+" : ""}${Math.round(v * 100)}bp` : fmtChg(v, 3, true));
+export const cellPct = (v: number | null | undefined) => (v != null && Math.abs(v) >= 100 ? fmtPct(v, 1) : fmtPct(v));
+export const cellBp = (v: number | null | undefined) => (v != null && Math.abs(v) >= 1 ? `${v > 0 ? "+" : ""}${Math.round(v * 100)}bp` : fmtChg(v, 3, true));
 
 /** One table (Shota): the level only as of now, every window as a % change, then σ 1M, 52-week position and
  *  distance to the 200-day average. The asset class is the section bar, not a column. */
@@ -105,7 +105,7 @@ function ChartGroup({ no, title, rows, period, tick, sigmaWindow, show, children
   );
 }
 
-function CurvePanel({ period, tick }: { period: ChartPeriod; tick: number }) {
+export function CurvePanel({ period, tick }: { period: ChartPeriod; tick: number }) {
   const ago = period === "1D" || period === "1W" ? "1M" : period;
   const us = useApi<{ current: Curve | null; ghost: Curve | null }>("curve", { country: "US", ago }, Math.floor(tick / 30));   // curves are daily
   const jp = useApi<{ current: Curve | null; ghost: Curve | null }>("curve", { country: "JP", ago }, Math.floor(tick / 30));
