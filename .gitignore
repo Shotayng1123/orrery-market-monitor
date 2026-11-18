@@ -9,3 +9,5 @@ supabase/.temp/
 web/.vite-dev.log
 web/.vite-mock.log
 jobs/data/backups/
+web/e2e/.out/
+web/e2e/.dist/

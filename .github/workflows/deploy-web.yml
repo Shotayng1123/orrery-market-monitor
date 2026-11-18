@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
     paths: ["web/**", ".github/workflows/deploy-web.yml"]
+  # a pull request that touches the site runs the checks only; nothing is published from it
+  pull_request:
+    paths: ["web/**", "sim/**", ".github/workflows/deploy-web.yml"]
   workflow_dispatch:
 
 permissions:
@@ -11,12 +14,45 @@ permissions:
   pages: write
   id-token: write
 
+# One publish at a time, a newer push replacing a waiting one. The checks of a pull request are a group of their
+# own, so they can neither cancel a publish nor be cancelled by one.
 concurrency:
-  group: pages
+  group: ${{ github.event_name == 'pull_request' && format('checks-{0}', github.ref) || 'pages' }}
   cancel-in-progress: true
 
 jobs:
+  # The browser checks (web/e2e, about 520 of them) and the logic checks (sim/logic.test.ts). Since 18 Nov 2026
+  # the site is published only when they pass: until then a publish checked only that the site builds.
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            jobs/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+      - run: node e2e/run.cjs
+        working-directory: web
+      - run: npm ci && npx tsx ../sim/logic.test.ts
+        working-directory: jobs
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output
+          path: web/e2e/.out
+          include-hidden-files: true
+          retention-days: 7
+
   build:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -39,7 +75,8 @@ jobs:
           path: web/dist
 
   deploy:
-    needs: build
+    if: github.event_name != 'pull_request'
+    needs: [build, test]
     runs-on: ubuntu-latest
     environment:
       name: github-pages

@@ -42,6 +42,21 @@ npm run build          # typecheck + production build into web/dist
 
 Backend deployment steps are in `supabase/README.md`.
 
+## Tests
+
+Two sets, neither of which needs the real API or a sign-in:
+
+- **Browser checks** (`web/e2e`, about 520 checks in 13 suites): every tab on a desktop and in the phone layout, the
+  classic phone layout, the sign-in screen, the home-screen hint, the new-version bar, opening without a connection,
+  and notifications. `cd web && npm run e2e` starts the test servers it needs and runs them all (about three
+  minutes); `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
+  Needs Playwright's browser once: `npx playwright install chromium`.
+- **Logic checks** (`sim/logic.test.ts`): exchange sessions, rolling bands, alert measures, the push encryption.
+  `cd jobs && npx tsx ../sim/logic.test.ts`.
+
+The `deploy-web` workflow runs both before it publishes: a failing check stops the publish. A pull request that
+touches `web/` runs them without publishing. `logic-tests` runs the logic checks when the server functions change.
+
 ## Data sources (v1)
 
 | Data | Source |

@@ -1,0 +1,32 @@
+name: logic-tests
+
+# The checks that need no browser and no database (sim/logic.test.ts): exchange sessions, rolling bands, alert
+# measures, the push-notification encryption. Run when the code they cover changes; the server functions are
+# deployed by hand, so this does not gate a deploy, it says whether one would be safe.
+on:
+  push:
+    branches: [main]
+    paths: ["supabase/functions/**", "sim/**", "web/src/lib/**", ".github/workflows/logic-tests.yml"]
+  pull_request:
+    paths: ["supabase/functions/**", "sim/**", "web/src/lib/**", ".github/workflows/logic-tests.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: jobs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: jobs/package-lock.json
+      - run: npm ci
+      - run: npx tsx ../sim/logic.test.ts
