@@ -21,18 +21,16 @@ export async function history(): Promise<string> {
   const rows: Array<Record<string, unknown>> = [];
   const missing: string[] = [];
   const suspects: string[] = [];
-  // How far do the answers in hand reach? The newest minute bar given for the instruments that trade round the
-  // clock (crypto first: it also trades at the weekend). A bar is booked only when they reach the end of its day
-  // (feedhealth.ts, barSettled): on 18 Nov 2026 the server was handed the prices of 10:52 New York time all
-  // evening and booked them as that day's closes. Where this reading cannot be made, bars are booked as before.
-  let fresh: number | null = null;
-  try {
-    const order = ["CRYPTO", "FX", "CME"];
-    const refs = everything.filter((i) => order.includes(i.market)).sort((a, b) => order.indexOf(a.market) - order.indexOf(b.market)).slice(0, 20).map((i) => i.symbol);
-    if (refs.length) for (const s of Object.values(await spark(refs, "1d", "1m"))) { const lp = lastPrint(s); if (lp && (fresh == null || lp.t * 1000 > fresh)) fresh = lp.t * 1000; }
-  } catch { /* no reading */ }
+  // How far do the answers in hand reach, market by market? The newest minute bar given for any instrument of a
+  // market (a currency pair: its newest hourly bar, below). A bar is booked only when they reach the end of its
+  // day (feedhealth.ts, barSettled): on 18 Nov 2026 the server was handed the prices of 10:52 New York time all
+  // evening for everything but crypto, and booked them as that day's closes. A market for which this reading
+  // cannot be made is booked as before.
+  const reach = new Map<string, number>();
+  const reaches = (market: string, ms: number) => { if (Number.isFinite(ms) && ms > (reach.get(market) ?? 0)) reach.set(market, ms); };
+  try { const m1 = await spark(inst.map((i) => i.symbol), "1d", "1m"); for (const i of inst) { const lp = m1[i.symbol] ? lastPrint(m1[i.symbol]) : null; if (lp) reaches(i.market, lp.t * 1000); } } catch { /* no reading */ }
   const held = new Set<string>();
-  const settled = (symbol: string, market: string, d: string): boolean => { if (fresh == null || barSettled(market, d, fresh)) return true; held.add(symbol); return false; };
+  const settled = (symbol: string, market: string, d: string): boolean => { const r = reach.get(market); if (r == null || barSettled(market, d, r)) return true; held.add(symbol); return false; };
   // A vendor misprint (a close far from the days on both sides) is neither written nor kept if already stored.
   const guard = async (symbol: string, wild: boolean, series: Array<{ d: string; close: number }>): Promise<Set<string>> => {
     const bad = suspectBars(series, spikeThreshold(symbol, wild));
@@ -47,6 +45,7 @@ export async function history(): Promise<string> {
   // price before 17:00 New York. Only finished days are booked, and never a weekend date.
   {
     let k = 0;
+    const fx: Array<{ symbol: string; closes: Array<{ d: string; close: number }> }> = [];
     await Promise.all(Array.from({ length: 5 }, async () => {
       for (;;) {
         const p = pairs[k++]; if (!p) return;
@@ -54,10 +53,14 @@ export async function history(): Promise<string> {
           const c = await chart(p.symbol, "1mo", "1h");
           const closes = fxClosesFromHourly(c.timestamp, c.close, now.getTime() / 1000);
           const bad = await guard(p.symbol, false, closes);
-          for (const x of closes) if (!bad.has(x.d) && settled(p.symbol, "FX", x.d)) rows.push({ symbol: p.symbol, d: x.d, close: x.close, source: FX_SOURCE_HOURLY, updated_at: now.toISOString() });
+          const lp = lastPrint(c);
+          if (lp) reaches("FX", (lp.t + 3600) * 1000);          // an hourly bar holds the hour that follows its stamp
+          fx.push({ symbol: p.symbol, closes: closes.filter((x) => !bad.has(x.d)) });
         } catch { missing.push(p.symbol); }
       }
     }));
+    // booked once every pair has been read: the reach of the currencies is the newest bar of any of them
+    for (const p of fx) for (const x of p.closes) if (settled(p.symbol, "FX", x.d)) rows.push({ symbol: p.symbol, d: x.d, close: x.close, source: FX_SOURCE_HOURLY, updated_at: now.toISOString() });
   }
   for (const i of inst) {
     const s = series[i.symbol];
@@ -83,5 +86,5 @@ export async function history(): Promise<string> {
     if (ue) throw new Error("prices_daily: " + ue.message);
   }
   const n = await saveTableSnapshot(now);
-  return `${rows.length} closes for ${everything.length - missing.length} instruments (${pairs.length} currency pairs at the 17:00 New York close)${missing.length ? `, missing: ${missing.join(" ")}` : ""}${suspects.length ? `; misprints dropped: ${suspects.join(", ")}` : ""}${held.size ? `; NOT BOOKED, the answers in hand reaching only ${new Date(fresh!).toISOString().slice(0, 16).replace("T", " ")} UTC: the newest close of ${held.size} instruments (${[...held].slice(0, 8).join(" ")}${held.size > 8 ? " …" : ""})` : ""}; table ${n} rows`;
+  return `${rows.length} closes for ${everything.length - missing.length} instruments (${pairs.length} currency pairs at the 17:00 New York close)${missing.length ? `, missing: ${missing.join(" ")}` : ""}${suspects.length ? `; misprints dropped: ${suspects.join(", ")}` : ""}${held.size ? `; NOT BOOKED, the answers in hand not reaching the end of the day (${[...reach].filter(([m]) => everything.some((i) => held.has(i.symbol) && (isFxPair(i.symbol) ? "FX" : i.market) === m)).map(([m, t]) => `${m} to ${new Date(t).toISOString().slice(5, 16).replace("T", " ")}`).join(", ")} UTC): the newest close of ${held.size} instruments (${[...held].slice(0, 8).join(" ")}${held.size > 8 ? " …" : ""})` : ""}; table ${n} rows`;
 }
