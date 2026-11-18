@@ -14,7 +14,7 @@ const vis = (p, sel) => p.locator(sel).count();
         const next = rows.find((r) => !r.classList.contains("past")), nx = next?.getBoundingClientRect();
         return { total: rows.length, boxH: Math.round(br.height), want: Math.round(box.querySelector("thead").getBoundingClientRect().height + box.querySelector("tr.cls").getBoundingClientRect().height + 10 * rh), full, labels, scrollable: box.scrollHeight > box.clientHeight + 2, scrollTop: Math.round(box.scrollTop), nextInView: !!nx && nx.top >= head.bottom - 1 && nx.bottom <= br.bottom + 1, panelH: Math.round(document.querySelector('.panel[data-no="01"]').getBoundingClientRect().height), vh: innerHeight }; });
       ck(`box is sized to ten events plus one date line (${m.boxH}px, ${m.total} events in the feed)`, Math.abs(m.boxH - m.want) <= 2, m);
-      ck(`${m.full} whole events and ${m.labels} date line(s) in view, starting on a whole row`, m.full === 10 - Math.max(0, m.labels - 1) && m.labels <= 2, m);
+      ck(`${m.full} whole events and ${m.labels} date line(s) in view, starting on a whole row`, m.full === 10 - Math.max(0, m.labels - 1) && m.labels >= 1, m);   // the number of date lines in view depends on the hour the check runs at (three just after midnight in Singapore); whole rows only is what must hold
       ck("the rest is reached by scrolling inside the box", m.scrollable, m);
       ck("opens at the next upcoming event, with the latest results above it", m.nextInView && m.scrollTop > 0, m);
       ck("the calendar panel is under half the screen tall", m.panelH < m.vh * 0.6, m);

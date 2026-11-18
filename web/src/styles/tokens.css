@@ -1231,7 +1231,7 @@ div.nw-row{cursor:pointer}
 .mp-head.doc .star{width:44px;height:44px;margin:0;border:1px solid var(--bord2);border-radius:11px;font-size:23px}
 .mp-doc.asset{padding:14px 8px 2px}
 .mp-doc.asset h1{margin:8px 0 12px}
-.mp-hero .mtile.cp{height:350px;min-height:0;aspect-ratio:auto;padding:2px 2px 0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.mp-hero .mtile.cp{height:clamp(410px,58vh,540px);min-height:0;aspect-ratio:auto;padding:2px 2px 0;border:0;border-radius:0;background:transparent;box-shadow:none}
 .mp-hero .mtile.cp .lb{margin:0 0 6px;font-size:12px}
 .mp-hero .mtile.cp .lbtxt{display:none}
 .mp-hero .mtile.cp .badge{margin:0 6px 0 0;font-size:11px;padding:1px 6px;border-radius:4px}
