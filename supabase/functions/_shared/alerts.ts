@@ -1,10 +1,18 @@
 // Excessive-move alerts. Thresholds (Shota): single stock ±7% intraday, index ±3%. One row per symbol, session
 // date and kind; while the move extends the magnitude and message are updated, so the top bar shows the latest.
 // For a stock the magnitude is the largest move of the session (moves.ts): it stays when the stock comes back.
-import { db } from "./db.ts";
-import { localDate, marketById, type Holidays } from "./sessions.ts";
-import { scanDue, sessionMove } from "./moves.ts";
-import { spark } from "./yahoo.ts";
+//
+// Which stocks (18 Nov 2026; until then only the first line, so Rakuten Bank's limit-down raised nothing):
+//   - Nikkei 225 and S&P 500 members and every stock on anyone's watchlist: one-minute bars, scanned every five
+//     minutes by the tick job (scanStockAlerts). The alert's time is the minute the threshold was passed.
+//   - every other company in the lists the Monitor follows (TOPIX, Nasdaq-100, KOSPI 200, Hang Seng, SSE 180) worth
+//     USD 5bn or more, the floor of the headline alerts: from the day range of the quotes the flow job already
+//     pulls every 10 to 20 minutes (scanQuoteAlerts). The alert's time is when the move was seen.
+import { db, selectAll } from "./db.ts";
+import { localDate, marketById, type Holidays, type MarketId } from "./sessions.ts";
+import { quoteMove, scanDue, sessionMove, stockMarket } from "./moves.ts";
+import { CCY, MIN_MCAP_USD } from "./newsalerts.ts";
+import { spark, type QuoteRow } from "./yahoo.ts";
 import type { TableRow } from "./table.ts";
 
 export const STOCK_PCT = 7, INDEX_PCT = 3;
@@ -39,36 +47,108 @@ export async function scanIndexAlerts(rows: TableRow[], now: Date): Promise<numb
   return upsertAlerts(out);
 }
 
-/** Stock alerts: constituents of the indices whose market is open or has just closed (moves.ts: scanDue), each
- *  measured over all of the session's one-minute bars against the previous close (moves.ts: sessionMove). */
+type Cand = Record<string, unknown> & { symbol: string; d: string; pct: number; msg: string };
+/** Keeps the candidates whose figure or wording differs from the stored row, so `upd` says when a move last
+ *  extended and a closed market's alert is not re-stamped by every scan. `fresh` are the ones with no row yet. */
+async function changedOnly(cand: Cand[]): Promise<{ fresh: Cand[]; moved: Cand[] }> {
+  if (!cand.length) return { fresh: [], moved: [] };
+  const { data: have } = await db.from("alerts").select("symbol,d,pct,msg").eq("kind", "stock").in("symbol", cand.map((c) => c.symbol)).gte("d", cand.map((c) => c.d).sort()[0]);
+  const old = new Map(((have ?? []) as Array<{ symbol: string; d: string; pct: number; msg: string }>).map((x) => [`${x.symbol}|${x.d}`, x]));
+  const fresh: Cand[] = [], moved: Cand[] = [];
+  for (const c of cand) { const o = old.get(`${c.symbol}|${c.d}`); if (!o) fresh.push(c); else if (Math.abs(o.pct - c.pct) >= 0.005 || o.msg !== c.msg) moved.push(c); }
+  return { fresh, moved };
+}
+
+/** The stocks on anyone's watchlist, with the exchange each trades on (moves.ts: stockMarket). */
+async function watchedStocks(): Promise<Array<{ symbol: string; name: string | null; market: MarketId }>> {
+  const rows = await selectAll<{ symbol: string; name: string | null }>(() => db.from("watchlists").select("symbol,name").order("symbol"));
+  const by = new Map<string, { symbol: string; name: string | null; market: MarketId }>();
+  for (const r of rows) { const market = stockMarket(r.symbol); if (market && !by.has(r.symbol)) by.set(r.symbol, { symbol: r.symbol, name: r.name, market }); else if (market && r.name && !by.get(r.symbol)!.name) by.get(r.symbol)!.name = r.name; }
+  return [...by.values()];
+}
+
+/** Stock alerts from one-minute bars: Nikkei 225 and S&P 500 members and every watched stock whose market is open
+ *  or has just closed (moves.ts: scanDue), each measured over all of the session's bars against the previous
+ *  close (moves.ts: sessionMove). */
 export async function scanStockAlerts(now: Date, holidays: Holidays): Promise<{ scanned: number; alerts: number }> {
-  const due = (id: "TSE" | "NYSE") => scanDue(marketById(id)!, now, holidays);
+  const dueBy = new Map<string, boolean>();
+  const due = (id: MarketId) => { if (!dueBy.has(id)) { const m = marketById(id); dueBy.set(id, !!m && scanDue(m, now, holidays)); } return dueBy.get(id)!; };
   const idxs: Array<"SP500" | "NK225"> = [];
   if (due("TSE")) idxs.push("NK225");
   if (due("NYSE")) idxs.push("SP500");
-  if (!idxs.length) return { scanned: 0, alerts: 0 };
-  const { data, error } = await db.from("constituents").select("idx,symbol,name,name_en").in("idx", idxs);
-  if (error) throw new Error(error.message);
-  // English company names as on the rest of the page (the Nikkei list's own names are upper-case short forms)
-  const list = ((data ?? []) as Array<{ idx: string; symbol: string; name: string; name_en: string | null }>).map((c) => ({ idx: c.idx, symbol: c.symbol, name: c.name_en ?? c.name }));
-  if (!list.length) return { scanned: 0, alerts: 0 };
-  const s = await spark(list.map((c) => c.symbol), "1d", "1m");
-  const cand: Array<Record<string, unknown> & { symbol: string; d: string; pct: number; msg: string }> = [];
-  for (const c of list) {
+  const list = new Map<string, { symbol: string; name: string; market: MarketId }>();
+  if (idxs.length) {
+    const { data, error } = await db.from("constituents").select("idx,symbol,name,name_en").in("idx", idxs);
+    if (error) throw new Error(error.message);
+    // English company names as on the rest of the page (the Nikkei list's own names are upper-case short forms)
+    for (const c of (data ?? []) as Array<{ idx: string; symbol: string; name: string; name_en: string | null }>) list.set(c.symbol, { symbol: c.symbol, name: c.name_en ?? c.name, market: c.idx === "NK225" ? "TSE" : "NYSE" });
+  }
+  // watched stocks outside those two lists, in any market the Monitor keeps session times for
+  const extra = (await watchedStocks()).filter((w) => !list.has(w.symbol) && due(w.market));
+  if (extra.length) {
+    const { data: named } = await db.from("constituents").select("symbol,name,name_en").in("symbol", extra.map((w) => w.symbol));
+    const nm = new Map(((named ?? []) as Array<{ symbol: string; name: string; name_en: string | null }>).map((c) => [c.symbol, c.name_en ?? c.name]));
+    for (const w of extra) list.set(w.symbol, { symbol: w.symbol, name: nm.get(w.symbol) ?? w.name ?? w.symbol, market: w.market });
+  }
+  if (!list.size) return { scanned: 0, alerts: 0 };
+  const s = await spark([...list.keys()], "1d", "1m");
+  const cand: Cand[] = [];
+  for (const c of list.values()) {
     const x = s[c.symbol]; if (!x) continue;
     const mv = sessionMove(x.timestamp, x.close, x.chartPreviousClose ?? x.previousClose, STOCK_PCT);
     if (!mv) continue;
-    const market = c.idx === "NK225" ? "TSE" : "NYSE";
     // The alert's time is the minute the stock first passed the threshold in this session, read from its own
     // one-minute bars. (The scan runs every five minutes for all names at once; stamping alerts with the scan
     // time gave every stock that crossed in the same window an identical time.)
-    cand.push({ d: localDate(marketById(market)!.tz, mv.lastT), at: new Date(mv.crossT * 1000).toISOString(), symbol: c.symbol, name: c.name, kind: "stock", pct: mv.pct, price: mv.price, market, msg: alertMsg(c.name, mv.pct, true), upd: now.toISOString() });
+    cand.push({ d: localDate(marketById(c.market)!.tz, mv.lastT), at: new Date(mv.crossT * 1000).toISOString(), symbol: c.symbol, name: c.name, kind: "stock", pct: mv.pct, price: mv.price, market: c.market, msg: alertMsg(c.name, mv.pct, true), upd: now.toISOString() });
   }
-  if (!cand.length) return { scanned: list.length, alerts: 0 };
-  // Write only what changed, as for the indices: the largest move of a session stays the same from one scan to
-  // the next until the stock goes further, and `upd` should say when it last did.
-  const { data: have } = await db.from("alerts").select("symbol,d,pct,msg").eq("kind", "stock").in("symbol", cand.map((c) => c.symbol)).gte("d", cand.map((c) => c.d).sort()[0]);
-  const old = new Map(((have ?? []) as Array<{ symbol: string; d: string; pct: number; msg: string }>).map((x) => [`${x.symbol}|${x.d}`, x]));
-  const out = cand.filter((c) => { const o = old.get(`${c.symbol}|${c.d}`); return !o || Math.abs(o.pct - c.pct) >= 0.005 || o.msg !== c.msg; });
-  return { scanned: list.length, alerts: await upsertAlerts(out) };
+  const { fresh, moved } = await changedOnly(cand);
+  return { scanned: list.size, alerts: await upsertAlerts([...fresh, ...moved]) };
+}
+
+const WIDE_MARKET: Record<string, MarketId> = { TOPIX: "TSE", NDX: "NYSE", KOSPI200: "KRX", HSI: "HKEX", SSE180: "SSE" };
+let covered: { at: number; symbols: Set<string> } | null = null;
+/** Stocks the minute scan already covers (Nikkei 225, S&P 500, watchlists): the quote scan leaves them alone, or
+ *  the two would keep overwriting each other's figure (one-minute closes against the day's true low and high). */
+async function minuteCovered(): Promise<Set<string>> {
+  if (covered && Date.now() - covered.at < 10 * 60e3) return covered.symbols;
+  const idx = await selectAll<{ symbol: string }>(() => db.from("constituents").select("symbol").in("idx", ["NK225", "SP500"]).order("symbol"));
+  covered = { at: Date.now(), symbols: new Set([...idx.map((r) => r.symbol), ...(await watchedStocks()).map((w) => w.symbol)]) };
+  return covered.symbols;
+}
+
+const USD_PAIR: Record<string, string> = { JPY: "USDJPY=X", KRW: "KRW=X", HKD: "HKD=X", CNY: "CNY=X" };
+/** Units of a currency per US dollar, from the market table's own quotes (for the USD 5bn floor). */
+async function perUsd(ccy: string): Promise<number> {
+  if (ccy === "USD") return 1;
+  const pair = USD_PAIR[ccy];
+  const { data } = pair ? await db.from("quotes_latest").select("price").eq("symbol", pair).maybeSingle() : { data: null };
+  const v = (data as { price: number } | null)?.price;
+  if (!v || !(v > 0)) throw new Error(`no ${ccy} rate for the size floor`);
+  return v;
+}
+
+/** Stock alerts for the wide lists, from the quotes the flow job has just pulled for `idx`: a company worth
+ *  USD 5bn or more whose low or high of the day lies beyond ±7% of the previous close. Returns the rows written. */
+export async function scanQuoteAlerts(idx: string, rows: Array<{ symbol: string; name: string; q: QuoteRow }>, now: Date): Promise<number> {
+  const market = WIDE_MARKET[idx], ccy = CCY[idx];
+  if (!market || !ccy || !rows.length) return 0;
+  const rate = await perUsd(ccy);
+  const skip = await minuteCovered(), tz = marketById(market)!.tz, oldest = now.getTime() / 1000 - 36 * 3600;
+  const cand: Cand[] = [], seenAt = new Map<string, number>();
+  for (const r of rows) {
+    const q = r.q;
+    if (skip.has(r.symbol) || q.time == null || q.time < oldest || q.marketCap == null || q.marketCap / rate < MIN_MCAP_USD) continue;
+    const mv = quoteMove(q.prevClose, q.low, q.high, STOCK_PCT);
+    if (!mv) continue;
+    seenAt.set(r.symbol, q.time);
+    cand.push({ d: localDate(tz, q.time), symbol: r.symbol, name: r.name, kind: "stock", pct: mv.pct, price: mv.price, market, msg: alertMsg(r.name, mv.pct, true), upd: now.toISOString() });
+  }
+  const { fresh, moved } = await changedOnly(cand);
+  // A new alert is timed when it is seen. One raised from an earlier session's quote (the first pull of a
+  // morning still carries yesterday's range, and a move made in a closing auction is seen only then) is timed at
+  // that session's last print instead, so it does not stand in the list as a move of this morning. One that
+  // extends keeps its first time (no `at` in the update).
+  const today = localDate(tz, now.getTime() / 1000);
+  return (await upsertAlerts(fresh.map((c) => ({ ...c, at: c.d === today ? now.toISOString() : new Date(seenAt.get(c.symbol)! * 1000).toISOString() })))) + (await upsertAlerts(moved));
 }

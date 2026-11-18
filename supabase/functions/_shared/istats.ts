@@ -7,6 +7,7 @@ import { chunk, db, selectAll } from "./db.ts";
 import { fetchText } from "./http.ts";
 import { quotes, spark, type QuoteRow } from "./yahoo.ts";
 import type { IndexId } from "./constituents.ts";
+import { scanQuoteAlerts } from "./alerts.ts";
 
 interface Constituent { idx: string; symbol: string; name: string; name_en: string | null; sector: string | null; gics_industry: string | null; weight: number | null }
 
@@ -118,7 +119,11 @@ export async function refreshQuotes(idx: IndexId): Promise<string> {
     upd.push({ idx, symbol: r.symbol, name: r.name, d: r.d, close: r.close, mcap: x.marketCap, volume: x.volume, adv3m: x.adv3m, turnover: x.volume != null ? x.volume * px : null, adv_turnover: x.adv3m != null ? x.adv3m * px : null, quote_at: at, ...flowFromQuote(x, px), mf_at: at, earnings_at: x.earningsAt ? new Date(x.earningsAt * 1000).toISOString() : null, earnings_est: x.earningsEst });
   }
   for (const part of chunk(upd, 500)) { const { error: ue } = await db.from("constituent_stats").upsert(part, { onConflict: "idx,symbol" }); if (ue) throw new Error("constituent_stats: " + ue.message); }
-  return `${idx}: ${upd.length} of ${rows.length} quoted`;
+  // excessive moves among the companies of this list that the minute scan does not cover (alerts.ts)
+  let alertNote = "";
+  try { const n = await scanQuoteAlerts(idx, rows.filter((r) => q[r.symbol]).map((r) => ({ symbol: r.symbol, name: r.name, q: q[r.symbol] })), new Date()); alertNote = `, alerts ${n}`; }
+  catch (e) { alertNote = `, alerts failed: ${e instanceof Error ? e.message : e}`; }
+  return `${idx}: ${upd.length} of ${rows.length} quoted${alertNote}`;
 }
 
 /** Kept for the schedules and the Actions job: the net flow comes with the quotes now. */
