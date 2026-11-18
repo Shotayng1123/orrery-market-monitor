@@ -1,7 +1,9 @@
 // Excessive-move alerts. Thresholds (Shota): single stock ±7% intraday, index ±3%. One row per symbol, session
 // date and kind; while the move extends the magnitude and message are updated, so the top bar shows the latest.
+// For a stock the magnitude is the largest move of the session (moves.ts): it stays when the stock comes back.
 import { db } from "./db.ts";
-import { localDate, marketById, marketState, type Holidays } from "./sessions.ts";
+import { localDate, marketById, type Holidays } from "./sessions.ts";
+import { scanDue, sessionMove } from "./moves.ts";
 import { spark } from "./yahoo.ts";
 import type { TableRow } from "./table.ts";
 
@@ -37,12 +39,13 @@ export async function scanIndexAlerts(rows: TableRow[], now: Date): Promise<numb
   return upsertAlerts(out);
 }
 
-/** Stock alerts: constituents of the indices whose market is open, measured against the previous close. */
+/** Stock alerts: constituents of the indices whose market is open or has just closed (moves.ts: scanDue), each
+ *  measured over all of the session's one-minute bars against the previous close (moves.ts: sessionMove). */
 export async function scanStockAlerts(now: Date, holidays: Holidays): Promise<{ scanned: number; alerts: number }> {
-  const open = (id: "TSE" | "NYSE") => { const m = marketById(id)!; const st = marketState(m, now, holidays); return st === "OPEN" || st === "BREAK"; };
+  const due = (id: "TSE" | "NYSE") => scanDue(marketById(id)!, now, holidays);
   const idxs: Array<"SP500" | "NK225"> = [];
-  if (open("TSE")) idxs.push("NK225");
-  if (open("NYSE")) idxs.push("SP500");
+  if (due("TSE")) idxs.push("NK225");
+  if (due("NYSE")) idxs.push("SP500");
   if (!idxs.length) return { scanned: 0, alerts: 0 };
   const { data, error } = await db.from("constituents").select("idx,symbol,name,name_en").in("idx", idxs);
   if (error) throw new Error(error.message);
@@ -50,23 +53,22 @@ export async function scanStockAlerts(now: Date, holidays: Holidays): Promise<{ 
   const list = ((data ?? []) as Array<{ idx: string; symbol: string; name: string; name_en: string | null }>).map((c) => ({ idx: c.idx, symbol: c.symbol, name: c.name_en ?? c.name }));
   if (!list.length) return { scanned: 0, alerts: 0 };
   const s = await spark(list.map((c) => c.symbol), "1d", "1m");
-  const out: Array<Record<string, unknown>> = [];
+  const cand: Array<Record<string, unknown> & { symbol: string; d: string; pct: number; msg: string }> = [];
   for (const c of list) {
     const x = s[c.symbol]; if (!x) continue;
-    const prev = x.chartPreviousClose ?? x.previousClose; if (!prev) continue;
-    let last: number | null = null, lastT = 0;
-    for (let i = x.close.length - 1; i >= 0; i--) { const v = x.close[i]; if (v != null) { last = v; lastT = x.timestamp[i]; break; } }
-    if (last == null) continue;
-    const pct = (last / prev - 1) * 100;
-    if (Math.abs(pct) < STOCK_PCT) continue;
+    const mv = sessionMove(x.timestamp, x.close, x.chartPreviousClose ?? x.previousClose, STOCK_PCT);
+    if (!mv) continue;
     const market = c.idx === "NK225" ? "TSE" : "NYSE";
-    const d = localDate(marketById(market)!.tz, lastT);
     // The alert's time is the minute the stock first passed the threshold in this session, read from its own
     // one-minute bars. (The scan runs every five minutes for all names at once; stamping alerts with the scan
     // time gave every stock that crossed in the same window an identical time.)
-    let crossT = lastT;
-    for (let i = 0; i < x.close.length; i++) { const v = x.close[i]; if (v != null && Math.abs((v / prev - 1) * 100) >= STOCK_PCT) { crossT = x.timestamp[i]; break; } }
-    out.push({ d, at: new Date(crossT * 1000).toISOString(), symbol: c.symbol, name: c.name, kind: "stock", pct, price: last, market, msg: alertMsg(c.name, pct, true), upd: now.toISOString() });
+    cand.push({ d: localDate(marketById(market)!.tz, mv.lastT), at: new Date(mv.crossT * 1000).toISOString(), symbol: c.symbol, name: c.name, kind: "stock", pct: mv.pct, price: mv.price, market, msg: alertMsg(c.name, mv.pct, true), upd: now.toISOString() });
   }
+  if (!cand.length) return { scanned: list.length, alerts: 0 };
+  // Write only what changed, as for the indices: the largest move of a session stays the same from one scan to
+  // the next until the stock goes further, and `upd` should say when it last did.
+  const { data: have } = await db.from("alerts").select("symbol,d,pct,msg").eq("kind", "stock").in("symbol", cand.map((c) => c.symbol)).gte("d", cand.map((c) => c.d).sort()[0]);
+  const old = new Map(((have ?? []) as Array<{ symbol: string; d: string; pct: number; msg: string }>).map((x) => [`${x.symbol}|${x.d}`, x]));
+  const out = cand.filter((c) => { const o = old.get(`${c.symbol}|${c.d}`); return !o || Math.abs(o.pct - c.pct) >= 0.005 || o.msg !== c.msg; });
   return { scanned: list.length, alerts: await upsertAlerts(out) };
 }
