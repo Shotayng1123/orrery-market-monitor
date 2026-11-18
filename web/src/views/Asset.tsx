@@ -60,7 +60,8 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
   const row = chartRow(d), dec = row.decimals, ccy = d.currency;
   const f = d.fin, sh = shortLine(d), s = d.short;
   const fs = f ? finSections(f, view) : null;
-  const bench = d.home.name;
+  const bms = d.benchmarks, title = bms.map((b) => b.name).join(" AND ");
+  const pp = (v: number | null) => (v == null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1).replace("-", "\u2212")}`);
   return (
     <>
       <div className="c12"><PeriodBar period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} /></div>
@@ -87,7 +88,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
           </KV>
           <KV k="From 52-week high / low">{<><span className={signCls(d.range.fromHi)}>{fmtPc(d.range.fromHi, true)}</span> / <span className={signCls(d.range.fromLo)}>{fmtPc(d.range.fromLo, true)}</span></>}</KV>
           <KV k="Volatility, 1M / 3M / 12M" title="Standard deviation of daily log returns over 21, 63 and 252 sessions, as a yearly figure">{fmtPc(d.vol.m1, false, 0)} / {fmtPc(d.vol.m3, false, 0)} / {fmtPc(d.vol.m12, false, 0)}</KV>
-          <KV k={`Beta vs ${bench}, 12M`} title={`From daily returns over the last ${d.beta.days} sessions on which both traded; correlation ${d.beta.corr == null ? "–" : d.beta.corr.toFixed(2)}`}>{d.beta.beta == null ? "–" : d.beta.beta.toFixed(2)}</KV>
+          {bms.map((b, k) => <KV key={b.symbol} k={`Beta vs ${b.name}, 12M`} title={`From daily returns over the last ${d.beta[k]?.days ?? 0} sessions on which both traded; correlation ${d.beta[k]?.corr == null ? "–" : d.beta[k].corr!.toFixed(2)}`}>{d.beta[k]?.beta == null ? "–" : d.beta[k].beta!.toFixed(2)}</KV>)}
           <KV k="Largest fall, 12M" title={d.drawdown.from ? `From the close of ${d.drawdown.from} to that of ${d.drawdown.to}` : undefined} cls={signCls(d.drawdown.pct)}>{fmtPc(d.drawdown.pct)}</KV>
           <KV k="P/E, last year / guidance" title={d.val.basis ?? undefined}>{fmtX(d.val.pe)} / {fmtX(d.val.peGuide)}</KV>
           <KV k="P/B" title={d.val.basis ?? undefined}>{fmtX(d.val.pb, 2)}</KV>
@@ -95,17 +96,18 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
           <KV k="Next earnings" title={d.earningsEst ? "Estimated by Yahoo Finance; not confirmed by the company" : undefined}>{d.earningsAt ? `${fmtStamp(d.earningsAt)}${d.earningsEst ? " (est.)" : ""}` : "–"}</KV>
         </tbody></table>
       </Panel>
-      <Panel no="03" title={`PERFORMANCE VS ${bench.toUpperCase()}`} span={8} aux="price change, dividends not included">
+      <Panel no="03" title={`PERFORMANCE VS ${title.toUpperCase()}`} span={8} aux="price change, dividends not included">
         <table className="secT perfT" id="st-perf">
           <thead><tr><th className="l" />{d.perf.map((r) => <th key={r.h} title={r.from ? `from the close of ${r.from}` : undefined}>{r.h}</th>)}</tr></thead>
           <tbody>
-            <tr><td className="l mut">Price then</td>{d.perf.map((r) => <td key={r.h} className="num mut">{fmtNum(r.base, dec)}</td>)}</tr>
-            <tr><td className="l">{d.symbol}</td>{d.perf.map((r) => <td key={r.h} className={`num ${signCls(r.stock)}`}>{fmtPc(r.stock, true)}</td>)}</tr>
-            <tr><td className="l">{bench}</td>{d.perf.map((r) => <td key={r.h} className={`num ${signCls(r.bench)}`}>{fmtPc(r.bench, true)}</td>)}</tr>
-            <tr className="tot"><td className="l">Against the benchmark, pp</td>{d.perf.map((r) => <td key={r.h} className={`num ${signCls(r.rel)}`}>{r.rel == null ? "–" : `${r.rel > 0 ? "+" : ""}${r.rel.toFixed(1).replace("-", "−")}`}</td>)}</tr>
+            <tr data-r="then"><td className="l mut">Price then</td>{d.perf.map((r) => <td key={r.h} className="num mut">{fmtNum(r.base, dec)}</td>)}</tr>
+            <tr data-r="stock"><td className="l">{d.symbol}</td>{d.perf.map((r) => <td key={r.h} className={`num ${signCls(r.stock)}`}>{fmtPc(r.stock, true)}</td>)}</tr>
+            {bms.map((b, k) => <tr key={b.symbol} data-r="bench"><td className="l" title={b.note ?? undefined}>{b.name}{b.note && <span className="badge proxy">PROXY</span>}</td>{d.perf.map((r) => <td key={r.h} className={`num ${signCls(r.bench[k])}`}>{fmtPc(r.bench[k], true)}</td>)}</tr>)}
+            {bms.map((b, k) => <tr key={b.symbol} data-r="rel" className={k === 0 ? "tot" : "tot2"}><td className="l">Against {b.name}, pp</td>{d.perf.map((r) => <td key={r.h} className={`num ${signCls(r.rel[k])}`}>{pp(r.rel[k])}</td>)}</tr>)}
           </tbody>
         </table>
-        <div className="mut finnote">Each column is the price now against the last close on or before the same day that many months ago; the benchmark is measured between the same two dates. A column is empty where the history does not reach that far.</div>
+        <div className="mut finnote">Each column is the price now against the last close on or before the same day that many months ago; a benchmark is measured between the same two dates. A column is empty where the history does not reach that far.</div>
+        {bms.filter((b) => b.note).map((b) => <div key={b.symbol} className="mut finnote">{b.note}</div>)}
       </Panel>
       <Panel no="04" title="SHORT INTEREST" span={4} aux={s ? (s.kind === "jpx" ? "JPX short-position reports" : s.kind === "interest" ? "exchange-reported · Yahoo Finance" : "FINRA") : ""}>
         {!s ? <Empty title="No short data">None reported for this name.</Empty> : s.kind === "jpx" ? (

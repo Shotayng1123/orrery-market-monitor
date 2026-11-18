@@ -68,6 +68,20 @@ export function homeIndex(symbol: string): { symbol: string; name: string } {
   return { symbol: "^GSPC", name: "S&P 500" };
 }
 
+/** The indices a stock's change is set against on its page. Tokyo names: the Nikkei 225 and TOPIX (Shota, 18 Nov
+ *  2026). The feed has no TOPIX series, so TOPIX is read from the 1306.T exchange-traded fund that tracks it, as on
+ *  the MARKET tab, and the page says so. Like the index, the fund's price leaves dividends out; but the fund
+ *  holds the dividends it receives until its yearly payout, so around that payout its change and the index's
+ *  differ a little. */
+export interface Benchmark { symbol: string; name: string; note: string | null }
+export function benchmarksFor(symbol: string): Benchmark[] {
+  if (/\.T$/.test(symbol)) return [
+    { symbol: "^N225", name: "Nikkei 225", note: null },
+    { symbol: "1306.T", name: "TOPIX", note: "TOPIX is read from the 1306.T exchange-traded fund that tracks it (the feed has no TOPIX series). The fund pays out the dividends it has collected once a year, so over a period that starts or ends near that payout its change differs a little from the index's." },
+  ];
+  return [{ ...homeIndex(symbol), note: null }];
+}
+
 // ---- statements ----
 export interface StatementRow { period: string; label: string; revenue: number | null; op: number | null; ni: number | null; eps: number | null; assets?: number | null; equity?: number | null; cfo?: number | null; cfi?: number | null; cff?: number | null; fcf?: number | null }
 export interface Statements { source: "edinetdb" | "yahoo" | null; currency: string | null; unit: string; annual: StatementRow[]; quarterly: StatementRow[]; forecast: { fiscalYearEnd: string | null; disclosed: string | null; revenue: number | null; op: number | null; ni: number | null; eps: number | null; dps: number | null } | null; note: string | null; asOf: string | null }

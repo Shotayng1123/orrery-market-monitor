@@ -5,7 +5,7 @@
 import { db } from "./db.ts";
 import { fetchText } from "./http.ts";
 import { keyStats, type KeyStats } from "./yahoo.ts";
-import { dailyBars, homeIndex, quoteFor } from "./assets.ts";
+import { benchmarksFor, dailyBars, quoteFor } from "./assets.ts";
 import { avgTurnover, betaCorr, maxDrawdown, perfRows, range52w, realisedVol, type Bar } from "./stockstats.ts";
 import { valuation, type Fin, type FinLine } from "./fin.ts";
 import { yahooFin, yahooFinTypes } from "./finsrc.ts";
@@ -56,11 +56,11 @@ function guided(fin: Fin | null, id: FinLine): number | null {
 export async function stockPage(symbol: string) {
   if (!symbol) throw new Error("symbol required");
   const q = await quoteFor(symbol);
-  const home = homeIndex(symbol), jp = /\.T$/.test(symbol), equity = q.quoteType === "EQUITY";
-  const [{ data: con }, own, bench, fin, ks] = await Promise.all([
+  const benchmarks = benchmarksFor(symbol), jp = /\.T$/.test(symbol), equity = q.quoteType === "EQUITY";
+  const [{ data: con }, own, benches, fin, ks] = await Promise.all([
     db.from("constituents").select("idx,sector,gics_industry,gics_source").eq("symbol", symbol).limit(5),
     soft(dailyBars(symbol), [] as Bar[], "price history"),
-    soft(dailyBars(home.symbol), [] as Bar[], "benchmark history"),
+    Promise.all(benchmarks.map((b) => soft(dailyBars(b.symbol), [] as Bar[], `${b.name} history`))),
     equity ? finFor(symbol, q.currency) : Promise.resolve({ fin: null, note: "Statements are available for equities only." }),
     equity ? soft(keyStats(symbol), null as KeyStats | null, "key statistics") : Promise.resolve(null),
   ]);
@@ -109,9 +109,9 @@ export async function stockPage(symbol: string) {
     sector: member?.sector ?? null, industry: member?.gics_industry ?? null, indices: (con ?? []).map((c) => c.idx),
     price: q.price, prevClose: q.prevClose, pct: q.price != null && q.prevClose ? (q.price / q.prevClose - 1) * 100 : null, asOf: q.time ? new Date(q.time * 1000).toISOString() : null,
     open: q.open ?? null, high: q.high ?? null, low: q.low ?? null, volume: q.volume, mcap: q.marketCap,
-    home, perf: perfRows(own, bench, q.price, q.prevClose), range: range52w(own, q.price),
+    benchmarks, perf: perfRows(own, benches, q.price, q.prevClose), range: range52w(own, q.price),
     vol: { m1: realisedVol(own, 21), m3: realisedVol(own, 63), m12: realisedVol(own, 252) },
-    beta: betaCorr(own, bench, 252), drawdown: maxDrawdown(own, 12),
+    beta: benches.map((b) => betaCorr(own, b, 252)), drawdown: maxDrawdown(own, 12),
     turnover: { d20: { shares: d20.shares, value: d20.value }, d60: { shares: d60.shares, value: d60.value } },
     shares, short,
     earningsAt: q.earningsAt ? new Date(q.earningsAt * 1000).toISOString() : null, earningsEst: q.earningsEst ?? null,

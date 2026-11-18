@@ -27,39 +27,41 @@ export function barOnOrBefore(bars: Bar[], t: number): Bar | null {
 }
 
 export const HORIZONS: Array<{ h: string; months: number }> = [{ h: "1M", months: 1 }, { h: "3M", months: 3 }, { h: "6M", months: 6 }, { h: "12M", months: 12 }, { h: "36M", months: 36 }, { h: "60M", months: 60 }];
-export interface PerfRow { h: string; from: string | null; base: number | null; stock: number | null; bench: number | null; rel: number | null }
+export interface PerfRow { h: string; from: string | null; base: number | null; stock: number | null; bench: Array<number | null>; rel: Array<number | null> }
 const pct = (now: number | null | undefined, then: number | null | undefined): number | null => (now == null || then == null || !(then > 0) ? null : (now / then - 1) * 100);
 
-/** The price now against the close one day, 1, 3, 6, 12, 36 and 60 months ago, the benchmark over the same
+/** The price now against the close one day, 1, 3, 6, 12, 36 and 60 months ago, each benchmark over the same
  *  dates, and the difference in percentage points (plus = the stock did better).
  *    last / prev        the stock's price now and its previous close (the quote), for the 1D row
- *    own, bench         daily bars; the latest bar may be today's
+ *    own                the stock's daily bars; the latest bar may be today's
+ *    benches            the daily bars of each benchmark (one list per benchmark, in the order they are shown)
  *  A horizon is measured from the last close on or before the same calendar day N months before the stock's
- *  latest bar. Where the history does not reach that far the row is empty, never shortened. The benchmark is
- *  read at the same two dates (its last close on or before each), so both cover the same stretch of time. */
-export function perfRows(own: Bar[], bench: Bar[], last: number | null, prev: number | null): PerfRow[] {
+ *  latest bar. Where the history does not reach that far the row is empty, never shortened. A benchmark is
+ *  read at the same two dates (its last close on or before each), so all cover the same stretch of time. */
+export function perfRows(own: Bar[], benches: Bar[][], last: number | null, prev: number | null): PerfRow[] {
   const rows: PerfRow[] = [];
   const end = own.length ? own[own.length - 1] : null;
   const px = last ?? end?.c ?? null;
-  const bEnd = end ? barOnOrBefore(bench, end.t) : null;
-  // 1D: the quote's own previous close; the benchmark's close before its latest bar
+  const ends = benches.map((b) => (end ? barOnOrBefore(b, end.t) : null));
+  const none = benches.map(() => null);
+  const diff = (s: number | null, b: Array<number | null>) => b.map((x) => (s == null || x == null ? null : s - x));
+  // 1D: the quote's own previous close; each benchmark's close before its latest bar
   {
     const before = end ? barOnOrBefore(own, end.t - DAY) : null;
     const base = prev ?? before?.c ?? null;
-    const bPrev = bEnd ? barOnOrBefore(bench, bEnd.t - DAY) : null;
-    const s = pct(px, base), b = pct(bEnd?.c, bPrev?.c);
-    rows.push({ h: "1D", from: before ? iso(before.t) : null, base, stock: s, bench: b, rel: s == null || b == null ? null : s - b });
+    const s = pct(px, base);
+    const b = benches.map((bars, k) => { const e = ends[k]; const p = e ? barOnOrBefore(bars, e.t - DAY) : null; return pct(e?.c, p?.c); });
+    rows.push({ h: "1D", from: before ? iso(before.t) : null, base, stock: s, bench: b, rel: diff(s, b) });
   }
   for (const { h, months } of HORIZONS) {
-    if (!end) { rows.push({ h, from: null, base: null, stock: null, bench: null, rel: null }); continue; }
+    if (!end) { rows.push({ h, from: null, base: null, stock: null, bench: [...none], rel: [...none] }); continue; }
     const at = monthsBack(end.t, months);
     const a = barOnOrBefore(own, at);
     // an anchor more than ten days older than asked for means the history has a hole there (or has only just begun)
     const ok = a != null && at - a.t <= 10 * DAY;
-    const bA = ok ? barOnOrBefore(bench, a!.t) : null;
-    const bOk = bA != null && a!.t - bA.t <= 10 * DAY;
-    const s = ok ? pct(px, a!.c) : null, b = bOk ? pct(bEnd?.c, bA!.c) : null;
-    rows.push({ h, from: ok ? iso(a!.t) : null, base: ok ? a!.c : null, stock: s, bench: b, rel: s == null || b == null ? null : s - b });
+    const s = ok ? pct(px, a!.c) : null;
+    const b = benches.map((bars, k) => { const bA = ok ? barOnOrBefore(bars, a!.t) : null; return bA != null && a!.t - bA.t <= 10 * DAY ? pct(ends[k]?.c, bA.c) : null; });
+    rows.push({ h, from: ok ? iso(a!.t) : null, base: ok ? a!.c : null, stock: s, bench: b, rel: diff(s, b) });
   }
   return rows;
 }

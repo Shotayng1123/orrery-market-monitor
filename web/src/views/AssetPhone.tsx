@@ -36,7 +36,8 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
     </div>
   );
   const row = chartRow(d), dec = row.decimals, ccy = d.currency;
-  const f = d.fin, s = d.short, sh = shortLine(d), bench = d.home.name;
+  const f = d.fin, s = d.short, sh = shortLine(d), bms = d.benchmarks;
+  const pp = (v: number | null) => (v == null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1).replace("-", "\u2212")}`);
   const fs = f ? finSections(f, view) : null;
   return (
     <div className="mp">
@@ -69,7 +70,7 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
             <KV k="Volume today" sub={d.volume != null && d.turnover.d60.shares ? `${Math.round((d.volume / d.turnover.d60.shares) * 100)}% of the 60-session average` : undefined}>{fmtCount(d.volume)}</KV>
             <KV k={sh.label} sub={s?.kind === "jpx" ? `positions of 0.5% and above · ${s.d}` : s?.kind === "finra" ? "not short interest" : undefined}>{sh.value}</KV>
             <KV k="Volatility, 1M / 3M / 12M" sub="yearly figure from daily returns">{fmtPc(d.vol.m1, false, 0)} / {fmtPc(d.vol.m3, false, 0)} / {fmtPc(d.vol.m12, false, 0)}</KV>
-            <KV k={`Beta vs ${bench}, 12M`}>{d.beta.beta == null ? "–" : d.beta.beta.toFixed(2)}</KV>
+            {bms.map((b, k) => <KV key={b.symbol} k={`Beta vs ${b.name}, 12M`}>{d.beta[k]?.beta == null ? "–" : d.beta[k].beta!.toFixed(2)}</KV>)}
             <KV k="Largest fall, 12M" sub={d.drawdown.from ? `${d.drawdown.from} to ${d.drawdown.to}` : undefined}><span className={signCls(d.drawdown.pct)}>{fmtPc(d.drawdown.pct)}</span></KV>
             <KV k="P/E, last year">{fmtX(d.val.pe)}</KV>
             <KV k="P/B">{fmtX(d.val.pb, 2)}</KV>
@@ -79,15 +80,21 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
         </div>
       </Section>
 
-      <Section title={`Performance vs ${bench}`} card={false}>
+      <Section title="Performance" aux={`vs ${bms.map((b) => b.name).join(", ")}`} card={false}>
         <div className="mp-card pad">
           <table className="mp-t perf" id="st-perf">
-            <thead><tr><th /><th>Price then</th><th>{d.symbol}</th><th>Benchmark</th><th>Diff, pp</th></tr></thead>
+            <thead><tr><th /><th>Price then</th><th>{d.symbol}</th>{bms.map((b) => <th key={b.symbol}>vs {b.name}</th>)}</tr></thead>
             <tbody>{d.perf.map((r) => (
-              <tr key={r.h}><td>{r.h}</td><td className="mut">{fmtNum(r.base, dec)}</td><td className={signCls(r.stock)}>{fmtPc(r.stock, true)}</td><td className={signCls(r.bench)}>{fmtPc(r.bench, true)}</td><td className={signCls(r.rel)}>{r.rel == null ? "–" : `${r.rel > 0 ? "+" : ""}${r.rel.toFixed(1).replace("-", "−")}`}</td></tr>
+              <tr key={r.h}><td>{r.h}</td><td className="mut">{fmtNum(r.base, dec)}</td><td className={signCls(r.stock)}>{fmtPc(r.stock, true)}</td>{bms.map((b, k) => <td key={b.symbol} className={signCls(r.rel[k])}>{pp(r.rel[k])}</td>)}</tr>
             ))}</tbody>
           </table>
-          <p className="mp-note in">Price changes, dividends not included. Each row is the price now against the last close on or before the same day that long ago; the benchmark is measured between the same two dates.</p>
+          <p className="mp-note in">"vs" is the stock's change less the index's, in percentage points (plus = the stock did better).</p>
+          <table className="mp-t perf idx" id="st-bench">
+            <thead><tr><th />{bms.map((b) => <th key={b.symbol}>{b.name}</th>)}</tr></thead>
+            <tbody>{d.perf.map((r) => <tr key={r.h}><td>{r.h}</td>{bms.map((b, k) => <td key={b.symbol} className={signCls(r.bench[k])}>{fmtPc(r.bench[k], true)}</td>)}</tr>)}</tbody>
+          </table>
+          <p className="mp-note in">Price changes, dividends not included. Each row is the price now against the last close on or before the same day that long ago; an index is measured between the same two dates.</p>
+          {bms.filter((b) => b.note).map((b) => <p key={b.symbol} className="mp-note in">{b.note}</p>)}
         </div>
       </Section>
 

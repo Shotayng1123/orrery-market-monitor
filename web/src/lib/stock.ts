@@ -3,7 +3,8 @@
 // worked out on the page except the two sums named in finSections (net cash, free cash flow).
 import { fmtNum } from "./fmt";
 
-export interface PerfRow { h: string; from: string | null; base: number | null; stock: number | null; bench: number | null; rel: number | null }
+export interface PerfRow { h: string; from: string | null; base: number | null; stock: number | null; bench: Array<number | null>; rel: Array<number | null> }
+export interface Benchmark { symbol: string; name: string; note: string | null }
 export type FinLine = "revenue" | "cogs" | "gross" | "sga" | "op" | "nonOpInc" | "nonOpExp" | "ordinary" | "extraInc" | "extraLoss" | "pretax" | "ni" | "eps" | "dps"
   | "cash" | "stDebt" | "ltDebt" | "assets" | "liabilities" | "equity" | "ocf" | "icf" | "fincf" | "capex" | "shares" | "dilutedShares" | "bps" | "payoutReported";
 export type RatioId = "salesYoy" | "gpm" | "opm" | "npm" | "payout" | "roe" | "equityRatio";
@@ -26,11 +27,11 @@ export interface StockPage {
   sector: string | null; industry: string | null; indices: string[];
   price: number | null; prevClose: number | null; pct: number | null; asOf: string | null;
   open: number | null; high: number | null; low: number | null; volume: number | null; mcap: number | null;
-  home: { symbol: string; name: string };
+  benchmarks: Benchmark[];   // what the stock is set against, in order; `perf[].bench`, `perf[].rel` and `beta` follow this order
   perf: PerfRow[];
   range: { hi: number | null; hiDate: string | null; lo: number | null; loDate: string | null; fromHi: number | null; fromLo: number | null; pos: number | null };
   vol: { m1: number | null; m3: number | null; m12: number | null };
-  beta: { beta: number | null; corr: number | null; days: number };
+  beta: Array<{ beta: number | null; corr: number | null; days: number }>;
   drawdown: { pct: number | null; from: string | null; to: string | null };
   turnover: { d20: { shares: number | null; value: number | null }; d60: { shares: number | null; value: number | null } };
   shares: { outstanding: number | null; diluted: number | null; dilutedNote: string | null; treasury: number | null; float: number | null; asOf: string | null; source: string | null };
