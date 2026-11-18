@@ -19,6 +19,9 @@ export interface Pack {
   us: { indices: Move[]; sectorsEtf: Move[]; sectorsConstituents: SectorMove[]; top: Move[]; bottom: Move[]; big: Move[]; breadth: Breadth | null; source: string };
   jp: { indices: Move[]; sectors: SectorMove[]; top: Move[]; bottom: Move[]; big: Move[]; breadth: Breadth | null; impliedOpenPct: number | null; impliedNote: string; source: string };
   table: Array<{ symbol: string; name: string; cls: string; last: number | null; d1Pct: number | null; d1Chg: number | null; unit: "pct" | "bp" }>;
+  /** A market whose prices stopped arriving before its close: the figures below are then not closing levels
+   *  (jobs/lib/pack.ts; absent from notes written before 19 Nov 2026). */
+  warnings?: string[];
 }
 
 function MovesTable({ rows, title }: { rows: Move[]; title: string }) {
@@ -87,6 +90,7 @@ export function Overnight({ pack }: { pack: Pack }) {
   const chg = (r: Pack["table"][number]) => r.unit === "bp" ? (r.d1Chg == null ? "–" : `${r.d1Chg > 0 ? "+" : ""}${(r.d1Chg * 100).toFixed(0)}bp`) : fmtPct(r.d1Pct);
   return (
     <>
+      {(pack.warnings ?? []).map((w) => <div key={w} className="nwarn" role="note">{w}</div>)}
       <div className="nsec">Markets · 1D</div>
       <table className="secT nmaj"><tbody>
         {MAJOR.map(([cls, syms]) => {

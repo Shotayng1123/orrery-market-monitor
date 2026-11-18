@@ -1,6 +1,6 @@
 // The phone layout: NEWS and RESEARCH.
 // Run from web/:  node e2e/run.cjs phone-news-research   (the runner starts the servers this needs; see e2e/run.cjs)
-const { chromium, devices } = require("playwright"); const { routes } = require("./harness.cjs");
+const { chromium, devices } = require("playwright"); const { routes, note } = require("./harness.cjs");
 const LIVE = "http://localhost:5181/orrery-market-monitor/";
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d)}`); };
 const pick = (p, label) => p.locator(".pick", { has: p.locator(`.lbl:text-is("${label}")`) });
@@ -71,4 +71,17 @@ const sizes = (p) => p.evaluate(() => { const vis = (el) => { const r = el.getBo
     rows = [{ id: 902, d: "2026-11-10", title: "An older note", generatedAt: new Date(Date.now() - 40 * 3600e3).toISOString(), kind: "daily" }];
     await p.goto(LIVE + "?phone=new#market"); await p.reload({ waitUntil: "networkidle" }); await p.waitForSelector(".mp-head h1"); await p.waitForTimeout(700);
     ck("an older note is not offered as the morning's; no page errors", (await p.locator("#mk-note").count()) === 0 && errs.length === 0, errs); await ctx.close(); }
+  console.log("\n[a morning note written while prices had stopped before the close]");
+  { const WARN = "Prices from New York stopped arriving at 18 Nov 10:52 New York time, before the close at 18 Nov 16:00. The US figures in these tables are as of then, not closing levels.";
+    for (const [name, opts] of [["desktop", { viewport: { width: 1440, height: 900 } }], ["phone", { ...devices["iPhone 13"] }]]) {
+      const ctx = await b.newContext(opts); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message)); await routes(p);
+      let warn = true;
+      await p.route("**/fakeapi?*", (r) => { const q = new URL(r.request().url()).searchParams; if (q.get("action") !== "note") return r.fallback(); const n = note(q.get("d"));
+        r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ note: { ...n, pack: warn ? { ...n.pack, warnings: [WARN] } : n.pack } }) }); });
+      await p.goto(LIVE + "#research/note:2026-11-16", { waitUntil: "networkidle" }); await p.waitForSelector(".ntabs .nsec"); await p.waitForTimeout(400);
+      const v = await p.evaluate(() => { const w = document.querySelector(".ntabs .nwarn"), first = document.querySelector(".ntabs .nsec"); if (!w) return null; const r = w.getBoundingClientRect();
+        return { text: w.textContent, above: r.bottom <= first.getBoundingClientRect().top + 1, left: Math.round(r.left), right: Math.round(r.right), vw: innerWidth, px: parseFloat(getComputedStyle(w).fontSize), over: document.documentElement.scrollWidth - innerWidth }; });
+      ck(`${name}: the note's tables open with the warning, in full, above the first table (${v?.px}px type)`, !!v && v.text === WARN && v.above && v.left >= 0 && v.right <= v.vw && v.over <= 0 && v.px >= (name === "phone" ? 14 : 11.5), v);
+      warn = false; await p.goto(LIVE + "#research/note:2026-11-13"); await p.reload({ waitUntil: "networkidle" }); await p.waitForSelector(".ntabs .nsec"); await p.waitForTimeout(300);
+      ck(`${name}: a note without one shows none; no page errors`, (await p.locator(".ntabs .nwarn").count()) === 0 && errs.length === 0, errs); await ctx.close(); } }
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0); })();

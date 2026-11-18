@@ -346,6 +346,16 @@ DATA ✕ with the reason, and a red bar at the foot of every screen: "No new pri
 sending them; the figures on screen are as of then." Both go when prices arrive again. Nothing else changes:
 the prices already on screen stay, with their own times. While the feed is stopped no move can be seen, so no
 alert is raised either; the bar is the only sign.
+
+The Morning Note is written after New York has closed, from the last prices the Monitor holds. If the feed
+stopped during a session those are not closing levels. `stoppedBeforeClose` (same file) finds a market's most
+recent regular close and whether its last print falls more than half an hour short of it; `jobs/lib/pack.ts`
+asks it for New York (the S&P 500's last print) and Tokyo (the Nikkei 225's) and, when it does, puts a line in
+the pack's `warnings`: "Prices from New York stopped arriving at 18 Nov 10:52 New York time, before the close at
+18 Nov 16:00. The US figures in these tables are as of then, not closing levels." The writer is told to say so
+at the start of "In brief" and never to present those figures as where the market closed, and the note's page
+shows the warning above its tables. Exchange holidays come from `sessions_cal`; New York's usual half days
+(the Friday after Thanksgiving, 24 December, 3 July) end at 13:00 and a last print then is taken as the close.
 - Spot-check the table against the exchange: Nikkei 225 close on JPX/Nikkei, S&P 500 on S&P DJI, USD/JPY on a bank page, UST 10Y on treasury.gov for the same date.
 - Holidays: `sessions_cal` rows are `verified = false` until checked against each exchange's published calendar; the DATA chip says so.
 

@@ -33,6 +33,7 @@ Hard rules:
 6. Dates and times: the pack is as of the generatedAt timestamp; today is dateSgt (Singapore). Refer to sessions by their date.
 7. If dateSgt is a Saturday there is no Tokyo session today or tomorrow: write the Japan section as the read-across for Monday's open, and say so. If dateSgt is a Monday, cover weekend news that matters for the open, with citations.
 8. ${TAG_RULE}
+9. If the pack has "warnings", prices for that market stopped arriving before its close, and the pack's figures for it are not closing levels. Say so in one plain sentence at the start of "In brief". Write that market's part from the reports you find, with citations, and never describe a figure from the pack as where that market closed.
 
 Length and style: 500 to 750 words in all. Short sentences, one cause and one effect each. Bullets ("- ") rather than long paragraphs. No sentence that only restates a move.
 

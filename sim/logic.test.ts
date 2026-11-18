@@ -19,7 +19,7 @@ import { bigMoves, isLargeCap, moveText, settledBars } from "../supabase/functio
 import { liveRows } from "../supabase/functions/_shared/intraday.ts";
 import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabase/functions/_shared/movecause.ts";
 import { ALERTS, COMPANY, FIRST, PHILOSOPHY, PHONE, TABS, WELCOME_SUBJECT, welcomeMail } from "../supabase/functions/_shared/welcome.ts";
-import { FEED_LATE_MIN, feedState, type Print } from "../supabase/functions/_shared/feedhealth.ts";
+import { FEED_LATE_MIN, feedState, stoppedBeforeClose, type Print } from "../supabase/functions/_shared/feedhealth.ts";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
 let pass = 0, fail = 0;
@@ -724,6 +724,23 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck("fifty minutes into the afternoon it is judged, and a print still from before lunch means the feed has stopped", !feedState([P("^N225", "TSE", "2026-11-19T02:30:00Z")], at("2026-11-19T04:25:00Z")).ok && feedState([P("^N225", "TSE", "2026-11-19T04:00:00Z")], at("2026-11-19T04:25:00Z")).ok);
     ck("on 25 December and 1 January currencies and futures do not trade: their old prints are not a stopped feed, while an exchange that is open that day is still judged", !feedState([P("USDJPY=X", "FX", "2026-12-24T22:00:00Z"), P("ES=F", "CME", "2026-12-24T18:00:00Z")], at("2026-12-25T15:00:00Z")).expected && !feedState([P("USDJPY=X", "FX", "2026-12-31T22:00:00Z")], at("2027-01-01T03:00:00Z")).expected && feedState([P("USDJPY=X", "FX", "2026-12-24T22:00:00Z"), P("^N225", "TSE", "2026-12-25T04:50:00Z")], at("2026-12-25T05:00:00Z")).ok && !feedState([P("USDJPY=X", "FX", "2026-12-24T22:00:00Z"), P("^N225", "TSE", "2026-12-25T02:30:00Z")], at("2026-12-25T05:00:00Z")).ok);
     ck("a market on holiday is not expected to print; an unknown market and an unreadable time are passed over", !feedState([P("^N225", "TSE", "2026-11-19T02:30:00Z")], at("2026-11-19T05:00:00Z"), { TSE: new Set(["2026-11-19"]) }).expected && !feedState([P("X", "MARS", "2026-11-18T17:29:00Z"), P("Y", "FX", "not a time")], at("2026-11-18T17:30:00Z")).expected && !feedState([], at("2026-11-18T17:30:00Z")).expected);
+  }
+
+  console.log("\n[after the close: did the prices stop before it?]");
+  {
+    const at = (iso: string) => Date.parse(iso), sb = stoppedBeforeClose;
+    // 18 Nov 2026: New York closes at 21:00 UTC; the Morning Note is written at 22:15 UTC
+    const stop = sb("NYSE", "2026-11-18T15:52:00Z", at("2026-11-18T22:15:00Z"));
+    ck("a last print at 10:52 New York time, read after the 16:00 close, is not a closing level: the close it fell short of is named", !!stop && stop.close === "2026-11-18T21:00:00.000Z" && stop.last === "2026-11-18T15:52:00.000Z", stop);
+    ck("a last print in the final minute of the session, or half an hour short at most, is the close", sb("NYSE", "2026-11-18T20:59:00Z", at("2026-11-18T22:15:00Z")) === null && sb("NYSE", "2026-11-18T20:30:00Z", at("2026-11-18T22:15:00Z")) === null && sb("NYSE", "2026-11-18T20:29:00Z", at("2026-11-18T22:15:00Z")) !== null);
+    ck("while the session is still on, the same print is measured against yesterday's close and passes (the live reading above covers the session itself)", sb("NYSE", "2026-11-18T15:52:00Z", at("2026-11-18T17:30:00Z")) === null && sb("NYSE", "2026-11-18T15:52:00Z", at("2026-11-18T21:10:00Z")) === null);
+    ck("in summer New York closes an hour earlier in UTC, and the close is found there", sb("NYSE", "2026-07-15T19:59:00Z", at("2026-07-15T22:15:00Z")) === null && sb("NYSE", "2026-07-15T17:30:00Z", at("2026-07-15T22:15:00Z"))?.close === "2026-07-15T20:00:00.000Z");
+    ck("over a weekend the last close is Friday's", sb("NYSE", "2026-11-20T20:59:00Z", at("2026-11-23T00:30:00Z")) === null && sb("NYSE", "2026-11-20T16:00:00Z", at("2026-11-22T22:15:00Z"))?.close === "2026-11-20T21:00:00.000Z");
+    const tg = { NYSE: new Set(["2026-11-26"]) };
+    ck("a holiday in the calendar is not a session: the close before it is the one that counts; without it the day would be misread", sb("NYSE", "2026-11-25T20:59:00Z", at("2026-11-27T03:00:00Z"), tg) === null && sb("NYSE", "2026-11-25T20:59:00Z", at("2026-11-27T03:00:00Z")) !== null);
+    ck("New York's half days end at 13:00 (the Friday after Thanksgiving, 24 December, 3 July): a last print then is that day's close; on any other day a feed that stops at 13:00 has stopped", sb("NYSE", "2026-11-27T18:00:00Z", at("2026-11-28T00:00:00Z"), tg) === null && sb("NYSE", "2026-11-27T17:30:00Z", at("2026-11-28T00:00:00Z"), tg) !== null && sb("NYSE", "2026-12-24T18:00:00Z", at("2026-12-24T23:00:00Z")) === null && sb("NYSE", "2026-07-15T17:00:00Z", at("2026-07-15T22:15:00Z")) !== null && sb("NYSE", "2026-11-18T18:00:00Z", at("2026-11-18T22:15:00Z")) !== null);
+    ck("Tokyo closes at 15:30 (06:30 UTC): a print in its last minute is the close, one from the morning session is not", sb("TSE", "2026-11-19T06:29:00Z", at("2026-11-19T22:15:00Z")) === null && sb("TSE", "2026-11-19T02:10:00Z", at("2026-11-19T22:15:00Z"))?.close === "2026-11-19T06:30:00.000Z");
+    ck("currencies and futures have no close to fall short of; an unknown market or no print gives no reading", sb("FX", "2026-11-18T15:52:00Z", at("2026-11-18T22:15:00Z")) === null && sb("CME", "2026-11-18T15:42:00Z", at("2026-11-18T22:15:00Z")) === null && sb("MARS", "2026-11-18T15:52:00Z", at("2026-11-18T22:15:00Z")) === null && sb("NYSE", null, at("2026-11-18T22:15:00Z")) === null);
   }
 
   console.log("\n[the welcome email]");
