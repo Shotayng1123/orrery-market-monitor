@@ -68,8 +68,15 @@ storing it in the database with `monitor_set_github_token`.
 
 The Supabase CLI is pinned to one version in the workflow (3.2.0). Version 3 changed which database a command
 talks to (a local one unless `--remote` is given) and what it prints, and taking "latest" brought that in
-unannounced: the first real run, on 18 Nov 2026, stopped for it before changing anything. By hand with CLI 3 the
-commands are `npx supabase db push --remote` and `npx supabase functions deploy tick daily api`.
+unannounced: the first real run, on 18 Nov 2026, stopped for it before changing anything. Two more things CLI 3
+needs, both found on the first deploys: `--yes` on every change to the hosted project (database, secrets,
+functions), because nobody is there to answer its question; and `--use-api` on `functions deploy`, so that
+Supabase bundles each function from its source. Bundled on the runner, `daily` came to 33 MB with the
+spreadsheet and PDF libraries inside and its upload was refused (413). By hand with CLI 3 the commands are
+`npx supabase db push --remote` and `npx supabase functions deploy api tick daily --use-api`.
+
+The first complete deploy was run 13 of the workflow (18 Nov 2026, 15:24 UTC): the four migrations of that day,
+the notification key, the email sender, and `api`, `tick` and `daily`.
 
 A scoped access token needs, by the CLI's own help for these commands: `project_admin_read` (link),
 `projects_read` and `database_pooling_config_read` (the database commands; the changes themselves go in with the
