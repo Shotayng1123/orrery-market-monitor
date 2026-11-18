@@ -103,10 +103,13 @@ export function barDayEnd(marketId: string, ymd: string): number | null {
 }
 /** Whether answers that reach `freshMs` can hold the close of this market's bar dated `ymd`: they must reach
  *  the end of that day, less the half hour an index may stop printing before its close. */
-export function barSettled(marketId: string, ymd: string, freshMs: number): boolean {
+export function barSettled(marketId: string, ymd: string, freshMs: number, graceMin = CLOSE_SHORT_MIN): boolean {
   const end = barDayEnd(marketId, ymd);
-  return end == null || end - CLOSE_SHORT_MIN * 60000 <= freshMs;
+  return end == null || end - graceMin * 60000 <= freshMs;
 }
+/** The grace when a market is read on its own minute bars alone: wider, because the Monitor's hours for a market
+ *  can be off (Mexico's index is given minute bars that end an hour before the bell kept in sessions.ts). */
+export const OWN_SHORT_MIN = 75;
 
 // ---- a stop that is over leaves a silence in the stored minute bars ----
 // Once prices arrive again the quotes no longer show that they had stopped, but the closes booked meanwhile are

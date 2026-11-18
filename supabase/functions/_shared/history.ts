@@ -6,7 +6,7 @@ import { localDate, marketById, marketState, partsIn } from "./sessions.ts";
 import { FX_SOURCE_HOURLY, fxClosesFromHourly, isFxPair, spikeThreshold, suspectBars } from "./fx.ts";
 import { loadHolidays, saveTableSnapshot } from "./table.ts";
 import { chart, lastPrint, spark } from "./yahoo.ts";
-import { barSettled } from "./feedhealth.ts";
+import { OWN_SHORT_MIN, barSettled } from "./feedhealth.ts";
 
 // ---------- history ----------
 export async function history(): Promise<string> {
@@ -22,17 +22,26 @@ export async function history(): Promise<string> {
   const missing: string[] = [];
   const suspects: string[] = [];
   // How far do the answers in hand reach? On 18 Nov 2026 the server was handed the prices of 10:52 New York time
-  // all evening for everything but crypto, and booked them as that day's closes. So two readings are made from
-  // the answers themselves: for crypto, its newest minute bar; for everything else together, the newest minute
-  // bar of any instrument (a currency pair: its newest hourly bar, below). A bar is booked only when the reading
-  // reaches the end of its day (feedhealth.ts, barSettled). Not market by market: Mexico's index is given
-  // minute bars that end an hour before its bell, and a reading of its own would hold its close back every day.
+  // all evening for everything but crypto, and booked them as that day's closes. The reach is read from the
+  // answers themselves, as the newest minute bar given (a currency pair: its newest hourly bar, below):
+  //   - for crypto, and for everything else together. A bar is booked only when that reading reaches the end
+  //     of its day, less half an hour (feedhealth.ts, barSettled);
+  //   - for each market on its own as well, with a wider grace (75 minutes), in case one market is handed old
+  //     answers while the others are current. Wider because the Monitor's hours can be off: Mexico's index is
+  //     given minute bars that end an hour before its bell in sessions.ts. On an exchange's half day (other
+  //     than New York's, which are known) this holds the close back until its next session prints.
   // Where no reading can be made, bars are booked as before.
   const reach = new Map<string, number>();
-  const reaches = (market: string, ms: number) => { const k = market === "CRYPTO" ? "crypto" : "rest"; if (Number.isFinite(ms) && ms > (reach.get(k) ?? 0)) reach.set(k, ms); };
+  const reaches = (market: string, ms: number) => { if (!Number.isFinite(ms)) return; for (const k of [market === "CRYPTO" ? "crypto" : "rest", "m:" + market]) if (ms > (reach.get(k) ?? 0)) reach.set(k, ms); };
   try { const m1 = await spark(inst.map((i) => i.symbol), "1d", "1m"); for (const i of inst) { const lp = m1[i.symbol] ? lastPrint(m1[i.symbol]) : null; if (lp) reaches(i.market, lp.t * 1000); } } catch { /* no reading */ }
-  const held = new Set<string>();
-  const settled = (symbol: string, market: string, d: string): boolean => { const r = reach.get(market === "CRYPTO" ? "crypto" : "rest"); if (r == null || barSettled(market, d, r)) return true; held.add(symbol); return false; };
+  const held = new Set<string>(), short = new Set<string>();
+  const settled = (symbol: string, market: string, d: string): boolean => {
+    const all = reach.get(market === "CRYPTO" ? "crypto" : "rest"), own = reach.get("m:" + market);
+    const byAll = all == null || barSettled(market, d, all), byOwn = own == null || barSettled(market, d, own, OWN_SHORT_MIN);
+    if (byAll && byOwn) return true;
+    held.add(symbol); short.add(byAll ? "m:" + market : market === "CRYPTO" ? "crypto" : "rest");
+    return false;
+  };
   // A vendor misprint (a close far from the days on both sides) is neither written nor kept if already stored.
   const guard = async (symbol: string, wild: boolean, series: Array<{ d: string; close: number }>): Promise<Set<string>> => {
     const bad = suspectBars(series, spikeThreshold(symbol, wild));
@@ -88,5 +97,5 @@ export async function history(): Promise<string> {
     if (ue) throw new Error("prices_daily: " + ue.message);
   }
   const n = await saveTableSnapshot(now);
-  return `${rows.length} closes for ${everything.length - missing.length} instruments (${pairs.length} currency pairs at the 17:00 New York close)${missing.length ? `, missing: ${missing.join(" ")}` : ""}${suspects.length ? `; misprints dropped: ${suspects.join(", ")}` : ""}${held.size ? `; NOT BOOKED, the answers in hand reaching only ${[...reach].map(([k, t]) => `${new Date(t).toISOString().slice(5, 16).replace("T", " ")} UTC${k === "crypto" ? " for crypto" : ""}`).join(", ")}: the newest close of ${held.size} instruments (${[...held].slice(0, 8).join(" ")}${held.size > 8 ? " …" : ""})` : ""}; table ${n} rows`;
+  return `${rows.length} closes for ${everything.length - missing.length} instruments (${pairs.length} currency pairs at the 17:00 New York close)${missing.length ? `, missing: ${missing.join(" ")}` : ""}${suspects.length ? `; misprints dropped: ${suspects.join(", ")}` : ""}${held.size ? `; NOT BOOKED, the answers in hand reaching only ${[...short].map((k) => `${new Date(reach.get(k)!).toISOString().slice(5, 16).replace("T", " ")} UTC for ${k === "rest" ? "everything but crypto" : k.replace(/^m:/, "")}`).join(", ")}: the newest close of ${held.size} instruments (${[...held].slice(0, 8).join(" ")}${held.size > 8 ? " …" : ""})` : ""}; table ${n} rows`;
 }

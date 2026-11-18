@@ -19,7 +19,7 @@ import { bigMoves, isLargeCap, moveText, settledBars } from "../supabase/functio
 import { liveRows } from "../supabase/functions/_shared/intraday.ts";
 import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabase/functions/_shared/movecause.ts";
 import { ALERTS, COMPANY, FIRST, PHILOSOPHY, PHONE, TABS, WELCOME_SUBJECT, welcomeMail } from "../supabase/functions/_shared/welcome.ts";
-import { FEED_LATE_MIN, barDayEnd, barSettled, feedState, fxTrading, silence, stoppedBeforeClose, type Print } from "../supabase/functions/_shared/feedhealth.ts";
+import { FEED_LATE_MIN, OWN_SHORT_MIN, barDayEnd, barSettled, feedState, fxTrading, silence, stoppedBeforeClose, type Print } from "../supabase/functions/_shared/feedhealth.ts";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
 let pass = 0, fail = 0;
@@ -755,6 +755,7 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck("half an hour short of the bell still holds the close (an index may stop printing a little early); a minute more does not", barSettled("NYSE", "2026-11-18", at("2026-11-18T20:30:00Z")) && !barSettled("NYSE", "2026-11-18", at("2026-11-18T20:29:00Z")));
     ck("current answers hold everything that has ended: at 22:35 UTC New York's close, the currencies' and the futures' day; crypto's day only after midnight UTC", ["NYSE", "FX", "CME", "LSE", "TSE"].every((m) => barSettled(m, "2026-11-18", at("2026-11-18T22:34:00Z"))) && !barSettled("CRYPTO", "2026-11-18", at("2026-11-18T22:34:00Z")) && barSettled("CRYPTO", "2026-11-18", at("2026-11-19T00:05:00Z")));
     ck("on New York's usual half days the bell is at 13:00, and answers that reach it hold that day's close", iso(barDayEnd("NYSE", "2026-11-27")) === "2026-11-27T18:00:00.000Z" && iso(barDayEnd("NYSE", "2026-12-24")) === "2026-12-24T18:00:00.000Z" && barSettled("NYSE", "2026-11-27", at("2026-11-27T18:00:00Z")) && !barSettled("NYSE", "2026-11-27", at("2026-11-27T16:00:00Z")) && iso(barDayEnd("NYSE", "2026-11-20")) === "2026-11-20T21:00:00.000Z");
+    ck("a market read on its own minute bars has a grace of 75 minutes: Mexico's bars, which end an hour before the bell kept for it, hold its close; New York's of 10:52 do not, nor would bars ending 80 minutes short", OWN_SHORT_MIN === 75 && barSettled("BMV", "2026-11-18", at("2026-11-18T20:00:00Z"), OWN_SHORT_MIN) && !barSettled("BMV", "2026-11-18", at("2026-11-18T20:00:00Z")) && !barSettled("NYSE", "2026-11-18", stop, OWN_SHORT_MIN) && !barSettled("NYSE", "2026-11-18", at("2026-11-18T19:40:00Z"), OWN_SHORT_MIN) && barSettled("KRX", "2026-11-18", at("2026-11-18T06:00:00Z"), OWN_SHORT_MIN));
     ck("over a weekend, Friday's bars are held by answers that reach Friday's 17:00 New York; a market not known is not judged", ["NYSE", "FX", "CME"].every((m) => barSettled(m, "2026-11-20", at("2026-11-20T21:59:00Z"))) && barSettled("MARS", "2026-11-18", stop));
   }
 
