@@ -6,8 +6,14 @@ import { fmtNum } from "./fmt";
 export interface PerfRow { h: string; from: string | null; base: number | null; stock: number | null; bench: Array<number | null>; rel: Array<number | null> }
 export interface Benchmark { symbol: string; name: string; note: string | null }
 export type FinLine = "revenue" | "cogs" | "gross" | "sga" | "op" | "nonOpInc" | "nonOpExp" | "ordinary" | "extraInc" | "extraLoss" | "pretax" | "ni" | "eps" | "dps"
-  | "cash" | "stDebt" | "ltDebt" | "assets" | "liabilities" | "equity" | "ocf" | "icf" | "fincf" | "capex" | "shares" | "dilutedShares" | "bps" | "payoutReported";
+  | "cash" | "stDebt" | "ltDebt" | "assets" | "liabilities" | "equity" | "ocf" | "icf" | "fincf" | "capex" | "shares" | "dilutedShares" | "bps" | "payoutReported"
+  | "rd" | "interestNet" | "otherNonOp" | "tax" | "unusual" | "cashSti" | "buyback" | "divPaid" | "sbc";   // lines of a company outside Japan
 export type RatioId = "salesYoy" | "gpm" | "opm" | "npm" | "payout" | "roe" | "equityRatio";
+/** Which rows a company's table has (the server decides, supabase/functions/_shared/fin.ts): a Japanese company
+ *  keeps the lines of Japanese statements, a company elsewhere gets those of US GAAP and IFRS statements. A row
+ *  in `optional` is shown only when some period has a figure. `netCash` and `fcf` are the two sums made here. */
+export type FinRowId = FinLine | "netCash" | "fcf";
+export interface FinLayout { is: FinRowId[]; bs: FinRowId[]; cf: FinRowId[]; optional: Array<FinRowId | RatioId>; labels?: Partial<Record<FinRowId, string>>; titles?: Partial<Record<FinRowId | RatioId, string>> }
 export interface FinPeriod { key: string; end: string; label: string; kind: "FY" | "Q" | "FC"; months: number; std: string | null; doc: string | null; url: string | null; note: string | null }
 export interface FinSet { periods: FinPeriod[]; lines: Partial<Record<FinLine, Array<number | null>>> }
 export interface FinUnit { div: number; label: string; dp: number }
@@ -17,6 +23,7 @@ export interface Fin {
   ratios: { annual: Partial<Record<RatioId, Array<number | null>>>; quarterly: Partial<Record<RatioId, Array<number | null>>> };
   guidance: { end: string; disclosed: string | null; quarter: number | null; progress: Partial<Record<"revenue" | "op" | "ordinary" | "ni", number | null>>; ytdMonths: number | null } | null;
   asOf: string | null; notes: string[];
+  layout?: FinLayout;
 }
 export type ShortData =
   | { kind: "finra"; d: string; ratio: number }
@@ -80,6 +87,8 @@ const LABEL: Record<string, string> = {
   ordinary: "Ordinary profit", extraInc: "Extraordinary income", extraLoss: "Extraordinary losses", pretax: "Profit before tax", ni: "Net income", eps: "EPS", dps: "DPS",
   cash: "Cash and deposits", stDebt: "Short-term debt", ltDebt: "Long-term debt", netCash: "Net cash", assets: "Total assets", liabilities: "Total liabilities", equity: "Equity",
   ocf: "Operating cash flow", icf: "Investing cash flow", fincf: "Financing cash flow", capex: "Capex", fcf: "Free cash flow",
+  rd: "R&D", interestNet: "Net interest income (expense)", otherNonOp: "Other income (expense)", tax: "Income tax", unusual: "Unusual items (memo)",
+  cashSti: "Cash and short-term investments", buyback: "Share buybacks", divPaid: "Dividends paid", sbc: "Stock-based compensation",
   salesYoy: "Sales growth, y/y", gpm: "Gross margin", opm: "Operating margin", npm: "Net margin", payout: "Payout ratio", roe: "ROE", equityRatio: "Equity ratio",
 };
 const TITLE: Record<string, string> = {
@@ -90,26 +99,46 @@ const TITLE: Record<string, string> = {
   fcf: "Operating cash flow less capex (worked out on this page)",
   salesYoy: "Revenue against the period that ended twelve months earlier", payout: "Dividend per share over earnings per share", roe: "Net income over equity at the year's end",
   ni: "Attributable to owners of the parent", equity: "Net assets (JP GAAP) or total equity",
+  rd: "Research and development expense",
+  interestNet: "Interest income less interest expense outside operations; negative = net expense",
+  otherNonOp: "Other non-operating income less expenses, including gains and losses on investments and disposals",
+  tax: "Income tax expense for the period",
+  unusual: "What the data provider classes as unusual (restructuring, impairments, gains and losses on disposals), before tax. Already inside the lines above; shown for reference",
+  cashSti: "Cash, cash equivalents and short-term investments",
+  buyback: "Cash paid to buy back the company's own shares", divPaid: "Cash dividends paid",
+  sbc: "Stock-based compensation expense: a cost paid in shares, not cash, and added back in operating cash flow",
 };
 const STRONG = new Set(["revenue", "gross", "op", "ordinary", "ni", "assets", "equity", "ocf"]);
+/** The rows of a Japanese company's table (the same list as LAYOUT_JP on the server), used when the statements
+ *  carry no layout of their own. */
+const LAYOUT_JP: FinLayout = {
+  is: ["revenue", "cogs", "gross", "sga", "op", "nonOpInc", "nonOpExp", "ordinary", "extraInc", "extraLoss", "pretax", "ni", "eps", "dps"],
+  bs: ["cash", "stDebt", "ltDebt", "netCash", "assets", "liabilities", "equity"], cf: ["ocf", "icf", "fincf", "capex", "fcf"],
+  optional: ["nonOpInc", "nonOpExp", "ordinary", "extraInc", "extraLoss", "pretax"],
+};
 
 /** The tables of the FINANCIALS panel for one view, section by section, each row a list of values column for
- *  column. Two rows are sums made here from reported lines, and are empty wherever a part is missing:
- *  net cash = cash - short-term debt - long-term debt; free cash flow = operating cash flow - capex. */
+ *  column. Which rows there are is the statements' own layout. Two rows are sums made here from reported lines,
+ *  and are empty wherever a part is missing:
+ *    net cash = cash (with short-term investments where the company reports that total) - short-term debt - long-term debt
+ *    free cash flow = operating cash flow - capex */
 export function finSections(f: Fin, view: "annual" | "quarterly"): { periods: FinPeriod[]; sections: FinSection[] } {
-  const set = f[view], n = set.periods.length, rat = f.ratios[view];
+  const set = f[view], n = set.periods.length, rat = f.ratios[view], lay = f.layout ?? LAYOUT_JP;
+  const optional = new Set<string>(lay.optional);
   const L = (id: FinLine): Array<number | null> => set.lines[id] ?? Array.from({ length: n }, () => null);
-  const row = (id: string, values: Array<number | null>, fmt: FinRow["fmt"] = "money"): FinRow => ({ id, label: LABEL[id] ?? id, values, fmt, strong: STRONG.has(id), title: TITLE[id] });
-  const line = (id: FinLine): FinRow => row(id, L(id), id === "eps" || id === "dps" ? "ps" : "money");
+  const row = (id: FinRowId | RatioId, values: Array<number | null>, fmt: FinRow["fmt"] = "money"): FinRow => ({ id, label: (lay.labels as Record<string, string> | undefined)?.[id] ?? LABEL[id] ?? id, values, fmt, strong: STRONG.has(id) || (id === "pretax" && !lay.is.includes("ordinary")), title: lay.titles?.[id] ?? TITLE[id] });
   const all = (...xs: Array<number | null>): boolean => xs.every((x) => x != null);
-  const cash = L("cash"), st = L("stDebt"), lt = L("ltDebt"), ocf = L("ocf"), capex = L("capex");
-  const netCash = cash.map((c, i) => (all(c, st[i], lt[i]) ? (c as number) - (st[i] as number) - (lt[i] as number) : null));
+  const cash = L("cash"), sti = L("cashSti"), st = L("stDebt"), lt = L("ltDebt"), ocf = L("ocf"), capex = L("capex");
+  const netCash = cash.map((c, i) => { const liquid = sti[i] ?? c; return all(liquid, st[i], lt[i]) ? (liquid as number) - (st[i] as number) - (lt[i] as number) : null; });
   const fcf = ocf.map((o, i) => (all(o, capex[i]) ? (o as number) - (capex[i] as number) : null));
+  const shown = (r: FinRow): boolean => !optional.has(r.id) || r.values.some((v) => v != null);
+  const rows = (ids: FinRowId[]): FinRow[] => ids.map((id) => row(id, id === "netCash" ? netCash : id === "fcf" ? fcf : L(id), id === "eps" || id === "dps" ? "ps" : "money")).filter(shown);
   const R = (id: RatioId): Array<number | null> => rat[id] ?? Array.from({ length: n }, () => null);
+  const ratios = [row("salesYoy", R("salesYoy"), "growth"), row("gpm", R("gpm"), "pct"), row("opm", R("opm"), "pct"), row("npm", R("npm"), "pct"), row("payout", R("payout"), "pct"), ...(view === "annual" ? [row("roe", R("roe"), "pct")] : []), row("equityRatio", R("equityRatio"), "pct")].filter(shown);
   return { periods: set.periods, sections: [
-    { id: "is", title: "Income statement", rows: (["revenue", "cogs", "gross", "sga", "op", "nonOpInc", "nonOpExp", "ordinary", "extraInc", "extraLoss", "pretax", "ni", "eps", "dps"] as FinLine[]).map(line) },
-    { id: "ratios", title: "Ratios, %", rows: [row("salesYoy", R("salesYoy"), "growth"), row("gpm", R("gpm"), "pct"), row("opm", R("opm"), "pct"), row("npm", R("npm"), "pct"), row("payout", R("payout"), "pct"), ...(view === "annual" ? [row("roe", R("roe"), "pct")] : []), row("equityRatio", R("equityRatio"), "pct")] },
-    { id: "bs", title: "Balance sheet", rows: [line("cash"), line("stDebt"), line("ltDebt"), row("netCash", netCash), line("assets"), line("liabilities"), line("equity")] },
-    { id: "cf", title: "Cash flow", rows: [line("ocf"), line("icf"), line("fincf"), line("capex"), row("fcf", fcf)] },
-  ] };
+    { id: "is", title: "Income statement", rows: rows(lay.is) },
+    { id: "ratios", title: "Ratios, %", rows: ratios },
+    { id: "bs", title: "Balance sheet", rows: rows(lay.bs) },
+    { id: "cf", title: "Cash flow", rows: rows(lay.cf) },
+  ].filter((sec) => sec.rows.length > 0) };
 }

@@ -24,8 +24,8 @@ const FIN_TTL = 7 * 86400e3, FIN_RETRY = 86400e3;   // a week; a day after a fai
 const FIN_PRIMARY = 6 * 3600e3;                    // EDINET DB's answers are stored and rationed one by one in edinet.ts
 async function yahooStatements(symbol: string, currency: string | null): Promise<Fin> {
   const p2 = Math.floor(Date.now() / 1000), p1 = p2 - 12 * 366 * 86400;
-  const text = await fetchText(`https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(symbol)}?type=${yahooFinTypes()}&period1=${p1}&period2=${p2}`, { headers: { "user-agent": "Mozilla/5.0", accept: "application/json" } }, 30000);
-  return yahooFin(JSON.parse(text), currency, today());
+  const answers = await Promise.all(yahooFinTypes().map(async (types) => JSON.parse(await fetchText(`https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(symbol)}?symbol=${encodeURIComponent(symbol)}&type=${types}&period1=${p1}&period2=${p2}`, { headers: { "user-agent": "Mozilla/5.0", accept: "application/json" } }, 30000)) as unknown));
+  return yahooFin(answers, currency, today());
 }
 /** The statements for a symbol, from the cache while it is fresh.
  *    primary          the fuller source for the market (EDINET DB for Tokyo). Yahoo stands in when it has none or

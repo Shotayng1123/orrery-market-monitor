@@ -2,7 +2,7 @@
 // sends. Nothing here is a real figure. A Tokyo symbol gets ten years, guidance and twelve quarters with every
 // line (as EDINET DB gives a JP GAAP filer); any other symbol gets four years and five quarters with the lines
 // Yahoo has, so the page is seen both full and sparse.
-import type { Fin, FinLine, FinPeriod, FinSet, MoveRow, RatioId, StockPage } from "./stock";
+import type { Fin, FinLayout, FinLine, FinPeriod, FinSet, MoveRow, RatioId, StockPage } from "./stock";
 
 function rng(seed: number): () => number { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 const seedOf = (s: string) => Array.from(s).reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
@@ -39,6 +39,20 @@ function mockMoves(pts: Array<{ t: number; v: number }>): MoveRow[] {
   ].sort((a, b) => b.t - a.t);
 }
 
+/** The rows of a company outside Japan, as the server sends them (LAYOUT_FOREIGN in supabase/functions/_shared/fin.ts). */
+const FOREIGN: FinLayout = {
+  is: ["revenue", "cogs", "gross", "rd", "sga", "op", "interestNet", "otherNonOp", "pretax", "tax", "ni", "eps", "dps", "unusual"],
+  bs: ["cash", "cashSti", "stDebt", "ltDebt", "netCash", "assets", "liabilities", "equity"],
+  cf: ["ocf", "icf", "fincf", "capex", "fcf", "buyback", "divPaid", "sbc"],
+  optional: ["cogs", "gross", "rd", "sga", "op", "interestNet", "otherNonOp", "tax", "dps", "unusual", "cashSti", "stDebt", "ltDebt", "netCash", "capex", "fcf", "buyback", "divPaid", "sbc", "gpm", "opm", "payout"],
+  labels: { cogs: "Cost of revenue", op: "Operating income", pretax: "Pretax income", eps: "EPS (diluted)", cash: "Cash and equivalents", equity: "Shareholders' equity" },
+  titles: {
+    ni: "Net income as the source gives it", equity: "Stockholders' equity, without minority interests",
+    netCash: "Cash and short-term investments (cash and equivalents where the company gives no such total) less short-term and long-term debt (worked out on this page); negative = net debt",
+    payout: "Dividend per share over earnings per share; where no dividend per share is given, dividends paid over net income",
+  },
+};
+
 export function mockStock(symbol: string, last?: number, pts: Array<{ t: number; v: number }> = []): StockPage {
   const r = rng(seedOf(symbol)), jp = /\.T$/.test(symbol), now = new Date();
   const drawn = jp ? Math.round(1500 + r() * 4000) : Math.round((60 + r() * 380) * 100) / 100, dayPct = (r() - 0.5) * 5;
@@ -63,7 +77,10 @@ export function mockStock(symbol: string, last?: number, pts: Array<{ t: number;
   const ocf = ni.map((v, i) => v + rev[i] * 0.05), capex = rev.map((v) => v * 0.055), icf = capex.map((v) => -v * 1.15), fincf = ocf.map((v, i) => -(v + icf[i]) * 0.8);
   const annual: FinSet = { periods: [...aP], lines: jp
     ? { revenue: rev, cogs, gross, sga, op, nonOpInc: noi, nonOpExp: noe, ordinary: ord, extraInc: exi, extraLoss: exl, pretax: pre, ni, eps, dps, cash, stDebt: st, ltDebt: lt, assets, liabilities: liab, equity, ocf, icf, fincf, capex }
-    : { revenue: rev, cogs, gross, sga, op, pretax: pre, ni, eps, dps: eps.map((v) => Math.round(v * 22) / 100), cash, stDebt: st, ltDebt: lt, assets, liabilities: liab, equity, ocf, icf, fincf, capex } };
+    // a company outside Japan: R&D beside SG&A, interest and other income down to pretax income, tax, and what it paid out
+    : { revenue: rev, cogs, gross, rd: sga.map((v) => v * 0.35), sga: sga.map((v) => v * 0.65), op, interestNet: rev.map((v) => -v * 0.004), otherNonOp: pre.map((v, i) => v - op[i] + rev[i] * 0.004), pretax: pre, tax: pre.map((v) => v * 0.3), ni,
+        eps, dps: eps.map((v) => Math.round(v * 22) / 100), unusual: exi.map((v, i) => v - exl[i]), cash, cashSti: cash.map((v) => v * 1.8), stDebt: st, ltDebt: lt, assets, liabilities: liab, equity,
+        ocf, icf, fincf, capex, buyback: ni.map((v) => v * 0.5), divPaid: ni.map((v) => v * 0.22), sbc: rev.map((v) => v * 0.02) } };
   if (jp) {   // the company's guidance for the year in progress: six lines only
     annual.periods.push(P("2027-03-31", "FY3/27", "FC", 12, "JP"));
     const add = (id: FinLine, v: number | null) => { (annual.lines[id] as Array<number | null>).push(v); };
@@ -85,13 +102,16 @@ export function mockStock(symbol: string, last?: number, pts: Array<{ t: number;
   const qOrd = qOp.map((v, i) => v + qRev[i] * 0.006), qNi = qOrd.map((v) => v * 0.7);
   const quarterly: FinSet = { periods: qP, lines: jp
     ? { revenue: qRev, cogs: qCogs.map((v, i) => (i >= nq - 4 ? null : v)), gross: qGross.map((v, i) => (i >= nq - 4 ? null : v)), sga: qSga.map((v, i) => (i >= nq - 4 ? null : v)), op: qOp, ordinary: qOrd, ni: qNi, eps: qNi.map((v) => v / sharesOut), ocf: qNi.map((v, i) => (i % 2 ? v * 1.4 : null)) }
-    : { revenue: qRev, cogs: qCogs, gross: qGross, sga: qSga, op: qOp, pretax: qOrd, ni: qNi, eps: qNi.map((v) => v / sharesOut) } };
+    : { revenue: qRev, cogs: qCogs, gross: qGross, rd: qSga.map((v) => v * 0.35), sga: qSga.map((v) => v * 0.65), op: qOp, interestNet: qRev.map((v) => -v * 0.004), otherNonOp: qRev.map((v) => v * 0.01), pretax: qOrd, tax: qOrd.map((v) => v * 0.3), ni: qNi, eps: qNi.map((v) => v / sharesOut),
+        cash: qRev.map((v) => v * 0.7), cashSti: qRev.map((v) => v * 1.26), stDebt: qRev.map((v) => v * 0.35), ltDebt: qRev.map((v) => v * 0.8), assets: qRev.map((v) => v * 5), liabilities: qRev.map((v) => v * 2.8), equity: qRev.map((v) => v * 2.2),
+        ocf: qNi.map((v, i) => v + qRev[i] * 0.05), icf: qRev.map((v) => -v * 0.063), fincf: qNi.map((v) => -v * 0.8), capex: qRev.map((v) => v * 0.055), buyback: qNi.map((v) => v * 0.5), divPaid: qNi.map((v) => v * 0.22) } };
 
   const unit = scale >= 1e11 ? { div: 1e9, label: "bn", dp: 1 } : { div: 1e6, label: "m", dp: 0 };
   const fin: Fin = { source: jp ? "edinetdb" : "yahoo", currency: jp ? "JPY" : "USD", unit, annual, quarterly,
     ratios: { annual: ratios(annual, 1), quarterly: ratios(quarterly, 4) },
     guidance: jp ? { end: "2027-03-31", disclosed: "2026-11-05", quarter: 2, progress: { revenue: 48.7, op: 52.1, ordinary: 51.4, ni: 55.0 }, ytdMonths: 6 } : null,
-    asOf: iso(now), notes: jp ? ["Mock data. Cost of sales, gross profit and SG&A are not in the quarterly earnings releases the latest four quarters come from."] : ["Mock data. Yahoo Finance carries four years and five quarters; it has no ordinary profit, extraordinary items or company guidance."] };
+    asOf: iso(now), notes: jp ? ["Mock data. Cost of sales, gross profit and SG&A are not in the quarterly earnings releases the latest four quarters come from."] : ["Mock data. Yahoo Finance carries four years and five quarters and no company guidance. The lines are those of a company reporting under US GAAP or IFRS; one the company does not report is left out."],
+    layout: jp ? undefined : FOREIGN };
 
   // a Tokyo name is set against two benchmarks (the second a little behind the first), any other against one
   const mk = (h: string, s: number | null, b: number | null) => { const bench = jp ? [b, b == null ? null : b * 0.86] : [b]; return { h, from: s == null ? null : iso(new Date(now.getTime() - 86400e3 * ({ "1D": 1, "1M": 31, "3M": 92, "6M": 183, "12M": 365, "36M": 1096, "60M": 1826 }[h] ?? 1))), base: s == null ? null : price / (1 + s / 100), stock: s, bench, rel: bench.map((x) => (s == null || x == null ? null : s - x)) }; };
