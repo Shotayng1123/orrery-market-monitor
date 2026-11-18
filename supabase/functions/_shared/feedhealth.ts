@@ -20,6 +20,7 @@ export interface FeedState {
   newest: string | null; symbol: string | null; lateMin: number | null;
 }
 export const FEED_LATE_MIN = 20;   // behind, after the feed's own delay, before the feed counts as stopped
+const WORLD_SHUT = new Set(["12-25", "01-01"]);   // month-day, UTC
 export const FEED_OPEN_MIN = 30;   // a market open for less than this (plus its delay) may not have printed yet
 
 export function feedState(prints: Print[], nowMs: number, holidays: Holidays = {}): FeedState {
@@ -28,6 +29,9 @@ export function feedState(prints: Print[], nowMs: number, holidays: Holidays = {
   for (const p of prints) {
     const m = marketById(p.market), t = Date.parse(p.marketTime);
     if (!m || !Number.isFinite(t)) continue;
+    // currencies and futures have no exchange calendar here, and on the two days the whole world is shut they do
+    // not trade either: without this, 25 December and 1 January would read as a feed that has stopped
+    if ((m.id === "FX" || m.id === "CME") && WORLD_SHUT.has(now.toISOString().slice(5, 10))) continue;
     // open now, and already open a while ago: just after an open or a lunch break the newest print is the one
     // from before it, and says nothing about the feed
     if (marketState(m, now, holidays) !== "OPEN" || marketState(m, new Date(nowMs - (FEED_OPEN_MIN + m.delayMin) * 60000), holidays) !== "OPEN") continue;
