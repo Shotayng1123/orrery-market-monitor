@@ -21,13 +21,16 @@ export const newClient = (): Anthropic => new Anthropic({ timeout: 50 * 60 * 100
 export interface Turn { text: string; model: string; inputTokens: number; outputTokens: number; searches: number; costUsd: number; pages: Array<{ title: string; url: string }>;
   /** One entry per search that came back as an error instead of results: the error's code (too_many_requests,
    *  unavailable, max_uses_exceeded, ...). */
-  searchErrors: string[] }
+  searchErrors: string[];
+  /** What the turn did, one short line per step (each search asked, each set of results, each piece of text and
+   *  of code), for a log that has to explain an answer. */
+  trace: string[] }
 
 type Msg = { role: "user" | "assistant"; content: unknown };
 
 async function runOnce(client: Anthropic, model: string, effort: string, system: string, user: string, maxSearches: number): Promise<Turn> {
   const messages: Msg[] = [{ role: "user", content: user }];
-  const out: Turn = { text: "", model, inputTokens: 0, outputTokens: 0, searches: 0, costUsd: 0, pages: [], searchErrors: [] };
+  const out: Turn = { text: "", model, inputTokens: 0, outputTokens: 0, searches: 0, costUsd: 0, pages: [], searchErrors: [], trace: [] };
   for (let i = 0; i <= MAX_RESUMES; i++) {
     const stream = client.beta.messages.stream({
       model,
@@ -47,7 +50,12 @@ async function runOnce(client: Anthropic, model: string, effort: string, system:
     out.inputTokens += msg.usage.input_tokens;
     out.outputTokens += msg.usage.output_tokens;
     out.searches += (msg.usage as { server_tool_use?: { web_search_requests?: number } }).server_tool_use?.web_search_requests ?? 0;
-    for (const b of msg.content as Array<{ type: string; text?: string; content?: unknown }>) {
+    for (const b of msg.content as Array<{ type: string; text?: string; content?: unknown; name?: string; input?: unknown }>) {
+      const clip = (v: unknown, n: number): string => { const t = (typeof v === "string" ? v : JSON.stringify(v ?? null)).replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n) + "…" : t; };
+      if (b.type === "text" && b.text) out.trace.push(`text: ${clip(b.text, 700)}`);
+      else if (b.type === "server_tool_use") out.trace.push(`${b.name ?? "tool"}: ${clip(b.input, 500)}`);
+      else if (b.type === "web_search_tool_result") out.trace.push(Array.isArray(b.content) ? `results: ${(b.content as Array<{ title?: string; url?: string; page_age?: string | null }>).map((r) => `${clip(r.title ?? "", 70)} <${r.url ?? ""}>${r.page_age ? ` (${r.page_age})` : ""}`).join(" | ")}` : `results: error ${clip(b.content, 120)}`);
+      else if (b.type !== "thinking" && b.type !== "redacted_thinking") out.trace.push(`${b.type}: ${clip(b.content ?? b.input ?? "", 300)}`);
       if (b.type === "text" && b.text) out.text += b.text;
       else if (b.type === "web_search_tool_result" && Array.isArray(b.content)) { for (const r of b.content as Array<{ type: string; title?: string; url?: string }>) if (r.type === "web_search_result" && r.url) out.pages.push({ title: r.title ?? r.url, url: r.url }); }
       // a search that failed carries an error object where its results would be (the SDK's BetaWebSearchToolResultError)

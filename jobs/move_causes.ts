@@ -9,6 +9,7 @@
 //   npx tsx move_causes.ts --dry           ask and print, store nothing
 //   npx tsx move_causes.ts --again         also look again at moves stored as "not found" (fewer than three tries)
 //   npx tsx move_causes.ts --parallel 3    look-ups at a time (default 1)
+//   npx tsx move_causes.ts --trace         print what each look-up did: its searches, the pages returned, its reply
 // Needs ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY. Optional: MOVE_CAUSE_MODEL (default
 // claude-opus-5-5), MOVE_CAUSE_EFFORT (default medium). Each look-up prints what it cost, how many pages its
 // searches returned, any search that failed, and, when nothing is stored as the reason, which way it came to that.
@@ -17,7 +18,7 @@ import { ask, newClient } from "./lib/llm.js";
 import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabase/functions/_shared/movecause.js";
 
 const arg = (k: string, d = ""): string => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] ?? d : d; };
-const DRY = process.argv.includes("--dry"), AGAIN = process.argv.includes("--again");
+const DRY = process.argv.includes("--dry"), AGAIN = process.argv.includes("--again"), TRACE = process.argv.includes("--trace");
 const MAX = Math.max(1, Math.min(300, Number(arg("max", "60")) || 60));
 const PARALLEL = Math.max(1, Math.min(6, Number(arg("parallel", "1")) || 1));
 const MODEL = process.env.MOVE_CAUSE_MODEL || "claude-opus-5-5", EFFORT = process.env.MOVE_CAUSE_EFFORT || "medium";
@@ -55,6 +56,7 @@ async function main(): Promise<void> {
           t = await look();
           if (!t.pages.length) throw new Error(`the searches returned no page, twice (${t.searches} search(es); ${errs(t)})`);
         }
+        if (TRACE) console.log(`${tag}: the question:\n${causeQuestion(r.ctx)}\n${tag}: what the look-up did:\n  ${t.trace.join("\n  ")}`);
         const a = readCause(t.text, t.pages);
         if (a.found) found++; else none++;
         console.log(`${tag}: ${a.found ? a.cause : `no report found (${WHY[a.why ?? ""] ?? "no reason given"})`} [${t.searches} searches, ${t.pages.length} pages${t.searchErrors.length ? `, ${errs(t)}` : ""}, $${t.costUsd.toFixed(3)}]${a.found ? ` <- ${a.sources.map((x) => x.url).join(" ")}` : ""}`);
