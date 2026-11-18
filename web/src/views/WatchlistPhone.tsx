@@ -1,3 +1,4 @@
+import { useAddBox } from "../lib/candidates";
 import { Fragment, useState } from "react";
 import { Empty } from "../components/Panel";
 import { Pick, type PickOption } from "../components/Pick";
@@ -5,7 +6,7 @@ import { Star } from "../components/Star";
 import { openAsset } from "../components/CompanyCard";
 import { Move, Screen, Section } from "../components/PhoneKit";
 import { useApi } from "../lib/useApi";
-import { setWatched, useWatch } from "../lib/watch";
+import { useWatch } from "../lib/watch";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtClock, fmtStamp, SGT } from "../lib/time";
 import { dayLabel, dayOf } from "./News";
@@ -21,25 +22,29 @@ export function WatchlistPhone({ tick }: { tick: number }) {
   const list = useApi<{ rows: WatchRow[] }>("watch_list", { v: w.version }, tick);
   const feed = useApi<Feed>("watch_feed", { v: w.version }, Math.floor(tick / 5));
   const [k, setK] = useState<Key>("pct1d");
-  const [add, setAdd] = useState("");
-  const [msg, setMsg] = useState<string | null>(null);
+  const box = useAddBox(w.has);
   const rows = list.data?.rows ?? [];
   const alerts = feed.data?.alerts ?? [], news = feed.data?.news ?? [], research = feed.data?.research ?? [];
-  const submit = async () => {
-    const s = add.trim();
-    if (!s) return;
-    const err = await setWatched(/^[a-z]{1,5}$/.test(s) ? s.toUpperCase() : s, true);
-    setMsg(err); if (!err) setAdd("");
-  };
   const ahead = rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3).sort((a, b) => a.earningsAt!.localeCompare(b.earningsAt!));
   const name = (s: string) => rows.find((r) => r.symbol === s)?.name ?? s;
   return (
     <Screen title="Watchlist" sub={list.data ? `${rows.length} name${rows.length === 1 ? "" : "s"}` : list.error ? <span className="warn">{list.error}</span> : "loading…"} right={<Pick label="Change" value={k} options={KEYS} onChange={setK} />}>
-      <form className="mp-add" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-        <input className="mp-find" type="text" placeholder="Add a symbol: NVDA, 7203.T, ^N225" value={add} autoCapitalize="characters" autoCorrect="off" onChange={(e) => { setAdd(e.target.value); setMsg(null); }} />
+      <form className="mp-add" onSubmit={(e) => { e.preventDefault(); void box.submit(); }}>
+        <input className="mp-find" id="wl-add" type="text" aria-label="Add a name to the watchlist" placeholder="Add a name or symbol: toyota, NVDA, 7203" value={box.text} autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck={false} onChange={(e) => box.setText(e.target.value)} />
         <button type="submit" className="mp-act">Add</button>
       </form>
-      {msg && <p className="mp-note warn">{msg}</p>}
+      {box.msg && <p id="wl-msg" className={`mp-note${box.msg.kind === "err" ? " warn" : ""}`}>{box.msg.text}</p>}
+      {(box.hits.length > 0 || box.busy) && (
+        <div className="mp-card mp-cands" id="wl-cands">
+          {box.busy && !box.hits.length && <div className="mp-cand none">Searching…</div>}
+          {box.hits.map((h) => (
+            <button type="button" className={`mp-cand${w.has(h.symbol) ? " have" : ""}`} key={h.symbol} onClick={() => void box.addHit(h)}>
+              <span className="w"><span className="n">{h.name}</span><span className="k"><b>{h.symbol}</b>{[h.kind, h.note].filter(Boolean).map((x) => ` · ${x}`).join("")}</span></span>
+              <span className="a">{w.has(h.symbol) ? "In your list" : "Add"}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <Section title="My names" aux="stocks at the last close">
         {rows.length ? rows.map((r) => (
           <div className="mp-row tap starred" key={r.symbol} role="button" tabIndex={0} title={`${r.name} (${r.symbol})${r.asOf ? ` · as of ${r.asOf.length > 10 ? fmtStamp(r.asOf) : r.asOf}` : ""}`} onClick={() => openAsset(r.symbol)}>

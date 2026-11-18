@@ -87,6 +87,25 @@ const measure = async (p, taps) => { await p.evaluate(() => { document.querySele
       ck("add an unknown symbol: the server's refusal is shown, the list is unchanged", /Unknown symbol ZZZZ/.test(await p.locator(".mp-note.warn").textContent().catch(() => "")) && (await my.locator(".mp-row").count()) === 6 && (await p.locator(".mp-add .mp-find").inputValue()) === "zzzz");
       await p.locator(".mp-add .mp-find").fill("aapl"); await p.locator(".mp-add .mp-find").press("Enter"); await p.waitForTimeout(900);
       ck("add \"aapl\" with the keyboard's Enter: sent as AAPL, the line appears, the box clears", p.__sets.at(-1).symbol === "AAPL" && p.__sets.at(-1).on === true && (await my.locator(".mp-row").count()) === 7 && (await p.locator(".mp-add .mp-find").inputValue()) === "" && (await p.locator(".mp-asof").textContent()) === "7 names" && (await p.locator(".mp-note.warn").count()) === 0, p.__sets);
+      // adding by part of a name or of a ticker: candidates under the box, one is chosen (Shota, 19 Nov 2026)
+      { const find = p.locator(".mp-add .mp-find"), cands = () => p.evaluate(() => [...document.querySelectorAll("#wl-cands .mp-cand")].map((e) => ({ name: e.querySelector(".n")?.textContent ?? "", k: e.querySelector(".k")?.textContent ?? "", a: e.querySelector(".a")?.textContent ?? "", h: Math.round(e.getBoundingClientRect().height), have: e.classList.contains("have"), px: Math.min(...[...e.querySelectorAll(".n, .k, .a")].map((x) => parseFloat(getComputedStyle(x).fontSize))), right: e.getBoundingClientRect().right })));
+        const sets0 = p.__sets.length;
+        await find.fill("toyo"); await p.waitForSelector("#wl-cands .mp-cand .n"); await p.waitForTimeout(300); let c = await cands();
+        const vw = await p.evaluate(() => innerWidth);
+        ck("typing part of a name (\"toyo\") lists the names that contain it, each with its symbol and where it is from; one already in the list is marked so", c.map((x) => x.name).join("|") === "Toyota Motor Corp|Toyota Industries Corp|Toyota Tsusho Corp|Toyota Motor Corporation ADR" && /^7203\.T · Equity · NK225/.test(c[0].k) && c[0].have && c[0].a === "In your list" && !c[1].have && c[1].a === "Add" && p.__searches.at(-1) === "toyo", c);
+        ck(`each candidate is a full line for the finger (${Math.min(...c.map((x) => x.h))}px, text ${Math.min(...c.map((x) => x.px))}px) and stays inside the screen`, c.every((x) => x.h >= 44 && x.px >= 12 && x.right <= vw + 1) && (await p.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 0, { vw, c });
+        await p.screenshot({ path: `watch-phone-add-${vw}.png` });
+        await p.locator(".mp-add .mp-act").tap(); await p.waitForTimeout(400);
+        ck("Add with several candidates and none chosen adds nothing: it says to choose one (a name is never added by a guess)", p.__sets.length === sets0 && /Choose one of the names/.test(await p.locator("#wl-msg").textContent()) && (await p.locator("#wl-msg.warn").count()) === 0 && (await find.inputValue()) === "toyo");
+        await p.locator("#wl-cands .mp-cand", { hasText: "Toyota Industries" }).tap(); await p.waitForTimeout(900);
+        ck("tapping a candidate adds it under its symbol and with its name; the line appears, the box clears, the candidates go, and it says what was added", p.__sets.length === sets0 + 1 && p.__sets.at(-1).symbol === "6201.T" && p.__sets.at(-1).on === true && p.__sets.at(-1).name === "Toyota Industries Corp" && (await my.locator(".mp-row").count()) === 8 && (await find.inputValue()) === "" && (await p.locator("#wl-cands").count()) === 0 && /Added Toyota Industries Corp \(6201\.T\)/.test(await p.locator("#wl-msg").textContent()), p.__sets.at(-1));
+        await find.fill("7203"); await p.waitForSelector("#wl-cands .mp-cand .n"); await p.waitForTimeout(300); c = await cands(); const sets1 = p.__sets.length;
+        await p.locator("#wl-cands .mp-cand").first().tap(); await p.waitForTimeout(500);
+        ck("part of a ticker (\"7203\") finds the name too; tapping one that is already in the list changes nothing and says so", c.length === 1 && c[0].name === "Toyota Motor Corp" && c[0].have && p.__sets.length === sets1 && /already in your list/.test(await p.locator("#wl-msg").textContent()));
+        await find.fill("tm"); await p.waitForSelector("#wl-cands .mp-cand .n"); await p.waitForTimeout(300); await find.press("Enter"); await p.waitForTimeout(900);
+        ck("a symbol typed in full (\"tm\", any case) is added by Enter even with other candidates showing", p.__sets.at(-1).symbol === "TM" && p.__sets.at(-1).name === "Toyota Motor Corporation ADR" && (await my.locator(".mp-row").count()) === 9 && (await find.inputValue()) === "");
+        for (const name of ["Toyota Industries", "Toyota Motor Corporation ADR"]) { await my.locator(".mp-row", { hasText: name }).locator(".star").tap(); await p.waitForTimeout(700); }
+        await find.fill(""); await p.waitForTimeout(300); }
       await my.locator(".mp-row", { hasText: "Apple" }).locator(".star").tap(); await p.waitForTimeout(900);
       ck("tap a star: the name leaves the list and the page stays on WATCHLIST", (await my.locator(".mp-row").count()) === 6 && /#watch/.test(p.url()) && p.__sets.at(-1).on === false, p.url());
       await sec(p, "In research").locator(".rs-row").first().tap(); await p.waitForTimeout(900);
@@ -108,4 +127,27 @@ const measure = async (p, taps) => { await p.evaluate(() => { document.querySele
   { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
     await p.goto(MOCK + "?phone=new#rates", { waitUntil: "networkidle" }); await p.waitForSelector("#grid .panel"); await p.waitForTimeout(600);
     ck("desktop with the preview switched on: still the desktop RATES & CURRENCY", (await p.locator(".mp").count()) === 0 && (await p.locator("#pnav").count()) === 0 && (await p.locator('.panel[data-k="fx"]').count()) === 1 && errs.length === 0, errs); await ctx.close(); }
+  console.log("\n[desktop WATCHLIST: adding by part of a name or of a ticker]");
+  { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+    state.syms = ["7203.T", "NVDA"]; await routes(p); await watchRoutes(p);
+    await p.goto(FAKE + "#watch", { waitUntil: "networkidle" }); await p.waitForSelector("#wl-add"); await p.waitForTimeout(800);
+    const list = () => p.evaluate(() => { const box = document.querySelector("#wl-cands"); if (!box) return null; const r = box.getBoundingClientRect(), i = document.querySelector("#wl-add").getBoundingClientRect(); return { under: r.top >= i.bottom - 1 && Math.abs(r.left - i.left) <= 2, rows: [...box.querySelectorAll(".sitem")].map((e) => ({ sym: e.querySelector("b")?.textContent ?? "", name: e.querySelector(".nm")?.textContent ?? "", act: e.querySelector(".act")?.textContent ?? "", on: e.classList.contains("on"), have: e.classList.contains("have") })) }; });
+    const names = () => p.evaluate(() => [...document.querySelectorAll('.panel[data-k="wl"] tbody tr td.nm')].map((td) => td.textContent.trim()));
+    const n0 = (await names()).length;
+    await p.locator("#wl-add").fill("toyo"); await p.waitForSelector("#wl-cands .sitem b"); await p.waitForTimeout(300); let l = await list();
+    ck("typing part of a name lists the candidates under the box: symbol, name, where it is from, and whether it is in the list already", l && l.under && l.rows.map((r) => r.sym).join() === "7203.T,6201.T,8015.T,TM" && l.rows[0].have && l.rows[0].act === "in your list" && l.rows[1].act === "+ add" && l.rows.every((r) => !r.on), l);
+    await p.locator("#wl-add").press("Enter"); await p.waitForTimeout(400);
+    ck("Enter with candidates showing and none chosen adds nothing and says to choose one", !(p.__sets || []).length && /Choose one of the names/.test(await p.locator("#wl-msg").textContent()) && (await names()).length === n0);
+    await p.locator("#wl-add").press("ArrowDown"); await p.locator("#wl-add").press("ArrowDown"); await p.locator("#wl-add").press("ArrowDown"); l = await list();
+    const marked = l.rows.findIndex((r) => r.on);
+    await p.screenshot({ path: "watch-desktop-add.png", clip: { x: 0, y: 0, width: 1000, height: 420 } });
+    await p.locator("#wl-add").press("Enter"); await p.waitForTimeout(900);
+    ck("the arrow keys walk the candidates and Enter adds the one they have reached, under its symbol and with its name", marked === 2 && p.__sets.at(-1).symbol === "8015.T" && p.__sets.at(-1).name === "Toyota Tsusho Corp" && (await names()).length === n0 + 1 && (await p.locator("#wl-add").inputValue()) === "" && /Added Toyota Tsusho Corp \(8015\.T\)/.test(await p.locator("#wl-msg").textContent()), { marked, set: p.__sets.at(-1) });
+    await p.locator("#wl-add").fill("6201"); await p.waitForSelector("#wl-cands .sitem b"); await p.waitForTimeout(300);
+    await p.locator("#wl-cands .sitem", { hasText: "Toyota Industries" }).click(); await p.waitForTimeout(900);
+    ck("part of a ticker finds a name too, and a click on a candidate adds it", p.__sets.at(-1).symbol === "6201.T" && (await names()).length === n0 + 2 && (await p.locator("#wl-cands").count()) === 0);
+    await p.locator("#wl-add").fill("zzzz"); await p.waitForTimeout(700); const none = await list();
+    await p.locator("#wl-add").press("Enter"); await p.waitForTimeout(600);
+    ck("text that matches nothing shows no list and is tried as a symbol, as before: the server's refusal is shown; no errors on the page", (none === null || none.rows.length === 0) && /Unknown symbol ZZZZ/.test(await p.locator("#wl-msg.warn").textContent().catch(() => "")) && errs.length === 0, { none, errs });
+    await ctx.close(); }
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0); })();

@@ -347,6 +347,12 @@ tbody tr.live:hover td{background:rgba(245,161,66,.1)}
 .sitem .nm{flex:1;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sitem .mut{font-size:10px;white-space:nowrap}
 .sitem.on,.sitem:hover{background:#15171c}
+/* the watchlist's add box: candidates for part of a name or of a ticker, under the box */
+.addbox{position:relative;display:inline-block}
+.sres.left{left:0;right:auto;top:100%;margin-top:3px}
+.sitem .act{flex:0 0 auto;font-size:10px;color:var(--amber);white-space:nowrap}
+.sitem.have{cursor:default}
+.sitem.have .act{color:var(--mut)}
 /* company card */
 .ccard{position:fixed;z-index:70;background:#0e0f12;border:1px solid var(--bord2);border-radius:3px;padding:8px 10px;box-shadow:0 10px 30px rgba(0,0,0,.65);font-size:11px;cursor:pointer}
 .ccard-h b{font-size:12px}
@@ -1205,6 +1211,16 @@ a.pl-row:active{background:var(--panel2)}
 .mp-legacy .chips{gap:8px;margin:0 0 8px}
 .mp-legacy .chips .chip-sm{position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:52px;min-height:36px;margin:0;padding:0 9px;border-radius:8px;font-family:var(--mono);font-size:12.5px;line-height:1.2}
 .mp-legacy .chips .chartnote{display:none}
+.mp-cands{margin:8px 0 0}
+.mp-cand{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:7px 14px;border:0;border-bottom:1px solid var(--bord);border-radius:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.mp-cand:last-child{border-bottom:0}
+.mp-cand .w{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
+.mp-cand .n{font-family:var(--sans);font-size:15px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-cand .k{font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-cand .k b{color:var(--cyan);font-weight:600}
+.mp-cand .a{flex:0 0 auto;font-family:var(--sans);font-size:14px;font-weight:600;color:var(--amber)}
+.mp-cand.have .a{color:var(--mut);font-weight:500}
+.mp-cand.none{color:var(--mut);font-family:var(--sans);font-size:14px;cursor:default}
 .mp-add{display:flex;gap:8px;margin:12px 0 0}
 .mp-add .mp-find{flex:1 1 auto;min-width:0;margin:0}
 .mp-add .mp-act{flex:0 0 auto}
