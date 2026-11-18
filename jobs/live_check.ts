@@ -19,15 +19,17 @@ async function main(): Promise<void> {
   const sb = db();
   console.log(`live check at ${utc(new Date(now).toISOString())}`);
 
-  await part("jobs: the last run of each, and failures in the last 24 hours", async () => {
-    const rows = must(await sb.from("job_runs").select("job,at,ok,detail,ms").order("at", { ascending: false }).limit(1000)) as Array<{ job: string; at: string; ok: boolean; detail: string | null; ms: number | null }>;
+  await part("jobs that ran in the last 48 hours: the last run of each, and failures in the last 24", async () => {
+    // the minute job alone writes 1,440 rows a day, so the two days are read in pages
+    const rows: Array<{ job: string; at: string; ok: boolean; detail: string | null; ms: number | null }> = [];
+    for (let from = 0; from < 8000; from += 1000) { const page = must(await sb.from("job_runs").select("job,at,ok,detail,ms").gte("at", new Date(now - 48 * 3600e3).toISOString()).order("at", { ascending: false }).range(from, from + 999)) as typeof rows; rows.push(...page); if (page.length < 1000) break; }
     const by = new Map<string, typeof rows>();
     for (const r of rows) { const a = by.get(r.job) ?? []; a.push(r); by.set(r.job, a); }
     for (const [job, rs] of [...by].sort()) {
       const day = rs.filter((r) => now - Date.parse(r.at) < 86400e3), bad = day.filter((r) => !r.ok);
       console.log(`  ${job}: last ${age(rs[0].at)} (${rs[0].ok ? "ok" : "FAILED"}${rs[0].ms != null ? `, ${rs[0].ms} ms` : ""}); ${day.length} runs in 24 h, ${bad.length} failed${bad.length ? `; last failure ${utc(bad[0].at)}: ${(bad[0].detail ?? "").slice(0, 160)}` : ""}`);
     }
-    if (!by.size) console.log("  no runs on record");
+    if (!by.size) console.log("  no runs on record in the last 48 hours");
   });
 
   await part("sources whose last attempt failed", async () => {
