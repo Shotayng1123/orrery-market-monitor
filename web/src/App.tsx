@@ -1,6 +1,7 @@
 import { pageHash } from "./lib/indices";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Topbar, VIEWS, type ViewId } from "./components/Topbar";
+import { CrashSwitch, TabGuard } from "./components/TabGuard";
 import { Gate } from "./auth/Gate";
 import { takeVerifyLink } from "./lib/verify";
 import { api, apiConfigured, clearToken, getToken, tokenId, type Me } from "./lib/api";
@@ -63,7 +64,7 @@ export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [healthErr, setHealthErr] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
-  const [nextIn, setNextIn] = useState<number | null>(null);
+  const [polling, setPolling] = useState(false);   // whether the refresh loop is running (the countdown itself lives in the top bar)
   const [hit, setHit] = useState(false);
   const [tick, setTick] = useState(0);
   const nextAt = useRef<number | null>(null);
@@ -119,27 +120,34 @@ export default function App() {
     window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const refreshing = useRef(false);
   const refresh = useCallback(async () => {
     if (!signedIn || !apiConfigured) return;
+    // one at a time: the loop asks again every second while a refresh is due, and a slow answer must not start a second one
+    if (refreshing.current) return;
+    refreshing.current = true;
     try {
       const h = await api<Health>("health");
       setHealth(h); setHealthErr(null);
       if (h.holidays) setHolidays(h.holidays);
     } catch (e) { setHealthErr(e instanceof Error ? e.message : String(e)); }
+    finally { refreshing.current = false; }
     setUpdatedAt(new Date()); setTick((t) => t + 1);
     setHit(true); setTimeout(() => setHit(false), 2000);
     nextAt.current = Date.now() + (anyOpen() ? OPEN_INTERVAL : CLOSED_INTERVAL) * 1000;
   }, [signedIn]);
 
   // The refresh loop: 60 s while any market is open, 10 min otherwise; the countdown chip shows the wait.
+  // The loop only looks at the clock: it changes no state until a refresh is due. Until 19 Nov 2026 it stored the
+  // seconds left every second, which drew the whole Monitor again every second: every table and every chart on
+  // the tab in view, on a phone's battery (and it rebuilt the stock page's chart each time, see SigmaChart).
+  // The top bar, which already ticks for its clock, works the countdown out from `nextAt` itself.
   useEffect(() => {
-    if (!signedIn || !apiConfigured) { setNextIn(null); return; }
+    if (!signedIn || !apiConfigured) { setPolling(false); return; }
+    setPolling(true);
     void refresh();
     const t = setInterval(() => {
-      if (nextAt.current == null) return;
-      const s = Math.max(0, Math.round((nextAt.current - Date.now()) / 1000));
-      setNextIn(s);
-      if (s <= 0) void refresh();
+      if (nextAt.current != null && Math.round((nextAt.current - Date.now()) / 1000) <= 0) void refresh();
     }, 1000);
     return () => clearInterval(t);
   }, [signedIn, refresh]);
@@ -164,6 +172,9 @@ export default function App() {
     </div></div></div>
   );
 
+  // development only: how often the whole Monitor has been drawn. The browser checks read it to see that a second
+  // in which nothing happens draws nothing (e2e/phone-rates-watchlist-stock.cjs).
+  if (import.meta.env.DEV) { const w = window as unknown as { __appRenders?: number }; w.__appRenders = (w.__appRenders ?? 0) + 1; }
   const { view, sub } = route;
   return (
     <>
@@ -182,11 +193,13 @@ export default function App() {
           </div>
         </div></div>
       )}
-      <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={me?.email ?? userId} onSignOut={() => (me ? setAcct(true) : signOut())} updatedAt={updatedAt} nextIn={nextIn} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} pv2={pv2} canPreview={phone} />
+      <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={me?.email ?? userId} onSignOut={() => (me ? setAcct(true) : signOut())} updatedAt={updatedAt} nextAt={nextAt} polling={polling} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} pv2={pv2} canPreview={phone} />
       <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–6 TABS · ESC</span><span>&#9974;</span></div>
       <div id="wrap">
         {pv2 && <InstallHint home={view === "market"} />}
         <div id="grid" data-view={view}>
+          <TabGuard key={`${view}/${pv2 ? "p" : "d"}`} resetKey={sub ?? ""}>
+          {import.meta.env.DEV && <CrashSwitch view={view} />}
           {view === "market" && (pv2 ? <MarketPhone tick={tick} /> : <MarketView tick={tick} />)}
           {view === "news" && (pv2 ? <NewsPhone tick={tick} /> : <NewsView tick={tick} />)}
           {view === "research" && (pv2 ? <ResearchPhone tick={tick} sub={sub} onSub={(s) => setHash("research", s)} /> : <ResearchView tick={tick} sub={sub} onSub={(s) => setHash("research", s)} />)}
@@ -194,6 +207,7 @@ export default function App() {
           {view === "equities" && (pv2 ? <EquitiesPhone sub={sub} onSub={(s) => setHash("equities", s)} tick={tick} /> : <EquitiesView sub={sub} onSub={(s) => setHash("equities", s)} tick={tick} />)}
           {view === "rates" && (pv2 ? <RatesPhone tick={tick} /> : <RatesFxView sub={sub} onSub={(s) => setHash("rates", s)} tick={tick} />)}
           {view === "asset" && (pv2 ? <AssetPhone symbol={sub} tick={tick} /> : <AssetView symbol={sub} tick={tick} />)}
+          </TabGuard>
         </div>
         <footer>Orrery Monitor shows market data from third-party feeds (Yahoo Finance; US Treasury; Japan MOF; exchange and central-bank publications) that may be delayed or incomplete; every panel states its source and as-of time. Information only; nothing here is investment advice. Default time zone: Singapore.</footer>
       </div>

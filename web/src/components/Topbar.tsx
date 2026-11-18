@@ -24,7 +24,8 @@ export interface TopbarProps {
   userId: string | null;
   onSignOut: () => void;
   updatedAt: Date | null;
-  nextIn: number | null;          // seconds to the next refresh, null when polling is off
+  nextAt: { current: number | null };   // when the next refresh is due (epoch ms); read every second with the clock
+  polling: boolean;               // false when the refresh loop is off (signed out, or no API configured)
   hit: boolean;                   // a payload just landed (green flash)
   health: "ok" | "warn" | "bad" | "unk";
   healthTitle: string;
@@ -39,6 +40,8 @@ export interface TopbarProps {
 export function Topbar(p: TopbarProps) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
+  // seconds to the next refresh, from the clock this bar already keeps; null when the loop is off or not yet timed
+  const nextIn = p.polling && p.nextAt.current != null ? Math.max(0, Math.round((p.nextAt.current - now.getTime()) / 1000)) : null;
   const statuses = allStatuses(now).filter((s) => CHIP_MARKETS.includes(s.market.id));
   const hol = haveHolidays() ? "" : " (holiday calendar not loaded yet)";
   // phone preview: search, clocks, data status and the account sit in a menu under the header
@@ -70,8 +73,8 @@ export function Topbar(p: TopbarProps) {
         </span>
         <span id="clock" title="Singapore time (default), Tokyo, New York"><b>{fmtClock(now, SGT, true)}</b> SGT · {fmtClock(now, "Asia/Tokyo")} JST · {fmtClock(now, "America/New_York")} ET</span>
         <span id="upd" className="mut" title="When the last payload landed">{p.updatedAt ? `UPD ${fmtStamp(p.updatedAt)}` : ""}</span>
-        <span id="nxt" className={`chip-sm${p.hit ? " hit" : p.nextIn == null ? " stale" : ""}`} title="Time to the next automatic refresh. Click to refresh now" onClick={p.onRefresh}>
-          &#8635; {p.nextIn == null ? "–:––" : `${Math.floor(p.nextIn / 60)}:${String(p.nextIn % 60).padStart(2, "0")}`}
+        <span id="nxt" className={`chip-sm${p.hit ? " hit" : nextIn == null ? " stale" : ""}`} title="Time to the next automatic refresh. Click to refresh now" onClick={p.onRefresh}>
+          &#8635; {nextIn == null ? "–:––" : `${Math.floor(nextIn / 60)}:${String(nextIn % 60).padStart(2, "0")}`}
         </span>
         <span id="hlth" className={`chip-sm hl hl-${p.health}`} title={p.healthTitle}>DATA {p.health === "ok" ? "OK" : p.health === "warn" ? "!" : p.health === "bad" ? "✕" : "?"}</span>
         <Help />

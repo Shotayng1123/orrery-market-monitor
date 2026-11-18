@@ -47,10 +47,11 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, about 700 checks in 15 suites): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, about 750 checks in 16 suites): every tab on a desktop and in the phone layout, the
   stock page (chart marks, performance, statements), the classic phone layout, the sign-in screen, creating an
   account by verification email, the manager's accounts list, the
-  home-screen hint, the new-version bar, opening without a connection, and notifications. `cd web && npm run e2e` starts the test servers it needs and runs them all (about three
+  home-screen hint, the new-version bar, opening without a connection, notifications, and a tab that fails
+  while it is drawn (it says so in its own space; the header and the other tabs stay). `cd web && npm run e2e` starts the test servers it needs and runs them all (about three
   minutes); `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
   Needs Playwright's browser once: `npx playwright install chromium`.
 - **Logic checks** (`sim/logic.test.ts`): exchange sessions, rolling bands, alert measures, the push encryption,

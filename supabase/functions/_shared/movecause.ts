@@ -5,7 +5,8 @@
 // So the model must name the pages it relied on, and a page it names that the search did not return is thrown
 // away; an answer left with no page is "not found", whatever it says.
 export interface MoveCtx { symbol: string; name: string; exchange: string | null; sector: string | null; currency: string | null; kind: "d1" | "w1" | "m1"; from: string; to: string; pct: number; fromPx: number; toPx: number; text: string; bench: string | null; benchPct: number | null }
-export interface CauseAnswer { found: boolean; cause: string | null; sources: Array<{ title: string; url: string }> }
+/** `why` is set on an answer that is not found: which of the three ways it came to that (for the job's log). */
+export interface CauseAnswer { found: boolean; cause: string | null; sources: Array<{ title: string; url: string }>; why?: "none reported" | "no sentence" | "no returned page cited" }
 
 export const CAUSE_SYSTEM = `You find the reported reason for one specific move in one stock, for a portfolio manager who will act on it.
 
@@ -16,6 +17,7 @@ Rules:
 2. If the stock only moved with its market (compare the benchmark's change given below), say so and name the market's reported trigger, if a report gives one.
 3. Never infer a reason from the price alone, from what usually moves this stock, or from memory. If you find no report that explains this move, the answer is that none was found. That answer is useful; a guess is harmful.
 4. Figures in the reason (earnings numbers, deal sizes) must be the ones in the report.
+5. Among the reports your searches returned, rest the reason on the most authoritative and name it first: the company's own release or filing, an exchange or a regulator, a news agency, an established newspaper or broadcaster (Reuters, Bloomberg, Nikkei, the Financial Times, The Wall Street Journal, CNBC and their like). Name a site that rewrites other outlets' reports, a stock-commentary blog, a price-alert page or a crypto news site only when none of the better kind reports the same thing. Do not search again only to find a better-known outlet for a reason you have already found reported.
 
 End your reply with one JSON object and nothing after it:
 {"found": true or false, "cause": "one sentence of at most 220 characters, plain text, starting with what happened" or null, "sources": ["the URL of each report you relied on, at most 3"]}
@@ -47,10 +49,10 @@ export function readCause(reply: string, pages: Array<{ title: string; url: stri
     if (start === 0) break;
   }
   if (!obj) throw new Error("the reply has no answer object");
-  const none: CauseAnswer = { found: false, cause: null, sources: [] };
-  if (obj.found !== true) return none;
+  const none = (why: NonNullable<CauseAnswer["why"]>): CauseAnswer => ({ found: false, cause: null, sources: [], why });
+  if (obj.found !== true) return none("none reported");
   const cause = typeof obj.cause === "string" ? obj.cause.replace(/\s+/g, " ").replace(/[*_`#]/g, "").trim() : "";
-  if (cause.length < 12) return none;
+  if (cause.length < 12) return none("no sentence");
   const known = new Map<string, { title: string; url: string }>();
   for (const p of pages) { const k = hostKey(p.url); if (k && !known.has(k)) known.set(k, p); }
   const sources: CauseAnswer["sources"] = [];
@@ -59,6 +61,6 @@ export function readCause(reply: string, pages: Array<{ title: string; url: stri
     if (hit && !sources.some((s) => s.url === hit.url)) sources.push({ title: hit.title.replace(/\s+/g, " ").trim().slice(0, 160), url: hit.url });
     if (sources.length === 3) break;
   }
-  if (!sources.length) return none;   // a reason with no report behind it is not shown
+  if (!sources.length) return none("no returned page cited");   // a reason with no report behind it is not shown
   return { found: true, cause: cause.length > 260 ? cause.slice(0, 257).replace(/\s+\S*$/, "") + "…" : cause, sources };
 }

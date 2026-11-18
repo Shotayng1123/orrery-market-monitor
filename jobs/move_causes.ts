@@ -4,46 +4,76 @@
 // A reason is stored only with the reports behind it (pages the search returned); otherwise the move is stored
 // as "not found". Nothing is guessed (the rules are in _shared/movecause.ts).
 //
-//   npx tsx move_causes.ts                 up to 60 moves
+//   npx tsx move_causes.ts                 up to 30 moves
 //   npx tsx move_causes.ts --max 10        fewer
 //   npx tsx move_causes.ts --dry           ask and print, store nothing
+//   npx tsx move_causes.ts --again         also look again at moves stored as "not found" (fewer than three tries)
+//   npx tsx move_causes.ts --symbol CRWV   only that stock's moves
+//   npx tsx move_causes.ts --redo          every move chosen, also one that already has its answer (with --symbol)
+//   npx tsx move_causes.ts --parallel 1    look-ups at a time (default 3)
+//   npx tsx move_causes.ts --trace         print what each look-up did: its searches, the pages returned, its reply
 // Needs ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY. Optional: MOVE_CAUSE_MODEL (default
-// claude-opus-5-5), MOVE_CAUSE_EFFORT (default medium). Each look-up prints what it cost.
+// claude-opus-5-5), MOVE_CAUSE_EFFORT (default medium), MOVE_CAUSE_SEARCHES (searches allowed a look-up, default 4). Each look-up prints what it cost, how many pages its
+// searches returned, any search that failed, and, when nothing is stored as the reason, which way it came to that.
 import { db } from "./lib/db.js";
 import { ask, newClient } from "./lib/llm.js";
 import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabase/functions/_shared/movecause.js";
 
 const arg = (k: string, d = ""): string => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] ?? d : d; };
-const DRY = process.argv.includes("--dry");
-const MAX = Math.max(1, Math.min(300, Number(arg("max", "60")) || 60));
+const DRY = process.argv.includes("--dry"), AGAIN = process.argv.includes("--again"), TRACE = process.argv.includes("--trace"), REDO = process.argv.includes("--redo");
+const SYMBOL = arg("symbol").trim().toUpperCase();
+if (SYMBOL && !/^[A-Z0-9^.=&-]{1,24}$/.test(SYMBOL)) { console.error(`not a symbol: ${SYMBOL}`); process.exit(2); }
+// --redo spends again on moves that are already answered, so it is taken only for one named stock
+if (REDO && !SYMBOL) { console.error("--redo needs --symbol"); process.exit(2); }
+const MAX = Math.max(1, Math.min(300, Number(arg("max", "30")) || 30));
+const PARALLEL = Math.max(1, Math.min(6, Number(arg("parallel", "3")) || 3));
 const MODEL = process.env.MOVE_CAUSE_MODEL || "claude-opus-5-5", EFFORT = process.env.MOVE_CAUSE_EFFORT || "medium";
-const SEARCHES = 4, PARALLEL = 3, MAX_TRIES = 3;
+// Each search costs about USD 0.09 (its results are read by the model), so the number allowed sets what a look-up
+// can cost: measured on 27 look-ups (18 Nov 2026), one search 0.09 to 0.10, two 0.18 to 0.20, three 0.24 to 0.31, four 0.37 to 0.43.
+const SEARCHES = Math.max(1, Math.min(8, Number(process.env.MOVE_CAUSE_SEARCHES) || 4)), MAX_TRIES = 3, EMPTY_WAIT_MS = 30_000;
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+const WHY: Record<string, string> = { "none reported": "the model found no report", "no sentence": "the model gave no usable sentence", "no returned page cited": "the model gave a reason but cited no page its searches returned" };
 
 interface Row { symbol: string; kind: string; d: string; ctx: MoveCtx; tries: number }
 
 async function main(): Promise<void> {
   const sb = db(), client = newClient();
-  const { data, error } = await sb.from("move_causes").select("symbol,kind,d,ctx,tries").in("status", ["queued", "error"]).lt("tries", MAX_TRIES).order("d", { ascending: false }).limit(MAX);
+  let q = sb.from("move_causes").select("symbol,kind,d,ctx,tries");
+  if (SYMBOL) q = q.eq("symbol", SYMBOL);
+  if (!REDO) q = q.in("status", AGAIN ? ["queued", "error", "not_found"] : ["queued", "error"]).lt("tries", MAX_TRIES);
+  const { data, error } = await q.order("d", { ascending: false }).limit(MAX);
   if (error) {
     // a database from before this change has no queue: that is not a failure of this job
     if (error.code === "PGRST205" || error.code === "42P01" || /could not find the table|does not exist/i.test(error.message)) { console.log("The move_causes table is not in the database yet (the database change of 18 Nov 2026 has not been applied): nothing to look up."); return; }
     throw new Error(error.message);
   }
   const rows = (data ?? []) as Row[];
-  console.log(`${rows.length} move(s) to look up (model ${MODEL}, effort ${EFFORT}, up to ${SEARCHES} searches each)`);
+  console.log(`${rows.length} move(s) to look up (model ${MODEL}, effort ${EFFORT}, up to ${SEARCHES} searches each, ${PARALLEL} at a time${SYMBOL ? `, ${SYMBOL} only` : ""}${REDO ? ", including those already answered" : AGAIN ? ", including those stored as not found" : ""})`);
   let found = 0, none = 0, failed = 0, cost = 0;
   const work = [...rows];
   await Promise.all(Array.from({ length: PARALLEL }, async () => {
     for (let r = work.shift(); r; r = work.shift()) {
       const tag = `${r.symbol} ${r.kind} ${r.d}`;
       try {
-        const t = await ask(client, { model: MODEL, effort: EFFORT, system: CAUSE_SYSTEM, user: causeQuestion(r.ctx), maxSearches: SEARCHES });
+        let spent = 0;
+        const look = async () => { const x = await ask(client, { model: MODEL, effort: EFFORT, system: CAUSE_SYSTEM, user: causeQuestion(r.ctx), maxSearches: SEARCHES }); cost += x.costUsd; spent += x.costUsd; return x; };
+        const errs = (x: { searchErrors: string[] }) => (x.searchErrors.length ? `searches that failed: ${x.searchErrors.join(", ")}` : "no search reported a failure");
+        let t = await look();
+        // A look-up whose searches brought back no page at all has not looked at anything: that says nothing about
+        // the move. It is asked once more after a pause, and if that is empty too the move is left for a later run
+        // (status "error") instead of being stored as "not found".
+        if (!t.pages.length) {
+          console.warn(`${tag}: ${t.searches} search(es) returned no page (${errs(t)}); asking again in ${EMPTY_WAIT_MS / 1000} s`);
+          await sleep(EMPTY_WAIT_MS);
+          t = await look();
+          if (!t.pages.length) throw new Error(`the searches returned no page, twice (${t.searches} search(es); ${errs(t)})`);
+        }
+        if (TRACE) console.log(`${tag}: the question:\n${causeQuestion(r.ctx)}\n${tag}: what the look-up did:\n  ${t.trace.join("\n  ")}`);
         const a = readCause(t.text, t.pages);
-        cost += t.costUsd;
         if (a.found) found++; else none++;
-        console.log(`${tag}: ${a.found ? a.cause : "no report found"} [${t.searches} searches, $${t.costUsd.toFixed(3)}]${a.found ? ` <- ${a.sources.map((x) => x.url).join(" ")}` : ""}`);
+        console.log(`${tag}: ${a.found ? a.cause : `no report found (${WHY[a.why ?? ""] ?? "no reason given"})`} [${t.searches} searches, ${t.pages.length} pages${t.searchErrors.length ? `, ${errs(t)}` : ""}, $${spent.toFixed(3)}]${a.found ? ` <- ${a.sources.map((x) => x.url).join(" ")}` : ""}`);
         if (DRY) continue;
-        const { error: e } = await sb.from("move_causes").update({ status: a.found ? "found" : "not_found", cause: a.cause, sources: a.sources, model: t.model, cost_usd: t.costUsd, tries: r.tries + 1, done_at: new Date().toISOString() }).eq("symbol", r.symbol).eq("kind", r.kind).eq("d", r.d);
+        const { error: e } = await sb.from("move_causes").update({ status: a.found ? "found" : "not_found", cause: a.cause, sources: a.sources, model: t.model, cost_usd: spent, tries: r.tries + 1, done_at: new Date().toISOString() }).eq("symbol", r.symbol).eq("kind", r.kind).eq("d", r.d);
         if (e) throw new Error(e.message);
       } catch (e) {
         failed++;

@@ -1,5 +1,6 @@
+import { zoomNow } from "../lib/prefs";
 import { useAddBox } from "../lib/candidates";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Empty, Panel } from "../components/Panel";
 import { Star } from "../components/Star";
 import { hideCard, money, openAsset, showCard } from "../components/CompanyCard";
@@ -28,7 +29,21 @@ export function WatchlistView({ tick }: { tick: number }) {
   const feed = useApi<Feed>("watch_feed", { v: w.version }, Math.floor(tick / 5));
   const box = useAddBox(w.has);
   const [open, setOpen] = useState(false);
+  // The candidates hang under the box but must not be cut by the panel, which clips what leaves it: they are
+  // placed on the page itself, at the box's own position (divided by the page's zoom, as the company card is).
+  const inp = useRef<HTMLInputElement>(null);
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
+  const showList = open && (box.hits.length > 0 || box.busy);
+  useEffect(() => {
+    if (!showList) { setAt(null); return; }
+    const place = () => { const el = inp.current; if (!el) return; const r = el.getBoundingClientRect(), z = zoomNow(); setAt({ left: r.left / z, top: r.bottom / z + 3 }); };
+    place();
+    window.addEventListener("scroll", place, true); window.addEventListener("resize", place);
+    return () => { window.removeEventListener("scroll", place, true); window.removeEventListener("resize", place); };
+  }, [showList]);
   const rows = list.data?.rows ?? [];
+  // an answer without one of its lists (an older server, a stand-in feed) shows that panel empty: it must not blank the page
+  const alerts = feed.data?.alerts ?? [], news = feed.data?.news ?? [], research = feed.data?.research ?? [];
   const cell = (v: number | null, full: number, bp = false) => <td className={`num ${signCls(v)}`} style={{ background: shade(v, full) }}>{bp ? (v == null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1)}`) : fmtPct(v, 1)}</td>;
   const ahead = rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3).sort((a, b) => a.earningsAt!.localeCompare(b.earningsAt!));
   const name = (s: string) => rows.find((r) => r.symbol === s)?.name ?? s;
@@ -38,7 +53,7 @@ export function WatchlistView({ tick }: { tick: number }) {
       <Panel no="01" title="MY NAMES" span={8} k="wl" aux={<>{rows.length} name{rows.length === 1 ? "" : "s"} · stocks at the last close, market instruments at the last print</>}>
         <div className="searchrow">
           <span className="addbox">
-            <input type="text" id="wl-add" aria-label="add a name to the watchlist" placeholder="add a name or a symbol: toyota, NVDA, 7203" value={box.text} autoComplete="off" style={{ width: 280 }}
+            <input type="text" id="wl-add" ref={inp} aria-label="add a name to the watchlist" placeholder="add a name or a symbol: toyota, NVDA, 7203" value={box.text} autoComplete="off" style={{ width: 330 }}
               onChange={(e) => { box.setText(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}
               onKeyDown={(e) => {
                 if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); box.setSel(Math.min(box.hits.length - 1, box.sel + 1)); }
@@ -46,8 +61,8 @@ export function WatchlistView({ tick }: { tick: number }) {
                 else if (e.key === "Enter") void box.submit();
                 else if (e.key === "Escape") setOpen(false);
               }} />
-            {open && (box.hits.length > 0 || box.busy) && (
-              <div className="sres left" id="wl-cands">
+            {showList && (
+              <div className="sres cands" id="wl-cands" style={at ? { left: at.left, top: at.top } : { visibility: "hidden" }}>
                 {box.busy && !box.hits.length && <div className="sitem mut">searching …</div>}
                 {box.hits.map((h, i) => (
                   <div key={h.symbol} className={`sitem${i === box.sel ? " on" : ""}${w.has(h.symbol) ? " have" : ""}`} title={w.has(h.symbol) ? "Already in your list" : `Add ${h.name} (${h.symbol})`} onMouseEnter={() => box.setSel(i)} onMouseDown={(e) => { e.preventDefault(); void box.addHit(h); }}>
@@ -83,13 +98,13 @@ export function WatchlistView({ tick }: { tick: number }) {
           <table className="secT"><tbody>{ahead.map((r) => <tr key={r.symbol}><td className="l mut num">{day(r.earningsAt!)} {fmtClock(new Date(r.earningsAt!), SGT)}</td><td className="l"><span className="lnk" onClick={() => openAsset(r.symbol)}>{r.name}</span></td><td className="l mut">{r.earningsEst ? "est." : "confirmed"}</td></tr>)}</tbody></table>
         ) : <Empty title="No dates ahead">{rows.length ? "None of your names has an earnings date in the feed." : "Add names to see their earnings dates."}</Empty>}
       </Panel>
-      <Panel no="03" title="ALERTS ON MY NAMES" span={4} k="wl-alerts" aux={feed.data ? `${feed.data.alerts.length} recent` : ""}>
-        {feed.data?.alerts.length ? (
-          <table className="secT"><tbody>{feed.data.alerts.map((a) => <tr key={a.id}><td className="l mut num">{fmtStamp(a.at).replace(" SGT", "")}</td><td className="l">{a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.msg}</a> : <span className="lnk" onClick={() => openAsset(a.symbol)}>{a.msg}</span>}</td><td className={`num ${signCls(a.pct)}`}>{a.pct == null ? "" : fmtPct(a.pct, 1)}</td></tr>)}</tbody></table>
+      <Panel no="03" title="ALERTS ON MY NAMES" span={4} k="wl-alerts" aux={feed.data ? `${alerts.length} recent` : ""}>
+        {alerts.length ? (
+          <table className="secT"><tbody>{alerts.map((a) => <tr key={a.id}><td className="l mut num">{fmtStamp(a.at).replace(" SGT", "")}</td><td className="l">{a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.msg}</a> : <span className="lnk" onClick={() => openAsset(a.symbol)}>{a.msg}</span>}</td><td className={`num ${signCls(a.pct)}`}>{a.pct == null ? "" : fmtPct(a.pct, 1)}</td></tr>)}</tbody></table>
         ) : <Empty title="No alerts">{feed.error ?? "Moves beyond ±5% (large companies) or ±7%, buybacks, guidance changes and large deals on your names appear here."}</Empty>}
       </Panel>
-      <Panel no="04" title="HEADLINES ON MY NAMES" span={8} k="wl-news" aux={feed.data ? `${feed.data.news.length} in the feed` : ""}>
-        {feed.data?.news.length ? <div className="nwlist">{feed.data.news.map((it) => (
+      <Panel no="04" title="HEADLINES ON MY NAMES" span={8} k="wl-news" aux={feed.data ? `${news.length} in the feed` : ""}>
+        {news.length ? <div className="nwlist">{news.map((it) => (
           <div className="nwrow" key={it.id}>
             <span className="nwt">{fmtStamp(it.publishedAt).replace(" SGT", "")}</span>
             <span className="nwh"><a href={it.url} target="_blank" rel="noreferrer">{decode(it.title)}</a></span>
@@ -99,8 +114,8 @@ export function WatchlistView({ tick }: { tick: number }) {
         ))}</div> : <Empty title="No headlines">{feed.error ?? "Headlines that name one of your companies appear here."}</Empty>}
       </Panel>
       <Panel no="05" title="IN RESEARCH" span={4} k="wl-research" aux="pieces that mention my names">
-        {feed.data?.research.length ? (
-          <table className="secT"><tbody>{feed.data.research.map((r) => <tr key={r.key}><td className="l mut num">{day(r.d)}</td><td className="l"><span className="lnk" onClick={() => { location.hash = `research/${encodeURIComponent(r.key)}`; }}>{r.title}</span><div className="mut" style={{ fontSize: 10 }}>{r.symbols.map(name).join(" · ")}</div></td></tr>)}</tbody></table>
+        {research.length ? (
+          <table className="secT"><tbody>{research.map((r) => <tr key={r.key}><td className="l mut num">{day(r.d)}</td><td className="l"><span className="lnk" onClick={() => { location.hash = `research/${encodeURIComponent(r.key)}`; }}>{r.title}</span><div className="mut" style={{ fontSize: 10 }}>{r.symbols.map(name).join(" · ")}</div></td></tr>)}</tbody></table>
         ) : <Empty title="No mentions">{feed.error ?? "Daily notes and weekly reports that mention your names appear here."}</Empty>}
       </Panel>
     </>

@@ -23,6 +23,7 @@ html,body{background:var(--bg);color:var(--txt);margin:0;font-family:var(--mono)
 ::selection{background:#2b4a66}
 a{color:var(--cyan)}
 .up{color:var(--up)} .dn{color:var(--dn)} .warn{color:var(--warn)} .mut{color:var(--mut)}
+.nb{white-space:nowrap}   /* a phrase that wraps as a whole (a date must not break at its hyphens) */
 .num{font-variant-numeric:tabular-nums}
 
 /* top bar */
@@ -349,7 +350,9 @@ tbody tr.live:hover td{background:rgba(245,161,66,.1)}
 .sitem.on,.sitem:hover{background:#15171c}
 /* the watchlist's add box: candidates for part of a name or of a ticker, under the box */
 .addbox{position:relative;display:inline-block}
-.sres.left{left:0;right:auto;top:100%;margin-top:3px}
+.sres.cands{position:fixed;right:auto;width:min(600px,94vw)}   /* on the page, not in the panel: a panel clips what leaves it */
+.sres.cands .sitem .nm{flex:0 0 auto;max-width:62%}                                          /* the name at its own width */
+.sres.cands .sitem .mut{flex:1 1 0;min-width:0;text-align:right;overflow:hidden;text-overflow:ellipsis}   /* where it is from takes what is left */
 .sitem .act{flex:0 0 auto;font-size:10px;color:var(--amber);white-space:nowrap}
 .sitem.have{cursor:default}
 .sitem.have .act{color:var(--mut)}
@@ -764,12 +767,31 @@ body.term .csvbtn{font-size:8px;padding:0 4px;margin-left:5px}
 .helpwrap{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:4vh 12px;overflow:auto}
 .helpbox{background:var(--panel2);border:1px solid var(--bord2);border-radius:5px;width:min(980px,100%);max-height:92vh;display:flex;flex-direction:column}
 .helphead{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--bord);letter-spacing:.1em;font-size:11.5px;color:var(--amber)}
-.helpbody{overflow:auto;padding:6px 14px 14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr));gap:4px 26px}
+/* a tab that could not be drawn (TabGuard): said in the tab's own space, on both layouts */
+.tabcrash{grid-column:1/-1;margin:10px 0;padding:18px 16px;border:1px solid var(--bord2);border-left:3px solid var(--dn);border-radius:5px;background:var(--panel2);font-size:12.5px;line-height:1.5}
+.tabcrash b{color:var(--amber);letter-spacing:.1em;font-size:11.5px}
+.tabcrash p{margin:8px 0 0;color:var(--txt2);overflow-wrap:anywhere}
+.tabcrash .chip-sm{margin-top:12px;cursor:pointer;background:none;font:inherit;font-size:11px;color:var(--txt)}
+body.pv2 .tabcrash{margin:14px 6px;font-size:15px;border-radius:9px}
+body.pv2 .tabcrash b{font-size:13px}
+body.pv2 .tabcrash .chip-sm{font-size:13.5px;padding:11px 14px;border-radius:9px}
+.helpbody{overflow:auto;padding:6px 14px 14px}
+/* two balanced columns of whole sections (one on a narrow screen). A grid put a short section beside a long one
+   and left the difference blank; the columns sit inside the scrolling box so that they grow downwards, not sideways */
+.helpcols{columns:380px 2;column-gap:26px}
+.helpsec{break-inside:avoid}
 .helpsec h4{margin:12px 0 4px;color:var(--amber);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase}
 .helpsec dl{margin:0}
 .helpsec dl>div{display:grid;grid-template-columns:118px minmax(0,1fr);gap:8px;padding:3px 0;border-bottom:1px solid var(--bord);font-size:11.5px;line-height:1.45}
 .helpsec dt{color:var(--txt);font-weight:600}
 .helpsec dd{margin:0;color:var(--txt2)}
+/* the phone layout: the Help in the size of the rest of that layout (it was the desktop's 11.5px) */
+body.pv2 .helpwrap{padding:10px 8px}
+body.pv2 .helpbox{max-height:calc(100vh - 20px);max-height:calc(100dvh - 20px);border-radius:10px}
+body.pv2 .helphead{font-size:13px;padding:12px 14px}
+body.pv2 .helphead .chip-sm{font-size:13px;padding:10px 13px;border-radius:9px}
+body.pv2 .helpsec h4{font-size:12.5px;margin:16px 0 6px}
+body.pv2 .helpsec dl>div{grid-template-columns:104px minmax(0,1fr);gap:10px;padding:7px 0;font-size:14px;line-height:1.45}
 /* phones: table figures a little larger than the rest (they were under 8.5px after the overall reduction) */
 @media (max-width:720px){table.mkt,table.mini,table.secT{font-size:11.5px}.nwrow{font-size:11.5px}}
 /* printing a research piece: the piece only, black on white */
@@ -1026,6 +1048,12 @@ body.pv2 .pick select{font-size:17px;top:-5px;bottom:auto;height:calc(100% + 10p
 .mp-asof{margin-top:4px;color:var(--mut);font-family:var(--mono);font-size:12.5px;display:flex;align-items:center;gap:8px}
 .mp-asof .badge{flex:0 0 auto;margin:0;font-size:11px;padding:1px 6px;border-radius:4px}
 .mp-head .pick{margin:0;flex:0 0 auto}
+/* the line under the title at full width, below the title and its drop-down (Screen subBelow) */
+.mp-head.below{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:12px}
+.mp-head.below .mp-ttl{display:contents}
+.mp-head.below h1{grid-column:1;grid-row:1}
+.mp-head.below>.pick{grid-column:2;grid-row:1}
+.mp-head.below .mp-asof{grid-column:1/-1;grid-row:2;margin-top:7px;flex-wrap:wrap;row-gap:3px}
 .mp-sec h2{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:28px;margin:22px 8px 8px;font-family:var(--mono);font-size:12.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
 .mp-sec h2 .aux{flex:0 0 auto;font-weight:400;letter-spacing:0;text-transform:none;color:var(--mut)}
 .mp-sec h2 .pick{margin:0}
