@@ -49,6 +49,12 @@ const nf = (d: number) => new Intl.NumberFormat("en-GB", { minimumFractionDigits
 export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, sigmaWindow = "m12", height = 160, fill = false, axes = false, color = FLAT, volume = false, marks, onReadout, onPan }: SigmaChartProps) {
   const el = useRef<HTMLDivElement>(null);
   const panRef = useRef(0);   // bars back from the latest, kept across rebuilds
+  // The marks as their content, not as the array they arrive in. A page hands over a fresh array on every one of
+  // its renders, and the Monitor renders once a second for its countdown: keyed on the array, the chart was
+  // rebuilt every second, and a mark's card opened by a tap was gone again at once (Shota, 19 Nov 2026).
+  const marksKey = useMemo(() => JSON.stringify(marks ?? null), [marks]);
+  const marksRef = useRef(marks); marksRef.current = marks;
+  const pinRef = useRef<string | null>(null);   // the mark a tap has opened (its day and direction), kept across rebuilds
 
   // data: [x, price, (bands…), (volume)]; `ts` holds the real timestamp of every x (x is a bar index on intraday
   // views). Volume, when drawn, is always the last column, so the columns before it keep their places.
@@ -107,7 +113,7 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
     const nAll = xsAll.length, lastT = ts[nAll - 1];
     // each mark sits on the bar of its day (a day with no bar, a holiday or one outside the history, has none)
     const dayAt = new Map<number, number>(); if (!intraday) ts.forEach((t, i) => dayAt.set(Math.floor(t / 86400), i));
-    const placed = (intraday ? [] : marks ?? []).map((m) => ({ m, i: dayAt.get(Math.floor(m.t / 86400)) })).filter((x): x is { m: ChartMark; i: number } => x.i != null && data[1][x.i] != null);
+    const placed = (intraday ? [] : marksRef.current ?? []).map((m) => ({ m, i: dayAt.get(Math.floor(m.t / 86400)) })).filter((x): x is { m: ChartMark; i: number } => x.i != null && data[1][x.i] != null);
     let i1 = nAll - 1, i0 = 0;
     if (windowSec) { i0 = i1; while (i0 > 0 && lastT - ts[i0 - 1] <= windowSec) i0--; }
     // never a window of one bar: uPlot cannot divide an axis of zero width into ticks ("Invalid array length").
@@ -164,7 +170,10 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
       },
     };
     // the marks' read-out: a small card beside the circle. `pinned` is the mark a tap has opened (touch has no hover).
+    // It is remembered in pinRef, so a chart rebuilt for fresh data opens the same card again.
+    const pinKey = (x: { m: ChartMark }): string => `${x.m.t}|${x.m.dir}`;
     let pinned: { m: ChartMark; i: number } | null = null, uRef: uPlot | null = null;
+    const pin = (x: { m: ChartMark; i: number } | null) => { pinned = x; pinRef.current = x ? pinKey(x) : null; };
     const card = document.createElement("div");
     card.className = "mvtip"; card.style.display = "none";
     const xy = (x: { i: number }) => (uRef ? { x: uRef.valToPos(xsAll[x.i], "x"), y: uRef.valToPos(data[1][x.i] as number, "y") } : { x: -99, y: -99 });
@@ -202,12 +211,17 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
     over.style.touchAction = "none";
     const keep = panRef.current;
     if (keep > 0 && keep < nAll - winN) { i1 = nAll - 1 - keep; i0 = i1 - winN; u.setScale("x", { min: xsAll[i0], max: xsAll[i1] }); }
+    // a card that was open before this rebuild opens again, if its mark is still on the chart and inside the view
+    if (pinRef.current) {
+      const again = placed.find((x) => pinKey(x) === pinRef.current);
+      if (again && xsAll[again.i] >= xsAll[i0] && xsAll[again.i] <= xsAll[i1]) { pinned = again; showMark(again); } else pinRef.current = null;
+    }
     let drag: { x0: number; y0: number; i1_0: number; id: number; moved: boolean } | null = null;
     const apply = () => { u.setScale("x", { min: xsAll[i0], max: xsAll[i1] }); panRef.current = nAll - 1 - i1; onPan?.(Math.round(lastT - ts[i1])); };
     const onDown = (e: PointerEvent) => { if (e.button !== 0 && e.pointerType === "mouse") return; drag = { x0: e.clientX, y0: e.clientY, i1_0: i1, id: e.pointerId, moved: false }; over.setPointerCapture?.(e.pointerId); over.style.cursor = "grabbing"; e.preventDefault(); };
     const onMove = (e: PointerEvent) => {
       if (!drag || e.pointerId !== drag.id) return;
-      if (Math.abs(e.clientX - drag.x0) > 6 || Math.abs(e.clientY - drag.y0) > 6) { drag.moved = true; if (pinned) { pinned = null; hideMark(); } }
+      if (Math.abs(e.clientX - drag.x0) > 6 || Math.abs(e.clientY - drag.y0) > 6) { drag.moved = true; if (pinned) { pin(null); hideMark(); } }
       const pxW = over.clientWidth || u.bbox.width / devicePixelRatio;
       const dIdx = Math.round(((drag.x0 - e.clientX) / Math.max(1, pxW)) * winN);   // drag left = move the window back in time
       i1 = Math.min(nAll - 1, Math.max(winN, drag.i1_0 - dIdx)); i0 = i1 - winN; apply();
@@ -220,7 +234,7 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
       if (!tap || !placed.length) return;
       const r = over.getBoundingClientRect(), z = r.width / (over.clientWidth || r.width);   // z: the page's CSS zoom
       const hit = markNear((e.clientX - r.left) / z, (e.clientY - r.top) / z, e.pointerType === "mouse" ? 9 : 22);
-      pinned = hit && hit !== pinned ? hit : null;
+      pin(hit && hit !== pinned ? hit : null);
       if (pinned) { showMark(pinned); tip.style.display = "none"; } else hideMark();
     };
     const onDbl = () => { i1 = nAll - 1; i0 = i1 - winN; apply(); };
@@ -231,7 +245,7 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
     over.addEventListener("dblclick", onDbl);
     return () => { ro.disconnect(); over.removeEventListener("pointerdown", onDown); over.removeEventListener("pointermove", onMove); over.removeEventListener("pointerup", onUp); over.removeEventListener("pointercancel", onUp); over.removeEventListener("dblclick", onDbl); u.destroy(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prepared, windowSec, intraday, decimals, height, fill, axes, color, hasVol, marks]);
+  }, [prepared, windowSec, intraday, decimals, height, fill, axes, color, hasVol, marksKey]);
 
   return <div className={`chartbox${fill ? " fill" : ""}`} ref={el} style={fill ? undefined : { height }} />;
 }

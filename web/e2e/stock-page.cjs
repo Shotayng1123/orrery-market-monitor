@@ -174,6 +174,18 @@ const IS = "revenue,cogs,gross,sga,op,nonOpInc,nonOpExp,ordinary,extraInc,extraL
     await p.touchscreen.tap(tgt.x + 6, tgt.y - 7); await p.waitForTimeout(250); let pc = await pcard();
     ck(`a tap on a circle (here 9px off its centre) opens its card: the move and the reason, inside the screen, ${pc ? pc.px : "?"}px type`, pd.up.length === 2 && pd.dn.length === 3 && pc && /\+6\.4% on the day\nMock: second-quarter/.test(pc.text) && pc.left >= 0 && pc.right <= pc.vw && pc.px >= 13, { pd, pc });
     await p.waitForTimeout(600); ck("the card stays until the next tap", (await pcard()) !== null);
+    // The live page renders once a second (its refresh countdown), which the mock does not. Any render of the page
+    // must leave an open card alone (Shota, 19 Nov 2026: on the phone the card was gone again at once).
+    { const before = (await pcard())?.text ?? null, canvas0 = await p.evaluate(() => { const c = document.querySelector(".mp-hero canvas"); c.__same = true; return !!c; });
+      const pickOf = (value) => p.evaluateHandle((v) => [...document.querySelectorAll("select")].find((x) => [...x.options].some((o) => o.value === v)), value);
+      const viewSel = await pickOf("quarterly"); await viewSel.asElement().selectOption("quarterly"); await p.waitForTimeout(500); await viewSel.asElement().selectOption("annual"); await p.waitForTimeout(500);
+      const kept = await pcard(), sameChart = await p.evaluate(() => document.querySelector(".mp-hero canvas")?.__same === true);
+      ck("the page rendering again (as it does every second on the live site) neither rebuilds the chart nor closes the open card", canvas0 && before !== null && kept !== null && kept.text === before && sameChart, { before, kept, sameChart });
+      const sig = await pickOf("m36"); await sig.asElement().selectOption("m36"); await p.waitForTimeout(900);
+      const after = await pcard(), rebuilt = await p.evaluate(() => document.querySelector(".mp-hero canvas")?.__same !== true);
+      ck("when the chart really is rebuilt (here: another σ window; on the live site, fresh prices), the card that was open opens again on the new chart", rebuilt && after !== null && after.text === before, { after, rebuilt });
+      await sig.asElement().selectOption("m12"); await p.waitForTimeout(900);
+      ck("and it is still there after the next rebuild", (await pcard())?.text === before); }
     const ov = await p.locator(".mp-hero .u-over").boundingBox();
     await p.touchscreen.tap(ov.x + 20, ov.y + 12); await p.waitForTimeout(250);
     ck("a tap elsewhere on the chart puts it away", (await pcard()) === null);
