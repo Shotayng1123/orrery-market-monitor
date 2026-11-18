@@ -73,9 +73,24 @@ export async function buildPack(sb: SupabaseClient, log: (s: string) => void = c
     const holidays: Record<string, Set<string>> = {};
     for (const r of (shut ?? []) as Array<{ market: string; d: string }>) (holidays[r.market] ??= new Set()).add(r.d);
     const clock = (iso: string, tz: string) => new Intl.DateTimeFormat("en-GB", { timeZone: tz, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso)).replace(",", "");
+    // The table gives each row its last value's time: a quote's own print time, or, once the day's close is
+    // booked, that day's date alone (table.ts). Only a quote can have stopped short of the close; a booked close
+    // is a closing level. (The first version of this check read the date-only stamp as a print at midnight UTC,
+    // and its first run on live data, 18 Nov, wrongly reported Tokyo as stopped at 09:00.)
+    const dated = (at: string) => /T00:00:00(?:\.000)?Z$/.test(at);
+    const { data: lastQ } = await sb.from("quotes_latest").select("symbol,market_time").in("symbol", ["^GSPC", "^N225"]);
+    const printOf = new Map(((lastQ ?? []) as Array<{ symbol: string; market_time: string }>).map((r) => [r.symbol, r.market_time]));
     for (const [symbol, market, tz, place, whose] of [["^GSPC", "NYSE", "America/New_York", "New York", "US"], ["^N225", "TSE", "Asia/Tokyo", "Tokyo", "Japanese"]] as const) {
-      const st = stoppedBeforeClose(market, byRow.get(symbol)?.lastAt ?? null, now.getTime(), holidays);
-      if (st) warnings.push(`Prices from ${place} stopped arriving at ${clock(st.last, tz)} ${place} time, before the close at ${clock(st.close, tz)}. The ${whose} figures in these tables are as of then, not closing levels.`);
+      const at = byRow.get(symbol)?.lastAt ?? null;
+      if (at && !dated(at)) {
+        const st = stoppedBeforeClose(market, at, now.getTime(), holidays);
+        if (st) warnings.push(`Prices from ${place} stopped arriving at ${clock(st.last, tz)} ${place} time, before the close at ${clock(st.close, tz)}. The ${whose} figures in these tables are as of then, not closing levels.`);
+      } else {
+        // the close is booked, but the minute feed of that session stopped short of it: the writer is told where
+        // the booked levels come from (not a warning: the daily history may well be right)
+        const st = stoppedBeforeClose(market, printOf.get(symbol) ?? null, now.getTime(), holidays);
+        if (st) notes.push(`the minute feed from ${place} stopped at ${clock(st.last, tz)} ${place} time, before the close at ${clock(st.close, tz)}; the ${whose} closing levels here were booked afterwards from the daily history`);
+      }
     }
   } catch (e) { log(`the check for prices that stopped before a close could not be made: ${e instanceof Error ? e.message : String(e)}`); }
   if (warnings.length) log(`WARNING: ${warnings.join(" ")}`);
