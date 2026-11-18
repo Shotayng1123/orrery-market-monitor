@@ -65,6 +65,22 @@ const start = async (b, { grant = true, init = fakePush, dev = devices["iPhone 1
   { const ctx = await b.newContext({ ...devices["iPhone 13"] }); const p = await ctx.newPage(); await p.goto(MOCK, { waitUntil: "networkidle" }); await p.waitForSelector(".mp-row"); await openWin(p); const w = await win(p);
     ck("a page without the service worker (a dev server): says it is not available there, no error", /Not available on this page yet/.test(w.why || "") && w.buttons.length === 0, w); await ctx.close(); }
 
+  console.log("\n[the offer on the watchlist]");
+  { const { watchRoutes, state } = require("./watchdata.cjs");
+    const nudge = (p) => p.evaluate(() => { const n = document.querySelector("#ntf-nudge"); if (!n) return null; const r = n.getBoundingClientRect(), btn = n.querySelector("button"), sec = n.closest(".mp-sec");
+      return { text: n.querySelector("span").textContent, btn: btn ? btn.textContent : null, btnH: btn ? Math.round(btn.getBoundingClientRect().height) : 0, sec: sec ? sec.querySelector("h2 span").textContent : null, left: Math.round(r.left), right: Math.round(r.right), vw: innerWidth, over: document.documentElement.scrollWidth - innerWidth }; });
+    const toWatch = async (p) => { await watchRoutes(p); await p.locator('#pnav a[href="#watch"]').tap(); await p.waitForSelector(".mp-head h1"); await p.waitForTimeout(900); };
+    { srv.sub = null; srv.calls = []; state.syms = ["7203.T", "NVDA"]; const { ctx, p, errs } = await start(b); await toWatch(p); const n = await nudge(p);
+      ck("names on the list and notifications off: Alerts on my names offers them in one line, with a button a thumb can hit", !!n && n.text === "Get these as notifications on this phone, as they happen." && n.btn === "TURN ON" && n.btnH >= 40 && n.sec === "Alerts on my names" && n.left >= 0 && n.right <= n.vw && n.over <= 0, n);
+      await p.locator("#ntf-nudge button").tap(); await p.waitForSelector(".modal.ntf .ntf-state"); await p.waitForTimeout(300); const w = await win(p);
+      ck("TURN ON opens the notifications window", !!w && w.state === "Off for this device" && w.buttons.join() === "TURN ON NOTIFICATIONS", w);
+      await p.locator(".modal.ntf button.go").tap(); await p.waitForTimeout(900); await p.locator(".modal.ntf h3 .x").tap(); await p.waitForTimeout(600);
+      ck("once they are on the offer is gone, and it returns if they are turned off", !!srv.sub && (await nudge(p)) === null && (await (async () => { await openWin(p); await p.locator(".modal.ntf button.go.ghost").tap(); await p.waitForTimeout(800); await p.locator(".modal.ntf h3 .x").tap(); await p.waitForTimeout(600); await p.locator('#pnav a[href="#watch"]').tap(); await p.waitForTimeout(600); return (await nudge(p))?.btn === "TURN ON"; })()) && errs.length === 0, { sub: srv.sub, errs }); await ctx.close(); }
+    { srv.sub = null; state.syms = ["7203.T"]; const { ctx, p } = await start(b, { init: () => { delete window.PushManager; } }); await toWatch(p); const n = await nudge(p);
+      ck("an iPhone browser tab, where there is no push: it says to add the Monitor to the Home Screen first, and offers no button", !!n && /add the Monitor to your Home Screen and open it from there/.test(n.text) && n.btn === null, n); await ctx.close(); }
+    { srv.sub = null; const { ctx, p } = await start(b); await watchRoutes(p, { empty: true }); await p.locator('#pnav a[href="#watch"]').tap(); await p.waitForSelector(".mp-head h1"); await p.waitForTimeout(900);
+      ck("an empty watchlist is not offered notifications about nothing", (await nudge(p)) === null); await ctx.close(); } }
+
   console.log("\n[a laptop]");
   { srv.sub = null; srv.calls = []; const { ctx, p, errs } = await start(b, { dev: { viewport: { width: 1440, height: 900 } } });
     await p.locator("#alerts .alrt").click(); await p.waitForSelector(".aldrop .alntf"); await p.locator(".aldrop .alntf").click(); await p.waitForSelector(".modal.ntf .ntf-state"); await p.waitForTimeout(300);

@@ -136,8 +136,10 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
         )}
       </Panel>
       {d.moves.eligible && (
-        <Panel no="05" title="BIG MOVES AND WHY" span={12} aux="5% in a day · 10% in five sessions · 20% from high to low, or low to high, within a month · marked on the 3M, 12M and 36M charts">
+        <Panel no="05" title="BIG MOVES AND WHY" span={12} aux={<><span className="nb">{d.moves.rows.length} in three years, newest first</span> · <span className="nb">5% in a day</span> · <span className="nb">10% in five sessions</span> · <span className="nb">20% from high to low, or low to high, within a month</span> · <span className="nb">marked on the 3M, 12M and 36M charts</span></>}>
           {d.moves.rows.length ? (
+            // a short box with its own scrolling (Shota, 19 Nov 2026): the whole list pushed FINANCIALS a long way down
+            <div className="mvbox" id="st-movebox" tabIndex={0} aria-label="Big moves, newest first">
             <table className="secT mvT" id="st-moves">
               <thead><tr><th className="l">Ended</th><th className="l">Move</th><th className="l">Why</th></tr></thead>
               <tbody>{d.moves.rows.map((m) => (
@@ -148,6 +150,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
                 </tr>
               ))}</tbody>
             </table>
+            </div>
           ) : <Empty title="No big moves">None in the last three years by these measures.</Empty>}
         </Panel>
       )}

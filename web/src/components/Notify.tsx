@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Pick } from "./Pick";
-import { PUSH_SCOPES, pushInfo, pushOff, pushOn, pushScope, pushTest, type PushInfo, type PushScope } from "../lib/push";
+import { NOTIFY_CHANGED, PUSH_SCOPES, openNotify, pushInfo, pushOff, pushOn, pushScope, pushTest, type PushInfo, type PushScope } from "../lib/push";
 
 const WHY: Record<Exclude<PushInfo["why"], "">, string> = {
   "ios-browser": "On an iPhone, notifications work in the app on your Home Screen (iOS 16.4 or later), not in a browser tab. Add the Monitor to your Home Screen, open it from there and turn them on.",
@@ -8,6 +8,24 @@ const WHY: Record<Exclude<PushInfo["why"], "">, string> = {
   worker: "Not available on this page yet. Reload it once and open this window again.",
   server: "Notifications are not set up on the server yet.",
 };
+
+/** One line where a phone lists alerts (the watchlist): how to get them as notifications. Shown only while this
+ *  device does not get them and could, or could once the Monitor is on the Home Screen; gone once they are on.
+ *  (19 Nov 2026: notifications were offered only from the menu, where a new reader does not look.) */
+export function NotifyNudge() {
+  const [info, setInfo] = useState<PushInfo | null>(null);
+  useEffect(() => {
+    let live = true;
+    const load = () => { pushInfo().then((i) => { if (live) setInfo(i); }).catch(() => { /* nothing known: nothing offered */ }); };
+    load();
+    window.addEventListener(NOTIFY_CHANGED, load);
+    return () => { live = false; window.removeEventListener(NOTIFY_CHANGED, load); };
+  }, []);
+  if (!info || info.on) return null;
+  if (info.can) return <div className="mp-nudge" id="ntf-nudge"><span>Get these as notifications on this phone, as they happen.</span><button type="button" onClick={openNotify}>TURN ON</button></div>;
+  if (info.why === "ios-browser") return <div className="mp-nudge" id="ntf-nudge"><span>To get these as notifications, add the Monitor to your Home Screen and open it from there.</span></div>;
+  return null;
+}
 
 /** The notifications window: alerts as notifications on this device, on or off, and which alerts (lib/push.ts). */
 export function Notify({ onClose }: { onClose: () => void }) {

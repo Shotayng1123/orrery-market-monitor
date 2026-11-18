@@ -5,6 +5,11 @@ name: live-check
 # It changes nothing and prints market data and counts only. By hand: Actions > live-check > Run workflow.
 on:
   workflow_dispatch:
+    inputs:
+      only:
+        description: "Parts to print, comma-separated (jobs, sources, market, source, equities, alerts, reasons, edinet, counts); empty for all"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -28,4 +33,5 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          LIVE_CHECK_ONLY: ${{ github.event.inputs.only || '' }}
         run: npx tsx live_check.ts

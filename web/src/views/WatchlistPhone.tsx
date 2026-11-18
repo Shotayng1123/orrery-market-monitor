@@ -5,6 +5,7 @@ import { Pick, type PickOption } from "../components/Pick";
 import { Star } from "../components/Star";
 import { openAsset } from "../components/CompanyCard";
 import { Move, Screen, Section } from "../components/PhoneKit";
+import { NotifyNudge } from "../components/Notify";
 import { useApi } from "../lib/useApi";
 import { useWatch } from "../lib/watch";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
@@ -68,6 +69,7 @@ export function WatchlistPhone({ tick }: { tick: number }) {
         )) : <Empty title="No dates ahead">{rows.length ? "None of your names has an earnings date in the feed." : "Add names to see their earnings dates."}</Empty>}
       </Section>
       <Section title="Alerts on my names" aux={feed.data ? `${alerts.length} recent` : ""}>
+        {rows.length > 0 && <NotifyNudge />}
         {alerts.length ? alerts.map((a) => {
           const body = <><span className="nw-meta"><span>{fmtStamp(a.at)}</span>{a.pct != null && <b className={signCls(a.pct)}>{fmtPct(a.pct, 1)}</b>}</span><span className="nw-title">{a.msg}</span></>;
           return a.url ? <a className="nw-row" key={a.id} href={a.url} target="_blank" rel="noreferrer">{body}</a> : <div className="nw-row" key={a.id} role="button" tabIndex={0} onClick={() => openAsset(a.symbol)}>{body}</div>;

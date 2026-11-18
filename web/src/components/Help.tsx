@@ -58,7 +58,8 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
     ["Quotes", "Refreshed every minute while a market is open. Most exchange feeds are delayed by 15 to 20 minutes."],
     ["Daily closes", "Booked after each market's close. A currency pair's day ends at 17:00 New York."],
     ["Curves", "Official sources. Japan, the euro area, the UK and Canada publish a day late."],
-    ["DATA OK", "Green when the minute and daily jobs have run on time. Hover or tap for the detail."],
+    ["DATA OK", "Green when the minute and daily jobs have run on time and prices are arriving for the markets that are open. Hover or tap for the detail."],
+    ["No new prices", "A red bar at the foot of the screen, and DATA ✕, when no market that is open has had a new price for more than twenty minutes beyond its feed's usual delay. The source has stopped sending; the figures on screen are as of the time the bar gives."],
     ["Keys", "1 to 6 switch tabs; / jumps to search; Esc leaves full screen."],
   ] },
 ];

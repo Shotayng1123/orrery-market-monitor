@@ -155,10 +155,11 @@ export async function adminSet(email: string, op: "approve" | "enable" | "disabl
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Network error" }; }
 }
 
-/** Manager only: send one email to the manager's own address through the sender the server has, to see it work. */
-export async function mailTest(): Promise<{ ok: true; to: string } | { ok: false; error: string }> {
+/** Manager only: send one email to the manager's own address through the sender the server has, to see it work.
+ *  "welcome" sends the welcome email a new account gets, to see it as its reader does. */
+export async function mailTest(what: "test" | "welcome" = "test"): Promise<{ ok: true; to: string } | { ok: false; error: string }> {
   try {
-    const { status, j } = await post("mail_test", {}, true);
+    const { status, j } = await post("mail_test", what === "welcome" ? { what } : {}, true);
     if (status !== 200) return { ok: false, error: failed(status, j, "The test email") };
     return { ok: true, to: typeof j.to === "string" ? j.to : "your address" };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Network error" }; }

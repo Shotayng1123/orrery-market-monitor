@@ -48,6 +48,9 @@ export interface Health {
   at: string;
   tick: { lastAt: string | null; ageMin: number | null; ok: boolean; note: string | null };
   daily: { lastAt: string | null; ok: boolean; note: string | null };
+  /** Whether prices are arriving: among the markets open now, the most recent print and how far behind it is
+   *  (absent from a server older than 19 Nov 2026). */
+  feed?: { expected: boolean; ok: boolean; newest: string | null; symbol: string | null; lateMin: number | null };
   sources: Array<{ name: string; lastOk: string | null; lastError: string | null }>;
   holidays: Partial<Record<MarketId, string[]>>;
   holidaysVerified: boolean;

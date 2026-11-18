@@ -239,6 +239,8 @@ const signedInAs = (id) => ({ fn: (t) => { try { if (!sessionStorage.getItem("se
 
       await tap(p, "#mailtest", phone); await p.waitForSelector("#mailtest-r"); let t = await p.evaluate(() => ({ text: document.querySelector("#mailtest-r").textContent, good: document.querySelector("#mailtest-r").classList.contains("up") }));
       ck("SEND A TEST EMAIL: the server is asked once and the page says where it went", srv.of("mail_test").length === 1 && t.good && t.text.includes("manager@example.com"), t);
+      await tap(p, "#mailwelcome", phone); await p.waitForFunction(() => /welcome email was sent/.test(document.querySelector("#mailtest-r")?.textContent ?? "")); const tw = await p.evaluate(() => ({ text: document.querySelector("#mailtest-r").textContent, line: document.querySelector("#mailline").textContent }));
+      ck("SEND IT TO ME: the server is asked for the welcome email a new account gets, and the page says where it went", srv.of("mail_test").length === 2 && JSON.stringify(srv.of("mail_test")[1].body) === '{"what":"welcome"}' && /The welcome email was sent to manager@example\.com/.test(tw.text) && /Once its password is set, a new account gets the welcome email\./.test(tw.line), { tw, calls: srv.of("mail_test").map((c) => c.body) });
       srv.script.mail_test = () => ({ status: 502, body: { error: "the mail server refused the sign-in: 535 5.7.8 Username and Password not accepted" } });
       await tap(p, "#mailtest", phone); await p.waitForFunction(() => document.querySelector("#mailtest-r")?.classList.contains("dn")); t = await p.evaluate(() => document.querySelector("#mailtest-r").textContent);
       ck("a test that fails shows the mail server's own words", /535 5\.7\.8 Username and Password not accepted/.test(t), t);

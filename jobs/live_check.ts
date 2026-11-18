@@ -12,14 +12,17 @@ const age = (iso: string | null | undefined): string => { if (!iso) return "neve
 const utc = (iso: string | null | undefined): string => (iso ? iso.slice(0, 16).replace("T", " ") + " UTC" : "–");
 const head = (t: string): void => console.log(`\n== ${t}`);
 // a table or a column that a database from before some change does not have is said, not thrown
-async function part(title: string, f: () => Promise<void>): Promise<void> { head(title); try { await f(); } catch (e) { console.log(`  could not be read: ${e instanceof Error ? e.message : String(e)}`); } }
+// LIVE_CHECK_ONLY (the workflow's "only" input): a comma-separated choice of parts, by the first word of each title
+// below (jobs, sources, market, source, equities, alerts, reasons, edinet, counts); empty for all of them
+const ONLY = (process.env.LIVE_CHECK_ONLY ?? "").toLowerCase().split(",").map((x) => x.trim()).filter(Boolean);
+async function part(key: string, title: string, f: () => Promise<void>): Promise<void> { if (ONLY.length && !ONLY.includes(key)) return; head(title); try { await f(); } catch (e) { console.log(`  could not be read: ${e instanceof Error ? e.message : String(e)}`); } }
 const must = <T>(r: { data: T | null; error: { message: string } | null }): T => { if (r.error) throw new Error(r.error.message); return r.data as T; };
 
 async function main(): Promise<void> {
   const sb = db();
   console.log(`live check at ${utc(new Date(now).toISOString())}`);
 
-  await part("jobs that ran in the last 48 hours: the last run of each, and failures in the last 24", async () => {
+  await part("jobs", "jobs that ran in the last 48 hours: the last run of each, and failures in the last 24", async () => {
     // the minute job alone writes 1,440 rows a day, so the two days are read in pages
     const rows: Array<{ job: string; at: string; ok: boolean; detail: string | null; ms: number | null }> = [];
     for (let from = 0; from < 8000; from += 1000) { const page = must(await sb.from("job_runs").select("job,at,ok,detail,ms").gte("at", new Date(now - 48 * 3600e3).toISOString()).order("at", { ascending: false }).range(from, from + 999)) as typeof rows; rows.push(...page); if (page.length < 1000) break; }
@@ -32,28 +35,53 @@ async function main(): Promise<void> {
     if (!by.size) console.log("  no runs on record in the last 48 hours");
   });
 
-  await part("sources whose last attempt failed", async () => {
+  await part("sources", "sources whose last attempt failed", async () => {
     const rows = must(await sb.from("source_status").select("name,last_ok,last_error,last_error_at")) as Array<{ name: string; last_ok: string | null; last_error: string | null; last_error_at: string | null }>;
-    const bad = rows.filter((r) => r.last_error_at && (!r.last_ok || Date.parse(r.last_error_at) > Date.parse(r.last_ok)));
+    const failed = rows.filter((r) => r.last_error_at && (!r.last_ok || Date.parse(r.last_error_at) > Date.parse(r.last_ok)));
+    // as the Monitor's own health reading has it: a source with nothing for a week is one that is no longer asked
+    const week = now - 7 * 86400e3, bad = failed.filter((r) => Date.parse(r.last_error_at!) > week), dropped = failed.filter((r) => Date.parse(r.last_error_at!) <= week);
     console.log(`  ${rows.length} sources on record, ${bad.length} failing now`);
     for (const r of bad) console.log(`  ${r.name}: failed ${age(r.last_error_at)}, last ok ${age(r.last_ok)}: ${(r.last_error ?? "").slice(0, 160)}`);
+    if (dropped.length) console.log(`  no longer asked (their last attempt, a failure, is more than a week old): ${dropped.map((r) => r.name).join(", ")}`);
   });
 
-  await part("EQUITIES: the lists, their booked closes and today's quotes", async () => {
-    const rows: Array<{ idx: string; d: string; q_time: string | null; q_price: number | null; q_prev: number | null }> = [];
-    for (let from = 0; ; from += 1000) { const page = must(await sb.from("constituent_stats").select("idx,d,q_time,q_price,q_prev").range(from, from + 999)) as typeof rows; rows.push(...page); if (page.length < 1000) break; }
+  await part("market", "the market table's own quotes (pulled every minute): when each last printed", async () => {
+    const rows = must(await sb.from("quotes_latest").select("symbol,price,market_time,fetched_at").in("symbol", ["^GSPC", "^IXIC", "^N225", "^VIX", "ES=F", "NKD=F", "USDJPY=X", "EURUSD=X", "^TNX", "CL=F", "GC=F"])) as Array<{ symbol: string; price: number; market_time: string; fetched_at: string }>;
+    for (const r of rows.sort((a, b) => a.symbol.localeCompare(b.symbol))) console.log(`  ${r.symbol.padEnd(9)} ${String(r.price).padEnd(11)} printed ${utc(r.market_time)} (${age(r.market_time)}), pulled ${age(r.fetched_at)}`);
+    if (!rows.length) console.log("  none of the instruments asked for is in the table");
+  });
+
+  await part("source", "the price source asked directly from here (not through the Monitor's server): its newest minute bar", async () => {
+    // tells a source that has stopped apart from a server that is being handed old answers
+    for (const symbol of ["USDJPY=X", "^GSPC", "AAPL"]) for (const host of ["query1", "query2"]) {
+      try {
+        const r = await fetch(`https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m`, { headers: { "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36", accept: "application/json" }, signal: AbortSignal.timeout(20000) });
+        if (!r.ok) { console.log(`  ${symbol} at ${host}: HTTP ${r.status}`); continue; }
+        const j = (await r.json()) as { chart?: { result?: Array<{ meta?: { regularMarketTime?: number; regularMarketPrice?: number }; timestamp?: number[] }> } };
+        const x = j.chart?.result?.[0], last = x?.timestamp?.at(-1), mt = x?.meta?.regularMarketTime;
+        console.log(`  ${symbol.padEnd(9)} at ${host}: price ${x?.meta?.regularMarketPrice ?? "–"}, market time ${mt ? utc(new Date(mt * 1000).toISOString()) + " (" + age(new Date(mt * 1000).toISOString()) + ")" : "–"}, last minute bar ${last ? utc(new Date(last * 1000).toISOString()) : "–"}`);
+      } catch (e) { console.log(`  ${symbol} at ${host}: ${e instanceof Error ? e.message : String(e)}`); }
+    }
+  });
+
+  await part("equities", "EQUITIES: the lists, their booked closes and today's quotes", async () => {
+    const rows: Array<{ idx: string; symbol: string; d: string; q_time: string | null; q_price: number | null; q_prev: number | null; quote_at: string | null }> = [];
+    for (let from = 0; ; from += 1000) { const page = must(await sb.from("constituent_stats").select("idx,symbol,d,q_time,q_price,q_prev,quote_at").order("idx").order("symbol").range(from, from + 999)) as typeof rows; rows.push(...page); if (page.length < 1000) break; }
     const by = new Map<string, typeof rows>();
     for (const r of rows) { const a = by.get(r.idx) ?? []; a.push(r); by.set(r.idx, a); }
     for (const [idx, rs] of [...by].sort()) {
       const d = rs.map((r) => r.d).sort().at(-1), q = rs.filter((r) => r.q_time && r.q_price != null && r.q_prev != null), newest = q.map((r) => r.q_time!).sort().at(-1);
       // "later" here is by date in UTC, a rough reading: the page decides by each exchange's own calendar day
       const later = q.filter((r) => r.q_time!.slice(0, 10) > r.d).length, fresh = q.filter((r) => now - Date.parse(r.q_time!) < 30 * 60000).length;
-      console.log(`  ${idx}: ${rs.length} names, closes of ${d}; ${q.length} with a quote, newest print ${age(newest)}; ${fresh} printed in the last 30 min; ${later} from a later day than the close`);
+      // quote_at is when the Monitor last pulled the quotes; q_time is when the exchange printed each price
+      const pulled = rs.map((r) => r.quote_at).filter((x): x is string => !!x).sort(), oldest = q.map((r) => r.q_time!).sort()[0];
+      console.log(`  ${idx}: ${rs.length} names, closes of ${d}; quotes last pulled ${age(pulled.at(-1))} (the oldest pull ${age(pulled[0])}); ${q.length} with a quote, prints from ${utc(oldest)} to ${utc(newest)}; ${fresh} printed in the last 30 min; ${later} from a later day than the close`);
+      for (const r of q.slice(0, 3)) console.log(`      ${r.symbol}: ${r.q_price} against ${r.q_prev} (${(((r.q_price! / r.q_prev!) - 1) * 100).toFixed(2)}%), printed ${utc(r.q_time)}, pulled ${utc(r.quote_at)}`);
     }
     if (!by.size) console.log("  no rows");
   });
 
-  await part("alerts of the last 48 hours", async () => {
+  await part("alerts", "alerts of the last 48 hours", async () => {
     const rows = must(await sb.from("alerts").select("at,upd,d,symbol,name,kind,pct,market,msg,pushed_at").gte("at", new Date(now - 48 * 3600e3).toISOString()).order("at", { ascending: false }).limit(200)) as Array<{ at: string; upd: string; d: string; symbol: string; name: string; kind: string; pct: number | null; market: string; msg: string; pushed_at: string | null }>;
     const stock = rows.filter((r) => r.kind === "stock"), under7 = stock.filter((r) => r.pct != null && Math.abs(r.pct) < 7);
     console.log(`  ${rows.length} in all: ${["stock", "index", "buyback", "revision", "mna"].map((k) => `${rows.filter((r) => r.kind === k).length} ${k}`).join(", ")}; of the stock alerts ${under7.length} are between 5% and 7% (the line for large companies); ${rows.filter((r) => r.pushed_at).length} went out as notifications`);
@@ -61,7 +89,7 @@ async function main(): Promise<void> {
     if (rows.length > 40) console.log(`  … and ${rows.length - 40} more`);
   });
 
-  await part("reasons for big moves", async () => {
+  await part("reasons", "reasons for big moves", async () => {
     const rows = must(await sb.from("move_causes").select("symbol,kind,d,status,tries,cost_usd,done_at,queued_at").order("d", { ascending: false }).limit(5000)) as Array<{ symbol: string; kind: string; d: string; status: string; tries: number; cost_usd: number | null; done_at: string | null; queued_at: string }>;
     const n = (s: string) => rows.filter((r) => r.status === s).length, cost = rows.reduce((a, r) => a + (r.cost_usd ?? 0), 0);
     console.log(`  ${rows.length} moves on record: ${n("found")} with a reason, ${n("not_found")} with none found, ${n("queued")} waiting, ${n("error")} failed (of which ${rows.filter((r) => r.status === "error" && r.tries >= 3).length} given up after three tries)`);
@@ -71,7 +99,7 @@ async function main(): Promise<void> {
     for (const [s, st] of [...syms].sort()) console.log(`  ${s}: ${st.length} moves; ${["found", "not_found", "queued", "error"].filter((k) => st.includes(k)).map((k) => `${st.filter((x) => x === k).length} ${k}`).join(", ")}`);
   });
 
-  await part("EDINET DB: stored answers and today's allowance", async () => {
+  await part("edinet", "EDINET DB: stored answers and today's allowance", async () => {
     const rows: Array<{ key: string; fetched_at: string; payload: { used?: number } | null }> = [];
     for (let from = 0; ; from += 1000) { const page = must(await sb.from("asset_cache").select("key,fetched_at,payload->used").like("key", "edb:%").range(from, from + 999)) as unknown as Array<{ key: string; fetched_at: string; used?: number }>; rows.push(...page.map((r) => ({ key: r.key, fetched_at: r.fetched_at, payload: { used: r.used } }))); if (page.length < 1000) break; }
     const kind = (k: string) => k.split(":")[1];
@@ -81,7 +109,7 @@ async function main(): Promise<void> {
     if (!budget.length) console.log("  no request has been counted yet: no Tokyo stock's statements have been asked for from EDINET DB");
   });
 
-  await part("counts (numbers only)", async () => {
+  await part("counts", "counts (numbers only)", async () => {
     for (const [t, what] of [["accounts", "rows in accounts"], ["users", "rows in users"], ["watchlists", "watchlist entries"], ["push_subs", "devices subscribed to notifications"], ["notes", "morning notes"], ["reports", "reports"]] as const) {
       const r = await sb.from(t).select("*", { count: "exact", head: true });
       console.log(`  ${what}: ${r.error ? `could not be read (${r.error.message})` : r.count}`);
