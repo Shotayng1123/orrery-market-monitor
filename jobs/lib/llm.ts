@@ -15,6 +15,9 @@ const MAX_TOKENS = 64000;          // room to think and act across many searches
 const MAX_RESUMES = 6;
 // USD per million tokens (input, output), for the cost line in the log
 const PRICE: Record<string, [number, number]> = { "claude-fable-5-2": [8, 40], "claude-opus-5-5": [4, 20], "claude-sonnet-5-5": [2, 10], "claude-haiku-5-5": [0.1, 0.5] };
+// What a token read from the prompt cache costs, as a fraction of the input price (0.1 where not listed). A token
+// written to the cache costs 1.25 times the input price (five-minute cache). Neither is part of usage.input_tokens.
+const CACHE_READ: Record<string, number> = { "claude-fable-5-2": 0.025, "claude-opus-5-5": 0.05, "claude-sonnet-5-5": 0.05 };
 
 export const newClient = (): Anthropic => new Anthropic({ timeout: 50 * 60 * 1000, maxRetries: 2 });   // a turn at xhigh can run for many minutes
 
@@ -28,9 +31,14 @@ export interface Turn { text: string; model: string; inputTokens: number; output
 
 type Msg = { role: "user" | "assistant"; content: unknown };
 
-async function runOnce(client: Anthropic, model: string, effort: string, system: string, user: string, maxSearches: number): Promise<Turn> {
+/** `direct`: the model asks each search itself and reads the results as they come (the basic search tool).
+ *  Without it the newer tool is used, with which the model may write a small program that runs the searches and
+ *  prints what it wants to keep; a program that fails after its searches ran has used them up and shown the
+ *  model nothing (see `ask`). */
+async function runOnce(client: Anthropic, model: string, effort: string, system: string, user: string, maxSearches: number, direct = false): Promise<Turn> {
   const messages: Msg[] = [{ role: "user", content: user }];
   const out: Turn = { text: "", model, inputTokens: 0, outputTokens: 0, searches: 0, costUsd: 0, pages: [], searchErrors: [], trace: [] };
+  let cacheWrite = 0, cacheRead = 0;
   for (let i = 0; i <= MAX_RESUMES; i++) {
     const stream = client.beta.messages.stream({
       model,
@@ -39,7 +47,7 @@ async function runOnce(client: Anthropic, model: string, effort: string, system:
       fallbacks: "default",
       output_config: { effort },
       system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
-      tools: maxSearches > 0 ? [{ type: "web_search_20260209", name: "web_search", max_uses: maxSearches }] : undefined,
+      tools: maxSearches > 0 ? [{ type: direct ? "web_search_20250305" : "web_search_20260209", name: "web_search", max_uses: maxSearches }] : undefined,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       messages: messages as any,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,6 +57,8 @@ async function runOnce(client: Anthropic, model: string, effort: string, system:
     out.model = msg.model;
     out.inputTokens += msg.usage.input_tokens;
     out.outputTokens += msg.usage.output_tokens;
+    cacheWrite += msg.usage.cache_creation_input_tokens ?? 0;
+    cacheRead += msg.usage.cache_read_input_tokens ?? 0;
     out.searches += (msg.usage as { server_tool_use?: { web_search_requests?: number } }).server_tool_use?.web_search_requests ?? 0;
     for (const b of msg.content as Array<{ type: string; text?: string; content?: unknown; name?: string; input?: unknown }>) {
       const clip = (v: unknown, n: number): string => { const t = (typeof v === "string" ? v : JSON.stringify(v ?? null)).replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n) + "…" : t; };
@@ -68,7 +78,8 @@ async function runOnce(client: Anthropic, model: string, effort: string, system:
     messages.push({ role: "assistant", content: msg.content });   // the server resumes the paused turn from here
   }
   const [pi, po] = PRICE[model] ?? PRICE[MODEL];
-  out.costUsd = (out.inputTokens * pi + out.outputTokens * po) / 1e6 + out.searches * 0.01;
+  out.costUsd = (out.inputTokens * pi + cacheWrite * pi * 1.25 + cacheRead * pi * (CACHE_READ[model] ?? 0.1) + out.outputTokens * po) / 1e6 + out.searches * 0.01;
+  if (cacheWrite || cacheRead) out.trace.push(`cache: ${cacheWrite} tokens written, ${cacheRead} read`);
   return out;
 }
 
@@ -90,8 +101,14 @@ async function run(client: Anthropic, system: string, user: string, maxSearches:
 export const write = (client: Anthropic, system: string, user: string, maxSearches: number): Promise<Turn> => run(client, system, user, maxSearches);
 
 /** One short look-up on a named model at a named effort, with web search (the reasons for big moves,
- *  jobs/move_causes.ts). No second model is tried: a look-up that fails is simply tried again later. */
-export const ask = (client: Anthropic, o: { model: string; effort: string; system: string; user: string; maxSearches: number }): Promise<Turn> => runOnce(client, o.model, o.effort, o.system, o.user, o.maxSearches);
+ *  jobs/move_causes.ts). No second model is tried: a look-up that fails is simply tried again later.
+ *
+ *  The searches are direct. With the newer search tool the first real run (18 Nov 2026) stored twelve of fifteen
+ *  moves as "no report found", two of them moves a dry run had just found dated reports for. The trace of a later
+ *  run showed why: the model wrote a program that ran three of its four searches and then failed before printing
+ *  any result; its corrected program met "Server tool use limit exceeded". The searches had returned 36 pages,
+ *  the reports among them, and the model had read none of them. */
+export const ask = (client: Anthropic, o: { model: string; effort: string; system: string; user: string; maxSearches: number }): Promise<Turn> => runOnce(client, o.model, o.effort, o.system, o.user, o.maxSearches, true);
 
 const REVIEW = `You are now the reader this piece is written for: a portfolio manager who has asked for depth and will not accept a first answer. Read the DRAFT below against the instructions you were given and against the NUMBERS PACK, then return the finished piece.
 

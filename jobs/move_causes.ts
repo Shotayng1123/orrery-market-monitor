@@ -8,7 +8,7 @@
 //   npx tsx move_causes.ts --max 10        fewer
 //   npx tsx move_causes.ts --dry           ask and print, store nothing
 //   npx tsx move_causes.ts --again         also look again at moves stored as "not found" (fewer than three tries)
-//   npx tsx move_causes.ts --parallel 3    look-ups at a time (default 1)
+//   npx tsx move_causes.ts --parallel 1    look-ups at a time (default 3)
 //   npx tsx move_causes.ts --trace         print what each look-up did: its searches, the pages returned, its reply
 // Needs ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY. Optional: MOVE_CAUSE_MODEL (default
 // claude-opus-5-5), MOVE_CAUSE_EFFORT (default medium). Each look-up prints what it cost, how many pages its
@@ -20,7 +20,7 @@ import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabas
 const arg = (k: string, d = ""): string => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] ?? d : d; };
 const DRY = process.argv.includes("--dry"), AGAIN = process.argv.includes("--again"), TRACE = process.argv.includes("--trace");
 const MAX = Math.max(1, Math.min(300, Number(arg("max", "60")) || 60));
-const PARALLEL = Math.max(1, Math.min(6, Number(arg("parallel", "1")) || 1));
+const PARALLEL = Math.max(1, Math.min(6, Number(arg("parallel", "3")) || 3));
 const MODEL = process.env.MOVE_CAUSE_MODEL || "claude-opus-5-5", EFFORT = process.env.MOVE_CAUSE_EFFORT || "medium";
 const SEARCHES = 4, MAX_TRIES = 3, EMPTY_WAIT_MS = 30_000;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -44,7 +44,8 @@ async function main(): Promise<void> {
     for (let r = work.shift(); r; r = work.shift()) {
       const tag = `${r.symbol} ${r.kind} ${r.d}`;
       try {
-        const look = async () => { const x = await ask(client, { model: MODEL, effort: EFFORT, system: CAUSE_SYSTEM, user: causeQuestion(r.ctx), maxSearches: SEARCHES }); cost += x.costUsd; return x; };
+        let spent = 0;
+        const look = async () => { const x = await ask(client, { model: MODEL, effort: EFFORT, system: CAUSE_SYSTEM, user: causeQuestion(r.ctx), maxSearches: SEARCHES }); cost += x.costUsd; spent += x.costUsd; return x; };
         const errs = (x: { searchErrors: string[] }) => (x.searchErrors.length ? `searches that failed: ${x.searchErrors.join(", ")}` : "no search reported a failure");
         let t = await look();
         // A look-up whose searches brought back no page at all has not looked at anything: that says nothing about
@@ -59,9 +60,9 @@ async function main(): Promise<void> {
         if (TRACE) console.log(`${tag}: the question:\n${causeQuestion(r.ctx)}\n${tag}: what the look-up did:\n  ${t.trace.join("\n  ")}`);
         const a = readCause(t.text, t.pages);
         if (a.found) found++; else none++;
-        console.log(`${tag}: ${a.found ? a.cause : `no report found (${WHY[a.why ?? ""] ?? "no reason given"})`} [${t.searches} searches, ${t.pages.length} pages${t.searchErrors.length ? `, ${errs(t)}` : ""}, $${t.costUsd.toFixed(3)}]${a.found ? ` <- ${a.sources.map((x) => x.url).join(" ")}` : ""}`);
+        console.log(`${tag}: ${a.found ? a.cause : `no report found (${WHY[a.why ?? ""] ?? "no reason given"})`} [${t.searches} searches, ${t.pages.length} pages${t.searchErrors.length ? `, ${errs(t)}` : ""}, $${spent.toFixed(3)}]${a.found ? ` <- ${a.sources.map((x) => x.url).join(" ")}` : ""}`);
         if (DRY) continue;
-        const { error: e } = await sb.from("move_causes").update({ status: a.found ? "found" : "not_found", cause: a.cause, sources: a.sources, model: t.model, cost_usd: t.costUsd, tries: r.tries + 1, done_at: new Date().toISOString() }).eq("symbol", r.symbol).eq("kind", r.kind).eq("d", r.d);
+        const { error: e } = await sb.from("move_causes").update({ status: a.found ? "found" : "not_found", cause: a.cause, sources: a.sources, model: t.model, cost_usd: spent, tries: r.tries + 1, done_at: new Date().toISOString() }).eq("symbol", r.symbol).eq("kind", r.kind).eq("d", r.d);
         if (e) throw new Error(e.message);
       } catch (e) {
         failed++;
