@@ -169,9 +169,19 @@ jobs:
             echo "stored on the server:$names"
           fi
 
+      # --use-api: each function is bundled on Supabase's side from its source. Bundled on this machine (with
+      # Docker, which a GitHub runner has) `daily` came to 33 MB, the spreadsheet and PDF libraries inside it, and
+      # the upload was refused ("413 request entity too large", 18 Nov 2026). One function at a time, the site's own
+      # (`api`) first, so that one refusal does not keep the others back; the step still fails if any did not go.
       - name: Functions
         if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy'
-        run: supabase functions deploy tick daily api --project-ref "$REF" --yes
+        run: |
+          failed=""
+          for f in api tick daily; do
+            echo "== $f"
+            supabase functions deploy "$f" --project-ref "$REF" --use-api --yes || failed="$failed $f"
+          done
+          if [ -n "$failed" ]; then echo "::error title=Functions not deployed::$failed"; exit 1; fi
 
       # optional: hands the database the token with which it asks GitHub for the Morning Note at 22:15 UTC
       - name: Morning Note token
