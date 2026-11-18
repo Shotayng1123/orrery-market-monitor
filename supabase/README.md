@@ -350,8 +350,10 @@ What the Monitor does about it:
   page then shows DATA ✕ with the reason, and a red bar at the foot of every screen: "No new prices since … The
   source has stopped sending them; the figures on screen are as of then." Both go when prices arrive again. The
   prices already on screen stay, with their own times. While the feed is stopped no move can be seen, so no alert
-  is raised either; the bar is the only sign. (Crypto kept arriving on 18 Nov, and crypto is always open: with
-  the reading as it is, that day's stop would not have raised the bar. Known, not yet changed.)
+  is raised either; the bar is the only sign. The reading is made twice, for crypto and for everything else, and
+  the one further behind is the state: on 18 Nov crypto kept arriving, and read together with the rest its fresh
+  prints vouched for the feed, so the first version of this check (deployed that evening, two hours into the stop) never raised
+  the bar. Currencies and futures are judged only inside their real week, Sunday 17:00 New York to Friday 17:00.
 - **Daily closes.** After the bell on 18 Nov the daily history, on the server, booked the stopped prices as that
   day's closes (7303.98 for the S&P 500). `history` now reads how far the answers in hand reach (the newest
   minute bar it is given: for crypto, for everything else together, and for each market on its own) and books a

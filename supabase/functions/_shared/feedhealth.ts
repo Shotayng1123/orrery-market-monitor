@@ -5,7 +5,8 @@
 //
 // The reading here: among the instruments whose market is open now, and has been for half an hour, take the one
 // that printed most recently, allowing each market its feed's own delay. If even that one is more than twenty
-// minutes behind, no price is arriving. One quiet instrument proves nothing; all of them at once do.
+// minutes behind, no price is arriving. One quiet instrument proves nothing; all of them at once do. It is made
+// twice, for crypto and for everything else, and the one further behind is the state (see feedState).
 // No network and no database here; checked in sim/logic.test.ts.
 import { marketById, marketState, partsIn, type Holidays } from "./sessions.ts";
 
@@ -25,7 +26,14 @@ export const FEED_OPEN_MIN = 30;   // a market open for less than this (plus its
 
 export function feedState(prints: Print[], nowMs: number, holidays: Holidays = {}): FeedState {
   const now = new Date(nowMs);
-  let best: { late: number; p: Print } | null = null;
+  // Currencies and futures are kept in sessions.ts by the day of the week alone; their real week runs from Sunday
+  // 17:00 New York to Friday 17:00 (fxTrading, which also knows 25 December and 1 January). Outside it their old
+  // prints say nothing about the feed.
+  const open = (m: NonNullable<ReturnType<typeof marketById>>, at: Date): boolean => marketState(m, at, holidays) === "OPEN" && ((m.id !== "FX" && m.id !== "CME") || fxTrading(at.getTime()));
+  // Two readings, crypto and everything else. On 18 Nov 2026 crypto went on arriving while every other price
+  // stood still for seven and a half hours: read together, crypto's fresh prints vouched for a feed that had
+  // stopped, and the bar this reading exists for was never raised.
+  const best: Record<"crypto" | "rest", { late: number; p: Print } | null> = { crypto: null, rest: null };
   for (const p of prints) {
     const m = marketById(p.market), t = Date.parse(p.marketTime);
     if (!m || !Number.isFinite(t)) continue;
@@ -34,13 +42,15 @@ export function feedState(prints: Print[], nowMs: number, holidays: Holidays = {
     if ((m.id === "FX" || m.id === "CME") && WORLD_SHUT.has(now.toISOString().slice(5, 10))) continue;
     // open now, and already open a while ago: just after an open or a lunch break the newest print is the one
     // from before it, and says nothing about the feed
-    if (marketState(m, now, holidays) !== "OPEN" || marketState(m, new Date(nowMs - (FEED_OPEN_MIN + m.delayMin) * 60000), holidays) !== "OPEN") continue;
-    const late = (nowMs - t) / 60000 - m.delayMin;
-    if (!best || late < best.late) best = { late, p };
+    if (!open(m, now) || !open(m, new Date(nowMs - (FEED_OPEN_MIN + m.delayMin) * 60000))) continue;
+    const late = (nowMs - t) / 60000 - m.delayMin, k = m.id === "CRYPTO" ? "crypto" : "rest";
+    if (!best[k] || late < best[k]!.late) best[k] = { late, p };
   }
-  if (!best) return { expected: false, ok: true, newest: null, symbol: null, lateMin: null };
-  const lateMin = Math.max(0, Math.round(best.late));
-  return { expected: true, ok: best.late <= FEED_LATE_MIN, newest: new Date(Date.parse(best.p.marketTime)).toISOString(), symbol: best.p.symbol, lateMin };
+  // the reading that is further behind is the state: either one stopped is a feed that has stopped
+  const worst = [best.rest, best.crypto].filter((x): x is { late: number; p: Print } => !!x).sort((x, y) => y.late - x.late)[0];
+  if (!worst) return { expected: false, ok: true, newest: null, symbol: null, lateMin: null };
+  const lateMin = Math.max(0, Math.round(worst.late));
+  return { expected: true, ok: worst.late <= FEED_LATE_MIN, newest: new Date(Date.parse(worst.p.marketTime)).toISOString(), symbol: worst.p.symbol, lateMin };
 }
 
 // ---- after the close: did the prices stop before it? ----
