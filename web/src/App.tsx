@@ -11,6 +11,8 @@ import { DEV_MOCK } from "./lib/useApi";
 import { anyOpen, setHolidays } from "./lib/sessions";
 import { applyPrefs, loadPrefs, savePrefs, type Prefs } from "./lib/prefs";
 import type { Health } from "./lib/types";
+import { feedFrom, lateText } from "./lib/feed";
+import { fmtStamp } from "./lib/time";
 import { MarketView } from "./views/Market";
 import { MarketPhone } from "./views/MarketPhone";
 import { NewsPhone } from "./views/NewsPhone";
@@ -128,9 +130,9 @@ export default function App() {
     refreshing.current = true;
     try {
       const h = await api<Health>("health");
-      setHealth(h); setHealthErr(null);
+      setHealth(h); setHealthErr(null); feedFrom(h);
       if (h.holidays) setHolidays(h.holidays);
-    } catch (e) { setHealthErr(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setHealthErr(e instanceof Error ? e.message : String(e)); feedFrom(null); }
     finally { refreshing.current = false; }
     setUpdatedAt(new Date()); setTick((t) => t + 1);
     setHit(true); setTimeout(() => setHit(false), 2000);
@@ -159,8 +161,10 @@ export default function App() {
   // signing out also ends this device's notifications: they belong to the account, and it is leaving this browser
   const signOut = () => { void pushOff().catch(() => undefined).finally(() => { clearToken(); setTok(null); setAcct(false); setNotify(false); }); };
 
-  const healthState: "ok" | "warn" | "bad" | "unk" = !apiConfigured ? "unk" : healthErr ? "bad" : !health ? "unk" : health.ok ? (health.tick.ok && health.daily.ok ? "ok" : "warn") : "bad";
-  const healthTitle = !apiConfigured ? "DATA HEALTH: API not configured" : healthErr ? `DATA HEALTH: ${healthErr}` : health ? `DATA HEALTH: tick ${health.tick.ageMin ?? "?"} min old (${health.tick.ok ? "ok" : health.tick.note ?? "late"}), daily ${health.daily.ok ? "ok" : health.daily.note ?? "late"}${health.holidaysVerified ? "" : "; holiday calendar unverified"}` : "DATA HEALTH: loading";
+  // a feed that has stopped is the worst reading there is: every price on screen is old, whatever the jobs say
+  const feedStopped = !!health?.feed && health.feed.expected && !health.feed.ok;
+  const healthState: "ok" | "warn" | "bad" | "unk" = !apiConfigured ? "unk" : healthErr ? "bad" : !health ? "unk" : feedStopped ? "bad" : health.ok ? (health.tick.ok && health.daily.ok ? "ok" : "warn") : "bad";
+  const healthTitle = !apiConfigured ? "DATA HEALTH: API not configured" : healthErr ? `DATA HEALTH: ${healthErr}` : health ? `DATA HEALTH: ${feedStopped ? `NO NEW PRICES since ${health.feed!.newest ? fmtStamp(health.feed!.newest) : "?"} (${lateText(health.feed!.lateMin ?? 0)} behind): the source has stopped sending new prices; ` : ""}tick ${health.tick.ageMin ?? "?"} min old (${health.tick.ok ? "ok" : health.tick.note ?? "late"}), daily ${health.daily.ok ? "ok" : health.daily.note ?? "late"}${health.holidaysVerified ? "" : "; holiday calendar unverified"}` : "DATA HEALTH: loading";
 
   if (!signedIn) return <div className="gatewrap"><Gate verify={verify} onSignedIn={() => { setVerify(null); setTok(getToken()); }} /><FootBars /></div>;
   if (me?.mustChange) return (

@@ -135,7 +135,9 @@ function mockNote() {
   };
 }
 
-export const mockHealth = (): Health => ({ ok: true, at: new Date().toISOString(), tick: { lastAt: new Date().toISOString(), ageMin: 1, ok: true, note: "mock" }, daily: { lastAt: new Date().toISOString(), ok: true, note: "mock" }, sources: [{ name: "mock", lastOk: new Date().toISOString(), lastError: null }], holidays: {}, holidaysVerified: false });
+// `om_mock_stale` = "1" in the browser's storage: the answer of a server whose price feed stopped 99 minutes ago
+const mockFeed = (): Health["feed"] => { let stale = false; try { stale = localStorage.getItem("om_mock_stale") === "1"; } catch { /* no storage */ } return stale ? { expected: true, ok: false, newest: new Date(Date.now() - 99 * 60e3).toISOString(), symbol: "USDJPY=X", lateMin: 99 } : { expected: true, ok: true, newest: new Date(Date.now() - 60e3).toISOString(), symbol: "USDJPY=X", lateMin: 1 }; };
+export const mockHealth = (): Health => ({ ok: true, at: new Date().toISOString(), tick: { lastAt: new Date().toISOString(), ageMin: 1, ok: true, note: "mock" }, daily: { lastAt: new Date().toISOString(), ok: true, note: "mock" }, feed: mockFeed(), sources: [{ name: "mock", lastOk: new Date().toISOString(), lastError: null }], holidays: {}, holidaysVerified: false });
 
 export function mockAction(action: string, params: Record<string, string | number | boolean | undefined> | undefined): unknown {
   switch (action) {

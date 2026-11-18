@@ -1,22 +1,31 @@
 import { useNet } from "../lib/net";
 import { useUpdate } from "../lib/update";
 import { fmtStamp } from "../lib/time";
+import { lateText, useFeedStopped } from "../lib/feed";
 
 /** The bars at the foot of every screen, sign-in included (above the tab bar on a phone):
  *  - the connection: shown when the server cannot be reached, or when a panel is showing what it last received
  *    instead of a fresh answer (lib/useApi.ts, lib/keep.ts), with the time of that data;
+ *  - the price feed: shown when no price has arrived for the markets that are open (lib/feed.ts), with the time
+ *    of the last one, so that nobody reads an old screen as a live one;
  *  - "A new version is ready" when a newer build than this page has been published (lib/update.ts). Update loads
  *    it and keeps the tab the reader was on. */
 export function FootBars() {
-  const net = useNet(), upd = useUpdate();
+  const net = useNet(), upd = useUpdate(), feed = useFeedStopped();
   const conn = net.offline || net.keptAt != null;
-  if (!conn && !upd.id) return null;
+  if (!conn && !upd.id && !feed) return null;
   return (
     <div id="footbars">
       {conn && (
         <div id="netbar" role="status" className={net.offline ? "off" : "slow"}>
           <i aria-hidden="true" />
           <span>{net.offline ? "No connection." : "Slow connection."}{net.keptAt != null ? ` Data from ${fmtStamp(net.keptAt)}.` : ""}</span>
+        </div>
+      )}
+      {feed && !net.offline && (
+        <div id="feedbar" role="alert">
+          <i aria-hidden="true" />
+          <span><b>No new prices since {fmtStamp(feed.since)}</b> ({lateText(feed.lateMin)} behind). The source has stopped sending them; the figures on screen are as of then.</span>
         </div>
       )}
       {upd.id && (

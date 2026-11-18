@@ -44,6 +44,7 @@ export async function pushOn(scope: PushScope): Promise<void> {
   }
   try { await post("push_sub", wire(sub, scope)); }
   catch (e) { await sub.unsubscribe().catch(() => undefined); throw e; }   // not stored: do not leave a subscription nobody sends to
+  window.dispatchEvent(new Event(NOTIFY_CHANGED));
 }
 /** Changes which alerts this device gets. */
 export async function pushScope(scope: PushScope): Promise<void> {
@@ -56,6 +57,7 @@ export async function pushOff(): Promise<void> {
   if (!sub) return;
   await post("push_unsub", { endpoint: sub.endpoint }).catch(() => undefined);   // the server also drops addresses the push service reports gone
   await sub.unsubscribe().catch(() => undefined);
+  window.dispatchEvent(new Event(NOTIFY_CHANGED));
 }
 /** One notification to this device, to see that they arrive. */
 export async function pushTest(): Promise<void> {
@@ -66,4 +68,6 @@ export async function pushTest(): Promise<void> {
 
 /** Opens the notifications window from anywhere (the menu, the alert list). */
 export const NOTIFY_EVENT = "om:notify";
+/** Fired when this device's notifications were turned on or off, so that a hint offering them can go or come. */
+export const NOTIFY_CHANGED = "om:notify-changed";
 export const openNotify = (): void => { window.dispatchEvent(new Event(NOTIFY_EVENT)); };
