@@ -40,15 +40,18 @@ async function main(): Promise<void> {
   });
 
   await part("EQUITIES: the lists, their booked closes and today's quotes", async () => {
-    const rows: Array<{ idx: string; d: string; q_time: string | null; q_price: number | null; q_prev: number | null }> = [];
-    for (let from = 0; ; from += 1000) { const page = must(await sb.from("constituent_stats").select("idx,d,q_time,q_price,q_prev").range(from, from + 999)) as typeof rows; rows.push(...page); if (page.length < 1000) break; }
+    const rows: Array<{ idx: string; symbol: string; d: string; q_time: string | null; q_price: number | null; q_prev: number | null; quote_at: string | null }> = [];
+    for (let from = 0; ; from += 1000) { const page = must(await sb.from("constituent_stats").select("idx,symbol,d,q_time,q_price,q_prev,quote_at").order("idx").order("symbol").range(from, from + 999)) as typeof rows; rows.push(...page); if (page.length < 1000) break; }
     const by = new Map<string, typeof rows>();
     for (const r of rows) { const a = by.get(r.idx) ?? []; a.push(r); by.set(r.idx, a); }
     for (const [idx, rs] of [...by].sort()) {
       const d = rs.map((r) => r.d).sort().at(-1), q = rs.filter((r) => r.q_time && r.q_price != null && r.q_prev != null), newest = q.map((r) => r.q_time!).sort().at(-1);
       // "later" here is by date in UTC, a rough reading: the page decides by each exchange's own calendar day
       const later = q.filter((r) => r.q_time!.slice(0, 10) > r.d).length, fresh = q.filter((r) => now - Date.parse(r.q_time!) < 30 * 60000).length;
-      console.log(`  ${idx}: ${rs.length} names, closes of ${d}; ${q.length} with a quote, newest print ${age(newest)}; ${fresh} printed in the last 30 min; ${later} from a later day than the close`);
+      // quote_at is when the Monitor last pulled the quotes; q_time is when the exchange printed each price
+      const pulled = rs.map((r) => r.quote_at).filter((x): x is string => !!x).sort(), oldest = q.map((r) => r.q_time!).sort()[0];
+      console.log(`  ${idx}: ${rs.length} names, closes of ${d}; quotes last pulled ${age(pulled.at(-1))} (the oldest pull ${age(pulled[0])}); ${q.length} with a quote, prints from ${utc(oldest)} to ${utc(newest)}; ${fresh} printed in the last 30 min; ${later} from a later day than the close`);
+      for (const r of q.slice(0, 3)) console.log(`      ${r.symbol}: ${r.q_price} against ${r.q_prev} (${(((r.q_price! / r.q_prev!) - 1) * 100).toFixed(2)}%), printed ${utc(r.q_time)}, pulled ${utc(r.quote_at)}`);
     }
     if (!by.size) console.log("  no rows");
   });

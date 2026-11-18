@@ -18,6 +18,7 @@ import { keyStatsOf } from "../supabase/functions/_shared/yahoo.ts";
 import { bigMoves, isLargeCap, moveText, settledBars } from "../supabase/functions/_shared/bigmoves.ts";
 import { liveRows } from "../supabase/functions/_shared/intraday.ts";
 import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabase/functions/_shared/movecause.ts";
+import { ALERTS, COMPANY, FIRST, PHILOSOPHY, PHONE, TABS, WELCOME_SUBJECT, welcomeMail } from "../supabase/functions/_shared/welcome.ts";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
 let pass = 0, fail = 0;
@@ -700,6 +701,24 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const few = liveRows([row("A", 100, 1, 103), row("B", 50, 1, 50, "2026-11-17T21:00:00Z"), row("C", 200, 1, 200, "2026-11-17T21:00:00Z")], ny);
     ck("fresh quotes for under half of the names change nothing: a list half at today's prices would rank wrongly", few.live === null && few.rows[0].pct1d === 1 && few.rows[0].close === 100);
     ck("a quote without a price, without its previous close or without a time is not used; an empty list is an empty list", liveRows([{ ...row("A", 100, 1, 103), q_prev: null }, { ...row("B", 50, 1, 51), q_time: null }, { ...row("C", 20, 1, 0) }], ny).live === null && liveRows([], ny).live === null && liveRows([], ny).rows.length === 0);
+  }
+
+  console.log("\n[the welcome email]");
+  {
+    const site = "https://example.github.io/orrery-market-monitor/", m = welcomeMail(site);
+    const lines = m.text.split("\n");
+    ck("the subject, and a plain-text part that opens with the idea behind the name before it says welcome", m.subject === WELCOME_SUBJECT && m.subject === "Welcome to Orrery Monitor" && lines[0] === PHILOSOPHY[0] && m.text.indexOf(PHILOSOPHY[2]) < m.text.indexOf("WELCOME") && PHILOSOPHY.length === 3 && PHILOSOPHY.every((p) => m.text.includes(p)), lines.slice(0, 3));
+    ck("the opening says what an orrery was and what the Monitor is, and names no date or maker it could get wrong", /early 1700s/.test(PHILOSOPHY[0]) && /London clockmakers/.test(PHILOSOPHY[0]) && /orrery/.test(PHILOSOPHY[1]) && /small, simple and powerful/.test(PHILOSOPHY[1]) && /what moved, by how much, and why/.test(PHILOSOPHY[2]) && !/17\d\d[^s]|Graham|Tompion|Rowley/.test(PHILOSOPHY.join(" ")), PHILOSOPHY);
+    ck("the six tabs in the order of the Monitor's header, each with what is there", TABS.map((t) => t[1]).join() === "MARKET,NEWS,RESEARCH,EQUITIES,RATES & CURRENCY,WATCHLIST" && TABS.map((t) => t[0]).join() === "market,news,research,equities,rates,watch" && TABS.every(([, name, what]) => what.length > 30 && m.text.includes(`- ${name}: ${what}`)), TABS.map((t) => t[1]));
+    ck("it says the alert lines as the Monitor has them (5% and 7% for a stock, 3% for an index, deals of USD 1bn) and both kinds of notification", ALERTS.includes(`${LARGE_STOCK_PCT}% in a session (${STOCK_PCT}% for smaller companies)`) && /index moves 3%/.test(ALERTS) && /USD 1bn/.test(ALERTS) && /Home Screen/.test(PHONE) && /NOTIFICATIONS/.test(PHONE) && /all of them, or only those on your watchlist/.test(PHONE) && [ALERTS, PHONE, COMPANY, ...FIRST].every((t) => m.text.includes(t)), [ALERTS, PHONE]);
+    const links = [...m.html.matchAll(/<a href="([^"]+)"/g)].map((x) => x[1]), imgs = [...m.html.matchAll(/<img src="([^"]+)"[^>]*alt="([^"]*)"/g)].map((x) => [x[1], x[2]]);
+    ck("every link goes to the Monitor itself: its front page from the button, and each tab", links.length === 7 && links[0] === site && links.slice(1).join() === TABS.map((t) => `${site}#${t[0]}`).join(), links);
+    ck("its two pictures come from the Monitor's own site, and the banner says what it shows where pictures are off", imgs.length === 2 && imgs[0][0] === `${site}mail/mark.png` && imgs[1][0] === `${site}mail/orrery.png` && /orrery/.test(imgs[1][1]), imgs);
+    const quote = [...m.html.matchAll(/<p class="om-quote" style="([^"]+)">([^<]+)<\/p>/g)];
+    ck("the opening is set in italic Times New Roman, and is the first text of the page after the name", quote.length === 3 && quote.every((q) => /font-family:'Times New Roman',Times,Georgia,serif/.test(q[1]) && /font-style:italic/.test(q[1])) && m.html.indexOf('class="om-quote"') < m.html.indexOf("Welcome.") && m.html.indexOf("Orrery Monitor</td>") < m.html.indexOf('class="om-quote"'), quote.map((q) => q[1].slice(0, 60)));
+    ck("an email's own rules: tables and styles on the elements, no script, no web font, no style sheet from elsewhere; text that could be read as markup is escaped", !/<script|<link|@import|@font-face|url\(/i.test(m.html) && /<table role="presentation"/.test(m.html) && m.html.includes("RATES &amp; CURRENCY") && !m.html.includes("RATES & CURRENCY") && m.html.includes("today&#39;s") === false && !/undefined|\[object/.test(m.html + m.text) && m.html.length < 20000, m.html.length);
+    const other = welcomeMail("https://monitor.example.com/");
+    ck("another site address is used throughout", !other.html.includes("example.github.io") && other.html.includes('href="https://monitor.example.com/#watch"') && other.text.includes("\nhttps://monitor.example.com/\n"));
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

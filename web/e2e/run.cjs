@@ -36,6 +36,7 @@ const SUITES = [
   { name: "accounts", needs: ["gate"] },
   { name: "install-hint", needs: ["mock"] },
   { name: "tab-guard", needs: ["mock"] },
+  { name: "welcome-mail", needs: ["mock"] },
   { name: "update-bar", needs: ["mock", "built"] },
   { name: "offline", needs: ["mock", "built"] },
   { name: "notifications", needs: ["mock", "built"] },

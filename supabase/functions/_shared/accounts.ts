@@ -18,6 +18,7 @@ import { db } from "./db.ts";
 import { signToken, type TokenPayload } from "./auth.ts";
 import { clientIp, json, siteUrl, timingSafeEqual } from "./http.ts";
 import { mailReady, mailSetup, sendMail } from "./mail.ts";
+import { welcomeMail } from "./welcome.ts";
 import { CODE_MAX_TRIES, CODE_TTL_MIN, PER_DAY_ALL, PER_EMAIL_HOUR, PER_IP_HOUR, RESEND_GAP_SEC, checkRefusal, cleanCode, codeHash, codeMail, newCode, noticeMail, sendRefusal, verifyLink } from "./signup.ts";
 
 const ITER = 150_000;
@@ -34,7 +35,7 @@ async function newHash(pw: string): Promise<{ pw_hash: string; pw_salt: string; 
   return { pw_hash: await hashPw(pw, salt, ITER), pw_salt: hex(salt), pw_iter: ITER };
 }
 
-export interface Account { email: string; pw_hash: string; pw_salt: string; pw_iter: number; role: "manager" | "user"; status: "pending" | "active" | "disabled"; must_change: boolean; tokens_after: string; created_at: string; last_seen: string | null; logins: number; verified_at?: string | null }
+export interface Account { email: string; pw_hash: string; pw_salt: string; pw_iter: number; role: "manager" | "user"; status: "pending" | "active" | "disabled"; must_change: boolean; tokens_after: string; created_at: string; last_seen: string | null; logins: number; verified_at?: string | null; welcomed_at?: string | null }
 
 const EMAIL = /^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 export const cleanEmail = (v: unknown): string | null => { const s = String(v ?? "").trim().toLowerCase(); return s.length <= 254 && EMAIL.test(s) ? s : null; };
@@ -134,6 +135,18 @@ export async function signupVerify(req: Request): Promise<Response> {
   return (await tryCode(req, ip, email, code, false)) ?? json(req, { ok: true, email });
 }
 
+/** The welcome email, once the account is open. It never stands in the account's way: if it cannot be sent, or
+ *  takes longer than eight seconds, that is logged and the person is signed in all the same. */
+async function welcome(email: string): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([sendMail({ to: email, ...welcomeMail(siteUrl()) }), new Promise<never>((_, no) => { timer = setTimeout(() => no(new Error("no answer from the mail server within 8 s")), 8000); })]);
+    const { error } = await db.from("accounts").update({ welcomed_at: new Date().toISOString() }).eq("email", email);
+    if (error) console.error("welcome email sent, but not recorded:", error.message);
+  } catch (e) { console.error("welcome email not sent:", e instanceof Error ? e.message : String(e)); }
+  finally { clearTimeout(timer); }
+}
+
 /** Step 3: the confirmed address (email + code again) and a password. The account is active at once and the
  *  reply signs it in. */
 export async function signupFinish(req: Request): Promise<Response> {
@@ -160,6 +173,7 @@ export async function signupFinish(req: Request): Promise<Response> {
   const token = await signToken(email, ttlOf(remember));
   await db.from("login_attempts").insert({ ip, ok: true });
   await db.from("users").upsert({ id: email, last_seen: at, logins: 1, remember }, { onConflict: "id" });
+  await welcome(email);
   return json(req, { token, id: email, role: "user", mustChange: false, expiresIn: ttlOf(remember) });
 }
 
@@ -242,16 +256,18 @@ export async function adminUsers(req: Request): Promise<Response> {
   let mail: { ready: boolean; from: string | null; via: string | null; problem: string | null };
   try { const m = mailSetup(); mail = { ready: !!m, from: m?.from.email ?? null, via: m ? (m.kind === "resend" ? "Resend" : m.host) : null, problem: null }; }
   catch (e) { mail = { ready: false, from: null, via: null, problem: e instanceof Error ? e.message : String(e) }; }
-  return json(req, { signup: mail.ready ? "email" : "approval", mail, rows: ((data ?? []) as Account[]).map((r) => ({ email: r.email, role: r.role, status: r.status, mustChange: r.must_change, createdAt: r.created_at, lastSeen: r.last_seen, logins: r.logins, verifiedAt: r.verified_at ?? null, watch: n.get(r.email) ?? 0 })) });
+  return json(req, { signup: mail.ready ? "email" : "approval", mail, rows: ((data ?? []) as Account[]).map((r) => ({ email: r.email, role: r.role, status: r.status, mustChange: r.must_change, createdAt: r.created_at, lastSeen: r.last_seen, logins: r.logins, verifiedAt: r.verified_at ?? null, welcomedAt: r.welcomed_at ?? null, watch: n.get(r.email) ?? 0 })) });
 }
 
 /** Manager only: one email to the manager's own address through the sender that is set up, so a mistake in the
- *  set-up shows here (with the mail server's own words) and not as people who cannot create an account. */
+ *  set-up shows here (with the mail server's own words) and not as people who cannot create an account. With
+ *  `what: "welcome"` it is the welcome email a new account gets, to see it as its reader does. */
 export async function mailTest(req: Request, me: Account): Promise<Response> {
   if (req.method !== "POST") return json(req, { error: "POST required" }, 405);
   try {
     if (!mailSetup()) return json(req, { error: "No email sender is set up on the server (supabase/README.md, Accounts by email)" }, 503);
-    const answer = await sendMail({ to: me.email, subject: "Orrery Monitor: test email", text: "This is the test email you asked the Orrery Monitor to send.\n\nIt arrived, so the Monitor can send the verification email to someone who creates an account." });
+    const b = (await req.json().catch(() => ({}))) as { what?: string };
+    const answer = await sendMail(b.what === "welcome" ? { to: me.email, ...welcomeMail(siteUrl()) } : { to: me.email, subject: "Orrery Monitor: test email", text: "This is the test email you asked the Orrery Monitor to send.\n\nIt arrived, so the Monitor can send the verification email to someone who creates an account." });
     return json(req, { ok: true, to: me.email, answer: answer.slice(0, 200) });
   } catch (e) { return json(req, { error: e instanceof Error ? e.message : String(e) }, 502); }
 }

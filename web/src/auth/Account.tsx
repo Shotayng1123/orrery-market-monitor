@@ -82,11 +82,12 @@ function Accounts({ me }: { me: Me }) {
     if (op === "reset" && r.tempPassword) setTemp({ email, pw: r.tempPassword });
     void load();
   }
-  async function sendTest() {
-    setBusy("mailtest"); setTest(null);
-    const r = await mailTest();
+  async function sendTest(what: "test" | "welcome" = "test") {
+    const key = what === "welcome" ? "mailwelcome" : "mailtest";
+    setBusy(key); setTest(null);
+    const r = await mailTest(what);
     setBusy("");
-    setTest(r.ok ? { ok: true, text: `Sent to ${r.to}. If it is not in the inbox within a minute, look in the spam folder.` } : { ok: false, text: r.error });
+    setTest(r.ok ? { ok: true, text: `${what === "welcome" ? "The welcome email was sent" : "Sent"} to ${r.to}. If it is not in the inbox within a minute, look in the spam folder.` } : { ok: false, text: r.error });
   }
   const pending = (rows ?? []).filter((r) => r.status === "pending").length;
   const mail = data?.mail;
@@ -95,7 +96,7 @@ function Accounts({ me }: { me: Me }) {
       <div className="minih">Accounts{rows ? ` · ${rows.length}` : ""}{pending ? ` · ${pending} waiting for approval` : ""}</div>
       {mail && (
         <div className="mailline" id="mailline">
-          {mail.ready ? <>New accounts open by themselves: the verification email comes from <b>{mail.from}</b>{mail.via ? ` (${mail.via})` : ""}.<span className="chip-sm" id="mailtest" onClick={() => { if (busy !== "mailtest") void sendTest(); }}>{busy === "mailtest" ? "SENDING…" : "SEND A TEST EMAIL"}</span></>
+          {mail.ready ? <>New accounts open by themselves: the verification email comes from <b>{mail.from}</b>{mail.via ? ` (${mail.via})` : ""}.<span className="chip-sm" id="mailtest" onClick={() => { if (!busy) void sendTest(); }}>{busy === "mailtest" ? "SENDING…" : "SEND A TEST EMAIL"}</span> Once its password is set, a new account gets the welcome email.<span className="chip-sm" id="mailwelcome" title="Sends the welcome email to your own address, to see it as a new reader does" onClick={() => { if (!busy) void sendTest("welcome"); }}>{busy === "mailwelcome" ? "SENDING…" : "SEND IT TO ME"}</span></>
             : mail.problem ? <><span className="warn">The email sender's set-up has a mistake: {mail.problem}.</span> Until it is put right, a new account waits here for your approval.</>
             : <>No email sender is set up on the server, so a new account waits here for your approval.</>}
           {test && <div className={test.ok ? "up" : "dn"} id="mailtest-r">{test.text}</div>}

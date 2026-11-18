@@ -103,6 +103,12 @@ const ck = (name, cond, detail) => { if (cond) { pass++; console.log("  ✓ " + 
 
   const col = (await db.query("select column_name from information_schema.columns where table_name = 'accounts' and column_name = 'verified_at'")).rows.length;
   ck("accounts has the verified_at column", col === 1);
+  // the welcome email's record (20261119000002): applied twice without an error, and the column is there
+  const wsql = fs.readFileSync(path.join(MIG, "20261119000002_welcome_email.sql"), "utf8");
+  await db.exec(wsql); await db.exec(wsql);
+  const wcol = (await db.query("select data_type from information_schema.columns where table_name = 'accounts' and column_name = 'welcomed_at'")).rows;
+  const wsrc = fs.readFileSync(path.join(__dirname, "..", "..", "supabase", "functions", "_shared", "accounts.ts"), "utf8");
+  ck("accounts has the welcomed_at column, a time, and the server writes it by that name", wcol.length === 1 && /timestamp with time zone/.test(wcol[0].data_type) && /\.update\(\{ welcomed_at: /.test(wsrc), wcol);
   const rls = (await db.query("select relrowsecurity from pg_class where relname = 'email_codes'")).rows[0].relrowsecurity;
   ck("email_codes is closed to everything but the service role (row level security on, no policies)", rls === true);
   const acl = (await db.query("select proname, has_function_privilege('anon', oid, 'execute') as anon, has_function_privilege('authenticated', oid, 'execute') as auth from pg_proc where proname like 'email_code_%' order by 1")).rows;
