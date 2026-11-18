@@ -12,7 +12,7 @@ import { readVerify } from "../web/src/lib/verify.ts";
 import { SmtpError, appPassword, buildMessage, dotStuff, parseFrom, smtpTalk, type Wire } from "../supabase/functions/_shared/smtp.ts";
 import { mailReady, mailSetup, resendRequest } from "../supabase/functions/_shared/mail.ts";
 import { avgTurnover, barOnOrBefore, betaCorr, maxDrawdown, monthsBack, perfRows, range52w, realisedVol, type Bar } from "../supabase/functions/_shared/stockstats.ts";
-import { fyLabel, pickUnit, progress, qEndLabel, qLabel, quarterEnd, ratiosOf, singleQuarters, valuation, type FinPeriod, type FinSet } from "../supabase/functions/_shared/fin.ts";
+import { fyLabel, justReported, pickUnit, progress, qEndLabel, qLabel, quarterEnd, quarterEps, ratiosOf, resultsDateToWatch, singleQuarters, valuation, type FinPeriod, type FinSet } from "../supabase/functions/_shared/fin.ts";
 import { legacyStatements, yahooFin, yahooFinTypes } from "../supabase/functions/_shared/finsrc.ts";
 import { keyStatsOf } from "../supabase/functions/_shared/yahoo.ts";
 import { bigMoves, isLargeCap, moveText, settledBars } from "../supabase/functions/_shared/bigmoves.ts";
@@ -429,11 +429,21 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const hole = singleQuarters([{ fy: "2026-03-31", q: 1, v: 100 }, { fy: "2026-03-31", q: 3, v: 370 }, { fy: "2026-03-31", q: 4, v: null }, { fy: "2027-03-31", q: 2, v: 240 }]);
     ck("a quarter whose predecessor is missing stays empty: a half-year or nine-month figure is never shown as a quarter", hole.map((x) => x.v).join() === "100,,," && hole[1].v === null && hole[3].v === null, hole);
     ck("a negative year-to-date change is a negative quarter (a loss, or a reversal), not an error", singleQuarters([{ fy: "x", q: 1, v: 50 }, { fy: "x", q: 2, v: 20 }])[1].v === -30);
+    // a single quarter's EPS from year-to-date rows: 1.5bn shares; H1 net income 300bn (EPS 200), Q1 120bn (EPS 80)
+    ck("the first quarter's EPS is the reported figure; a later quarter's is its net income over the share count the year-to-date EPS implies", quarterEps(1, { ni: 120e9, eps: 80 }, null) === 80 && near(quarterEps(2, { ni: 300e9, eps: 200 }, { ni: 120e9, eps: 80 }), 120) && near(quarterEps(3, { ni: 280e9, eps: 186.67 }, { ni: 300e9, eps: 200 }), -20e9 / (280e9 / 186.67)));
+    ck("a buyback of 2% between the two rows still gives a figure, on the later row's share count", near(quarterEps(2, { ni: 300e9, eps: 300e9 / 1.47e9 }, { ni: 120e9, eps: 80 }), 180e9 / 1.47e9));
+    ck("no quarterly EPS across a split (the implied share counts differ), on a missing figure, or on figures too small to imply a share count", quarterEps(2, { ni: 300e9, eps: 100 }, { ni: 120e9, eps: 80 }) === null && quarterEps(2, { ni: 300e9, eps: null }, { ni: 120e9, eps: 80 }) === null && quarterEps(2, { ni: 300e9, eps: 200 }, null) === null && quarterEps(2, { ni: 300e9, eps: 200 }, { ni: null, eps: 80 }) === null && quarterEps(2, { ni: 9e7, eps: 0.6 }, { ni: 5e7, eps: 0.33 }) === null && quarterEps(2, { ni: 300e9, eps: -200 }, { ni: 120e9, eps: 80 }) === null);
+    ck("a loss-making half is handled like any other: the signs of net income and EPS agree, so the share count is positive", near(quarterEps(2, { ni: -90e9, eps: -60 }, { ni: -30e9, eps: -20 }), -40));
     ck("progress against full-year guidance is the year-to-date figure over the guidance, for the first three quarters only", near(progress(370, 600, 3), 370 / 600 * 100) && near(progress(100, 600, 1), 100 / 6) && progress(600, 700, 4) === null && progress(null, 600, 2) === null && progress(100, null, 2) === null && progress(100, -50, 2) === null && progress(100, 600, null) === null);
     const val = valuation(3000, { eps: 200, epsGuide: 250, bps: 2400, dps: 60, dpsGuide: 75 });
     ck("valuation: price over earnings (last year's and the guided), price over book, dividend yield", near(val.pe, 15) && near(val.peGuide, 12) && near(val.pb, 1.25) && near(val.yield, 2) && near(val.yieldGuide, 2.5), val);
     const none = valuation(3000, { eps: -20, epsGuide: null, bps: 0, dps: null, dpsGuide: 0 });
     ck("no multiple on a loss, on a missing figure or on zero book value; a guided dividend of nil is a yield of nil", none.pe === null && none.peGuide === null && none.pb === null && none.yield === null && none.yieldGuide === 0 && valuation(null, { eps: 1, epsGuide: 1, bps: 1, dps: 1, dpsGuide: 1 }).yield === null, none);
+    // stored statements around a results date
+    const H = 3600e3, D0 = Date.UTC(2026, 10, 10, 6);   // results due 10 Nov 2026, 06:00 UTC
+    ck("stored statements are asked for again daily from 18 hours after the results date until six days after it", !justReported(D0, D0 - H) && !justReported(D0, D0 + 17 * H) && justReported(D0, D0 + 18 * H) && justReported(D0, D0 + 5 * 24 * H) && !justReported(D0, D0 + 6 * 24 * H) && !justReported(null, D0) && !justReported(undefined, D0));
+    ck("the results date kept with the statements: a date just passed stays until its six days have run, even when the quote already shows next quarter's", resultsDateToWatch(D0, D0 + 91 * 24 * H, D0 + 2 * 24 * H) === D0 && resultsDateToWatch(D0, null, D0 + H) === D0);
+    ck("after those days the next date the quote knows is kept; a date still ahead is replaced by the quote's newer one, and kept when the quote has none", resultsDateToWatch(D0, D0 + 91 * 24 * H, D0 + 7 * 24 * H) === D0 + 91 * 24 * H && resultsDateToWatch(D0, D0 + 24 * H, D0 - 24 * H) === D0 + 24 * H && resultsDateToWatch(D0, null, D0 - 24 * H) === D0 && resultsDateToWatch(D0, null, D0 + 7 * 24 * H) === null && resultsDateToWatch(null, D0 - H, D0) === null && resultsDateToWatch(null, null, D0) === null);
   }
 
   console.log("\n[N] a stock's page: reading Yahoo's statements and key statistics (made-up answers in Yahoo's shape)");

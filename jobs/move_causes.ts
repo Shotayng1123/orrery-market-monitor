@@ -24,7 +24,11 @@ interface Row { symbol: string; kind: string; d: string; ctx: MoveCtx; tries: nu
 async function main(): Promise<void> {
   const sb = db(), client = newClient();
   const { data, error } = await sb.from("move_causes").select("symbol,kind,d,ctx,tries").in("status", ["queued", "error"]).lt("tries", MAX_TRIES).order("d", { ascending: false }).limit(MAX);
-  if (error) throw new Error(error.message);
+  if (error) {
+    // a database from before this change has no queue: that is not a failure of this job
+    if (error.code === "PGRST205" || error.code === "42P01" || /could not find the table|does not exist/i.test(error.message)) { console.log("The move_causes table is not in the database yet (the database change of 18 Nov 2026 has not been applied): nothing to look up."); return; }
+    throw new Error(error.message);
+  }
   const rows = (data ?? []) as Row[];
   console.log(`${rows.length} move(s) to look up (model ${MODEL}, effort ${EFFORT}, up to ${SEARCHES} searches each)`);
   let found = 0, none = 0, failed = 0, cost = 0;

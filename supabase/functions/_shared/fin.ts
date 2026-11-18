@@ -102,11 +102,45 @@ export function singleQuarters<T extends { fy: string; q: number; v: number | nu
   });
 }
 
+/** Earnings per share of a single quarter where the company reports only year-to-date figures (a 決算短信).
+ *  The first quarter is the reported figure. A later quarter is the quarter's net income (year-to-date less the
+ *  year-to-date before it) over the share count that the later year-to-date EPS implies (net income over EPS).
+ *  It is left empty unless that can be trusted:
+ *    - both year-to-date rows carry net income of at least 100m and EPS of at least 1 in absolute size, so the
+ *      rounding of the reported figures moves the implied share count by under 1%;
+ *    - the share counts the two rows imply agree within 5% (a split or a large issue in between would make the
+ *      quarter's figure rest on a different share basis from its neighbours). */
+export function quarterEps(q: number, cur: { ni: number | null; eps: number | null }, prev: { ni: number | null; eps: number | null } | null): number | null {
+  if (q === 1) return cur.eps;
+  if (!prev || cur.ni == null || cur.eps == null || prev.ni == null || prev.eps == null) return null;
+  const sure = (ni: number, eps: number): boolean => Math.abs(ni) >= 1e8 && Math.abs(eps) >= 1;
+  if (!sure(cur.ni, cur.eps) || !sure(prev.ni, prev.eps)) return null;
+  const sCur = cur.ni / cur.eps, sPrev = prev.ni / prev.eps;
+  if (!(sCur > 0) || !(sPrev > 0) || Math.abs(sCur / sPrev - 1) > 0.05) return null;
+  return (cur.ni - prev.ni) / sCur;
+}
+
 /** How far the year-to-date figure has come against the full-year guidance, in per cent (the 進捗率 of a
  *  決算短信). Only for the first three quarters: at the full year the guidance on the page is next year's. */
 export function progress(ytd: number | null | undefined, fullYear: number | null | undefined, quarter: number | null): number | null {
   if (quarter == null || quarter < 1 || quarter > 3) return null;
   return div(ytd, fullYear);
+}
+
+const WATCH_FROM = 18 * 3600e3, WATCH_TO = 6 * 86400e3;
+/** Whether stored statements should be distrusted because the company has just reported: from 18 hours after
+ *  the results date that was stored with them (`due`, Unix milliseconds) until six days after it. In that
+ *  stretch they are asked for again daily, since sources take from hours to days to carry new results. */
+export function justReported(due: number | null | undefined, now: number): boolean {
+  return due != null && now >= due + WATCH_FROM && now < due + WATCH_TO;
+}
+/** The results date to store with statements fetched at `now`: a date that has passed is kept until its six
+ *  days have run (so the daily asking above goes on); otherwise the next date the quote knows (`next`), and
+ *  failing that a stored date still ahead. All in Unix milliseconds. */
+export function resultsDateToWatch(stored: number | null | undefined, next: number | null | undefined, now: number): number | null {
+  if (stored != null && stored <= now && now < stored + WATCH_TO) return stored;
+  if (next != null && next > now) return next;
+  return stored != null && stored > now ? stored : null;
 }
 
 /** Valuation from the price and the statements. Each is null unless every input is there and positive where it

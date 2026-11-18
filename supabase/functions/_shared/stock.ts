@@ -7,7 +7,7 @@ import { fetchText } from "./http.ts";
 import { keyStats, type KeyStats } from "./yahoo.ts";
 import { benchmarksFor, dailyBars, quoteFor } from "./assets.ts";
 import { avgTurnover, betaCorr, maxDrawdown, perfRows, range52w, realisedVol, type Bar } from "./stockstats.ts";
-import { valuation, type Fin, type FinLine } from "./fin.ts";
+import { justReported, resultsDateToWatch, valuation, type Fin, type FinLine } from "./fin.ts";
 import { yahooFin, yahooFinTypes } from "./finsrc.ts";
 import { bigMoves, isLargeCap, moveText, settledBars, type BigMove } from "./bigmoves.ts";
 import { stockMarket } from "./moves.ts";
@@ -20,30 +20,37 @@ const isoDay = (t: number | null | undefined): string | null => (t == null ? nul
 const soft = async <T>(p: Promise<T>, fallback: T, what: string): Promise<T> => { try { return await p; } catch (e) { console.log(`stock: ${what}:`, e instanceof Error ? e.message : String(e)); return fallback; } };
 
 // ---- statements: kept in asset_cache, since they change four times a year and the sources are rationed ----
-const FIN_TTL = 7 * 86400e3, FIN_RETRY = 86400e3;   // a week; a day after a failure or a stand-in source
+const FIN_TTL = 7 * 86400e3, FIN_RETRY = 86400e3;   // a week; a day after a failure, a stand-in source, or fresh results
+const FIN_PRIMARY = 6 * 3600e3;                    // EDINET DB's answers are stored and rationed one by one in edinet.ts
 async function yahooStatements(symbol: string, currency: string | null): Promise<Fin> {
   const p2 = Math.floor(Date.now() / 1000), p1 = p2 - 12 * 366 * 86400;
   const text = await fetchText(`https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(symbol)}?type=${yahooFinTypes()}&period1=${p1}&period2=${p2}`, { headers: { "user-agent": "Mozilla/5.0", accept: "application/json" } }, 30000);
   return yahooFin(JSON.parse(text), currency, today());
 }
-/** The statements for a symbol, from the cache while it is fresh. `primary` is the fuller source for the market
- *  (set for Japan in a later step); Yahoo stands in when it has none or cannot answer, and then the cache is
- *  kept for a day only, so the fuller source is asked again tomorrow. */
-export async function finFor(symbol: string, currency: string | null, primary?: (symbol: string) => Promise<Fin | null>): Promise<{ fin: Fin | null; note: string | null }> {
-  const key = `fin2:${symbol}`;
+/** The statements for a symbol, from the cache while it is fresh.
+ *    primary          the fuller source for the market (EDINET DB for Tokyo). Yahoo stands in when it has none or
+ *                     cannot answer, and then the cache is kept for a day only, so the fuller source is asked
+ *                     again tomorrow
+ *    nextEarningsAt   the next results date the quote knows (Unix seconds). It is stored with the statements:
+ *                     once it has passed they are asked for again daily for a few days (fin.ts justReported),
+ *                     so new results do not wait for the weekly refresh */
+export async function finFor(symbol: string, currency: string | null, primary?: (symbol: string) => Promise<Fin | null>, nextEarningsAt?: number | null): Promise<{ fin: Fin | null; note: string | null }> {
+  const key = `fin2:${symbol}`, now = Date.now();
   const { data } = await db.from("asset_cache").select("payload,fetched_at").eq("key", key).maybeSingle();
-  if (data) {
-    const c = data.payload as { fin: Fin | null; note: string | null; ttl: number };
-    if (Date.now() - Date.parse(data.fetched_at) < (c.ttl ?? FIN_RETRY)) return { fin: c.fin, note: c.note };
+  const c = data ? (data.payload as { fin: Fin | null; note: string | null; ttl: number; due?: number | null }) : null;
+  if (data && c) {
+    const ttl = justReported(c.due, now) ? Math.min(c.ttl ?? FIN_RETRY, FIN_RETRY) : c.ttl ?? FIN_RETRY;
+    if (now - Date.parse(data.fetched_at) < ttl) return { fin: c.fin, note: c.note };
   }
   let fin: Fin | null = null, note: string | null = null, ttl = FIN_TTL;
-  if (primary) { try { fin = await primary(symbol); } catch (e) { note = e instanceof Error ? e.message : String(e); ttl = FIN_RETRY; } }
+  if (primary) { try { fin = await primary(symbol); if (fin) ttl = FIN_PRIMARY; } catch (e) { note = e instanceof Error ? e.message : String(e); ttl = FIN_RETRY; } }
   if (!fin) {
     try { fin = await yahooStatements(symbol, currency); if (primary) ttl = FIN_RETRY; if (!fin.annual.periods.length && !fin.quarterly.periods.length) { fin = null; note = [note, "Yahoo Finance has no statements for this name"].filter(Boolean).join("; "); } }
     catch (e) { note = [note, `statements unavailable: ${e instanceof Error ? e.message : String(e)}`].filter(Boolean).join("; "); ttl = Math.min(ttl, 3600e3); }
   }
   if (fin && note) fin.notes.push(`The fuller source could not be used (${note}); it is tried again tomorrow.`);
-  await db.from("asset_cache").upsert({ key, payload: { fin, note, ttl } as unknown as Record<string, unknown>, fetched_at: new Date().toISOString() });
+  const due = resultsDateToWatch(c?.due, nextEarningsAt == null ? null : nextEarningsAt * 1000, now);
+  await db.from("asset_cache").upsert({ key, payload: { fin, note, ttl, due } as unknown as Record<string, unknown>, fetched_at: new Date().toISOString() });
   return { fin, note };
 }
 
@@ -113,7 +120,7 @@ export async function stockPage(symbol: string) {
     db.from("constituents").select("idx,sector,gics_industry,gics_source").eq("symbol", symbol).limit(5),
     soft(dailyBars(symbol), [] as Bar[], "price history"),
     Promise.all(benchmarks.map((b) => soft(dailyBars(b.symbol), [] as Bar[], `${b.name} history`))),
-    equity ? finFor(symbol, q.currency) : Promise.resolve({ fin: null, note: "Statements are available for equities only." }),
+    equity ? finFor(symbol, q.currency, undefined, q.earningsAt) : Promise.resolve({ fin: null, note: "Statements are available for equities only." }),
     equity ? soft(keyStats(symbol), null as KeyStats | null, "key statistics") : Promise.resolve(null),
   ]);
   const member = (con ?? []).find((c) => c.sector) ?? (con ?? [])[0] ?? null;

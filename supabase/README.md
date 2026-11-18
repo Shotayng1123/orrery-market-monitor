@@ -192,9 +192,20 @@ valuation, the big moves with their reasons, and the statements. The arithmetic 
 `_shared/bigmoves.ts` and `_shared/fin.ts`; what each source sends is read in `_shared/finsrc.ts`. All four are
 checked in `sim/logic.test.ts` (sections L to P).
 
-- **Statements are cached** in `asset_cache` under `fin2:SYMBOL` for a week (a day when a stand-in source had to be
-  used), because they change four times a year and EDINET DB allows a hundred requests a day on its free plan.
-  The hover card reads the same cache and otherwise Yahoo; it never asks EDINET DB.
+- **Statements are stored**, because they change four times a year and the sources are rationed. The finished
+  statements sit in `asset_cache` under `fin2:SYMBOL`: a week for a name read from Yahoo, a day when Yahoo had to
+  stand in for EDINET DB. The next results date known from the quote is stored with them; from 18 hours after
+  that date until six days after it they are asked for again daily, so new results do not wait for the weekly
+  refresh. The hover card reads the same store and otherwise Yahoo; it never asks EDINET DB.
+- **EDINET DB allows a hundred requests a day** on its free plan (the day is Japan's; `EDINETDB_DAILY_BUDGET`,
+  default 90, is this server's share). A Tokyo name takes one request to find its EDINET code (kept a year) and
+  three for its statements, each stored on its own (`_shared/edinet.ts`): the 決算短信 for a week, and daily once
+  the next one is due (70 days after the last); the annual figures and the single quarters for thirty days, and
+  every second day while a full-year 決算短信 is out whose 有価証券報告書 is not in yet. When the allowance is
+  used up, or no `EDINETDB_API_KEY` is set, Yahoo stands in for that name until the next day and the page says so.
+  The key is a server secret: add `EDINETDB_API_KEY` to the repository's secrets and the next server deploy
+  stores it (or once by hand, `npx supabase secrets set EDINETDB_API_KEY='<key>'`). An EDINET DB connector used
+  with the same account draws on the same hundred requests.
 - **A page from before this action** (`asset`) is still answered, for the hover card and for a web build older
   than the server. The web falls back the other way too: a server that answers `unknown action` to `stock` gets
   the earlier page.

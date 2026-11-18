@@ -69,6 +69,15 @@ export function yahooFin(json: unknown, currency: string | null, asOf: string | 
   return finish("yahoo", currency, annual.periods.length ? annual : emptySet(), quarterly.periods.length ? quarterly : emptySet(), null, notes, asOf);
 }
 
+// ---- EDINET DB: 有価証券報告書 (annual), quarterly reports (single quarters) and 決算短信 ----
+// The three answers as they arrived (edinet.ts asks for them). The reading is written once the provider's field
+// dictionary has been read; until then nothing is made of them and edinet.ts is not yet used by the page.
+export interface EdinetRaw { annual: unknown; standalone: unknown; earnings: unknown }
+/** Whether an answer can have changed: `earnings` when the next 決算短信 is due, `annual` when a full-year 決算短信
+ *  is out whose 有価証券報告書 is not in the annual answer yet. */
+export function edinetWaiting(_raw: EdinetRaw, _now: number): { earnings: boolean; annual: boolean } { return { earnings: false, annual: false }; }
+export function edinetFin(_raw: EdinetRaw, _asOf: string | null): Fin | null { return null; }
+
 // ---- the shorter shape the hover card (and the page before 18 Nov 2026) reads ----
 export interface LegacyRow { period: string; label: string; revenue: number | null; op: number | null; ni: number | null; eps: number | null; assets?: number | null; equity?: number | null; cfo?: number | null; cfi?: number | null; cff?: number | null; fcf?: number | null }
 export interface LegacyStatements { source: "edinetdb" | "yahoo" | null; currency: string | null; unit: string; annual: LegacyRow[]; quarterly: LegacyRow[]; forecast: { fiscalYearEnd: string | null; disclosed: string | null; revenue: number | null; op: number | null; ni: number | null; eps: number | null; dps: number | null } | null; note: string | null; asOf: string | null }
