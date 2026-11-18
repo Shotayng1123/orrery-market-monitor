@@ -22,6 +22,22 @@ export type ShortData =
   | { kind: "finra"; d: string; ratio: number }
   | { kind: "jpx"; d: string; ratio: number; shares: number | null; daysToCover: number | null; holders: Array<{ holder: string; ratio: number; d: string }> }
   | { kind: "interest"; d: string | null; shares: number | null; pctFloat: number | null; pctOut: number | null; daysToCover: number | null; prior: number | null; priorDate: string | null; finra: { d: string; ratio: number } | null };
+/** A big move of the stock (supabase/functions/_shared/bigmoves.ts): a day of 5% or more, five sessions of 10% or
+ *  more, or a fall or rise of 20% or more within a month; `text` says it in words. `status` is where the search
+ *  for its reason stands: found (with `cause` and `sources`), not_found (searched, nothing reliable), queued
+ *  (being looked up), failed (the look-up itself failed three times), old (older than the twelve months reasons
+ *  are looked up for), off (this server does not look reasons up). */
+export interface MoveRow { kind: "d1" | "w1" | "m1"; dir: 1 | -1; pct: number; from: string; to: string; fromPx: number; toPx: number; t: number; text: string; status: "found" | "not_found" | "queued" | "failed" | "old" | "off"; cause: string | null; sources: Array<{ title: string; url: string }> }
+export const whyText = (m: MoveRow): string => (m.status === "found" && m.cause ? m.cause : m.status === "not_found" ? "No reliable report of the reason was found." : m.status === "queued" ? "The reason is being looked up; it appears here when found." : m.status === "failed" ? "The look-up for this move failed; no reason is shown." : m.status === "old" ? "Not looked up: reasons are searched for moves of the last twelve months." : "Reasons are not looked up on this server yet.");
+/** The moves as marks for the chart: one per day (the moves that end the same day share a circle, coloured by the largest). */
+export function chartMarks(rows: MoveRow[]): Array<{ t: number; dir: 1 | -1; title: string; items: Array<{ text: string; why: string }> }> {
+  const by = new Map<string, MoveRow[]>();
+  for (const r of rows) by.set(r.to, [...(by.get(r.to) ?? []), r]);
+  return [...by.entries()].map(([to, rs]) => ({ t: rs[0].t, dir: [...rs].sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0].dir, title: to, items: rs.map((r) => ({ text: r.text, why: whyText(r) })) }));
+}
+/** The site a source is on, for a short link label: "reuters.com". */
+export const siteOf = (url: string): string => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; } };
+
 export interface StockPage {
   symbol: string; name: string; exchange: string | null; currency: string | null; quoteType: string | null;
   sector: string | null; industry: string | null; indices: string[];
@@ -36,6 +52,7 @@ export interface StockPage {
   turnover: { d20: { shares: number | null; value: number | null }; d60: { shares: number | null; value: number | null } };
   shares: { outstanding: number | null; diluted: number | null; dilutedNote: string | null; treasury: number | null; float: number | null; asOf: string | null; source: string | null };
   short: ShortData | null;
+  moves: { eligible: boolean; rows: MoveRow[] };   // eligible: 1tn yen / 10bn US dollars and above
   earningsAt: string | null; earningsEst: boolean | null;
   val: { pe: number | null; peGuide: number | null; pb: number | null; yield: number | null; yieldGuide: number | null; basis: string | null };
   fin: Fin | null; finNote: string | null;

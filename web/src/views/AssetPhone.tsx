@@ -10,7 +10,7 @@ import { Section, Stat } from "../components/PhoneKit";
 import { useApi } from "../lib/useApi";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtStamp } from "../lib/time";
-import { finSections, fmtCount, fmtPc, fmtX, type StockPage } from "../lib/stock";
+import { chartMarks, finSections, fmtCount, fmtPc, fmtX, siteOf, whyText, type StockPage } from "../lib/stock";
 import { chartRow, GuidanceLine, shortLine } from "./Asset";
 import { AssetPhoneLegacy } from "./AssetPhoneLegacy";
 
@@ -39,6 +39,7 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
   const f = d.fin, s = d.short, sh = shortLine(d), bms = d.benchmarks;
   const pp = (v: number | null) => (v == null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1).replace("-", "\u2212")}`);
   const fs = f ? finSections(f, view) : null;
+  const marks = d.moves.eligible ? chartMarks(d.moves.rows) : undefined;
   return (
     <div className="mp">
       <header className="mp-head doc">{backBtn}<Star symbol={d.symbol} name={d.name} /></header>
@@ -50,7 +51,8 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
         <Pick label="Period" value={period} options={CHART_PERIODS} onChange={setPeriod} />
         <Pick label="σ window" value={sigmaWindow} options={WINDOWS} onChange={setSigmaWindow} />
       </div>
-      <div className="mp-card pad mp-hero"><ChartPanel row={row} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes volume /></div>
+      <div className="mp-card pad mp-hero"><ChartPanel row={row} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes volume marks={marks} /></div>
+      {d.moves.eligible && d.moves.rows.length > 0 && <p className="mp-note">Circles on the 3M, 12M and 36M charts are big moves. Tap one for the reason; the list is under Big moves below.</p>}
 
       <Section title="Key data" aux={d.asOf ? `as of ${fmtStamp(d.asOf)}` : ""} card={false}>
         <div className="mp-card pad" id="st-key">
@@ -97,6 +99,23 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
           {bms.filter((b) => b.note).map((b) => <p key={b.symbol} className="mp-note in">{b.note}</p>)}
         </div>
       </Section>
+
+      {d.moves.eligible && (
+        <Section title="Big moves" aux="and why" card={false}>
+          <div className="mp-card pad" id="st-moves">
+            {d.moves.rows.length ? (
+              <ul className="mp-moves">{d.moves.rows.map((m) => (
+                <li key={`${m.kind}${m.to}`} data-kind={m.kind} data-status={m.status}>
+                  <div className="h"><span className={`dot ${m.dir > 0 ? "up" : "dn"}`} /><b className={m.dir > 0 ? "up" : "dn"}>{m.text}</b><span className="d">{m.to}</span></div>
+                  <div className="w">{whyText(m)}</div>
+                  {m.sources.length > 0 && <div className="s">{m.sources.map((x) => <a key={x.url} href={x.url} target="_blank" rel="noreferrer">{siteOf(x.url)}</a>)}</div>}
+                </li>
+              ))}</ul>
+            ) : <Empty title="No big moves">None in the last three years by these measures.</Empty>}
+            <p className="mp-note in">A day of 5% or more, five sessions of 10% or more, or 20% from a high to a low (or a low to a high) within a month.</p>
+          </div>
+        </Section>
+      )}
 
       <Section title="Short interest" aux={s ? (s.kind === "jpx" ? "JPX reports" : s.kind === "interest" ? "exchange-reported" : "FINRA") : ""} card={false}>
         <div className="mp-card pad" id="st-short">

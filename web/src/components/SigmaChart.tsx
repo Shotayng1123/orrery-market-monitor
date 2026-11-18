@@ -22,6 +22,12 @@ const VOL_SHARE = 0.2;                  // the tallest bar in view takes a fifth
 export const fmtVol = (v: number | null | undefined): string => (v == null || !Number.isFinite(v) ? "–" : v >= 1e9 ? `${(v / 1e9).toFixed(2)}bn` : v >= 1e6 ? `${(v / 1e6).toFixed(v >= 1e8 ? 0 : 1)}m` : v >= 1e3 ? `${(v / 1e3).toFixed(v >= 1e5 ? 0 : 1)}k` : String(Math.round(v)));
 const AXIS = SHARED_AXIS;
 
+/** A mark on the chart: a small circle on the close of day `t` (Unix seconds, any time that day), green for a
+ *  rise and red for a fall. Pointing at it (or tapping it) shows `title` and then each item: what moved, and
+ *  why. Daily charts only. */
+export interface ChartMark { t: number; dir: 1 | -1; title: string; items: Array<{ text: string; why: string }> }
+const MARK_R = 4.5;   // the circle's radius in CSS pixels
+
 export interface SigmaChartProps {
   points: SeriesPoint[];          // full series including history behind the window (for bands and panning)
   windowSec?: number;             // width of the visible window in seconds; defaults to the whole series
@@ -33,13 +39,14 @@ export interface SigmaChartProps {
   axes?: boolean;                 // Analytics tiles have none; large charts may show them
   color?: string;                 // price line colour (UP / DN / FLAT)
   volume?: boolean;               // draw the bars' volumes (points[].q) along the foot of the chart
+  marks?: ChartMark[];            // big moves and the like, as circles on the line (daily charts only)
   onReadout?: (r: { t: number; v: number; z: number | null; q?: number | null } | null) => void;
   onPan?: (offsetSec: number) => void;   // how far back the window has been dragged (0 = latest)
 }
 
 const nf = (d: number) => new Intl.NumberFormat("en-GB", { minimumFractionDigits: d, maximumFractionDigits: d });
 
-export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, sigmaWindow = "m12", height = 160, fill = false, axes = false, color = FLAT, volume = false, onReadout, onPan }: SigmaChartProps) {
+export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, sigmaWindow = "m12", height = 160, fill = false, axes = false, color = FLAT, volume = false, marks, onReadout, onPan }: SigmaChartProps) {
   const el = useRef<HTMLDivElement>(null);
   const panRef = useRef(0);   // bars back from the latest, kept across rebuilds
 
@@ -98,6 +105,9 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
     // the visible window: the bars within windowSec of the latest one; panning moves it by whole bars
     const xsAll = data[0] as number[];
     const nAll = xsAll.length, lastT = ts[nAll - 1];
+    // each mark sits on the bar of its day (a day with no bar, a holiday or one outside the history, has none)
+    const dayAt = new Map<number, number>(); if (!intraday) ts.forEach((t, i) => dayAt.set(Math.floor(t / 86400), i));
+    const placed = (intraday ? [] : marks ?? []).map((m) => ({ m, i: dayAt.get(Math.floor(m.t / 86400)) })).filter((x): x is { m: ChartMark; i: number } => x.i != null && data[1][x.i] != null);
     let i1 = nAll - 1, i0 = 0;
     if (windowSec) { i0 = i1; while (i0 > 0 && lastT - ts[i0 - 1] <= windowSec) i0--; }
     // never a window of one bar: uPlot cannot divide an axis of zero width into ticks ("Invalid array length").
@@ -121,7 +131,22 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
       legend: { show: false },
       cursor: { drag: { x: false, y: false }, points: { show: false }, move: zoomMove },   // no cross-panel sync: only the panel under the pointer responds
       hooks: {
+        draw: [(u) => {
+          if (!placed.length) return;
+          const g = u.ctx, pr = devicePixelRatio || 1, x0 = u.scales.x.min ?? -Infinity, x1 = u.scales.x.max ?? Infinity;
+          g.save();
+          for (const { m, i } of placed) {
+            const xv = xsAll[i]; if (xv < x0 || xv > x1) continue;
+            g.beginPath(); g.arc(u.valToPos(xv, "x", true), u.valToPos(data[1][i] as number, "y", true), MARK_R * pr, 0, Math.PI * 2);
+            g.fillStyle = m.dir > 0 ? UP : DN; g.fill(); g.lineWidth = 1.5 * pr; g.strokeStyle = "#0b0b0c"; g.stroke();
+          }
+          g.restore();
+        }],
         setCursor: [(u) => {
+          // near a mark: its own read-out (what moved, and why) instead of the price at the pointer
+          const hit = pinned ?? markNear(u.cursor.left ?? -99, u.cursor.top ?? -99, 9);
+          if (hit) { showMark(hit); tip.style.display = "none"; onReadout?.(null); return; }
+          hideMark();
           const i = u.cursor.idx;
           const v = i == null || i < 0 ? null : (u.data[1][i] as number | null);
           if (i == null || i < 0 || v == null) { onReadout?.(null); tip.style.display = "none"; return; }
@@ -138,11 +163,35 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
         }],
       },
     };
+    // the marks' read-out: a small card beside the circle. `pinned` is the mark a tap has opened (touch has no hover).
+    let pinned: { m: ChartMark; i: number } | null = null, uRef: uPlot | null = null;
+    const card = document.createElement("div");
+    card.className = "mvtip"; card.style.display = "none";
+    const xy = (x: { i: number }) => (uRef ? { x: uRef.valToPos(xsAll[x.i], "x"), y: uRef.valToPos(data[1][x.i] as number, "y") } : { x: -99, y: -99 });
+    const markNear = (left: number, top: number, reach: number) => {
+      let best: { m: ChartMark; i: number } | null = null, bd = reach * reach;
+      for (const x of placed) { const p = xy(x), d = (p.x - left) ** 2 + (p.y - top) ** 2; if (d <= bd) { bd = d; best = x; } }
+      return best;
+    };
+    const showMark = (x: { m: ChartMark; i: number }) => {
+      if (!uRef) return;
+      card.replaceChildren();
+      const add = (cls: string, text: string) => { const d = document.createElement("div"); d.className = cls; d.textContent = text; card.appendChild(d); };
+      add(`t ${x.m.dir > 0 ? "up" : "dn"}`, x.m.title); for (const it of x.m.items) { add("l", it.text); add("w", it.why); }
+      card.style.display = "block";
+      const w = uRef.over.clientWidth, h = uRef.over.clientHeight, p = xy(x);
+      card.style.maxWidth = `${Math.max(160, Math.min(300, w - 12))}px`;
+      card.style.left = `${Math.max(0, Math.min(w - card.offsetWidth, p.x + 12 + card.offsetWidth > w ? p.x - 12 - card.offsetWidth : p.x + 12))}px`;
+      card.style.top = `${Math.max(0, Math.min(h - card.offsetHeight, p.y - card.offsetHeight / 2))}px`;
+    };
+    const hideMark = () => { card.style.display = "none"; };
     const u = new uPlot(opts, data, box);
+    uRef = u;
     const tip = document.createElement("div");
     tip.className = "ctip";
     tip.style.display = "none";
     u.over.appendChild(tip);
+    u.over.appendChild(card);
     const ro = new ResizeObserver(() => u.setSize(size()));
     ro.observe(box);
 
@@ -153,16 +202,27 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
     over.style.touchAction = "none";
     const keep = panRef.current;
     if (keep > 0 && keep < nAll - winN) { i1 = nAll - 1 - keep; i0 = i1 - winN; u.setScale("x", { min: xsAll[i0], max: xsAll[i1] }); }
-    let drag: { x0: number; i1_0: number; id: number } | null = null;
+    let drag: { x0: number; y0: number; i1_0: number; id: number; moved: boolean } | null = null;
     const apply = () => { u.setScale("x", { min: xsAll[i0], max: xsAll[i1] }); panRef.current = nAll - 1 - i1; onPan?.(Math.round(lastT - ts[i1])); };
-    const onDown = (e: PointerEvent) => { if (e.button !== 0 && e.pointerType === "mouse") return; drag = { x0: e.clientX, i1_0: i1, id: e.pointerId }; over.setPointerCapture?.(e.pointerId); over.style.cursor = "grabbing"; e.preventDefault(); };
+    const onDown = (e: PointerEvent) => { if (e.button !== 0 && e.pointerType === "mouse") return; drag = { x0: e.clientX, y0: e.clientY, i1_0: i1, id: e.pointerId, moved: false }; over.setPointerCapture?.(e.pointerId); over.style.cursor = "grabbing"; e.preventDefault(); };
     const onMove = (e: PointerEvent) => {
       if (!drag || e.pointerId !== drag.id) return;
+      if (Math.abs(e.clientX - drag.x0) > 6 || Math.abs(e.clientY - drag.y0) > 6) { drag.moved = true; if (pinned) { pinned = null; hideMark(); } }
       const pxW = over.clientWidth || u.bbox.width / devicePixelRatio;
       const dIdx = Math.round(((drag.x0 - e.clientX) / Math.max(1, pxW)) * winN);   // drag left = move the window back in time
       i1 = Math.min(nAll - 1, Math.max(winN, drag.i1_0 - dIdx)); i0 = i1 - winN; apply();
     };
-    const onUp = (e: PointerEvent) => { if (drag && e.pointerId === drag.id) { drag = null; over.style.cursor = "grab"; } };
+    // a press that did not move is a tap: on a mark it opens that mark's read-out and keeps it open; elsewhere it closes it
+    const onUp = (e: PointerEvent) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const tap = !drag.moved && e.type === "pointerup";
+      drag = null; over.style.cursor = "grab";
+      if (!tap || !placed.length) return;
+      const r = over.getBoundingClientRect(), z = r.width / (over.clientWidth || r.width);   // z: the page's CSS zoom
+      const hit = markNear((e.clientX - r.left) / z, (e.clientY - r.top) / z, e.pointerType === "mouse" ? 9 : 22);
+      pinned = hit && hit !== pinned ? hit : null;
+      if (pinned) { showMark(pinned); tip.style.display = "none"; } else hideMark();
+    };
     const onDbl = () => { i1 = nAll - 1; i0 = i1 - winN; apply(); };
     over.addEventListener("pointerdown", onDown);
     over.addEventListener("pointermove", onMove);
@@ -171,7 +231,7 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
     over.addEventListener("dblclick", onDbl);
     return () => { ro.disconnect(); over.removeEventListener("pointerdown", onDown); over.removeEventListener("pointermove", onMove); over.removeEventListener("pointerup", onUp); over.removeEventListener("pointercancel", onUp); over.removeEventListener("dblclick", onDbl); u.destroy(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prepared, windowSec, intraday, decimals, height, fill, axes, color, hasVol]);
+  }, [prepared, windowSec, intraday, decimals, height, fill, axes, color, hasVol, marks]);
 
   return <div className={`chartbox${fill ? " fill" : ""}`} ref={el} style={fill ? undefined : { height }} />;
 }

@@ -11,7 +11,7 @@ import type { TableRow } from "../lib/types";
 import type { MarketId } from "../lib/sessions";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtStamp } from "../lib/time";
-import { finSections, fmtCount, fmtPc, fmtX, type Fin, type StockPage } from "../lib/stock";
+import { chartMarks, finSections, fmtCount, fmtPc, fmtX, siteOf, whyText, type Fin, type MoveRow, type StockPage } from "../lib/stock";
 import { AssetViewLegacy } from "./AssetLegacy";
 
 export const marketOf = (symbol: string): MarketId => (/\.T$/.test(symbol) ? "TSE" : /\.KS$/.test(symbol) ? "KRX" : /\.HK$/.test(symbol) ? "HKEX" : /\.SS$|\.SZ$/.test(symbol) ? "SSE" : /\.L$/.test(symbol) ? "LSE" : /\.SI$/.test(symbol) ? "SGX" : "NYSE");
@@ -41,6 +41,11 @@ export function GuidanceLine({ f }: { f: Fin }) {
   );
 }
 
+/** One big move in the list under the chart: when, what, why, and where the reason was read. */
+export function MoveWhy({ m }: { m: MoveRow }) {
+  return <>{whyText(m)}{m.sources.length > 0 && <span className="mut">{m.sources.map((x) => <a key={x.url} href={x.url} target="_blank" rel="noreferrer" title={x.title}>{siteOf(x.url)}</a>)}</span>}</>;
+}
+
 function KV({ k, children, title, cls }: { k: ReactNode; children: ReactNode; title?: string; cls?: string }) {
   return <tr title={title}><td className="l">{k}</td><td className={`num${cls ? ` ${cls}` : ""}`}>{children}</td></tr>;
 }
@@ -60,13 +65,14 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
   const row = chartRow(d), dec = row.decimals, ccy = d.currency;
   const f = d.fin, sh = shortLine(d), s = d.short;
   const fs = f ? finSections(f, view) : null;
+  const marks = d.moves.eligible ? chartMarks(d.moves.rows) : undefined;
   const bms = d.benchmarks, title = bms.map((b) => b.name).join(" AND ");
   const pp = (v: number | null) => (v == null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1).replace("-", "\u2212")}`);
   return (
     <>
       <div className="c12"><PeriodBar period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} /></div>
       <Panel no="01" title={d.name.toUpperCase()} span={8} aux={<><Star symbol={d.symbol} name={d.name} /> {d.symbol}{d.exchange ? ` · ${d.exchange}` : ""}{d.sector ? ` · ${d.sector}` : ""}{d.industry ? ` · ${d.industry}` : ""}{d.indices.length ? ` · ${d.indices.join(", ")}` : ""} · Yahoo Finance</>}>
-        <div className="bigwrap"><ChartPanel row={row} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes volume /></div>
+        <div className="bigwrap"><ChartPanel row={row} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes volume marks={marks} /></div>
       </Panel>
       <Panel no="02" title="KEY DATA" span={4} aux={d.asOf ? `as of ${fmtStamp(d.asOf)}` : ""}>
         <div className="krow">
@@ -129,7 +135,23 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
           <table className="secT" id="st-short"><tbody><KV k={`FINRA short-volume share · ${s.d}`} title="The share of the day's reported volume that was sold short; not short interest">{(s.ratio * 100).toFixed(0)}%</KV></tbody></table>
         )}
       </Panel>
-      <Panel no="05" title="FINANCIALS" span={12} aux={f ? <>{f.source === "edinetdb" ? "EDINET DB (有価証券報告書 · 決算短信)" : "Yahoo Finance fundamentals"}{f.asOf ? ` · fetched ${f.asOf}` : ""}</> : ""}>
+      {d.moves.eligible && (
+        <Panel no="05" title="BIG MOVES AND WHY" span={12} aux="5% in a day · 10% in five sessions · 20% from high to low, or low to high, within a month · marked on the 3M, 12M and 36M charts">
+          {d.moves.rows.length ? (
+            <table className="secT mvT" id="st-moves">
+              <thead><tr><th className="l">Ended</th><th className="l">Move</th><th className="l">Why</th></tr></thead>
+              <tbody>{d.moves.rows.map((m) => (
+                <tr key={`${m.kind}${m.to}`} data-kind={m.kind} data-status={m.status}>
+                  <td className="l d"><span className={`dot ${m.dir > 0 ? "up" : "dn"}`} />{m.to}</td>
+                  <td className={`l m ${m.dir > 0 ? "up" : "dn"}`}>{m.text}</td>
+                  <td className="l w"><MoveWhy m={m} /></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          ) : <Empty title="No big moves">None in the last three years by these measures.</Empty>}
+        </Panel>
+      )}
+      <Panel no={d.moves.eligible ? "06" : "05"} title="FINANCIALS" span={12} aux={f ? <>{f.source === "edinetdb" ? "EDINET DB (有価証券報告書 · 決算短信)" : "Yahoo Finance fundamentals"}{f.asOf ? ` · fetched ${f.asOf}` : ""}</> : ""}>
         {f && fs ? (
           <>
             <div className="finhead">

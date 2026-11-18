@@ -15,6 +15,8 @@ import { avgTurnover, barOnOrBefore, betaCorr, maxDrawdown, monthsBack, perfRows
 import { fyLabel, pickUnit, progress, qEndLabel, qLabel, quarterEnd, ratiosOf, singleQuarters, valuation, type FinPeriod, type FinSet } from "../supabase/functions/_shared/fin.ts";
 import { legacyStatements, yahooFin, yahooFinTypes } from "../supabase/functions/_shared/finsrc.ts";
 import { keyStatsOf } from "../supabase/functions/_shared/yahoo.ts";
+import { bigMoves, isLargeCap, moveText } from "../supabase/functions/_shared/bigmoves.ts";
+import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabase/functions/_shared/movecause.ts";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
 let pass = 0, fail = 0;
@@ -481,6 +483,67 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const ks = keyStatsOf({ quoteSummary: { result: [{ defaultKeyStatistics: { sharesOutstanding: { raw: 14.8e9, fmt: "14.8B" }, floatShares: { raw: 14.7e9 }, sharesShort: { raw: 1.1e8 }, shortRatio: { raw: 2.3 }, shortPercentOfFloat: { raw: 0.0075 }, sharesPercentSharesOut: { raw: 0.0074 }, sharesShortPriorMonth: { raw: 1.0e8 }, dateShortInterest: { raw: 1793318400 }, sharesShortPreviousMonthDate: { raw: 1790726400 }, bookValue: {}, beta: { raw: 1.2 } } }], error: null } });
     ck("key statistics: share counts and short interest are read from their raw values; an empty one is null", ks.sharesOutstanding === 14.8e9 && ks.floatShares === 14.7e9 && ks.sharesShort === 1.1e8 && ks.shortRatio === 2.3 && ks.shortPercentOfFloat === 0.0075 && ks.sharesPercentSharesOut === 0.0074 && ks.sharesShortPriorMonth === 1.0e8 && ks.dateShortInterest === 1793318400 && ks.bookValue === null, ks);
     ck("an answer without the statistics (a Tokyo stock has no short interest there; a wrong shape) gives nulls, not an error", keyStatsOf({ quoteSummary: { result: [{}] } }).sharesShort === null && keyStatsOf({ quoteSummary: { result: null } }).sharesOutstanding === null && keyStatsOf(null).floatShares === null && keyStatsOf({ quoteSummary: { result: [{ defaultKeyStatistics: { sharesShort: { raw: "many" }, floatShares: 5e6 } }] } }).sharesShort === null);
+  }
+
+  console.log("\n[O] a stock's page: the big moves marked on the chart");
+  {
+    const T0 = Date.parse("2026-01-05T00:00:00Z") / 1000, D = (t: number) => new Date(t * 1000).toISOString().slice(0, 10);
+    const series = (closes: number[]): Bar[] => closes.map((c, i) => ({ t: T0 + i * 86400, c }));
+    const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) < eps;
+    const flat = (n: number, v = 100) => Array.from({ length: n }, () => v);
+    // one day
+    let m = bigMoves(series([...flat(10), 94, 94, 94]));
+    ck("a day that closes 5% or more from the previous close is a big move, dated that day, with both closes", m.length === 1 && m[0].kind === "d1" && m[0].dir === -1 && near(m[0].pct, -6) && m[0].to === D(T0 + 10 * 86400) && m[0].from === D(T0 + 9 * 86400) && m[0].fromPx === 100 && m[0].toPx === 94, m);
+    ck("exactly 5% counts (up and down); 4.99% does not", bigMoves(series([...flat(8), 95])).length === 1 && bigMoves(series([...flat(8), 105])).length === 1 && bigMoves(series([...flat(8), 105]))[0].dir === 1 && bigMoves(series([...flat(8), 95.01])).length === 0 && bigMoves(series([...flat(8), 104.99])).length === 0);
+    // a week: five sessions, no single day of 5%
+    m = bigMoves(series([...flat(6), 102, 104.5, 107, 109, 111.5, 111.5, 111.5]));
+    ck("five sessions that move the close 10% or more are one big move, even when no single day is", m.length === 1 && m[0].kind === "w1" && near(m[0].pct, 11.5) && m[0].from === D(T0 + 5 * 86400) && m[0].to === D(T0 + 10 * 86400), m);
+    m = bigMoves(series([...flat(6), 103, 106, 109, 112, 115, 118, 121, 124, 124, 124, 124, 124, 124]));
+    ck("a rise that runs on gives one mark for its largest week, not one for every overlapping window", m.filter((x) => x.kind === "w1").length === 1 && near(m.find((x) => x.kind === "w1")!.pct, 15) && m.filter((x) => x.kind === "d1").length === 0, m);
+    const twoWeeks = bigMoves(series([...flat(6), 97, 94, 91, 88, 86, ...flat(10, 86), 89, 92, 95, 98, 101, 101]));
+    ck("a week down and, later, a week up are two moves, each in its own direction", twoWeeks.filter((x) => x.kind === "w1").length === 2 && twoWeeks.filter((x) => x.kind === "w1").map((x) => x.dir).sort().join() === "-1,1", twoWeeks);
+    // a month: a slide of 1.2% a day
+    const slide = Array.from({ length: 31 }, (_, i) => 100 * 0.988 ** i);
+    m = bigMoves(series([...flat(5), ...slide, ...flat(5, slide[30])]));
+    const month = m.filter((x) => x.kind === "m1");
+    ck("a fall of 20% or more from a high to a later low within 21 sessions is one big move, from the high to the low", month.length === 1 && month[0].dir === -1 && near(month[0].pct, (0.988 ** 21 - 1) * 100, 1e-6) && m.filter((x) => x.kind === "d1").length === 0 && m.filter((x) => x.kind === "w1").length === 0, m);
+    ck("a slide of under 20% in a month is not one (1% a day for a month is 19%)", bigMoves(series([...flat(5), ...Array.from({ length: 31 }, (_, i) => 100 * 0.99 ** i)])).length === 0);
+    const vee = [...flat(4), ...Array.from({ length: 16 }, (_, i) => 100 * 0.985 ** (i + 1)), ...Array.from({ length: 16 }, (_, i) => 100 * 0.985 ** 16 * 1.016 ** (i + 1))];
+    m = bigMoves(series(vee)).filter((x) => x.kind === "m1");
+    ck("a fall and the recovery after it are two moves: one ending at the low, one starting from it", m.length === 2 && m.some((x) => x.dir === -1 && x.to === D(T0 + 19 * 86400)) && m.some((x) => x.dir === 1 && x.from === D(T0 + 19 * 86400) && x.pct >= 20), m);
+    // everything at once: a crash day at the end of a bad week in a bad month
+    const crash = [...flat(10), 99, 98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 77];
+    m = bigMoves(series(crash));
+    ck("a crash day that ends a bad week and a bad month gives all three, on the same day, newest first", m.length >= 3 && m.slice(0, 3).map((x) => x.kind).join() === "d1,m1,w1" && new Set(m.slice(0, 3).map((x) => x.to)).size === 1 && m.every((x) => x.dir === -1), m);
+    ck("only moves ending on or after the day asked for are returned", bigMoves(series(crash), T0 + 26 * 86400).length === 0 && bigMoves(series(crash), T0 + 25 * 86400).every((x) => x.t === T0 + 25 * 86400) && bigMoves(series(crash), T0 + 25 * 86400).length === 3);
+    ck("bars without a price are skipped, and too short a history gives nothing", bigMoves(series([100, 0, 100, 100])).length === 0 && bigMoves([]).length === 0 && bigMoves(series([100])).length === 0);
+    ck("large enough to be explained: 1tn yen and above, 10bn dollars and above, other currencies by their dollar value", isLargeCap(1e12, "JPY", 155) && !isLargeCap(9.99e11, "JPY", 155) && isLargeCap(1e10, "USD", 1) && !isLargeCap(9.9e9, "USD", 1) && isLargeCap(1.5e13, "KRW", 1400) && !isLargeCap(1.3e13, "KRW", 1400) && !isLargeCap(1e15, "KRW", null) && !isLargeCap(null, "JPY", 155) && !isLargeCap(1e13, null, 1));
+    ck("each move in words", moveText({ kind: "d1", pct: -8.23, from: "2026-08-04", to: "2026-08-05" }) === "−8.2% on the day" && moveText({ kind: "w1", pct: 12.44, from: "2026-08-03", to: "2026-08-10" }) === "+12.4% in five sessions (from 3 Aug)" && moveText({ kind: "m1", pct: -24, from: "2026-08-03", to: "2026-08-27" }) === "−24.0% from the high of 3 Aug to the low of 27 Aug" && moveText({ kind: "m1", pct: 21.5, from: "2026-04-07", to: "2026-04-30" }) === "+21.5% from the low of 7 Apr to the high of 30 Apr");
+  }
+
+  console.log("\n[P] a stock's page: asking why a big move happened, and reading the answer");
+  {
+    const ctx: MoveCtx = { symbol: "7203.T", name: "Toyota Motor Corp", exchange: "Tokyo", sector: "Consumer Discretionary", currency: "JPY", kind: "d1", from: "2026-08-04", to: "2026-08-05", pct: -8.23, fromPx: 3200, toPx: 2936.6, text: "−8.2% on the day", bench: "Nikkei 225", benchPct: -1.14 };
+    const q = causeQuestion(ctx);
+    ck("the question names the stock, the move with its dates and closes, and the benchmark's change over the same dates", q.includes("Toyota Motor Corp (7203.T, Tokyo, Consumer Discretionary)") && q.includes("-8.2% on the day on 5 August 2026 (previous close 4 August 2026); close 3,200 to 2,937 JPY.") && q.includes("Over the same dates the Nikkei 225 changed -1.1%.") && /reported reason/.test(q), q);
+    const qm = causeQuestion({ ...ctx, kind: "m1", from: "2026-07-07", to: "2026-08-05", pct: -24, fromPx: 96.5, toPx: 73.34, text: "−24.0% from the high of 7 Jul to the low of 5 Aug", bench: null, benchPct: null, currency: "USD", exchange: null, sector: null });
+    ck("a move over several days gives both closes' dates; a missing benchmark is said to be missing, not left as nought", qm.includes("between the close of 7 July 2026 and the close of 5 August 2026; close 96.50 to 73.34 USD.") && qm.includes("The benchmark's change over these dates is not available.") && qm.includes("Toyota Motor Corp (7203.T)"), qm);
+    ck("the instructions forbid guessing and ask for the reports relied on", /Never infer a reason from the price alone/.test(CAUSE_SYSTEM) && /a guess is harmful/.test(CAUSE_SYSTEM) && /"sources"/.test(CAUSE_SYSTEM) && /none was found/.test(CAUSE_SYSTEM));
+    const pages = [{ title: "Toyota cuts full-year outlook as tariffs bite | Example News", url: "https://www.example.com/business/toyota-outlook-cut?utm=x" }, { title: "Toyota Motor: Consolidated results for the first quarter", url: "https://global.example.org/ir/q1.pdf" }, { title: "Unrelated page", url: "https://other.example.net/page" }];
+    const good = readCause('I searched and found two reports.\n\n{"found": true, "cause": "Toyota cut its full-year operating profit forecast by 16% with first-quarter results, citing US tariffs.", "sources": ["https://example.com/business/toyota-outlook-cut", "https://global.example.org/ir/q1.pdf"]}', pages);
+    ck("a reason is read with the reports behind it, matched to the pages the search returned (their titles and addresses)", good.found && good.cause === "Toyota cut its full-year operating profit forecast by 16% with first-quarter results, citing US tariffs." && good.sources.length === 2 && good.sources[0].url === pages[0].url && good.sources[0].title === pages[0].title && good.sources[1].url === pages[1].url, good);
+    const invented = readCause('{"found": true, "cause": "The company announced a large recall of vehicles before the open.", "sources": ["https://made-up.example/recall"]}', pages);
+    ck("a reason whose only report is a page the search never returned is not shown: the move is stored as not found", invented.found === false && invented.cause === null && invented.sources.length === 0, invented);
+    const mixed = readCause('{"found": true, "cause": "Toyota cut its full-year forecast with first-quarter results.", "sources": ["https://made-up.example/x", "https://global.example.org/ir/q1.pdf", "https://global.example.org/ir/q1.pdf"]}', pages);
+    ck("an invented address among real ones is dropped, a repeated one counted once", mixed.found && mixed.sources.length === 1 && mixed.sources[0].url === pages[1].url, mixed);
+    ck("a reason with no report named is not shown either", readCause('{"found": true, "cause": "Probably profit-taking after a strong run in the shares.", "sources": []}', pages).found === false && readCause('{"found": true, "cause": "Likely sector rotation.", "sources": null}', pages).found === false);
+    ck("'not found' is read as that, whatever else the reply says", readCause('Several pages mention the stock but none explains this move.\n{"found": false, "cause": null, "sources": []}', pages).found === false && readCause('{"found": false, "cause": "maybe earnings", "sources": ["https://global.example.org/ir/q1.pdf"]}', pages).cause === null && readCause('{"found": "yes", "cause": "Toyota cut its forecast with results.", "sources": ["https://global.example.org/ir/q1.pdf"]}', pages).found === false);
+    const fenced = readCause('Here is my answer {see below}.\n```json\n{"found": true, "cause": "**Toyota** cut its `full-year` forecast with first-quarter results.", "sources": ["https://global.example.org/ir/q1.pdf/"]}\n```', pages);
+    ck("the answer is found inside a code fence and after other braces; marks are taken out of the sentence", fenced.found && fenced.cause === "Toyota cut its full-year forecast with first-quarter results." && fenced.sources[0].url === pages[1].url, fenced);
+    const long = readCause(`{"found": true, "cause": "${"Toyota cut its full-year forecast and announced further measures in response to tariffs ".repeat(5).trim()}", "sources": ["https://global.example.org/ir/q1.pdf"]}`, pages);
+    ck("an over-long sentence is cut at a word and marked as cut; at most three reports are kept", long.found && long.cause!.length <= 258 && long.cause!.endsWith("…") && readCause(`{"found": true, "cause": "Toyota cut its forecast with results.", "sources": ${JSON.stringify([...pages.map((p) => p.url), "https://fourth.example/x"])}}`, [...pages, { title: "4", url: "https://fourth.example/x" }]).sources.length === 3, long.cause);
+    let threw = 0; for (const bad of ["I could not find anything.", "{not json}", "", '["found", true]', '{"cause": "x"}']) { try { readCause(bad, pages); } catch { threw++; } }
+    ck("a reply with no answer object is an error, so the job tries that move again instead of storing nothing", threw === 5);
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

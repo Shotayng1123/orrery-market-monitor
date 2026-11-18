@@ -20,6 +20,25 @@ const fin = (p) => p.evaluate(() => {
   const box = t.closest(".finbox");
   return { unit: t.querySelector("thead th .u").textContent, perShare: t.querySelector("thead th small").textContent, periods: head.slice(1), fc: [...t.querySelectorAll("thead th")].slice(1).map((th) => th.classList.contains("fc")), bands: [...t.querySelectorAll("tr.band")].map((tr) => [tr.cells[0].textContent, tr.cells[1].textContent]), order, rows, box: { w: box.clientWidth, sw: box.scrollWidth, left: box.scrollLeft } };
 });
+// The marks are drawn on the chart's canvas, so they are found by their colour: a filled disc of the "up" green or
+// the "down" red (the price line is one of those colours too, but only a pixel or two wide). Returns each disc's
+// centre in page coordinates, ready for the mouse or a finger.
+const discs = (p, sel) => p.evaluate((sel) => {
+  const c = document.querySelector(sel + " canvas"), g = c.getContext("2d"), w = c.width, h = c.height, d = g.getImageData(0, 0, w, h).data, r = c.getBoundingClientRect(), k = r.width / w, dpr = w / c.clientWidth;
+  const is = (x, y, col) => { const i = (y * w + x) * 4; return d[i + 3] > 240 && Math.abs(d[i] - col[0]) < 14 && Math.abs(d[i + 1] - col[1]) < 14 && Math.abs(d[i + 2] - col[2]) < 14; };
+  const half = Math.max(2, Math.round(2 * dpr)), out = { up: [], dn: [] };   // the fill is ~3.7 CSS px in radius inside its dark rim: a box 2 px each way from a point near the centre is all fill
+  for (const [name, col] of [["up", [63, 208, 126]], ["dn", [255, 77, 66]]]) {
+    const hits = [];
+    for (let y = half; y < h - half; y += 2) for (let x = half; x < w - half; x += 2) {
+      if (!is(x, y, col)) continue;
+      let n = 0, all = 0; for (let dy = -half; dy <= half; dy += 1) for (let dx = -half; dx <= half; dx += 1) { all++; if (is(x + dx, y + dy, col)) n++; }
+      if (n / all >= 0.85) hits.push([x, y]);
+    }
+    for (const [x, y] of hits) { const near = out[name].find((o) => Math.hypot(o.cx - x, o.cy - y) < 10 * dpr); if (near) { near.n++; near.sx += x; near.sy += y; near.cx = near.sx / near.n; near.cy = near.sy / near.n; } else out[name].push({ cx: x, cy: y, sx: x, sy: y, n: 1 }); }
+    out[name] = out[name].map((o) => ({ x: r.left + o.cx * k, y: r.top + o.cy * k })).sort((a, b) => a.x - b.x);
+  }
+  return out;
+}, sel);
 const IS = "revenue,cogs,gross,sga,op,nonOpInc,nonOpExp,ordinary,extraInc,extraLoss,pretax,ni,eps,dps", BS = "cash,stDebt,ltDebt,netCash,assets,liabilities,equity", CF = "ocf,icf,fincf,capex,fcf";
 
 (async () => { const b = await chromium.launch();
@@ -27,7 +46,7 @@ const IS = "revenue,cogs,gross,sga,op,nonOpInc,nonOpExp,ordinary,extraInc,extraL
   { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
     await p.goto(MOCK + "#asset/7203.T", { waitUntil: "networkidle" }); await p.waitForSelector("table.fin"); await p.waitForSelector(".bigwrap canvas"); await p.waitForTimeout(900); await hideBar(p);
     const panels = await p.evaluate(() => [...document.querySelectorAll("#grid .panel")].map((x) => `${x.dataset.no} ${x.querySelector(".phead .t").textContent}`));
-    ck("five panels: the chart, KEY DATA, PERFORMANCE VS the benchmark, SHORT INTEREST, FINANCIALS", panels.join("|") === "01 MOCK MOTOR CORP|02 KEY DATA|03 PERFORMANCE VS NIKKEI 225 AND TOPIX|04 SHORT INTEREST|05 FINANCIALS", panels);
+    ck("the panels: the chart, KEY DATA, PERFORMANCE VS the benchmarks, SHORT INTEREST, BIG MOVES AND WHY (a large company), FINANCIALS", panels.join("|") === "01 MOCK MOTOR CORP|02 KEY DATA|03 PERFORMANCE VS NIKKEI 225 AND TOPIX|04 SHORT INTEREST|05 BIG MOVES AND WHY|06 FINANCIALS", panels);
     // the chart: volume along its foot, named under the chart and in the read-out at the pointer
     const hint = await p.locator(".bigwrap .rdout").textContent();
     const box = await p.locator(".bigwrap .u-over").boundingBox(); await p.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.4); await p.waitForTimeout(250);
@@ -52,6 +71,27 @@ const IS = "revenue,cogs,gross,sga,op,nonOpInc,nonOpExp,ordinary,extraInc,extraL
     // short interest
     const sh = await p.evaluate(() => [...document.querySelectorAll("#st-short tr")].map((tr) => [...tr.cells].map((c) => c.textContent)));
     ck("SHORT INTEREST (Tokyo): the reported positions in total, the shares and days of volume, then each holder", /^Reported positions \(0\.5% and above\) · \d{4}-\d{2}-\d{2}$/.test(sh[0][0]) && sh[0][1] === "1.23%" && /^Shares · days/.test(sh[1][0]) && sh.length === 4 && Math.abs(num(sh[2][1]) + num(sh[3][1]) - 1.23) < 0.011, sh);
+    // big moves: circles on the chart, the reason at the pointer, and the list
+    await p.mouse.move(5, 5); await p.waitForTimeout(150);
+    let ds = await discs(p, ".bigwrap");
+    ck(`the chart marks the big moves of its window with small circles, green for a rise and red for a fall (${ds.up.length} green, ${ds.dn.length} red)`, ds.up.length === 2 && ds.dn.length === 3, ds);
+    const card = () => p.evaluate(() => { const e = document.querySelector(".bigwrap .mvtip"); return e && getComputedStyle(e).display !== "none" ? { text: e.innerText, cls: e.querySelector(".t").className, box: (() => { const r = e.getBoundingClientRect(), o = document.querySelector(".bigwrap .u-over").getBoundingClientRect(); return r.left >= o.left - 1 && r.right <= o.right + 1 && r.top >= o.top - 1 && r.bottom <= o.bottom + 1; })() } : null; });
+    const last = ds.up[ds.up.length - 1];
+    await p.mouse.move(last.x, last.y); await p.waitForTimeout(200); let cd = await card();
+    ck("pointing at a circle shows what moved and why: the date, the move, the reported reason; inside the chart; and the plain price read-out steps aside", cd && /^\d{4}-\d{2}-\d{2}\n\+6\.4% on the day\nMock: second-quarter operating profit/.test(cd.text) && cd.cls.includes("up") && cd.box && !(await p.locator(".bigwrap .ctip").isVisible()), cd);
+    await p.mouse.move(last.x - 60, last.y + 40); await p.waitForTimeout(200);
+    ck("moving off the circle puts the card away and the price read-out back", (await card()) === null && (await p.locator(".bigwrap .ctip").isVisible()));
+    const two = ds.dn[ds.dn.length - 1];
+    await p.mouse.move(two.x, two.y); await p.waitForTimeout(200); cd = await card();
+    ck("two moves that end on the same day share one circle, and its card gives both, each with its own answer", cd && /\u22127\.9% on the day\nMock: a recall/.test(cd.text) && /\u221211\.3% in five sessions \(from \d+ \w+\)\nNo reliable report of the reason was found\./.test(cd.text) && cd.cls.includes("dn"), cd);
+    await p.mouse.move(5, 5);
+    const mv = await p.evaluate(() => ({ aux: document.querySelector('.panel[data-no="05"] .aux').textContent, rows: [...document.querySelectorAll("#st-moves tbody tr")].map((tr) => ({ kind: tr.dataset.kind, status: tr.dataset.status, dot: tr.querySelector(".dot").className, d: tr.cells[0].textContent, move: tr.cells[1].textContent, moveCls: tr.cells[1].className, why: tr.cells[2].childNodes[0].textContent, links: [...tr.querySelectorAll("a")].map((a) => ({ t: a.textContent, href: a.href, target: a.target, rel: a.rel, title: a.title })) })) }));
+    ck("BIG MOVES AND WHY lists them, newest first: the day each ended, the move in words and in its colour, and the rule in the header", mv.rows.length === 6 && mv.rows.map((r) => r.kind).join() === "d1,d1,w1,m1,m1,d1" && mv.rows.every((r, i) => i === 0 || r.d <= mv.rows[i - 1].d) && mv.rows.every((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.d) && r.dot.includes(r.move.startsWith("+") ? "up" : "dn") && r.moveCls.includes(r.move.startsWith("+") ? "up" : "dn")) && /5% in a day · 10% in five sessions · 20% from high to low/.test(mv.aux), mv);
+    ck("each state of the search reads as what it is: a reason with its sources, none found, being looked up, older than a year", mv.rows.map((r) => r.status).join() === "found,found,not_found,found,queued,old" && /^Mock: second-quarter/.test(mv.rows[0].why) && mv.rows[2].why === "No reliable report of the reason was found." && /being looked up/.test(mv.rows[4].why) && /last twelve months/.test(mv.rows[5].why) && mv.rows.filter((r) => r.status !== "found").every((r) => r.links.length === 0), mv.rows.map((r) => [r.status, r.why]));
+    ck("a reason's sources are links named by their site, opening in a new tab", mv.rows[0].links.map((l) => l.t).join() === "example.com,example.org" && mv.rows[0].links.every((l) => /^https:\/\/example\./.test(l.href) && l.target === "_blank" && /noreferrer/.test(l.rel) && l.title.length > 5), mv.rows[0].links);
+    await p.locator('select[aria-label="Period"]').first().selectOption("1D"); await p.waitForTimeout(900);
+    const per = await p.evaluate(() => document.querySelector(".bigwrap .rdout").textContent);
+    { ds = await discs(p, ".bigwrap"); ck("the one-day chart (minute bars) carries no marks: they belong to daily closes", /1-minute/.test(per) && ds.up.length === 0, { per, ds }); await p.locator('select[aria-label="Period"]').first().selectOption("12M"); await p.waitForTimeout(900); }
     // the statements, by year
     let f = await fin(p);
     ck("FINANCIALS by year: ten fiscal years and the company's guidance as the last column, marked E and tinted", f.periods.join() === "FY3/17,FY3/18,FY3/19,FY3/20,FY3/21,FY3/22,FY3/23,FY3/24,FY3/25,FY3/26,FY3/27E" && f.fc.join() === "false,false,false,false,false,false,false,false,false,false,true" && f.rows.revenue.cls[10].includes("fc") && !f.rows.revenue.cls[9].includes("fc"), f.periods);
@@ -98,12 +138,30 @@ const IS = "revenue,cogs,gross,sga,op,nonOpInc,nonOpExp,ordinary,extraInc,extraL
     ck("the source's limits are said under the table; no errors on the page", /four years and five quarters/.test(note) && errs.length === 0, { note, errs });
     await p.screenshot({ path: "stock-desktop-sparse.png", fullPage: true }); await ctx.close(); }
 
+  console.log("\n[desktop, a company below 1tn yen: no big-move marks]");
+  { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+    await p.goto(MOCK + "#asset/9999.T", { waitUntil: "networkidle" }); await p.waitForSelector("table.fin"); await p.waitForSelector(".bigwrap canvas"); await p.waitForTimeout(900); await hideBar(p);
+    const panels = await p.evaluate(() => [...document.querySelectorAll("#grid .panel")].map((x) => `${x.dataset.no} ${x.querySelector(".phead .t").textContent}`)), ds = await discs(p, ".bigwrap");
+    ck("no BIG MOVES panel and no circles on the chart; the other panels as usual, FINANCIALS numbered 05", panels.length === 5 && panels[4] === "05 FINANCIALS" && !panels.some((x) => /BIG MOVES/.test(x)) && ds.up.length === 0 && errs.length === 0, { panels, ds, errs }); await ctx.close(); }
+
   console.log("\n[phone layout]");
   { const ctx = await b.newContext({ ...devices["iPhone 13"] }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
     await p.goto(MOCK + "#asset/7203.T", { waitUntil: "networkidle" }); await p.waitForSelector("table.fin"); await p.waitForSelector(".mp-hero canvas"); await p.waitForTimeout(900); await hideBar(p);
     const top = await p.evaluate(() => ({ secs: [...document.querySelectorAll(".mp-sec > h2 > span:first-child")].map((e) => e.textContent), hint: document.querySelector(".mp-hero .rdout").textContent, stats: [...document.querySelectorAll("#st-key .mp-grid .k")].map((e) => e.textContent), kv: [...document.querySelectorAll("#st-key table.kv tr")].map((tr) => tr.cells[0].childNodes[0].textContent) }));
-    ck("the same page as cards: Key data, Performance, Short interest, Financials; the chart with volume", top.secs.join("|") === "Key data|Performance|Short interest|Financials" && /volume/.test(top.hint), top);
+    ck("the same page as cards: Key data, Performance, Big moves, Short interest, Financials; the chart with volume", top.secs.join("|") === "Key data|Performance|Big moves|Short interest|Financials" && /volume/.test(top.hint), top);
     ck("key data: six figures at a glance, then the list (shares, diluted shares, average volume and value, short interest, …)", top.stats.join() === "Day,Market cap,P/E, guidance,52-week low,52-week high,From the high" && ["Shares outstanding", "Diluted shares", "Average daily volume, 60 sessions", "Average daily value traded, 60 sessions", "Short interest (reported)", "Next earnings"].every((k) => top.kv.includes(k)), top);
+    // big moves on a phone: tap a circle for the reason, tap elsewhere to put it away; the list with links below
+    const pd = await discs(p, ".mp-hero");
+    const pcard = () => p.evaluate(() => { const e = document.querySelector(".mp-hero .mvtip"); if (!e || getComputedStyle(e).display === "none") return null; const r = e.getBoundingClientRect(); return { text: e.innerText, left: r.left, right: r.right, vw: innerWidth, px: parseFloat(getComputedStyle(e.querySelector(".w")).fontSize) }; });
+    const tgt = pd.up[pd.up.length - 1];
+    await p.touchscreen.tap(tgt.x + 6, tgt.y - 7); await p.waitForTimeout(250); let pc = await pcard();
+    ck(`a tap on a circle (here 9px off its centre) opens its card: the move and the reason, inside the screen, ${pc ? pc.px : "?"}px type`, pd.up.length === 2 && pd.dn.length === 3 && pc && /\+6\.4% on the day\nMock: second-quarter/.test(pc.text) && pc.left >= 0 && pc.right <= pc.vw && pc.px >= 13, { pd, pc });
+    await p.waitForTimeout(600); ck("the card stays until the next tap", (await pcard()) !== null);
+    const ov = await p.locator(".mp-hero .u-over").boundingBox();
+    await p.touchscreen.tap(ov.x + 20, ov.y + 12); await p.waitForTimeout(250);
+    ck("a tap elsewhere on the chart puts it away", (await pcard()) === null);
+    const pl = await p.evaluate(() => ({ items: [...document.querySelectorAll("#st-moves .mp-moves li")].map((li) => ({ status: li.dataset.status, head: li.querySelector(".h b").textContent, d: li.querySelector(".h .d").textContent, dH: li.querySelector(".h .d").getBoundingClientRect().height, why: li.querySelector(".w").textContent, links: [...li.querySelectorAll(".s a")].map((a) => ({ t: a.textContent, h: Math.round(a.getBoundingClientRect().height), target: a.target })) })), hint: [...document.querySelectorAll(".mp > p.mp-note")].map((e) => e.textContent).find((t) => /Circles/.test(t)) ?? "", ox: document.documentElement.scrollWidth - innerWidth }));
+    ck("under Big moves the same six, each with its reason or its state, the date on one line, and the sources as links", pl.items.length === 6 && pl.items.map((x) => x.status).join() === "found,found,not_found,found,queued,old" && pl.items.every((x) => /^\d{4}-\d{2}-\d{2}$/.test(x.d) && x.dH < 24) && pl.items[0].links.map((l) => l.t).join() === "example.com,example.org" && pl.items[0].links.every((l) => l.h >= 24 && l.target === "_blank") && /Tap one for the reason/.test(pl.hint) && pl.ox <= 0, pl);
     const perf = await p.evaluate(() => { const t = document.querySelector("#st-perf"), r = t.getBoundingClientRect(), t2 = document.querySelector("#st-bench"), tab = (x) => ({ head: [...x.querySelectorAll("thead th")].map((c) => c.textContent), rows: [...x.querySelectorAll("tbody tr")].map((tr) => [...tr.cells].map((c) => c.textContent)) }); return { ...tab(t), idx: tab(t2), left: r.left, right: r.right, vw: innerWidth, px: parseFloat(getComputedStyle(t.querySelector("td")).fontSize) }; });
     ck(`performance turned on its side so it fits the width: a row per horizon; the price then, the stock, and its difference against each index (${Math.round(perf.left)}–${Math.round(perf.right)}px of ${perf.vw}px, ${perf.px}px type)`, perf.head.join("|") === "|Price then|7203.T|vs Nikkei 225|vs TOPIX" && perf.rows.map((r) => r[0]).join() === "1D,1M,3M,6M,12M,36M,60M" && perf.rows.every((r) => r.length === 5) && perf.left >= 0 && perf.right <= perf.vw && perf.px >= 13, perf);
     ck("under it the two indices' own changes, and each difference is the stock's change less the index's", perf.idx.head.join("|") === "|Nikkei 225|TOPIX" && perf.idx.rows.length === 7 && perf.rows.every((r, i) => [0, 1].every((k) => Math.abs(num(r[2]) - num(perf.idx.rows[i][k + 1]) - num(r[3 + k])) <= 0.11)), perf.idx);

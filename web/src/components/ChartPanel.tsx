@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { DN, FLAT, fmtVol, SigmaChart, UP, type SigmaWindow } from "./SigmaChart";
+import { DN, FLAT, fmtVol, SigmaChart, UP, type ChartMark, type SigmaWindow } from "./SigmaChart";
 import { useApi, DEV_MOCK } from "../lib/useApi";
 import type { Series, TableRow } from "../lib/types";
 import { fmtChg, fmtNum, fmtPct, isYield, signCls } from "../lib/fmt";
@@ -27,7 +27,7 @@ function sessionWindow(points: Array<{ t: number }>): number {
 /** One instrument in the Analytics tile grammar: name row with the session tag and stamp, the price under
  *  the name, the period change under the price, then the chart. `shape` sets the tile proportions. */
 const WIN_LABEL: Record<SigmaWindow, string> = { m1: "1M", m12: "12M", m36: "36M" };
-export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wide", axes = false, volume = false }: { row: TableRow; period: ChartPeriod; tick: number; sigmaWindow?: SigmaWindow; shape?: "wide" | "square" | "large"; axes?: boolean; volume?: boolean }) {
+export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wide", axes = false, volume = false, marks }: { row: TableRow; period: ChartPeriod; tick: number; sigmaWindow?: SigmaWindow; shape?: "wide" | "square" | "large"; axes?: boolean; volume?: boolean; marks?: ChartMark[] }) {
   // The tile's price and change come from the table row, refreshed every minute. The line itself is refetched
   // as often as its bars change: one-minute bars every minute, 15-minute and hourly bars every five minutes,
   // daily closes every quarter of an hour (a full history per tile per minute is megabytes of traffic an hour).
@@ -78,7 +78,7 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
       <div className="vl"><Flash value={row.last}>{fmtNum(row.last, row.decimals)}{isRate && row.last != null ? "%" : ""}</Flash></div>
       <div className={`ch ${signCls(chg)}`}>{isRate ? fmtChg(chg, 3, true) : fmtPct(chg)} <span className="mut">{period}{anchor != null ? ` · from ${fmtNum(anchor, row.decimals)}` : ""}</span></div>
       {points.length
-        ? <SigmaChart points={points} windowSec={windowSec} intraday={intraday} decimals={row.decimals} sigmaWindow={sigmaWindow} onReadout={setRd} onPan={setPan} color={color} fill={shape !== "wide"} height={shape === "wide" ? 150 : undefined} axes={axes} volume={volume} />
+        ? <SigmaChart points={points} windowSec={windowSec} intraday={intraday} decimals={row.decimals} sigmaWindow={sigmaWindow} onReadout={setRd} onPan={setPan} color={color} fill={shape !== "wide"} height={shape === "wide" ? 150 : undefined} axes={axes} volume={volume} marks={marks} />
         : <div className="chartbox empty" style={shape === "wide" ? { height: 150 } : undefined}>{s.error ?? (s.loading || !seen ? "loading…" : "no history yet")}</div>}
       <div className="rdout mut" title="Click, hold and drag the chart to move back in time; double-click to return to the latest">
         {rd ? <>{intraday ? <>{fmtStamp(rd.t * 1000, SGT)} · {fmtNum(rd.v, row.decimals)}</> : <>{new Date(rd.t * 1000).toISOString().slice(0, 10)} · {fmtNum(rd.v, row.decimals)} · {WIN_LABEL[sigmaWindow]} {z(rd.z)}</>}{volume && rd.q != null ? <> · vol {fmtVol(rd.q)}</> : null}</>

@@ -172,7 +172,7 @@ export function mockAction(action: string, params: Record<string, string | numbe
       const all = [{ symbol: "7203.T", name: "Toyota Motor Corp", kind: "Equity", note: "NK225 · Transportation" }, { symbol: "285A.T", name: "Kioxia Holdings", kind: "Equity", note: "NK225 · Technology" }, { symbol: "AAPL", name: "Apple Inc.", kind: "Equity", note: "SP500 · Information Technology" }, { symbol: "USDJPY=X", name: "USD/JPY", kind: "Currency", note: "Monitor instrument" }, { symbol: "^TNX", name: "US 10Y yield", kind: "Fixed income", note: "Monitor instrument" }];
       return { rows: all.filter((x) => x.symbol.toLowerCase().includes(term) || x.name.toLowerCase().includes(term)) };
     }
-    case "stock": { const sym = String(params?.symbol ?? "7203.T"), pts = dailySeries(sym, 300); return mockStock(sym, pts[pts.length - 1].v); }   // the price the mock chart ends at
+    case "stock": { const sym = String(params?.symbol ?? "7203.T"), pts = dailySeries(sym, 300); return mockStock(sym, pts[pts.length - 1].v, pts); }   // the price the mock chart ends at, and its days for the marks
     case "asset": {
       const symbol = String(params?.symbol ?? "7203.T"); const r = rng(seedOf(symbol)); const jp = /\.T$/.test(symbol);
       const price = jp ? 1000 + r() * 5000 : 50 + r() * 400; const pct = (r() - 0.5) * 6;

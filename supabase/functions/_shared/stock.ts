@@ -9,6 +9,9 @@ import { benchmarksFor, dailyBars, quoteFor } from "./assets.ts";
 import { avgTurnover, betaCorr, maxDrawdown, perfRows, range52w, realisedVol, type Bar } from "./stockstats.ts";
 import { valuation, type Fin, type FinLine } from "./fin.ts";
 import { yahooFin, yahooFinTypes } from "./finsrc.ts";
+import { bigMoves, isLargeCap, moveText, type BigMove } from "./bigmoves.ts";
+import { barOnOrBefore } from "./stockstats.ts";
+import type { MoveCtx } from "./movecause.ts";
 
 const today = (): string => new Date().toISOString().slice(0, 10);
 const isoDay = (t: number | null | undefined): string | null => (t == null ? null : new Date(t * 1000).toISOString().slice(0, 10));
@@ -53,6 +56,51 @@ function guided(fin: Fin | null, id: FinLine): number | null {
   return i < 0 ? null : fin!.annual.lines[id]?.[i] ?? null;
 }
 
+// ---- big moves and their reasons (large companies only) ----
+const USD_PAIR: Record<string, string> = { JPY: "USDJPY=X", KRW: "KRW=X", HKD: "HKD=X", CNY: "CNY=X" };
+/** Units of a currency per US dollar from the market table's quotes; null for a currency the table does not follow. */
+async function perUsd(ccy: string | null): Promise<number | null> {
+  if (ccy === "USD") return 1;
+  const pair = ccy ? USD_PAIR[ccy] : undefined;
+  if (!pair) return null;
+  const { data } = await db.from("quotes_latest").select("price").eq("symbol", pair).maybeSingle();
+  const v = (data as { price: number } | null)?.price;
+  return v && v > 0 ? v : null;
+}
+const MOVES_SHOWN_MONTHS = 37;    // the chart's longest view is 36 months
+const CAUSES_FOR_DAYS = 366;      // reasons are looked up for moves of the last twelve months
+const QUEUE_PER_VIEW = 15;        // at most this many new look-ups are queued by one opening of a page
+const CAUSE_TRIES = 3;            // the job gives a look-up that fails this many tries, then leaves it (jobs/move_causes.ts)
+type MoveOut = BigMove & { text: string; status: "found" | "not_found" | "queued" | "failed" | "old" | "off"; cause: string | null; sources: Array<{ title: string; url: string }> };
+/** The big moves of a large company with the reason stored for each. A move of the last twelve months with no
+ *  reason yet is put on the queue for the job that finds them (jobs/move_causes.ts) and shown as being looked up.
+ *  Where the store is not there (a database from before this change) the moves are shown without reasons. */
+async function movesFor(symbol: string, q: { name: string | null; exchange: string | null; currency: string | null; marketCap: number | null }, sector: string | null, own: Bar[], bench: { name: string; bars: Bar[] } | null): Promise<{ eligible: boolean; rows: MoveOut[] }> {
+  if (!isLargeCap(q.marketCap, q.currency, q.currency === "JPY" ? 1 : await perUsd(q.currency))) return { eligible: false, rows: [] };
+  const now = Date.now() / 1000;
+  const found = bigMoves(own, now - MOVES_SHOWN_MONTHS * 30.5 * 86400);
+  const { data, error } = await db.from("move_causes").select("kind,d,status,cause,sources,tries").eq("symbol", symbol);
+  const stored = new Map(((data ?? []) as Array<{ kind: string; d: string; status: string; cause: string | null; sources: Array<{ title: string; url: string }> | null; tries: number }>).map((r) => [`${r.kind}|${r.d}`, r]));
+  const queue: Array<Record<string, unknown>> = [];
+  const rows = found.map((m): MoveOut => {
+    const text = moveText(m), hit = stored.get(`${m.kind}|${m.to}`);
+    if (error) return { ...m, text, status: "off", cause: null, sources: [] };
+    if (hit) return { ...m, text, status: hit.status === "found" ? "found" : hit.status === "not_found" ? "not_found" : hit.status === "error" && hit.tries >= CAUSE_TRIES ? "failed" : "queued", cause: hit.status === "found" ? hit.cause : null, sources: hit.status === "found" ? hit.sources ?? [] : [] };
+    if (now - m.t > CAUSES_FOR_DAYS * 86400) return { ...m, text, status: "old", cause: null, sources: [] };
+    if (queue.length < QUEUE_PER_VIEW) {
+      const a = bench ? barOnOrBefore(bench.bars, Date.parse(m.from + "T00:00:00Z") / 1000) : null, z = bench ? barOnOrBefore(bench.bars, m.t) : null;
+      const ctx: MoveCtx = { symbol, name: q.name ?? symbol, exchange: q.exchange, sector, currency: q.currency, kind: m.kind, from: m.from, to: m.to, pct: m.pct, fromPx: m.fromPx, toPx: m.toPx, text, bench: bench?.name ?? null, benchPct: a && z && a.c > 0 ? (z.c / a.c - 1) * 100 : null };
+      queue.push({ symbol, kind: m.kind, d: m.to, from_d: m.from, pct: m.pct, ctx });
+    }
+    return { ...m, text, status: "queued", cause: null, sources: [] };
+  });
+  if (queue.length) {
+    const { error: e } = await db.from("move_causes").upsert(queue, { onConflict: "symbol,kind,d", ignoreDuplicates: true });
+    if (e) console.log("stock: queueing moves:", e.message); else await db.rpc("move_causes_kick");
+  }
+  return { eligible: true, rows };
+}
+
 export async function stockPage(symbol: string) {
   if (!symbol) throw new Error("symbol required");
   const q = await quoteFor(symbol);
@@ -66,6 +114,7 @@ export async function stockPage(symbol: string) {
   ]);
   const member = (con ?? []).find((c) => c.sector) ?? (con ?? [])[0] ?? null;
   const d20 = avgTurnover(own, 20), d60 = avgTurnover(own, 60);
+  const moves = equity ? await soft(movesFor(symbol, q, member?.sector ?? null, own, benchmarks.length ? { name: benchmarks[0].name, bars: benches[0] } : null), { eligible: false, rows: [] as MoveOut[] }, "big moves") : { eligible: false, rows: [] as MoveOut[] };
 
   // short interest: Japan = the positions of 0.5% and above reported to the exchange; elsewhere the exchange-reported
   // short interest Yahoo republishes, with FINRA's daily short-volume share beside it where there is one
@@ -113,7 +162,7 @@ export async function stockPage(symbol: string) {
     vol: { m1: realisedVol(own, 21), m3: realisedVol(own, 63), m12: realisedVol(own, 252) },
     beta: benches.map((b) => betaCorr(own, b, 252)), drawdown: maxDrawdown(own, 12),
     turnover: { d20: { shares: d20.shares, value: d20.value }, d60: { shares: d60.shares, value: d60.value } },
-    shares, short,
+    shares, short, moves,
     earningsAt: q.earningsAt ? new Date(q.earningsAt * 1000).toISOString() : null, earningsEst: q.earningsEst ?? null,
     val, fin: f, finNote: fin.note,
   };
