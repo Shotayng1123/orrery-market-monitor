@@ -2,7 +2,7 @@
 // needs it as a bearer. The research desk publishes with POST report_put and the x-report-secret header.
 import { db, selectAll } from "../_shared/db.ts";
 import { bearer, verifyToken } from "../_shared/auth.ts";
-import { accountFor, adminSet, adminUsers, changePassword, login, signup } from "../_shared/accounts.ts";
+import { accountFor, adminSet, adminUsers, authInfo, changePassword, login, mailTest, signup, signupFinish, signupStart, signupVerify } from "../_shared/accounts.ts";
 import { corsHeaders, json, timingSafeEqual } from "../_shared/http.ts";
 import { computeTable } from "../_shared/table.ts";
 import { CURVE_LABELS } from "../_shared/curves.ts";
@@ -24,6 +24,10 @@ Deno.serve(async (req) => {
     if (action === "login") return await login(req);
     if (action === "report_put") return await reportPut(req);
     if (action === "signup") return await signup(req);
+    if (action === "auth_info") return authInfo(req);
+    if (action === "signup_start") return await signupStart(req);
+    if (action === "signup_verify") return await signupVerify(req);
+    if (action === "signup_finish") return await signupFinish(req);
     const user = await verifyToken(bearer(req));
     const account = user ? await accountFor(user) : null;
     if (!user || !account) return json(req, { error: "unauthorised" }, 401);
@@ -31,9 +35,9 @@ Deno.serve(async (req) => {
     if (action === "change_password") return await changePassword(req, account);
     // a password set by the manager opens nothing until its owner has replaced it
     if (account.must_change) return json(req, { error: "Change your password first" }, 403);
-    if (action === "admin_users" || action === "admin_set") {
+    if (action === "admin_users" || action === "admin_set" || action === "mail_test") {
       if (account.role !== "manager") return json(req, { error: "forbidden" }, 403);
-      return action === "admin_users" ? await adminUsers(req) : await adminSet(req, account);
+      return action === "admin_users" ? await adminUsers(req) : action === "mail_test" ? await mailTest(req, account) : await adminSet(req, account);
     }
     switch (action) {
       case "health": return json(req, await health());

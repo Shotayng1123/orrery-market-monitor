@@ -7,6 +7,10 @@ import { fxClosesFromDaily, fxClosesFromHourly, fxDay, suspectBars } from "../su
 import { AFTER_CLOSE_MIN, quoteMove, scanDue, sessionMove, stockMarket } from "../supabase/functions/_shared/moves.ts";
 import { b64u, encryptPush, pushEndpointOk, unb64u, vapidHeader } from "../supabase/functions/_shared/webpush.ts";
 import { alertNote, moveMark, notesFor, stampSgt, wanted, type AlertLite } from "../supabase/functions/_shared/pushrules.ts";
+import { CODE_MAX_TRIES, CODE_TTL_MIN, checkRefusal, cleanCode, codeHash, codeMail, newCode, noticeMail, sendRefusal, verifyLink } from "../supabase/functions/_shared/signup.ts";
+import { readVerify } from "../web/src/lib/verify.ts";
+import { SmtpError, appPassword, buildMessage, dotStuff, parseFrom, smtpTalk, type Wire } from "../supabase/functions/_shared/smtp.ts";
+import { mailReady, mailSetup, resendRequest } from "../supabase/functions/_shared/mail.ts";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
 let pass = 0, fail = 0;
@@ -224,6 +228,115 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const many = Array.from({ length: 30 }, (_, i) => a(100 + i, `${7000 + i}.T`, "stock", `Company ${i} ${i === 28 ? "up" : "down"} 8% intraday`, `2026-11-18T02:${String(10 + i).padStart(2, "0")}:00Z`, i === 28 ? 8 : -8));
     const sum = notesFor(many, "all", watch);
     ck("thirty at once (a sell-off): a single notification with the count and the three newest, each with its mark", sum.length === 1 && sum[0].title === "30 new alerts" && sum[0].body === `${RED} Company 29 down 8% intraday · ${GREEN} Company 28 up 8% intraday · ${RED} Company 27 down 8% intraday and 27 more` && sum[0].hash === "#market", sum);
+  }
+
+  console.log("\n[K] an account by email: the code, the button's link, the words, the emails, the sender");
+  {
+    // the code
+    const seq = (...v: number[]) => { let i = 0; return () => v[i++]; };
+    ck("a code is six digits, zeros kept in front", newCode(seq(42)) === "000042" && newCode(seq(123456789)) === "456789" && /^\d{6}$/.test(newCode()));
+    ck("random numbers above the last full million are drawn again, so no code is likelier than another", newCode(seq(4_294_967_295, 4_294_000_000, 4_293_999_999)) === "999999");
+    const seen = new Set<string>(); for (let i = 0; i < 400; i++) seen.add(newCode());
+    ck("400 codes in a row are (nearly) all different", seen.size >= 395, seen.size);
+    const h = await codeHash("a-secret-of-at-least-16", "a@example.com", "123456");
+    ck("what is stored is an HMAC: the same for the same code, different for another code, another address or another secret", /^[0-9a-f]{64}$/.test(h) && h === await codeHash("a-secret-of-at-least-16", "a@example.com", "123456") && h !== await codeHash("a-secret-of-at-least-16", "a@example.com", "123457") && h !== await codeHash("a-secret-of-at-least-16", "b@example.com", "123456") && h !== await codeHash("another-secret-16-long", "a@example.com", "123456"));
+    ck("the code as typed: spaces and a dash are dropped; anything but six digits is refused", cleanCode("123 456") === "123456" && cleanCode(" 123-456 ") === "123456" && cleanCode("12345") === null && cleanCode("1234567") === null && cleanCode("12345a") === null && cleanCode(undefined) === null && cleanCode("１２３４５６") === null);
+    // the words
+    ck("a code that was sent: no refusal", sendRefusal("ok", 0) === null && checkRefusal("ok", 5) === null);
+    const gap = sendRefusal("gap", 37)!, hour = sendRefusal("email_hour", 1790)!;
+    ck("too soon: says how many seconds", gap.status === 429 && gap.error === "An email was sent a moment ago. A new one can be sent in 37 s." && gap.waitSec === 37, gap);
+    ck("too many to one address: says how many minutes", hour.status === 429 && hour.error === "Too many emails were sent to this address. Try again in 30 min." && hour.waitSec === 1790, hour);
+    ck("too many from one network, and the daily total, are refusals too; an answer the code does not know is an error, not a pass", sendRefusal("ip_hour", 0)!.status === 429 && sendRefusal("day", 0)!.status === 429 && sendRefusal("", 0)!.status === 500 && checkRefusal("", 0) !== null);
+    ck("a wrong code says how many tries are left", checkRefusal("wrong", 4) === "That code is not right. 4 tries left." && checkRefusal("wrong", 1) === "That code is not right. 1 try left." && checkRefusal("wrong", 0) === "That code is not right, and it can no longer be used. Send a new email.");
+    ck("nothing waiting, an email past its time and a used-up code each say to send a new email", ["none", "expired", "spent"].every((x) => /Send a new email\.$/.test(checkRefusal(x, 0) ?? "")));
+    // the button's link: made on the server, read by the page
+    const SITE = "https://shotayng1123.github.io/orrery-market-monitor/";
+    const link = verifyLink(SITE, "new.person+desk@example.co.jp", "048213");
+    ck("the button opens the Monitor's own page, with the code and the address after the # (the part browsers do not send to a server)", link.startsWith(SITE + "#verify=048213.") && !link.includes("?") && !link.slice(SITE.length + 1).includes("#") && !link.includes("@") && /^[A-Za-z0-9_.=#-]+$/.test(link.slice(SITE.length)), link);
+    const back = readVerify(link.slice(SITE.length));
+    ck("the page reads the same address and code back out of it", back?.email === "new.person+desk@example.co.jp" && back.code === "048213", back);
+    ck("addresses of every length read back the same (base64 with and without padding)", ["a@b.co", "ab@b.co", "abc@b.co", "x_y-z.w+tag@sub.example.com"].every((e) => { const r = readVerify(verifyLink(SITE, e, "000001").slice(SITE.length)); return r?.email === e && r.code === "000001"; }));
+    ck("anything else after the # is not a verification link: a tab, a stock page, a short or lettered code, a payload that is not an address", [ "#market", "#asset/7203.T", "#verify=", "#verify=12345.YUBiLmNv", "#verify=12345a.YUBiLmNv", "#verify=123456", "#verify=123456.", "#verify=123456.!!!!", `#verify=123456.${Buffer.from("not an address").toString("base64url")}`, `#verify=123456.${Buffer.from("a@b.co").toString("base64url")}&x=1`, "" ].every((h) => readVerify(h) === null));
+    // the emails
+    const mail = codeMail("048213", link);
+    const hrefs = [...mail.html.matchAll(/href="([^"]*)"/g)].map((m) => m[1]);
+    ck("the email: a Verify my email button that opens that link and nothing else, the code for the Home Screen app, how long both are valid", mail.subject === "Verify your email for Orrery Monitor" && hrefs.length === 1 && hrefs[0] === link && />Verify my email<\/a>/.test(mail.html) && mail.html.includes("048 213") && mail.text.includes(link) && mail.text.includes("048 213") && mail.text.includes(`${CODE_TTL_MIN} minutes`) && mail.html.includes(`${CODE_TTL_MIN} minutes`) && (mail.text.match(/https?:\/\//g) ?? []).length === 1 && CODE_MAX_TRIES === 5, mail);
+    const have = noticeMail("have", SITE), off = noticeMail("off", SITE);
+    ck("an address that already has an account is told so by email, with where to sign in, and gets no button and no code", /already has an account/.test(have.text) && /sign in with your password/.test(have.text) && have.text.includes(SITE) && !/verify=|\d{3} \d{3}|Verify my email/.test(have.text + have.html) && [...have.html.matchAll(/href="([^"]*)"/g)].every((m) => m[1] === SITE), have);
+    ck("an address whose account was switched off is told to contact the manager, with no link at all", /switched off/.test(off.text) && /contact the Monitor's manager/.test(off.text) && !/https?:|href|verify=/.test(off.text + off.html) && off.subject === have.subject, off);
+    // who it comes from
+    const env = (o: Record<string, string>) => (k: string) => o[k];
+    ck("no sender set up: none, and that is not an error", mailSetup(env({})) === null && !mailReady(env({})));
+    const gm = mailSetup(env({ SMTP_USER: "desk@gmail.com", SMTP_PASS: "abcd efgh ijkl mnop" }));
+    ck("a Gmail address and its app password are enough: Gmail's server, port 465, mail from that address", gm?.kind === "smtp" && gm.host === "smtp.gmail.com" && gm.port === 465 && gm.from.email === "desk@gmail.com" && gm.from.name === "Orrery Monitor" && mailReady(env({ SMTP_USER: "desk@gmail.com", SMTP_PASS: "x" })), gm);
+    ck("an app password is used without the spaces it is shown with; any other password is left alone", appPassword("abcd efgh ijkl mnop") === "abcdefghijklmnop" && appPassword("my pass word") === "my pass word" && appPassword("abcdefghijklmnop") === "abcdefghijklmnop");
+    const rs = mailSetup(env({ RESEND_API_KEY: "re_test", MAIL_FROM: "Orrery Desk <notes@orrery.example>" }));
+    ck("a Resend key and a sender address: Resend, with the name given", rs?.kind === "resend" && rs.from.email === "notes@orrery.example" && rs.from.name === "Orrery Desk", rs);
+    const threw = (o: Record<string, string>) => { try { mailSetup(env(o)); return ""; } catch (e) { return (e as Error).message; } };
+    ck("half a set-up is named, not guessed around: no sender address, no password, a port Supabase blocks", /MAIL_FROM is not set/.test(threw({ RESEND_API_KEY: "re_test" })) && /both be set/.test(threw({ SMTP_USER: "desk@gmail.com" })) && /465/.test(threw({ SMTP_USER: "a@b.co", SMTP_PASS: "x", SMTP_PORT: "587" })) && /465/.test(threw({ SMTP_USER: "a@b.co", SMTP_PASS: "x", SMTP_PORT: "25" })) && /not an email address/.test(threw({ SMTP_USER: "desk", SMTP_PASS: "x" })) && !mailReady(env({ RESEND_API_KEY: "re_test" })));
+    const rq = resendRequest({ from: { name: "Orrery Monitor", email: "notes@orrery.example" }, key: "re_test" }, { to: "a@example.com", ...mail });
+    const sent = JSON.parse(String(rq.init.body)) as Record<string, unknown>;
+    ck("the request to Resend: its address, the key as a bearer, one recipient, both versions of the text", rq.url === "https://api.resend.com/emails" && (rq.init.headers as Record<string, string>).authorization === "Bearer re_test" && sent.from === "Orrery Monitor <notes@orrery.example>" && JSON.stringify(sent.to) === '["a@example.com"]' && sent.subject === mail.subject && sent.text === mail.text && sent.html === mail.html, sent);
+    ck("a sender is read as written: with a name, in quotes, or bare; nonsense is refused", parseFrom("Orrery Monitor <Notes@Example.com>")?.email === "notes@example.com" && parseFrom('"Orrery, Desk" <n@example.com>')?.name === "Orrery, Desk" && parseFrom("n@example.com")?.name === "" && parseFrom("not an address") === null && parseFrom("a@b") === null && parseFrom("a b@example.com") === null && parseFrom("a@example.com\r\nBcc: x@example.com") === null);
+
+    // the message as it goes on the wire
+    const msg = buildMessage({ from: { name: "Orrery Monitor", email: "desk@gmail.com" }, to: "a@example.com", ...mail }, new Date("2026-11-18T02:05:09Z"), "abc123");
+    const [head, ...rest] = msg.split("\r\n\r\n");
+    const un64 = (b: string) => Buffer.from(b.replace(/\r\n/g, ""), "base64").toString("utf8");
+    ck("headers: from, to, subject, a date with a numeric zone, an id on the sender's domain", head.includes('From: "Orrery Monitor" <desk@gmail.com>\r\n') && head.includes("To: <a@example.com>\r\n") && head.includes(`Subject: ${mail.subject}\r\n`) && head.includes("Date: Wed, 18 Nov 2026 02:05:09 +0000\r\n") && head.includes("Message-ID: <abc123@gmail.com>\r\n") && head.includes("MIME-Version: 1.0") && /Content-Type: multipart\/alternative; boundary="=_orrery_abc123"$/.test(head), head);
+    ck("the text and the HTML version come back out of the message unchanged", un64(rest[1].split("\r\n--")[0]) === mail.text.replace(/\n/g, "\r\n") && un64(rest[2].split("\r\n--")[0]) === mail.html && msg.endsWith("--=_orrery_abc123--\r\n"), [rest[1], rest[2]]);
+    ck("every line ends with CR LF and none is longer than 78 characters", !/[^\r]\n/.test(msg) && msg.split("\r\n").every((l) => l.length <= 78), msg.split("\r\n").filter((l) => l.length > 78));
+    const plain = buildMessage({ from: { name: "", email: "desk@gmail.com" }, to: "a@example.com", subject: "Zürich 東京 — a subject that is long enough to need more than one encoded word", text: "ü" }, new Date("2026-11-18T02:05:09Z"), "x1");
+    const subj = /Subject: ((?:.|\r\n )*)\r\n/.exec(plain)![1].split("\r\n ").map((w) => Buffer.from(/^=\?UTF-8\?B\?(.*)\?=$/.exec(w)![1], "base64").toString("utf8")).join("");
+    ck("a subject beyond ASCII travels as encoded words and reads back the same; without HTML the message is the text alone", subj === "Zürich 東京 — a subject that is long enough to need more than one encoded word" && plain.includes("From: <desk@gmail.com>") && plain.includes("Content-Type: text/plain; charset=utf-8") && !plain.includes("multipart") && un64(plain.split("\r\n\r\n")[1]) === "ü", plain);
+    let bad = 0; for (const [f, t] of [["desk@gmail.com", "a@example.com\r\nRCPT TO:<x@example.com>"], ["desk@gmail.com>\r\nDATA", "a@example.com"], ["desk@gmail.com", "a b@example.com"]]) { try { buildMessage({ from: { name: "", email: f }, to: t, subject: "s", text: "t" }, new Date(), "x"); } catch { bad++; } }
+    ck("an address carrying a line break or a space is refused before anything is sent", bad === 3);
+    ck("a line that starts with a dot gets a second dot, so a lone dot can only end the message", dotStuff("a\r\n.\r\n.b\r\nc.\r\n") === "a\r\n..\r\n..b\r\nc.\r\n" && dotStuff(".first") === "..first");
+
+    // the conversation with a mail server (a scripted one: what a server sends is fixed by RFC 5321 and RFC 4954)
+    const server = (o: { auth?: string; user?: string; pass?: string; greet?: string; rcpt?: string; split?: boolean; hangUpAfter?: string } = {}) => {
+      const out: string[] = [o.greet ?? "220 smtp.test ESMTP ready\r\n"], lines: string[] = []; let data: string | null = null, body = "", loginStep = 0, loginUser = "";
+      const push = (t: string) => { if (o.split && t.length > 6) { out.push(t.slice(0, 5)); out.push(t.slice(5)); } else out.push(t); };
+      const b = (t: string) => Buffer.from(t, "base64").toString("utf8");
+      const wire: Wire = {
+        read: async () => (out.length ? out.shift()! : null),
+        write: async (t) => {
+          if (data != null) { data += t; if (data.endsWith("\r\n.\r\n")) { body = data.slice(0, -3); data = null; push("250 2.0.0 OK queued as 1a2b\r\n"); } return; }
+          for (const line of t.split("\r\n").filter(Boolean)) {
+            lines.push(line);
+            if (o.hangUpAfter && line.startsWith(o.hangUpAfter)) return;
+            if (loginStep === 1) { loginUser = b(line); loginStep = 2; push("334 UGFzc3dvcmQ6\r\n"); }
+            else if (loginStep === 2) { loginStep = 0; push(loginUser === (o.user ?? "desk@gmail.com") && b(line) === (o.pass ?? "abcdefghijklmnop") ? "235 2.7.0 Accepted\r\n" : "535 5.7.8 Username and Password not accepted\r\n"); }
+            else if (line.startsWith("EHLO")) push(`250-smtp.test at your service\r\n250-SIZE 35882577\r\n250-8BITMIME\r\n250-AUTH ${o.auth ?? "LOGIN PLAIN XOAUTH2"}\r\n250 SMTPUTF8\r\n`);
+            else if (line.startsWith("AUTH PLAIN ")) push(b(line.slice(11)) === `\0${o.user ?? "desk@gmail.com"}\0${o.pass ?? "abcdefghijklmnop"}` ? "235 2.7.0 Accepted\r\n" : "535-5.7.8 Username and Password not accepted.\r\n535 5.7.8 See the help page\r\n");
+            else if (line === "AUTH LOGIN") { loginStep = 1; push("334 VXNlcm5hbWU6\r\n"); }
+            else if (line.startsWith("MAIL FROM:")) push("250 2.1.0 OK\r\n");
+            else if (line.startsWith("RCPT TO:")) push(o.rcpt ?? "250 2.1.5 OK\r\n");
+            else if (line === "DATA") { data = ""; push("354 Go ahead\r\n"); }
+            else if (line === "QUIT") push("221 2.0.0 closing\r\n");
+            else push("502 5.5.1 Unrecognized command\r\n");
+          }
+        },
+      };
+      return { wire, lines, body: () => body };
+    };
+    const cred = { user: "desk@gmail.com", pass: "abcdefghijklmnop" };
+    let sv = server();
+    let answer = await smtpTalk(sv.wire, cred, "desk@gmail.com", "a@example.com", msg);
+    ck("a message is handed over in the order a mail server expects, and its own answer comes back", answer === "2.0.0 OK queued as 1a2b" && sv.lines.join("|") === `EHLO [127.0.0.1]|AUTH PLAIN ${Buffer.from("\0desk@gmail.com\0abcdefghijklmnop").toString("base64")}|MAIL FROM:<desk@gmail.com>|RCPT TO:<a@example.com>|DATA|QUIT` && sv.body() === msg, [answer, sv.lines]);
+    sv = server({ split: true });
+    ck("answers that arrive in pieces are read the same", await smtpTalk(sv.wire, cred, "desk@gmail.com", "a@example.com", msg) === "2.0.0 OK queued as 1a2b" && sv.body() === msg);
+    sv = server({ auth: "LOGIN" });
+    ck("a server that only offers the other sign-in is spoken to that way", await smtpTalk(sv.wire, cred, "desk@gmail.com", "a@example.com", msg) === "2.0.0 OK queued as 1a2b" && sv.lines[1] === "AUTH LOGIN" && sv.lines[2] === Buffer.from("desk@gmail.com").toString("base64"), sv.lines);
+    sv = server();
+    await smtpTalk(sv.wire, cred, "desk@gmail.com", "a@example.com", "Subject: dots\r\n\r\n.\r\n.hidden line\r\nlast");
+    ck("a message with lines starting with a dot arrives whole (the server's end mark is not triggered early)", dotStuff("Subject: dots\r\n\r\n.\r\n.hidden line\r\nlast\r\n") === sv.body() && sv.lines.at(-1) === "QUIT", sv.body());
+    const refusal = async (o: Parameters<typeof server>[0], c = cred): Promise<Error> => { try { await smtpTalk(server(o).wire, c, "desk@gmail.com", "a@example.com", msg); return new Error("was accepted"); } catch (e) { return e as Error; } };
+    const wrongPw = await refusal({}, { user: "desk@gmail.com", pass: "a-wrong-password" });
+    ck("a refused sign-in: the server's own words, the step that failed, and never the password", wrongPw instanceof SmtpError && wrongPw.code === 535 && wrongPw.step === "the sign-in" && /Username and Password not accepted/.test(wrongPw.message) && !wrongPw.message.includes("a-wrong-password") && !wrongPw.message.includes(Buffer.from("\0desk@gmail.com\0a-wrong-password").toString("base64")), wrongPw.message);
+    const noBox = await refusal({ rcpt: "550 5.1.1 The email account that you tried to reach does not exist\r\n" });
+    ck("an address the server refuses is reported as that", noBox instanceof SmtpError && noBox.code === 550 && noBox.step === "the recipient" && /does not exist/.test(noBox.message), noBox.message);
+    ck("a server that hangs up, one that greets with a refusal, and one with no sign-in this client knows each give an error, not a hang", /closed the connection/.test((await refusal({ hangUpAfter: "MAIL FROM" })).message) && (await refusal({ greet: "554 5.7.1 No service\r\n" }) as SmtpError).step === "the connection" && /no sign-in this client knows/.test((await refusal({ auth: "XOAUTH2 OAUTHBEARER" })).message) && /unexpected answer/.test((await refusal({ greet: "hello there\r\n" })).message));
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

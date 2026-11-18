@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { adminSet, api, changePassword, type AccountRow, type Me } from "../lib/api";
+import { adminSet, api, changePassword, mailTest, type AccountRow, type AdminUsers, type Me } from "../lib/api";
 import { fmtStampSafe } from "../views/shared";
 
 /** The change-password form. `forced` is the screen after a manager's reset: nothing else opens until it is done. */
@@ -34,28 +34,73 @@ export function ChangePassword({ forced, onDone }: { forced?: boolean; onDone: (
   );
 }
 
-/** Manager only: who has an account, with approve / switch off / switch on / reset password. */
+/** Asked before an account is deactivated (or a waiting one rejected): what it does, in full, and a way back. */
+function ConfirmOff({ row, busy, onYes, onNo }: { row: AccountRow; busy: boolean; onYes: () => void; onNo: () => void }) {
+  useEffect(() => { const f = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onNo(); } }; window.addEventListener("keydown", f, true); return () => window.removeEventListener("keydown", f, true); }, [onNo]);
+  const waiting = row.status === "pending";
+  return (
+    <div className="modal-bg confirm" onClick={(e) => { e.stopPropagation(); onNo(); }}>
+      <div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="cf-title" aria-describedby="cf-text" onClick={(e) => e.stopPropagation()}>
+        <h3 id="cf-title">{waiting ? "Reject this account?" : "Deactivate this account?"}</h3>
+        <div className="cf-who">{row.email}</div>
+        <div className="sub2" id="cf-text">
+          {waiting ? "This person asked for an account and has not been let in. Rejected, they can neither sign in nor ask again with this address."
+            : "They are signed out on every device within a minute and stop receiving alerts on their phone. They can neither sign in nor create the account again."}
+          {" "}Their watchlist is kept. You can switch the account back on at any time (REACTIVATE){waiting ? "." : "; they then sign in again and turn notifications back on themselves."}
+        </div>
+        <div className="cf-btns">
+          <button type="button" className="go ghost" id="cf-no" onClick={onNo} autoFocus>CANCEL</button>
+          <button type="button" className={`go danger${busy ? " busy" : ""}`} id="cf-yes" disabled={busy} onClick={onYes}>{busy ? "…" : waiting ? "REJECT" : "DEACTIVATE"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const STATUS: Record<AccountRow["status"], string> = { active: "active", pending: "waiting", disabled: "deactivated" };
+
+/** Manager only: who has an account, with deactivate (asked twice) / reactivate / reset password, and approve for
+ *  an account that still waits (only where the server has no email sender, or from before verification emails). */
 function Accounts({ me }: { me: Me }) {
-  const [rows, setRows] = useState<AccountRow[] | null>(null);
+  const [data, setData] = useState<AdminUsers | null>(null);
   const [err, setErr] = useState("");
   const [temp, setTemp] = useState<{ email: string; pw: string } | null>(null);
   const [busy, setBusy] = useState("");
+  const [ask, setAsk] = useState<AccountRow | null>(null);
+  const [test, setTest] = useState<{ ok: boolean; text: string } | null>(null);
+  const rows = data?.rows ?? null;
   const load = useCallback(async () => {
-    try { setRows((await api<{ rows: AccountRow[] }>("admin_users")).rows); setErr(""); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
+    try { setData(await api<AdminUsers>("admin_users")); setErr(""); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); }
   }, []);
   useEffect(() => { void load(); }, [load]);
   async function act(email: string, op: "approve" | "enable" | "disable" | "reset") {
     setBusy(email + op); setErr("");
     const r = await adminSet(email, op);
     setBusy("");
+    if (op === "disable") setAsk(null);
     if (!r.ok) { setErr(r.error); return; }
     if (op === "reset" && r.tempPassword) setTemp({ email, pw: r.tempPassword });
     void load();
   }
+  async function sendTest() {
+    setBusy("mailtest"); setTest(null);
+    const r = await mailTest();
+    setBusy("");
+    setTest(r.ok ? { ok: true, text: `Sent to ${r.to}. If it is not in the inbox within a minute, look in the spam folder.` } : { ok: false, text: r.error });
+  }
   const pending = (rows ?? []).filter((r) => r.status === "pending").length;
+  const mail = data?.mail;
   return (
     <div className="acct-adm">
       <div className="minih">Accounts{rows ? ` · ${rows.length}` : ""}{pending ? ` · ${pending} waiting for approval` : ""}</div>
+      {mail && (
+        <div className="mailline" id="mailline">
+          {mail.ready ? <>New accounts open by themselves: the verification email comes from <b>{mail.from}</b>{mail.via ? ` (${mail.via})` : ""}.<span className="chip-sm" id="mailtest" onClick={() => { if (busy !== "mailtest") void sendTest(); }}>{busy === "mailtest" ? "SENDING…" : "SEND A TEST EMAIL"}</span></>
+            : mail.problem ? <><span className="warn">The email sender's set-up has a mistake: {mail.problem}.</span> Until it is put right, a new account waits here for your approval.</>
+            : <>No email sender is set up on the server, so a new account waits here for your approval.</>}
+          {test && <div className={test.ok ? "up" : "dn"} id="mailtest-r">{test.text}</div>}
+        </div>
+      )}
       {temp && (
         <div className="temppw">
           Temporary password for <b>{temp.email}</b>: <code>{temp.pw}</code>
@@ -69,14 +114,14 @@ function Accounts({ me }: { me: Me }) {
         <table className="secT"><thead><tr><th className="l">Email</th><th className="l">Status</th><th>Last sign-in</th><th>Watch</th><th /></tr></thead>
           <tbody>{(rows ?? []).map((r) => (
             <tr key={r.email}>
-              <td className="l" title={`created ${fmtStampSafe(r.createdAt)} · ${r.logins} sign-ins`}>{r.email}{r.role === "manager" && <span className="badge">MANAGER</span>}</td>
-              <td className={`l ${r.status === "pending" ? "warn" : r.status === "disabled" ? "dn" : ""}`}>{r.status}{r.mustChange ? " · temp pw" : ""}</td>
+              <td className="l" title={`created ${fmtStampSafe(r.createdAt)} · ${r.logins} sign-ins${r.verifiedAt ? ` · address verified by email ${fmtStampSafe(r.verifiedAt)}` : ""}`}>{r.email}{r.role === "manager" && <span className="badge">MANAGER</span>}</td>
+              <td className={`l ${r.status === "pending" ? "warn" : r.status === "disabled" ? "dn" : ""}`}>{STATUS[r.status] ?? r.status}{r.mustChange ? " · temp pw" : ""}</td>
               <td className="num mut">{r.lastSeen ? fmtStampSafe(r.lastSeen) : "–"}</td>
               <td className="num">{r.watch}</td>
               <td className="num acts">
                 {r.status === "pending" && <span className="chip-sm on" onClick={() => void act(r.email, "approve")}>{busy === r.email + "approve" ? "…" : "APPROVE"}</span>}
-                {r.status === "disabled" && <span className="chip-sm" onClick={() => void act(r.email, "enable")}>{busy === r.email + "enable" ? "…" : "SWITCH ON"}</span>}
-                {r.status !== "disabled" && r.email !== me.email && <span className="chip-sm" onClick={() => void act(r.email, "disable")}>{busy === r.email + "disable" ? "…" : r.status === "pending" ? "REJECT" : "SWITCH OFF"}</span>}
+                {r.status === "disabled" && <span className="chip-sm" onClick={() => void act(r.email, "enable")}>{busy === r.email + "enable" ? "…" : "REACTIVATE"}</span>}
+                {r.status !== "disabled" && r.email !== me.email && <span className="chip-sm" onClick={() => setAsk(r)}>{r.status === "pending" ? "REJECT" : "DEACTIVATE"}</span>}
                 {r.status === "active" && r.email !== me.email && <span className="chip-sm" onClick={() => void act(r.email, "reset")}>{busy === r.email + "reset" ? "…" : "RESET PW"}</span>}
               </td>
             </tr>
@@ -84,6 +129,7 @@ function Accounts({ me }: { me: Me }) {
         </table>
         {rows && rows.length === 0 && <div className="mut">No accounts yet.</div>}
       </div>
+      {ask && <ConfirmOff row={ask} busy={busy === ask.email + "disable"} onYes={() => void act(ask.email, "disable")} onNo={() => { if (busy !== ask.email + "disable") setAsk(null); }} />}
     </div>
   );
 }

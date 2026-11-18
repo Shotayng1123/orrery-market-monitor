@@ -1,0 +1,12 @@
+{
+  "name": "orrery-monitor-sql-checks",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Checks of the rules that live in the database, run on PGlite (Postgres inside Node). No live database is touched.",
+  "scripts": {
+    "test": "node signup.test.cjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16"
+  }
+}
