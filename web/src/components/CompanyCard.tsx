@@ -1,3 +1,4 @@
+import { pageHash } from "../lib/indices";
 import { zoomNow } from "../lib/prefs";
 import { useEffect, useRef, useState } from "react";
 import { useApi } from "../lib/useApi";
@@ -28,7 +29,8 @@ export function hideCard() {
   if (pending) { clearTimeout(pending); pending = null; }
   window.dispatchEvent(new CustomEvent("om:card:hide"));
 }
-export const openAsset = (symbol: string) => { hideCard(); location.hash = `asset/${encodeURIComponent(symbol)}`; };
+/** Opens a symbol's own page: the single-name page, or for an index the EQUITIES tab covers, that index there. */
+export const openAsset = (symbol: string) => { hideCard(); location.hash = pageHash(symbol); };
 
 /** Compact money: 1.23tn / 456bn / 7.8m. */
 export const money = (v: number | null | undefined, ccy?: string | null) => {

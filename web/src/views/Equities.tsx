@@ -1,3 +1,4 @@
+import { INDICES } from "../lib/indices";
 import { zoomNow } from "../lib/prefs";
 import { useMemo, useState } from "react";
 import { Empty, Panel } from "../components/Panel";
@@ -16,16 +17,7 @@ import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtStamp } from "../lib/time";
 import { mergeClasses } from "../lib/classes";
 
-export const INDICES = [
-  { id: "topix", label: "TOPIX", symbol: "1306.T", stats: "TOPIX", statsNote: "", support: ["^N225", "NKD=F", "USDJPY=X", "JGB10Y"] },
-  { id: "nk225", label: "NIKKEI 225", symbol: "^N225", stats: "NK225", statsNote: "", support: ["NKD=F", "1306.T", "USDJPY=X", "^SOX"] },
-  { id: "spx", label: "S&P 500", symbol: "^GSPC", stats: "SP500", statsNote: "", support: ["ES=F", "^VIX", "^TNX", "DX-Y.NYB"] },
-  { id: "ixic", label: "NASDAQ COMP", symbol: "^IXIC", stats: "NDX", statsNote: "Nasdaq-100 names stand in for the Composite's ~3,000 constituents", support: ["NQ=F", "^SOX", "^VIX", "^TNX"] },
-  { id: "kospi", label: "KOSPI", symbol: "^KS11", stats: "KOSPI200", statsNote: "KOSPI 200 names stand in for the ~800-name KOSPI", support: ["KRW=X", "^SOX", "^TWII", "^GSPC"] },
-  { id: "hsi", label: "HANG SENG", symbol: "^HSI", stats: "HSI", statsNote: "", support: ["000001.SS", "CNH=X", "^GSPC", "^TNX"] },
-  { id: "sse", label: "SHANGHAI COMP", symbol: "000001.SS", stats: "SSE180", statsNote: "SSE 180 names stand in for the ~2,200-name Composite", support: ["^HSI", "CNH=X", "HG=F", "^GSPC"] },
-] as const;
-export type IndexId = (typeof INDICES)[number]["id"];
+export { INDICES, type IndexId } from "../lib/indices";
 
 export interface StatRow {
   symbol: string; name: string; sector: string | null; weight: number | null; d: string; close: number; prev: number | null;

@@ -35,6 +35,18 @@ const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
     ck("tap a line: its chart, six periods and three statistics open under it", d.open === 1 && d.chart >= 1 && d.cells === 9 && d.cur === "1D" && d.more, d);
     await p.locator(".mp-row").nth(3).tap(); await p.waitForTimeout(500); ck("tapping another line moves the detail there", (await p.evaluate(() => [...document.querySelectorAll(".mp-item")].map((e, i) => e.classList.contains("open") ? i : -1).filter((i) => i >= 0).join())) === "3");
     await p.locator(".mp-row").nth(3).tap(); await p.waitForTimeout(300); ck("tapping it again closes the detail", (await p.locator(".mp-item.open").count()) === 0);
+    // an index's own page is its page on EQUITIES (Shota, 19 Nov 2026: the Nikkei 225 opened from MARKET was a different page from the one on EQUITIES)
+    { const openPage = async (name) => { await p.evaluate(() => { location.hash = "market"; }); await p.waitForSelector(".mp-row"); await p.waitForTimeout(400); await p.locator(".mp-row", { hasText: name }).first().tap(); await p.waitForSelector(".mp-item.open .mp-more"); const label = await p.locator(".mp-item.open .mp-more").textContent(); await p.locator(".mp-item.open .mp-more").tap(); await p.waitForTimeout(900); return { label, ...(await p.evaluate(() => ({ hash: location.hash, tab: document.querySelector("#pnav a.on")?.textContent ?? null, title: document.querySelector(".mp-head h1, .mp-head .mp-title")?.textContent ?? null, index: document.querySelector(".mp-head .pick select")?.value ?? null, fixed: document.querySelector(".mp-row.fixed")?.textContent ?? "" }))) }; };
+      const nk = await openPage("Nikkei 225");
+      ck("MARKET, Nikkei 225, \"Open Nikkei 225's page\": the Nikkei 225 on EQUITIES (the same page the EQUITIES tab shows), not a page of its own", /Nikkei 225/.test(nk.label) && nk.hash === "#equities/nk225" && nk.tab === "Equities" && nk.index === "nk225" && /Nikkei 225/i.test(nk.fixed), nk);
+      const sp = await openPage("S&P 500");
+      ck("the same for the S&P 500", sp.hash === "#equities/spx" && sp.index === "spx" && sp.tab === "Equities", sp);
+      const fx = await openPage("USD/JPY");
+      ck("an instrument that has no page on EQUITIES (a currency) still opens the single-name page", fx.hash === "#asset/USDJPY%3DX", fx);
+      await p.evaluate(() => { location.hash = "asset/%5EHSI"; }); await p.waitForTimeout(900);
+      const old = await p.evaluate(() => ({ hash: location.hash, index: document.querySelector(".mp-head .pick select")?.value ?? null }));
+      ck("an older link to an index's single-name page lands on that index on EQUITIES too", old.hash === "#equities/hsi" && old.index === "hsi", old);
+      await p.evaluate(() => { location.hash = "market"; }); await p.waitForSelector(".mp-row"); await p.waitForTimeout(500); }
     await p.locator("#pnav a", { hasText: "News" }).tap(); await p.waitForTimeout(700);
     const n = await p.evaluate(() => ({ hash: location.hash, on: document.querySelector("#pnav a.on")?.textContent, panels: document.querySelectorAll(".mp-sec").length, y: scrollY }));
     ck("bottom tab News: opens NEWS and lights that tab", n.hash === "#news" && n.on === "News" && n.panels >= 2, n);

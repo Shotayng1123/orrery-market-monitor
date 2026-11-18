@@ -147,6 +147,14 @@ const IS = "revenue,cogs,gross,sga,op,nonOpInc,nonOpExp,ordinary,extraInc,extraL
     ck("the source's limits are said under the table; no errors on the page", /four years and five quarters/.test(note) && errs.length === 0, { note, errs });
     await p.screenshot({ path: "stock-desktop-sparse.png", fullPage: true }); await ctx.close(); }
 
+  console.log("\n[desktop: an index's own page is its page on EQUITIES, wherever the link is]");
+  { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+    const at = async (hash) => { await p.goto(MOCK + hash, { waitUntil: "networkidle" }); await p.waitForTimeout(900); return p.evaluate(() => ({ hash: location.hash, index: [...document.querySelectorAll(".pick select")].map((x) => x.value), fin: document.querySelectorAll("table.fin").length, key: document.querySelectorAll("#st-key").length })); };
+    const nk = await at("#asset/%5EN225"), topix = await at("#asset/1306.T"), sox = await at("#asset/%5ESOX"), stock = await at("#asset/7203.T");
+    ck("the Nikkei 225 and TOPIX (read from the 1306.T fund) open on EQUITIES with that index chosen", nk.hash === "#equities/nk225" && nk.index.includes("nk225") && nk.key === 0 && topix.hash === "#equities/topix" && topix.index.includes("topix"), { nk, topix });
+    ck("an index EQUITIES has no page for, and a stock, keep the single-name page; no errors", sox.hash === "#asset/%5ESOX" && sox.key === 1 && stock.hash === "#asset/7203.T" && stock.fin === 1 && errs.length === 0, { sox, stock, errs });
+    await ctx.close(); }
+
   console.log("\n[desktop, a company below 1tn yen: no big-move marks]");
   { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
     await p.goto(MOCK + "#asset/9999.T", { waitUntil: "networkidle" }); await p.waitForSelector("table.fin"); await p.waitForSelector(".bigwrap canvas"); await p.waitForTimeout(900); await hideBar(p);

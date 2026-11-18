@@ -1,3 +1,4 @@
+import { pageHash } from "./lib/indices";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Topbar, VIEWS, type ViewId } from "./components/Topbar";
 import { Gate } from "./auth/Gate";
@@ -35,7 +36,12 @@ interface Route { view: ViewId; sub: string }
 function parseHash(): Route {
   const [v, ...rest] = location.hash.replace(/^#/, "").split("/");
   const sub = decodeURIComponent(rest.join("/"));
-  if (v === "asset") return { view: "asset", sub };
+  if (v === "asset") {
+    // an address of the single-name page for an index that has its page on EQUITIES (an older link, a bookmark) goes there
+    const [to, id] = pageHash(sub).split("/");
+    if (to === "equities") { history.replaceState(null, "", `#equities/${id}`); return { view: "equities", sub: id }; }
+    return { view: "asset", sub };
+  }
   return { view: VIEWS.some((x) => x.id === v) ? (v as ViewId) : "market", sub };
 }
 const setHash = (view: ViewId, sub = "") => { location.hash = sub ? `${view}/${sub}` : view; };
