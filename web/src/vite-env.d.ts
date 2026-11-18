@@ -6,3 +6,6 @@ interface ImportMetaEnv {
   readonly VITE_DEV_MOCK?: string;
 }
 interface ImportMeta { readonly env: ImportMetaEnv }
+
+/** The id of this build (vite.config.ts): the commit on GitHub, the build time elsewhere. */
+declare const __BUILD_ID__: string;
