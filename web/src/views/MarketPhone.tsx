@@ -77,8 +77,16 @@ export function InstrumentRow({ r, period, tick, open, onToggle, fixed = false, 
   );
 }
 
+const NOTE_FRESH_MS = 36 * 3600e3;
+const noteDay = (d: string): string => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+
 export function MarketPhone({ tick }: { tick: number }) {
   const table = useApi<{ rows: TableRow[]; asOf: string }>("table", undefined, tick);
+  // The newest morning note, as one line above the list (19 Nov 2026): the table says what moved, the note says
+  // why, and until now the second was two taps away with nothing on this screen to say it was there. Shown while
+  // it is the news of the day (36 hours); an older one is not offered as today's.
+  const notes = useApi<{ rows: Array<{ d: string; title: string; generatedAt: string; kind?: string }> }>("notes", { n: 5 }, Math.floor(tick / 10));
+  const note = (notes.data?.rows ?? []).find((n) => (n.kind ?? "daily") !== "weekly" && !!n.title && Date.now() - Date.parse(n.generatedAt) < NOTE_FRESH_MS);
   const [period, setPeriod] = useState<ChartPeriod>("1D");
   const [open, setOpen] = useState<string | null>(null);
   const rows = (table.data?.rows ?? []).filter((r) => r.marketTab !== false).sort((a, b) => a.order - b.order);   // the curated table set
@@ -88,6 +96,13 @@ export function MarketPhone({ tick }: { tick: number }) {
     <Screen title="Markets"
       sub={<>{table.data ? <>as of {fmtStampSafe(table.data.asOf)}</> : table.error ? <span className="warn">{table.error}</span> : "loading…"}{DEV_MOCK && <span className="badge est">MOCK</span>}</>}
       right={<Pick label="Change" value={period} options={CHART_PERIODS} onChange={setPeriod} title="The change shown on every line: from the close at the start of this period to the last print (bp for yields)" />}>
+      {note && (
+        <a className="mp-today" id="mk-note" href={`#research/${encodeURIComponent(`note:${note.d}`)}`}>
+          <span className="k">Morning note · {noteDay(note.d)}</span>
+          <span className="t">{note.title}</span>
+          <span className="go" aria-hidden="true">&rsaquo;</span>
+        </a>
+      )}
       {rows.length ? [...groups.entries()].map(([cls, rs]) => (
         <section key={cls} className="mp-sec">
           <h2>{cls}</h2>

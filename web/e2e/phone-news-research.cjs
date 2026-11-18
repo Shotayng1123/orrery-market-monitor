@@ -55,4 +55,20 @@ const sizes = (p) => p.evaluate(() => { const vis = (el) => { const r = el.getBo
     await p.goto(LIVE + "#research/report:1"); await p.reload({ waitUntil: "networkidle" }); await p.waitForSelector(".mp-doc h1"); await p.waitForTimeout(300);   // a fresh load, as a link from elsewhere would be
     await p.locator(".mp-back").tap(); await p.waitForSelector(".rs-row"); ck("a link to a piece opens it; its back button leads to the list", p.url().endsWith("#research"));
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+  console.log("\n[MARKET: the morning's note above the list]");
+  { const ctx = await b.newContext({ ...devices["iPhone 13"] }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message)); await routes(p);
+    const today = new Date().toISOString().slice(0, 10), TITLE = "Chip rout meets Toyota surge as Nikkei futures point lower before the open, and the yen firms into the Bank of Japan";
+    let rows = [{ id: 900, d: today, title: "Weekly Strategy (not a morning note)", generatedAt: new Date(Date.now() - 3600e3).toISOString(), kind: "weekly" }, { id: 901, d: today, title: TITLE, generatedAt: new Date(Date.now() - 2 * 3600e3).toISOString(), kind: "daily" }];
+    await p.route("**/fakeapi?*", (r) => { const q = new URL(r.request().url()).searchParams; if (q.get("action") !== "notes") return r.fallback();
+      r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ rows }) }); });
+    await p.goto(LIVE + "?phone=new#market", { waitUntil: "networkidle" }); await p.waitForSelector("#mk-note"); await p.waitForTimeout(400);
+    const v = await p.evaluate(() => { const a = document.querySelector("#mk-note"), r = a.getBoundingClientRect(), head = document.querySelector(".mp-head").getBoundingClientRect(), t = a.querySelector(".t");
+      return { k: a.querySelector(".k").textContent, t: t.textContent, lines: Math.round(t.getBoundingClientRect().height / parseFloat(getComputedStyle(t).lineHeight)), href: a.getAttribute("href"), left: Math.round(r.left), right: Math.round(r.right), h: Math.round(r.height), below: r.top >= head.bottom - 1, vw: innerWidth, over: document.documentElement.scrollWidth - innerWidth }; });
+    ck("the newest morning note (not the weekly) is offered under the title, with its day and its headline on at most three lines", /^Morning note · \d{1,2} [A-Z][a-z]{2}$/.test(v.k) && v.t.startsWith("Chip rout meets Toyota surge") && v.lines <= 3 && v.below && v.left >= 0 && v.right <= v.vw && v.over <= 0 && v.h >= 56, v);
+    await p.locator("#mk-note").tap(); await p.waitForSelector(".mp-doc h1"); await p.waitForTimeout(300);
+    ck("a tap opens that note in RESEARCH", decodeURIComponent(p.url()).endsWith(`#research/note:${today}`) && v.href === `#research/${encodeURIComponent("note:" + today)}`, { url: p.url(), href: v.href });
+    // a note older than a day and a half is not offered as today's
+    rows = [{ id: 902, d: "2026-11-10", title: "An older note", generatedAt: new Date(Date.now() - 40 * 3600e3).toISOString(), kind: "daily" }];
+    await p.goto(LIVE + "?phone=new#market"); await p.reload({ waitUntil: "networkidle" }); await p.waitForSelector(".mp-head h1"); await p.waitForTimeout(700);
+    ck("an older note is not offered as the morning's; no page errors", (await p.locator("#mk-note").count()) === 0 && errs.length === 0, errs); await ctx.close(); }
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0); })();

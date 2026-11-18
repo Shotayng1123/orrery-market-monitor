@@ -50,7 +50,7 @@ export function WatchlistPhone({ tick }: { tick: number }) {
         {rows.length ? rows.map((r) => (
           <div className="mp-row tap starred" key={r.symbol} role="button" tabIndex={0} title={`${r.name} (${r.symbol})${r.asOf ? ` · as of ${r.asOf.length > 10 ? fmtStamp(r.asOf) : r.asOf}` : ""}`} onClick={() => openAsset(r.symbol)}>
             <Star symbol={r.symbol} name={r.name} />
-            <span className="mp-nm"><span className="n">{r.name}</span><span className="mp-st">{r.symbol} · {r.sector ?? r.kind}</span></span>
+            <span className="mp-nm"><span className="n">{r.name}</span><span className="mp-st one">{r.symbol} · {r.sector ?? r.kind}</span></span>
             <span className="mp-px">{fmtNum(r.last, r.last != null && r.last >= 1000 ? 0 : r.isYield ? 3 : 2)}</span>
             <Move v={r[k]}>{fmtPct(r[k], 1)}</Move>
           </div>
