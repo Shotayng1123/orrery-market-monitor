@@ -15,7 +15,7 @@ name: deploy-server
 on:
   push:
     branches: [main]
-    paths: ["supabase/migrations/**", "supabase/functions/**", "supabase/config.toml", ".github/workflows/deploy-server.yml"]
+    paths: ["supabase/migrations/**", "supabase/functions/**", "supabase/config.toml", "jobs/tools/deploy_guard.jq", ".github/workflows/deploy-server.yml"]
   workflow_dispatch:
     inputs:
       mode:
@@ -78,27 +78,41 @@ jobs:
       - name: Logic checks
         if: steps.keys.outputs.ready == 'true'
         working-directory: jobs
-        run: npm ci && npx tsx ../sim/logic.test.ts
+        run: npm ci && npx tsx ../sim/logic.test.ts && bash ../sim/deploy_guard.test.sh
 
+      # Pinned on purpose. Version 3 of the CLI changed which database a command talks to (the local one unless
+      # --remote is given) and what it prints, and "latest" brought that in unannounced: the first real run of
+      # this workflow (18 Nov 2026) stopped for it. A newer version is taken by changing this number, after
+      # reading that version's help for the commands below.
       - uses: supabase/setup-cli@v1
         if: steps.keys.outputs.ready == 'true'
         with:
-          version: latest
+          version: 3.2.0
       - name: Link the project
         if: steps.keys.outputs.ready == 'true'
         run: supabase link --project-ref "$REF"
 
+      # --remote = the linked project (the CLI's default is a database on this machine). The list of migrations is
+      # asked for as JSON, which reads the same whatever the CLI decides to print for people.
       - name: What a deploy would change
         if: steps.keys.outputs.ready == 'true'
         run: |
-          echo "== migrations: in the repository (local) and applied to the database (remote)"
-          supabase migration list | tee /tmp/migrations.txt
+          set -o pipefail
+          echo "== migrations: in the repository, and whether the database has each on record"
+          # asked for as JSON, the CLI writes an error as JSON too, into the same place: show it, or the log says nothing
+          if ! supabase migration list --remote --output-format json > /tmp/migrations.json; then
+            echo "the list of migrations could not be read. The CLI's answer:"; cat /tmp/migrations.json; echo; exit 1
+          fi
+          jq -r '.migrations[] | if (.local // "") == "" then "\(.remote)   applied, but not in the repository" elif (.remote // "") == "" then "\(.local)   WAITING" else "\(.local)   applied" end' /tmp/migrations.json
           echo "== database changes waiting to be applied"
-          supabase db push --dry-run
+          supabase db push --remote --dry-run --output-format text
           echo "== functions as deployed now"
-          supabase functions list --project-ref "$REF"
+          supabase functions list --project-ref "$REF" --output-format text
           echo "== secrets the functions have (names only)"
-          supabase secrets list --project-ref "$REF" | awk '{ print $1 }'
+          if ! supabase secrets list --project-ref "$REF" --output-format json > /tmp/secrets.out; then
+            echo "the list of secrets could not be read. The CLI's answer:"; cat /tmp/secrets.out; echo; exit 1
+          fi
+          grep -oE '[A-Z][A-Z0-9]*(_[A-Z0-9]+)+' /tmp/secrets.out | sort -u
 
       # A deploy applies every migration the database has no record of. That is only right when the record is
       # complete: if the database was ever changed by hand, old migrations would look new and be run again. So a
@@ -106,31 +120,27 @@ jobs:
       - name: The database's record must match the repository
         if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy'
         run: |
-          sed 's/│/|/g' /tmp/migrations.txt | awk -F'|' '
-            { l = $1; r = $2; gsub(/[^0-9]/, "", l); gsub(/[^0-9]/, "", r) }
-            length(l) == 14 || length(r) == 14 {
-              rows++
-              if (length(r) == 14) { applied++; if (r > last) last = r; if (length(l) != 14) unknown = unknown " " r }
-              else waiting[++n] = l
-            }
-            END {
-              if (!rows)   { print "could not read the list of migrations: run this workflow with check and look at its output"; exit 1 }
-              if (!applied && n) { print "the database has no record of any migration, but " n " are in the repository: applying them all again would be wrong"; exit 1 }
-              if (unknown != "") { print "the database has migrations the repository does not:" unknown; exit 1 }
-              for (i = 1; i <= n; i++) if (waiting[i] < last) old = old " " waiting[i]
-              if (old != "") { print "waiting migrations older than the newest applied one (" last "):" old; exit 1 }
-              print (n ? n " migration(s) waiting, all newer than " last : "nothing waiting; the newest applied is " last)
-            }'
+          verdict=$(jq -r -f jobs/tools/deploy_guard.jq /tmp/migrations.json)
+          echo "$verdict"
+          case "$verdict" in OK*) ;; *) exit 1 ;; esac
 
+      # --yes: a change to a hosted database is only made when it is said in so many words; nobody is here to be asked
       - name: Database changes
         if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy'
-        run: supabase db push
+        run: supabase db push --remote --yes
 
       # made once, on the runner, and stored straight on the server: it is never shown and never in git
       - name: Notification key
         if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy'
         run: |
-          if supabase secrets list --project-ref "$REF" | grep -q "VAPID_PUBLIC_KEY"; then
+          # the list read in the step above, searched as plain text so it does not matter how the CLI lays it out.
+          # A list in which the server's own sign-in secret cannot be found was not read properly: stop, rather
+          # than make a second key over an existing one (a different key ends every phone's subscription
+          # without telling anyone).
+          if ! grep -q "MONITOR_TOKEN_SECRET" /tmp/secrets.out; then
+            echo "the list of the server's secrets could not be read (MONITOR_TOKEN_SECRET is not in it): no key was made"; exit 1
+          fi
+          if grep -q "VAPID_PUBLIC_KEY" /tmp/secrets.out; then
             echo "the server already has its notification key"
           else
             node jobs/tools/gen_vapid.mjs > /dev/null

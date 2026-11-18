@@ -47,7 +47,7 @@ intraday prices, yield curves, calendar, news, notes, reports and sign-ins; pg_c
 The database changes and the three functions are deployed by the `deploy-server` workflow, the way `deploy-web` publishes
 the site: a push to `main` that touches `supabase/` deploys it. Nobody needs the Supabase CLI or a key on their own
 machine, so a change can come from any session. Deploying by hand (`npx supabase db push`, `npx supabase functions
-deploy tick daily api`) still works, but then deploy only what is already on `main`, or the next automatic deploy
+deploy tick daily api`; with CLI 3, `db push --remote`) still works, but then deploy only what is already on `main`, or the next automatic deploy
 will put `main`'s code back.
 
 Set up once, in the repository's Settings › Secrets and variables › Actions › Secrets:
@@ -65,6 +65,16 @@ What a deploy does, in order: the logic checks (`sim/logic.test.ts`; a failure s
 a guard; `supabase db push`; the notification key, made on the runner and stored on the server if the server has
 none (never shown, never in git); `supabase functions deploy tick daily api`; and, if `NOTE_DISPATCH_TOKEN` is set,
 storing it in the database with `monitor_set_github_token`.
+
+The Supabase CLI is pinned to one version in the workflow (3.2.0). Version 3 changed which database a command
+talks to (a local one unless `--remote` is given) and what it prints, and taking "latest" brought that in
+unannounced: the first real run, on 18 Nov 2026, stopped for it before changing anything. By hand with CLI 3 the
+commands are `npx supabase db push --remote` and `npx supabase functions deploy tick daily api`.
+
+A scoped access token needs, by the CLI's own help for these commands: `project_admin_read` (link),
+`projects_read` and `database_pooling_config_read` (the database commands; the changes themselves go in with the
+database password), `edge_functions_read` and `edge_functions_write`, `edge_functions_secrets_read` and
+`edge_functions_secrets_write`. A run that lacks one stops and names it.
 
 The guard: a deploy applies every migration the database has no record of. That is only right when the record is
 complete, so the deploy stops unless everything waiting is newer than everything applied. If it stops, run the

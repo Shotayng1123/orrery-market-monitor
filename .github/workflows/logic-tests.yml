@@ -6,9 +6,9 @@ name: logic-tests
 on:
   push:
     branches: [main]
-    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/lib/**", ".github/workflows/logic-tests.yml"]
+    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/lib/**", "jobs/tools/**", ".github/workflows/logic-tests.yml"]
   pull_request:
-    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/lib/**", ".github/workflows/logic-tests.yml"]
+    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/lib/**", "jobs/tools/**", ".github/workflows/logic-tests.yml"]
   workflow_dispatch:
 
 permissions:
@@ -30,6 +30,8 @@ jobs:
           cache-dependency-path: jobs/package-lock.json
       - run: npm ci
       - run: npx tsx ../sim/logic.test.ts
+      # the guard that decides whether a server deploy may apply database changes (jobs/tools/deploy_guard.jq)
+      - run: bash ../sim/deploy_guard.test.sh
 
   # the rules that live in the database (sim/sql/*.test.cjs), on PGlite: Postgres compiled to run inside Node
   sql:
