@@ -102,8 +102,8 @@ export async function buildPack(sb: SupabaseClient, log: (s: string) => void = c
     // 2026 ended at 23:27 UTC; the closes booked during it stayed (oil's "close" of 18 Nov was its price of
     // 10:42 New York time, the DAX's its level 53 minutes before the bell). The stop itself is on record as a
     // silence in the stored minute bars of USD/JPY, which prints every minute round the clock on weekdays. A
-    // row whose day ended after the silence began, and whose booked close is a price stored in the half hour
-    // before it, was booked from the stopped prices. No silence, no check: nothing here reads a healthy day.
+    // row whose day ended after the silence began, and whose booked close is the last price stored for it before
+    // the silence, was booked from the stopped prices. No silence, no check: nothing here reads a healthy day.
     const since = new Date(now.getTime() - 34 * 3600e3).toISOString(), prints: number[] = [];
     for (let from = 0; from < 4000; from += 1000) { const { data: page } = await sb.from("bars_intraday").select("t").eq("symbol", "USDJPY=X").gte("t", since).order("t").range(from, from + 999); const p = (page ?? []) as Array<{ t: string }>; prints.push(...p.map((x) => Date.parse(x.t))); if (p.length < 1000) break; }
     const gap = prints.length ? silence(prints, now.getTime()) : null;
@@ -119,8 +119,10 @@ export async function buildPack(sb: SupabaseClient, log: (s: string) => void = c
         for (const x of p) { const a = before.get(x.symbol) ?? []; a.push(x.close); before.set(x.symbol, a); }
         if (p.length < 1000) break;
       }
-      const frozen = cand.filter((r) => (before.get(r.symbol) ?? []).some((c) => c > 0 && Math.abs((r.last as number) / c - 1) < 1e-6));
-      if (frozen.length) warnings.push(`Prices stopped arriving at ${clock(new Date(gap.from).toISOString(), "UTC")} UTC${gap.to < now.getTime() - 60000 ? ` and came back at ${clock(new Date(gap.to).toISOString(), "UTC")} UTC` : ""}. For these rows that was before the end of their day, and the level booked as their latest close is a price from just before the stop, not a closing level: ${frozen.map((r) => r.name).join(", ")}.`);
+      // the last price stored before the stop, not any of that half hour: the VIX and a Treasury yield, whose
+      // closes had been booked again from the real ones, each matched an earlier minute by chance
+      const frozen = cand.filter((r) => { const c = (before.get(r.symbol) ?? []).at(-1); return c != null && c > 0 && Math.abs((r.last as number) / c - 1) < 1e-6; });
+      if (frozen.length) warnings.push(`Prices stopped arriving at ${clock(new Date(gap.from).toISOString(), "UTC")} UTC${gap.to < now.getTime() - 60000 ? ` and came back at ${clock(new Date(gap.to).toISOString(), "UTC")} UTC` : ""}. For these rows that was before the end of their day, and the level booked as their latest close is their last price before the stop, not a closing level: ${frozen.map((r) => r.name).join(", ")}.`);
     }
   } catch (e) { log(`the check for prices that stopped before a close could not be made: ${e instanceof Error ? e.message : String(e)}`); }
   if (warnings.length) log(`WARNING: ${warnings.join(" ")}`);
