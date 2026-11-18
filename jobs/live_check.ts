@@ -90,13 +90,20 @@ async function main(): Promise<void> {
   });
 
   await part("reasons", "reasons for big moves", async () => {
-    const rows = must(await sb.from("move_causes").select("symbol,kind,d,status,tries,cost_usd,done_at,queued_at").order("d", { ascending: false }).limit(5000)) as Array<{ symbol: string; kind: string; d: string; status: string; tries: number; cost_usd: number | null; done_at: string | null; queued_at: string }>;
+    const rows = must(await sb.from("move_causes").select("symbol,kind,d,from_d,pct,status,tries,cost_usd,done_at,queued_at").order("d", { ascending: false }).limit(5000)) as Array<{ symbol: string; kind: string; d: string; from_d: string | null; pct: number | null; status: string; tries: number; cost_usd: number | null; done_at: string | null; queued_at: string }>;
     const n = (s: string) => rows.filter((r) => r.status === s).length, cost = rows.reduce((a, r) => a + (r.cost_usd ?? 0), 0);
     console.log(`  ${rows.length} moves on record: ${n("found")} with a reason, ${n("not_found")} with none found, ${n("queued")} waiting, ${n("error")} failed (of which ${rows.filter((r) => r.status === "error" && r.tries >= 3).length} given up after three tries)`);
     console.log(`  cost of the look-ups stored (the last one of each move): USD ${cost.toFixed(2)}`);
     const syms = new Map<string, string[]>();
     for (const r of rows) { const a = syms.get(r.symbol) ?? []; a.push(r.status); syms.set(r.symbol, a); }
     for (const [s, st] of [...syms].sort()) console.log(`  ${s}: ${st.length} moves; ${["found", "not_found", "queued", "error"].filter((k) => st.includes(k)).map((k) => `${st.filter((x) => x === k).length} ${k}`).join(", ")}`);
+    // what is waiting, move by move: a day (d1), five sessions (w1), a swing within a month (m1)
+    const waiting = rows.filter((r) => r.status === "queued");
+    for (const s of [...new Set(waiting.map((r) => r.symbol))].sort()) {
+      const w = waiting.filter((r) => r.symbol === s);
+      console.log(`  ${s} waiting: ${["d1", "w1", "m1"].map((k) => `${w.filter((r) => r.kind === k).length} ${k}`).join(", ")}`);
+      for (const r of w) console.log(`    ${r.kind} ${r.from_d ?? "?"} to ${r.d}: ${r.pct == null ? "?" : `${r.pct > 0 ? "+" : ""}${r.pct.toFixed(1)}%`}`);
+    }
   });
 
   await part("edinet", "EDINET DB: stored answers and today's allowance", async () => {
