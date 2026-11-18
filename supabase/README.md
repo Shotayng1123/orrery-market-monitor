@@ -268,7 +268,10 @@ The reason for each move is found outside the database:
    `_shared/movecause.ts` drops any other address). Otherwise the move is stored as `not_found` and the page says
    "No reliable report of the reason was found". A look-up that fails is tried three times.
 
-It costs model tokens and searches. Every run prints the cost of each look-up and the total. The knobs:
+It costs model tokens and searches. Every run prints the cost of each look-up and the total. Measured on the
+first runs (18 Nov 2026, the defaults below): USD 0.08 a look-up with four searches, about fourteen seconds each,
+so a company opened for the first time (at most 15 moves queued) is about USD 1.20 and a full run of 60 about
+USD 5. The knobs:
 repository **variables** `MOVE_CAUSE_MODEL` (default `claude-opus-5-5`) and `MOVE_CAUSE_EFFORT` (default
 `medium`), and the run's `max` input (default 60 moves a run). It needs the `ANTHROPIC_API_KEY`, `SUPABASE_URL`
 and `SUPABASE_SERVICE_ROLE_KEY` secrets the Morning Note already uses. To see what is waiting or stored:
