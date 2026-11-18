@@ -4,7 +4,7 @@ import * as web from "../web/src/lib/sessions.ts";
 import * as srv from "../supabase/functions/_shared/sessions.ts";
 import { rollingBands, pct } from "../web/src/lib/stats.ts";
 import { fxClosesFromDaily, fxClosesFromHourly, fxDay, suspectBars } from "../supabase/functions/_shared/fx.ts";
-import { AFTER_CLOSE_MIN, quoteMove, scanDue, sessionMove, stockMarket } from "../supabase/functions/_shared/moves.ts";
+import { AFTER_CLOSE_MIN, closeMove, quoteMove, scanDue, sessionMove, stockMarket } from "../supabase/functions/_shared/moves.ts";
 import { b64u, encryptPush, pushEndpointOk, unb64u, vapidHeader } from "../supabase/functions/_shared/webpush.ts";
 import { alertNote, moveMark, notesFor, stampSgt, wanted, type AlertLite } from "../supabase/functions/_shared/pushrules.ts";
 import { CODE_MAX_TRIES, CODE_TTL_MIN, checkRefusal, cleanCode, codeHash, codeMail, newCode, noticeMail, sendRefusal, verifyLink } from "../supabase/functions/_shared/signup.ts";
@@ -160,6 +160,12 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
   ck("low -10% and high +8% on one day: the larger one", !!both && Math.abs(both.pct - -10) < 1e-9, both);
   ck("a day inside ±7% raises nothing; exactly 7.0% counts", quoteMove(1000, 931, 1069, 7) === null && quoteMove(1000, 930, 1000, 7) !== null && quoteMove(1000, 1000, 1070, 7) !== null);
   ck("no previous close or no range: nothing", quoteMove(null, 900, 1100, 7) === null && quoteMove(0, 900, 1100, 7) === null && quoteMove(1000, null, null, 7) === null);
+  // the official close: a closing auction prints after the last one-minute bar (figures made up to the shape of
+  // Intuit on 17 Nov 2026: around -6.5% during the day, -7.2% at the close, and no alert from the bars)
+  const bars = sessionMove([1, 2, 3, 4], [938, 935, 934, 931.5], 1000, 7), shut = closeMove(1000, 928, 7);
+  ck("a stock whose one-minute bars all stop short of the line but whose official close is beyond it is caught at the close", bars === null && !!shut && Math.abs(shut.pct - -7.2) < 1e-9 && shut.price === 928, { bars, shut });
+  ck("a close inside the line raises nothing; exactly 7.0% counts, either way; a rise is reported as a rise", closeMove(1000, 935, 7) === null && closeMove(1000, 1069.9, 7) === null && closeMove(1000, 930, 7) !== null && closeMove(1000, 1070, 7)!.pct > 0);
+  ck("no previous close or no closing price: nothing", closeMove(null, 900, 7) === null && closeMove(0, 900, 7) === null && closeMove(1000, null, 7) === null && closeMove(1000, 0, 7) === null);
   ck("only one side known: that side is used", quoteMove(1000, null, 1090, 7)?.pct === 9.000000000000007 || Math.abs((quoteMove(1000, null, 1090, 7)?.pct ?? 0) - 9) < 1e-9);
   const mk = (s: string) => stockMarket(s);
   ck("Tokyo stocks, including the new-style codes: 5838.T, 7203.T, 285A.T", mk("5838.T") === "TSE" && mk("7203.T") === "TSE" && mk("285A.T") === "TSE");
