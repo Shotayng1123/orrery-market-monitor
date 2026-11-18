@@ -18,7 +18,7 @@ import { WatchlistPhone } from "./views/WatchlistPhone";
 import { AssetPhone } from "./views/AssetPhone";
 import { PhoneNav } from "./components/PhoneNav";
 import { InstallHint } from "./components/InstallHint";
-import { UpdateBar } from "./components/UpdateBar";
+import { FootBars } from "./components/FootBars";
 import { usePhone, usePhoneV2 } from "./lib/phone";
 import { NewsView } from "./views/News";
 import { ResearchView } from "./views/Research";
@@ -127,15 +127,18 @@ export default function App() {
     return () => clearInterval(t);
   }, [signedIn, refresh]);
 
+  // back on a connection: ask again at once instead of waiting out the minute
+  useEffect(() => { const f = () => void refresh(); window.addEventListener("online", f); return () => window.removeEventListener("online", f); }, [refresh]);
+
   const setPrefs = (p: Prefs) => { setPrefsState(p); savePrefs(p); };
   const signOut = () => { clearToken(); setTok(null); setAcct(false); };
 
   const healthState: "ok" | "warn" | "bad" | "unk" = !apiConfigured ? "unk" : healthErr ? "bad" : !health ? "unk" : health.ok ? (health.tick.ok && health.daily.ok ? "ok" : "warn") : "bad";
   const healthTitle = !apiConfigured ? "DATA HEALTH: API not configured" : healthErr ? `DATA HEALTH: ${healthErr}` : health ? `DATA HEALTH: tick ${health.tick.ageMin ?? "?"} min old (${health.tick.ok ? "ok" : health.tick.note ?? "late"}), daily ${health.daily.ok ? "ok" : health.daily.note ?? "late"}${health.holidaysVerified ? "" : "; holiday calendar unverified"}` : "DATA HEALTH: loading";
 
-  if (!signedIn) return <div className="gatewrap"><Gate onSignedIn={() => setTok(getToken())} /><UpdateBar /></div>;
+  if (!signedIn) return <div className="gatewrap"><Gate onSignedIn={() => setTok(getToken())} /><FootBars /></div>;
   if (me?.mustChange) return (
-    <div className="gatewrap"><UpdateBar /><div className="modal-bg"><div className="modal">
+    <div className="gatewrap"><FootBars /><div className="modal-bg"><div className="modal">
       <h3><Logo />Choose a new password</h3>
       <div className="sub2">You signed in as <b>{me.email}</b> with a password that was set for you. Replace it with your own before the Monitor opens.</div>
       <ChangePassword forced onDone={() => setTok(getToken())} />
@@ -165,7 +168,7 @@ export default function App() {
         <footer>Orrery Monitor shows market data from third-party feeds (Yahoo Finance; US Treasury; Japan MOF; exchange and central-bank publications) that may be delayed or incomplete; every panel states its source and as-of time. Information only; nothing here is investment advice. Default time zone: Singapore.</footer>
       </div>
       {pv2 && <PhoneNav view={view} onNav={(v) => setHash(v)} />}
-      <UpdateBar />
+      <FootBars />
     </>
   );
 }
