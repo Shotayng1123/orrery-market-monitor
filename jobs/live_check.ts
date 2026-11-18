@@ -49,6 +49,14 @@ async function main(): Promise<void> {
     const rows = must(await sb.from("quotes_latest").select("symbol,price,market_time,fetched_at").in("symbol", ["^GSPC", "^IXIC", "^N225", "^VIX", "ES=F", "NKD=F", "USDJPY=X", "EURUSD=X", "^TNX", "CL=F", "GC=F"])) as Array<{ symbol: string; price: number; market_time: string; fetched_at: string }>;
     for (const r of rows.sort((a, b) => a.symbol.localeCompare(b.symbol))) console.log(`  ${r.symbol.padEnd(9)} ${String(r.price).padEnd(11)} printed ${utc(r.market_time)} (${age(r.market_time)}), pulled ${age(r.fetched_at)}`);
     if (!rows.length) console.log("  none of the instruments asked for is in the table");
+    // the closes booked for the same instruments: a close booked while the quotes stood still shows here as a
+    // close equal to the quote it was frozen at
+    const closes = must(await sb.from("prices_daily").select("symbol,d,close").in("symbol", rows.map((r) => r.symbol)).gte("d", new Date(now - 8 * 86400e3).toISOString().slice(0, 10)).order("d", { ascending: false })) as Array<{ symbol: string; d: string; close: number }>;
+    console.log("  booked closes, newest first:");
+    for (const r of rows) {
+      const c = closes.filter((x) => x.symbol === r.symbol).slice(0, 3);
+      console.log(`  ${r.symbol.padEnd(9)} ${c.map((x) => `${x.d} ${x.close}`).join("; ") || "none in the last 8 days"}${c[0] && Math.abs(c[0].close / r.price - 1) < 1e-6 ? "   <- the newest close equals the quote" : ""}`);
+    }
   });
 
   await part("source", "the price source asked directly from here (not through the Monitor's server): its newest minute bar", async () => {
