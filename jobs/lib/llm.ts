@@ -46,7 +46,8 @@ async function runOnce(client: Anthropic, model: string, effort: string, system:
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       output_config: { effort },
-      system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
+      // the Morning Note's long instructions are cached (its review turn reads them again); a look-up asks once
+      system: [direct ? { type: "text", text: system } : { type: "text", text: system, cache_control: { type: "ephemeral" } }],
       tools: maxSearches > 0 ? [{ type: direct ? "web_search_20250305" : "web_search_20260209", name: "web_search", max_uses: maxSearches }] : undefined,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       messages: messages as any,
