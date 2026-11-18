@@ -349,7 +349,9 @@ tbody tr.live:hover td{background:rgba(245,161,66,.1)}
 .sitem.on,.sitem:hover{background:#15171c}
 /* the watchlist's add box: candidates for part of a name or of a ticker, under the box */
 .addbox{position:relative;display:inline-block}
-.sres.left{left:0;right:auto;top:100%;margin-top:3px}
+.sres.cands{position:fixed;right:auto;width:min(600px,94vw)}   /* on the page, not in the panel: a panel clips what leaves it */
+.sres.cands .sitem .nm{flex:0 0 auto;max-width:62%}                                          /* the name at its own width */
+.sres.cands .sitem .mut{flex:1 1 0;min-width:0;text-align:right;overflow:hidden;text-overflow:ellipsis}   /* where it is from takes what is left */
 .sitem .act{flex:0 0 auto;font-size:10px;color:var(--amber);white-space:nowrap}
 .sitem.have{cursor:default}
 .sitem.have .act{color:var(--mut)}

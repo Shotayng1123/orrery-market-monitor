@@ -1,5 +1,6 @@
+import { zoomNow } from "../lib/prefs";
 import { useAddBox } from "../lib/candidates";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Empty, Panel } from "../components/Panel";
 import { Star } from "../components/Star";
 import { hideCard, money, openAsset, showCard } from "../components/CompanyCard";
@@ -28,6 +29,18 @@ export function WatchlistView({ tick }: { tick: number }) {
   const feed = useApi<Feed>("watch_feed", { v: w.version }, Math.floor(tick / 5));
   const box = useAddBox(w.has);
   const [open, setOpen] = useState(false);
+  // The candidates hang under the box but must not be cut by the panel, which clips what leaves it: they are
+  // placed on the page itself, at the box's own position (divided by the page's zoom, as the company card is).
+  const inp = useRef<HTMLInputElement>(null);
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
+  const showList = open && (box.hits.length > 0 || box.busy);
+  useEffect(() => {
+    if (!showList) { setAt(null); return; }
+    const place = () => { const el = inp.current; if (!el) return; const r = el.getBoundingClientRect(), z = zoomNow(); setAt({ left: r.left / z, top: r.bottom / z + 3 }); };
+    place();
+    window.addEventListener("scroll", place, true); window.addEventListener("resize", place);
+    return () => { window.removeEventListener("scroll", place, true); window.removeEventListener("resize", place); };
+  }, [showList]);
   const rows = list.data?.rows ?? [];
   const cell = (v: number | null, full: number, bp = false) => <td className={`num ${signCls(v)}`} style={{ background: shade(v, full) }}>{bp ? (v == null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1)}`) : fmtPct(v, 1)}</td>;
   const ahead = rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3).sort((a, b) => a.earningsAt!.localeCompare(b.earningsAt!));
@@ -38,7 +51,7 @@ export function WatchlistView({ tick }: { tick: number }) {
       <Panel no="01" title="MY NAMES" span={8} k="wl" aux={<>{rows.length} name{rows.length === 1 ? "" : "s"} · stocks at the last close, market instruments at the last print</>}>
         <div className="searchrow">
           <span className="addbox">
-            <input type="text" id="wl-add" aria-label="add a name to the watchlist" placeholder="add a name or a symbol: toyota, NVDA, 7203" value={box.text} autoComplete="off" style={{ width: 280 }}
+            <input type="text" id="wl-add" ref={inp} aria-label="add a name to the watchlist" placeholder="add a name or a symbol: toyota, NVDA, 7203" value={box.text} autoComplete="off" style={{ width: 280 }}
               onChange={(e) => { box.setText(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}
               onKeyDown={(e) => {
                 if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); box.setSel(Math.min(box.hits.length - 1, box.sel + 1)); }
@@ -46,8 +59,8 @@ export function WatchlistView({ tick }: { tick: number }) {
                 else if (e.key === "Enter") void box.submit();
                 else if (e.key === "Escape") setOpen(false);
               }} />
-            {open && (box.hits.length > 0 || box.busy) && (
-              <div className="sres left" id="wl-cands">
+            {showList && (
+              <div className="sres cands" id="wl-cands" style={at ? { left: at.left, top: at.top } : { visibility: "hidden" }}>
                 {box.busy && !box.hits.length && <div className="sitem mut">searching …</div>}
                 {box.hits.map((h, i) => (
                   <div key={h.symbol} className={`sitem${i === box.sel ? " on" : ""}${w.has(h.symbol) ? " have" : ""}`} title={w.has(h.symbol) ? "Already in your list" : `Add ${h.name} (${h.symbol})`} onMouseEnter={() => box.setSel(i)} onMouseDown={(e) => { e.preventDefault(); void box.addHit(h); }}>

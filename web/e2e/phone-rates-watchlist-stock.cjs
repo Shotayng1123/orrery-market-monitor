@@ -131,10 +131,15 @@ const measure = async (p, taps) => { await p.evaluate(() => { document.querySele
   { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
     state.syms = ["7203.T", "NVDA"]; await routes(p); await watchRoutes(p);
     await p.goto(FAKE + "#watch", { waitUntil: "networkidle" }); await p.waitForSelector("#wl-add"); await p.waitForTimeout(800);
-    const list = () => p.evaluate(() => { const box = document.querySelector("#wl-cands"); if (!box) return null; const r = box.getBoundingClientRect(), i = document.querySelector("#wl-add").getBoundingClientRect(); return { under: r.top >= i.bottom - 1 && Math.abs(r.left - i.left) <= 2, rows: [...box.querySelectorAll(".sitem")].map((e) => ({ sym: e.querySelector("b")?.textContent ?? "", name: e.querySelector(".nm")?.textContent ?? "", act: e.querySelector(".act")?.textContent ?? "", on: e.classList.contains("on"), have: e.classList.contains("have") })) }; });
+    const list = () => p.evaluate(() => { const box = document.querySelector("#wl-cands"); if (!box) return null; const r = box.getBoundingClientRect(), i = document.querySelector("#wl-add").getBoundingClientRect();
+      // every row must be reachable: the point at its middle belongs to the row itself, not to a panel that cut the list off
+      const whole = [...box.querySelectorAll(".sitem")].every((e) => { const x = e.getBoundingClientRect(); const hit = document.elementFromPoint(x.left + x.width / 2, x.top + x.height / 2); return !!hit && e.contains(hit); });
+      const cut = [...box.querySelectorAll(".sitem .nm")].filter((e) => e.scrollWidth > e.clientWidth + 1).length;
+      return { under: r.top >= i.bottom - 1 && Math.abs(r.left - i.left) <= 2, whole, cut, rows: [...box.querySelectorAll(".sitem")].map((e) => ({ sym: e.querySelector("b")?.textContent ?? "", name: e.querySelector(".nm")?.textContent ?? "", act: e.querySelector(".act")?.textContent ?? "", on: e.classList.contains("on"), have: e.classList.contains("have") })) }; });
     const names = () => p.evaluate(() => [...document.querySelectorAll('.panel[data-k="wl"] tbody tr td.nm')].map((td) => td.textContent.trim()));
     const n0 = (await names()).length;
     await p.locator("#wl-add").fill("toyo"); await p.waitForSelector("#wl-cands .sitem b"); await p.waitForTimeout(300); let l = await list();
+    ck("every candidate can be seen and clicked (the panel does not cut the list off) and no name is shortened", l && l.whole && l.cut === 0, l && { whole: l.whole, cut: l.cut });
     ck("typing part of a name lists the candidates under the box: symbol, name, where it is from, and whether it is in the list already", l && l.under && l.rows.map((r) => r.sym).join() === "7203.T,6201.T,8015.T,TM" && l.rows[0].have && l.rows[0].act === "in your list" && l.rows[1].act === "+ add" && l.rows.every((r) => !r.on), l);
     await p.locator("#wl-add").press("Enter"); await p.waitForTimeout(400);
     ck("Enter with candidates showing and none chosen adds nothing and says to choose one", !(p.__sets || []).length && /Choose one of the names/.test(await p.locator("#wl-msg").textContent()) && (await names()).length === n0);
@@ -146,6 +151,12 @@ const measure = async (p, taps) => { await p.evaluate(() => { document.querySele
     await p.locator("#wl-add").fill("6201"); await p.waitForSelector("#wl-cands .sitem b"); await p.waitForTimeout(300);
     await p.locator("#wl-cands .sitem", { hasText: "Toyota Industries" }).click(); await p.waitForTimeout(900);
     ck("part of a ticker finds a name too, and a click on a candidate adds it", p.__sets.at(-1).symbol === "6201.T" && (await names()).length === n0 + 2 && (await p.locator("#wl-cands").count()) === 0);
+    // an idle second draws nothing: the countdown is the top bar's own business (until 19 Nov 2026 it drew the whole Monitor every second)
+    { await p.locator("#wl-add").fill(""); await p.locator("#wl-add").blur(); await p.waitForTimeout(2600);
+      const a = await p.evaluate(() => ({ n: window.__appRenders, nxt: document.querySelector("#nxt").textContent.trim() })); await p.waitForTimeout(3200);
+      const z = await p.evaluate(() => ({ n: window.__appRenders, nxt: document.querySelector("#nxt").textContent.trim() }));
+      const secs = (t) => { const m = /(\d+):(\d\d)/.exec(t); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+      ck(`an idle Monitor is not drawn again every second: ${z.n - a.n} draw(s) of the whole page in 3.2 s (it was one a second), while the countdown still runs (${a.nxt} to ${z.nxt})`, typeof a.n === "number" && z.n - a.n <= 2 && secs(a.nxt) != null && secs(z.nxt) != null && (secs(a.nxt) - secs(z.nxt) >= 2 || secs(z.nxt) > secs(a.nxt)), { a, z }); }
     await p.locator("#wl-add").fill("zzzz"); await p.waitForTimeout(700); const none = await list();
     await p.locator("#wl-add").press("Enter"); await p.waitForTimeout(600);
     ck("text that matches nothing shows no list and is tried as a symbol, as before: the server's refusal is shown; no errors on the page", (none === null || none.rows.length === 0) && /Unknown symbol ZZZZ/.test(await p.locator("#wl-msg.warn").textContent().catch(() => "")) && errs.length === 0, { none, errs });
