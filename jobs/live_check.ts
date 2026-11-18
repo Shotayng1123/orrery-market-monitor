@@ -48,6 +48,19 @@ async function main(): Promise<void> {
     if (!rows.length) console.log("  none of the instruments asked for is in the table");
   });
 
+  await part("the price source asked directly from here (not through the Monitor's server): its newest minute bar", async () => {
+    // tells a source that has stopped apart from a server that is being handed old answers
+    for (const symbol of ["USDJPY=X", "^GSPC", "AAPL"]) for (const host of ["query1", "query2"]) {
+      try {
+        const r = await fetch(`https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m`, { headers: { "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36", accept: "application/json" }, signal: AbortSignal.timeout(20000) });
+        if (!r.ok) { console.log(`  ${symbol} at ${host}: HTTP ${r.status}`); continue; }
+        const j = (await r.json()) as { chart?: { result?: Array<{ meta?: { regularMarketTime?: number; regularMarketPrice?: number }; timestamp?: number[] }> } };
+        const x = j.chart?.result?.[0], last = x?.timestamp?.at(-1), mt = x?.meta?.regularMarketTime;
+        console.log(`  ${symbol.padEnd(9)} at ${host}: price ${x?.meta?.regularMarketPrice ?? "–"}, market time ${mt ? utc(new Date(mt * 1000).toISOString()) + " (" + age(new Date(mt * 1000).toISOString()) + ")" : "–"}, last minute bar ${last ? utc(new Date(last * 1000).toISOString()) : "–"}`);
+      } catch (e) { console.log(`  ${symbol} at ${host}: ${e instanceof Error ? e.message : String(e)}`); }
+    }
+  });
+
   await part("EQUITIES: the lists, their booked closes and today's quotes", async () => {
     const rows: Array<{ idx: string; symbol: string; d: string; q_time: string | null; q_price: number | null; q_prev: number | null; quote_at: string | null }> = [];
     for (let from = 0; ; from += 1000) { const page = must(await sb.from("constituent_stats").select("idx,symbol,d,q_time,q_price,q_prev,quote_at").order("idx").order("symbol").range(from, from + 999)) as typeof rows; rows.push(...page); if (page.length < 1000) break; }

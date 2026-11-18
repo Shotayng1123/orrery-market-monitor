@@ -201,6 +201,23 @@ Checked without the live project: `sim/logic.test.ts` section K (the code, the b
 conversation with a mail server), `sim/sql/signup.test.cjs` (the database functions, on an in-memory Postgres) and
 `web/e2e/accounts.cjs` (the screens).
 
+### The welcome email (added 2026-11-19)
+
+Once the password is set and the account is open, the new reader gets one welcome email
+(`supabase/functions/_shared/welcome.ts`): the idea behind the name first, then what the account opens (the six
+tabs, a company's own page, alerts, notifications on a phone, the watchlist) and a first five minutes. It is
+sent by the same sender as the verification email, through `signupFinish`, and never stands in the account's
+way: if it cannot be sent, or the mail server takes longer than eight seconds, that is logged and the person is
+signed in all the same. `accounts.welcomed_at` (migration `20261119000002`) records the sending.
+
+- To read it as a new reader does: Account › Accounts › **SEND IT TO ME** sends it to the manager's own address.
+- Its two pictures (the Monitor's mark and a drawing of an orrery) are files of the site,
+  `web/public/mail/mark.png` and `orrery.png`, fetched by the reader's mail program from `MONITOR_SITE_URL`;
+  `web/tools/mail-pictures.cjs` draws them. With pictures switched off the email still reads whole.
+- An account from before this change, and one a manager approves where no email sender is set up, gets none.
+- Checked in `sim/logic.test.ts` (its words, its links, the rules an email must keep) and
+  `web/e2e/welcome-mail.cjs` (drawn at a desktop mail program's width and at a phone's).
+
 ## The stock page and its sources (added 2026-11-18)
 
 `api?action=stock&symbol=…` answers the whole page in one go (`_shared/stock.ts`): the quote, the change over each
