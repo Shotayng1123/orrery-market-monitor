@@ -63,6 +63,32 @@ reports gone are deleted. The encryption and signing are in `functions/_shared/w
 example of RFC 8291 in `sim/logic.test.ts`. On an iPhone, notifications exist only in the app added to the Home Screen
 (iOS 16.4 or later).
 
+## The Morning Note on time (added 2026-11-18)
+
+GitHub starts this repository's scheduled workflows hours late (the note, due 07:00 SGT, finished 09:36 on 17 Nov and
+08:30 on 18 Nov). The database's own scheduler is punctual, so it asks GitHub for the note at 22:15 UTC
+(pg_cron job `monitor-morning-note`, which calls `monitor_dispatch('morning-note.yml')`). GitHub's own schedule stays
+as the fallback. Until a token is stored, `monitor_dispatch` does nothing.
+
+1. `npx supabase db push` (migration `20261118000002_note_on_time.sql`). This also adds one quote pull after the
+   Tokyo and Seoul closes, for alerts on closing-auction moves.
+2. A GitHub token that may start this repository's workflows. GitHub › Settings › Developer settings › Personal
+   access tokens › Fine-grained tokens › Generate new token: *Repository access* = Only select repositories ›
+   `orrery-market-monitor`; *Repository permissions* › **Actions: Read and write**. Note its expiry date: when it
+   expires the note falls back to GitHub's schedule and arrives late again.
+3. Store it, in the SQL editor of the Supabase project (the token goes nowhere else, and not into git):
+   ```sql
+   select monitor_set_github_token('<the token>');
+   ```
+4. Try it at a time of day when today's note is already there, so the run only checks and stops (about half a minute,
+   nothing is written and the model is not called):
+   ```sql
+   select monitor_dispatch('morning-note.yml', '{"if_missing":"true"}'::jsonb);
+   select * from monitor_dispatch_status();   -- a few seconds later: 204 = GitHub accepted the request
+   ```
+   A `morning-note` run then appears in the repository's Actions tab. 401 = the token is wrong or has expired;
+   403 or 404 = it may not start workflows of this repository.
+
 ## Changing the shared sign-in password
 
 The password exists only as the function secret `MONITOR_PASSWORD`; it is not in git or in the database, and
