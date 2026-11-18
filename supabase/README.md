@@ -323,7 +323,29 @@ Browsers already signed in stay signed in (tokens are signed with `MONITOR_TOKEN
 
 ## Verifying
 
-- `api?action=health` (with a sign-in token) → `tick.ageMin` ≤ 3 during a session, `daily.ok` true, `sources` without errors.
+- **Actions › live-check › Run workflow** (`jobs/live_check.ts`, added 2026-11-19): a read-only report on the live
+  database, with no laptop and no sign-in. It prints when each job last ran and what failed, sources that are
+  failing, when the market table's own quotes last printed against when they were pulled, each EQUITIES list's
+  booked closes and today's quotes, the alerts of the last 48 hours, the reasons for big moves and their cost,
+  and the EDINET DB allowance used. Market data and counts only: no email address, no watchlist.
+- `api?action=health` (with a sign-in token) → `tick.ageMin` ≤ 3 during a session, `daily.ok` true, `feed.ok` true,
+  `sources` without errors.
+
+### When the price feed stops (added 2026-11-19)
+
+On 18 Nov 2026, from 15:52 UTC, the source went on answering every request, with the same prices: the S&P 500,
+USD/JPY, the futures and all 503 constituents carried a print time of 15:52 or earlier for more than an hour and
+a half, with New York open. The minute job ran on time throughout (it asked, and was answered), so the header
+said DATA OK. From a GitHub runner the source answered HTTP 429, so whether it had stopped for everyone or only
+for the Monitor's server could not be told from outside.
+
+`health.feed` (`_shared/feedhealth.ts`) now reads the prints themselves: among the instruments whose market is
+open, and has been for half an hour, it takes the one that printed most recently, allowing each market its
+feed's own delay; if even that one is more than twenty minutes behind, the feed has stopped. The page then shows
+DATA ✕ with the reason, and a red bar at the foot of every screen: "No new prices since … The source has stopped
+sending them; the figures on screen are as of then." Both go when prices arrive again. Nothing else changes:
+the prices already on screen stay, with their own times. While the feed is stopped no move can be seen, so no
+alert is raised either; the bar is the only sign.
 - Spot-check the table against the exchange: Nikkei 225 close on JPX/Nikkei, S&P 500 on S&P DJI, USD/JPY on a bank page, UST 10Y on treasury.gov for the same date.
 - Holidays: `sessions_cal` rows are `verified = false` until checked against each exchange's published calendar; the DATA chip says so.
 

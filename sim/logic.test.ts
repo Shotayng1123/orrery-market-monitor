@@ -19,6 +19,7 @@ import { bigMoves, isLargeCap, moveText, settledBars } from "../supabase/functio
 import { liveRows } from "../supabase/functions/_shared/intraday.ts";
 import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabase/functions/_shared/movecause.ts";
 import { ALERTS, COMPANY, FIRST, PHILOSOPHY, PHONE, TABS, WELCOME_SUBJECT, welcomeMail } from "../supabase/functions/_shared/welcome.ts";
+import { FEED_LATE_MIN, feedState, type Print } from "../supabase/functions/_shared/feedhealth.ts";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
 let pass = 0, fail = 0;
@@ -701,6 +702,27 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const few = liveRows([row("A", 100, 1, 103), row("B", 50, 1, 50, "2026-11-17T21:00:00Z"), row("C", 200, 1, 200, "2026-11-17T21:00:00Z")], ny);
     ck("fresh quotes for under half of the names change nothing: a list half at today's prices would rank wrongly", few.live === null && few.rows[0].pct1d === 1 && few.rows[0].close === 100);
     ck("a quote without a price, without its previous close or without a time is not used; an empty list is an empty list", liveRows([{ ...row("A", 100, 1, 103), q_prev: null }, { ...row("B", 50, 1, 51), q_time: null }, { ...row("C", 20, 1, 0) }], ny).live === null && liveRows([], ny).live === null && liveRows([], ny).rows.length === 0);
+  }
+
+  console.log("\n[has the price feed stopped?]");
+  {
+    const at = (iso: string) => Date.parse(iso), P = (symbol: string, market: string, marketTime: string): Print => ({ symbol, market, marketTime });
+    // 18 Nov 2026, 17:30 UTC, as it was: New York open three hours, currencies trading, and nothing newer than 15:52
+    const frozen = [P("^GSPC", "NYSE", "2026-11-18T15:52:00Z"), P("USDJPY=X", "FX", "2026-11-18T15:52:10Z"), P("ES=F", "CME", "2026-11-18T15:42:00Z"), P("^N225", "TSE", "2026-11-18T06:30:00Z")];
+    const f = feedState(frozen, at("2026-11-18T17:30:00Z"));
+    ck("the evening of 18 Nov: every open market's newest print is an hour and a half old, so the feed has stopped; the closed Tokyo market is not counted", f.expected && !f.ok && f.lateMin === 98 && f.symbol === "USDJPY=X" && f.newest === "2026-11-18T15:52:10.000Z", f);
+    const live = feedState([...frozen.slice(0, 1), P("USDJPY=X", "FX", "2026-11-18T17:29:00Z"), ...frozen.slice(2)], at("2026-11-18T17:30:00Z"));
+    ck("one instrument that printed a minute ago is enough: quiet instruments beside it prove nothing", live.expected && live.ok && live.lateMin === 1 && live.symbol === "USDJPY=X", live);
+    ck("a feed's own delay is allowed for: a futures price ten minutes old on a ten-minute feed is on time", feedState([P("ES=F", "CME", "2026-11-18T17:20:00Z")], at("2026-11-18T17:30:00Z")).lateMin === 0 && feedState([P("^N225", "TSE", "2026-11-19T04:35:00Z")], at("2026-11-19T05:00:00Z")).lateMin === 5);
+    const edge = (min: number) => feedState([P("EURUSD=X", "FX", new Date(at("2026-11-18T17:30:00Z") - min * 60000).toISOString())], at("2026-11-18T17:30:00Z"));
+    ck(`up to ${FEED_LATE_MIN} minutes behind is still a feed; a minute more is not`, FEED_LATE_MIN === 20 && edge(20).ok && !edge(21).ok && edge(21).lateMin === 21);
+    const weekend = feedState(frozen, at("2026-11-21T12:00:00Z"));
+    ck("with every market closed (a Saturday) nothing is expected, and old prints are not a fault", !weekend.expected && weekend.ok && weekend.newest === null && weekend.lateMin === null, weekend);
+    // Tokyo, Thursday 19 Nov: 12:40 is ten minutes after lunch, and the newest print is the one from 11:30
+    const lunch = feedState([P("^N225", "TSE", "2026-11-19T02:30:00Z")], at("2026-11-19T03:40:00Z"));
+    ck("just after a lunch break or an open the newest print is the one from before it: not judged yet", !lunch.expected && lunch.ok, lunch);
+    ck("fifty minutes into the afternoon it is judged, and a print still from before lunch means the feed has stopped", !feedState([P("^N225", "TSE", "2026-11-19T02:30:00Z")], at("2026-11-19T04:25:00Z")).ok && feedState([P("^N225", "TSE", "2026-11-19T04:00:00Z")], at("2026-11-19T04:25:00Z")).ok);
+    ck("a market on holiday is not expected to print; an unknown market and an unreadable time are passed over", !feedState([P("^N225", "TSE", "2026-11-19T02:30:00Z")], at("2026-11-19T05:00:00Z"), { TSE: new Set(["2026-11-19"]) }).expected && !feedState([P("X", "MARS", "2026-11-18T17:29:00Z"), P("Y", "FX", "not a time")], at("2026-11-18T17:30:00Z")).expected && !feedState([], at("2026-11-18T17:30:00Z")).expected);
   }
 
   console.log("\n[the welcome email]");

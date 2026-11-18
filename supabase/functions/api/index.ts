@@ -13,7 +13,8 @@ import { quotes } from "../_shared/yahoo.ts";
 import { pushState, pushSubscribe, pushTest, pushUnsubscribe } from "../_shared/push.ts";
 import { stockPage } from "../_shared/stock.ts";
 import { liveRows } from "../_shared/intraday.ts";
-import { localDate } from "../_shared/sessions.ts";
+import { localDate, type Holidays } from "../_shared/sessions.ts";
+import { feedState } from "../_shared/feedhealth.ts";
 
 const RANGES: Record<string, number> = { "1W": 7, "1M": 31, "3M": 93, "12M": 366, "36M": 1096 };
 const SIGMA_LOOKBACK_DAYS = 1120;   // 756 trading days ≈ 1,100 calendar days, so the 36M band is defined from the first point shown
@@ -163,23 +164,31 @@ async function reportPut(req: Request): Promise<Response> {
 // ---------- health ----------
 async function health() {
   const now = Date.now();
-  const [{ data: tick }, { data: daily }, { data: sources }, { data: cal }, unverifiedRes] = await Promise.all([
+  const [{ data: tick }, { data: daily }, { data: sources }, { data: cal }, unverifiedRes, { data: inst }, { data: prints }] = await Promise.all([
     db.from("job_runs").select("at,ok,detail").eq("job", "tick").order("at", { ascending: false }).limit(1).maybeSingle(),
     db.from("job_runs").select("at,ok,detail,job").like("job", "daily:%").order("at", { ascending: false }).limit(1).maybeSingle(),
     db.from("source_status").select("*"),
     db.from("sessions_cal").select("market,d").gte("d", new Date(now - 2 * 86400e3).toISOString().slice(0, 10)),
     db.from("sessions_cal").select("market", { count: "exact", head: true }).eq("verified", false),
+    db.from("instruments").select("symbol,market").eq("active", true),
+    db.from("quotes_latest").select("symbol,market_time"),
   ]);
   const unverifiedCount = unverifiedRes.count ?? 0;
   const tickAge = tick ? Math.round((now - Date.parse(tick.at)) / 60000) : null;
   const holidays: Record<string, string[]> = {};
   for (const r of (cal ?? []) as Array<{ market: string; d: string }>) (holidays[r.market] ??= []).push(r.d);
   const tickOk = !!tick && tick.ok && tickAge != null && tickAge <= 3;
+  // has the feed itself stopped? (the jobs running on time only shows that the Monitor asked: feedhealth.ts)
+  const marketOf = new Map(((inst ?? []) as Array<{ symbol: string; market: string }>).map((r) => [r.symbol, r.market]));
+  const closedDays: Holidays = {};
+  for (const [m, days] of Object.entries(holidays)) closedDays[m] = new Set(days);
+  const feed = feedState(((prints ?? []) as Array<{ symbol: string; market_time: string }>).filter((r) => marketOf.has(r.symbol)).map((r) => ({ symbol: r.symbol, market: marketOf.get(r.symbol)!, marketTime: r.market_time })), now, closedDays);
   return {
     ok: true,
     at: new Date(now).toISOString(),
     tick: { lastAt: tick?.at ?? null, ageMin: tickAge, ok: tickOk, note: tick ? (tick.ok ? tick.detail : `last run failed: ${tick.detail}`) : "no tick yet" },
     daily: { lastAt: daily?.at ?? null, ok: !!daily && daily.ok, note: daily ? `${daily.job}: ${daily.detail}` : "no daily run yet" },
+    feed,
     // a source that has neither succeeded nor failed for a week is no longer called (a feed that was dropped): not listed
     sources: (sources ?? []).filter((s) => Math.max(Date.parse(s.last_ok ?? "") || 0, Date.parse(s.last_error_at ?? "") || 0) > now - 7 * 86400e3).map((s) => ({ name: s.name, lastOk: s.last_ok, lastError: s.last_error })),
     holidays,
