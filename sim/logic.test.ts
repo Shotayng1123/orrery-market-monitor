@@ -11,6 +11,12 @@ import { CODE_MAX_TRIES, CODE_TTL_MIN, checkRefusal, cleanCode, codeHash, codeMa
 import { readVerify } from "../web/src/lib/verify.ts";
 import { SmtpError, appPassword, buildMessage, dotStuff, parseFrom, smtpTalk, type Wire } from "../supabase/functions/_shared/smtp.ts";
 import { mailReady, mailSetup, resendRequest } from "../supabase/functions/_shared/mail.ts";
+import { avgTurnover, barOnOrBefore, betaCorr, maxDrawdown, monthsBack, perfRows, range52w, realisedVol, type Bar } from "../supabase/functions/_shared/stockstats.ts";
+import { fyLabel, justReported, LAYOUT_FOREIGN, LAYOUT_JP, pickUnit, progress, qEndLabel, qLabel, quarterEnd, quarterEps, ratiosOf, resultsDateToWatch, singleQuarters, valuation, type FinPeriod, type FinRowId, type FinSet } from "../supabase/functions/_shared/fin.ts";
+import { legacyStatements, yahooFin, yahooFinTypes } from "../supabase/functions/_shared/finsrc.ts";
+import { keyStatsOf } from "../supabase/functions/_shared/yahoo.ts";
+import { bigMoves, isLargeCap, moveText, settledBars } from "../supabase/functions/_shared/bigmoves.ts";
+import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabase/functions/_shared/movecause.ts";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
 let pass = 0, fail = 0;
@@ -337,6 +343,236 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const noBox = await refusal({ rcpt: "550 5.1.1 The email account that you tried to reach does not exist\r\n" });
     ck("an address the server refuses is reported as that", noBox instanceof SmtpError && noBox.code === 550 && noBox.step === "the recipient" && /does not exist/.test(noBox.message), noBox.message);
     ck("a server that hangs up, one that greets with a refusal, and one with no sign-in this client knows each give an error, not a hang", /closed the connection/.test((await refusal({ hangUpAfter: "MAIL FROM" })).message) && (await refusal({ greet: "554 5.7.1 No service\r\n" }) as SmtpError).step === "the connection" && /no sign-in this client knows/.test((await refusal({ auth: "XOAUTH2 OAUTHBEARER" })).message) && /unexpected answer/.test((await refusal({ greet: "hello there\r\n" })).message));
+  }
+
+  console.log("\n[L] a stock's page: the numbers worked out from its price history");
+  {
+    const T = (d: string) => Date.parse(d + "T00:00:00Z") / 1000, D = (t: number) => new Date(t * 1000).toISOString().slice(0, 10);
+    const near = (a: number | null, b: number, eps = 1e-9) => a != null && Math.abs(a - b) < eps;
+    ck("N months back is the same day of the month, or the month's last day when it has no such day", D(monthsBack(T("2026-11-18"), 1)) === "2026-10-18" && D(monthsBack(T("2026-03-30"), 1)) === "2026-02-28" && D(monthsBack(T("2024-03-31"), 1)) === "2024-02-29" && D(monthsBack(T("2026-01-15"), 3)) === "2025-10-15" && D(monthsBack(T("2026-11-18"), 60)) === "2021-11-18" && D(monthsBack(T("2026-05-31"), 6)) === "2025-11-30");
+    // weekdays from 2 Jan 2020 to 18 Nov 2026: the stock gains 0.05% a day, the benchmark 0.02%
+    const days: number[] = []; for (let t = T("2020-01-02"); t <= T("2026-11-18"); t += 86400) { const w = new Date(t * 1000).getUTCDay(); if (w !== 0 && w !== 6) days.push(t); }
+    const own: Bar[] = days.map((t, i) => ({ t, c: 100 * 1.0005 ** i, h: 100 * 1.0005 ** i * 1.01, l: 100 * 1.0005 ** i * 0.99, v: 1000 + (i % 7) * 100 }));
+    const bench: Bar[] = days.map((t, i) => ({ t, c: 1000 * 1.0002 ** i }));
+    const n = own.length - 1, idx = (d: string) => days.findIndex((t) => D(t) === d);
+    ck("the last close on or before a day: the day itself, the Friday before a weekend, nothing before the history starts", D(barOnOrBefore(own, T("2026-08-18"))!.t) === "2026-08-18" && D(barOnOrBefore(own, T("2026-10-18"))!.t) === "2026-10-16" && barOnOrBefore(own, T("2019-12-31")) === null && D(barOnOrBefore(own, T("2030-01-01"))!.t) === "2026-11-18");
+    const rows = perfRows(own, [bench], own[n].c, own[n - 1].c);
+    const want: Record<string, string> = { "1M": "2026-10-16", "3M": "2026-08-18", "6M": "2026-05-18", "12M": "2025-11-18", "36M": "2023-11-17", "60M": "2021-11-18" };
+    ck("the horizons are 1D, 1M, 3M, 6M, 12M, 36M, 60M, each measured from the last close on or before that day", rows.map((r) => r.h).join() === "1D,1M,3M,6M,12M,36M,60M" && Object.entries(want).every(([h, d]) => rows.find((r) => r.h === h)!.from === d), rows.map((r) => [r.h, r.from]));
+    ck("each change is the price now against that close, for the stock and for the benchmark over the same dates", Object.entries(want).every(([h, d]) => { const k = n - idx(d), r = rows.find((x) => x.h === h)!; return near(r.stock, (1.0005 ** k - 1) * 100, 1e-7) && near(r.bench[0], (1.0002 ** k - 1) * 100, 1e-7) && near(r.base, own[idx(d)].c, 1e-9); }), rows);
+    ck("the last column is the stock's change minus the benchmark's, in percentage points", rows.every((r) => r.stock != null && r.bench[0] != null && near(r.rel[0], r.stock - r.bench[0])) && rows.every((r) => (r.rel[0] as number) > 0));
+    ck("1D uses the quote's previous close for the stock and the benchmark's previous close for the benchmark", near(perfRows(own, [bench], 110, 100)[0].stock, 10) && near(rows[0].bench[0], 0.02, 1e-9) && perfRows(own, [bench], 110, 100)[0].from === "2026-11-17");
+    ck("with no quote the latest close stands in for the price now", near(perfRows(own, [bench], null, null).find((r) => r.h === "1M")!.stock, rows.find((r) => r.h === "1M")!.stock as number));
+    const short = perfRows(own.slice(-400), [bench], own[n].c, own[n - 1].c);
+    ck("a history that does not reach back far enough leaves the horizon empty, it is never measured over a shorter time", short.find((r) => r.h === "12M")!.stock != null && short.find((r) => r.h === "36M")!.stock === null && short.find((r) => r.h === "60M")!.rel[0] === null && short.find((r) => r.h === "36M")!.from === null);
+    const holed = own.filter((b) => b.t < T("2026-04-20") || b.t > T("2026-05-25"));
+    ck("a hole in the history at the anchor leaves that horizon empty too (the others stand)", perfRows(holed, [bench], null, null).find((r) => r.h === "6M")!.stock === null && perfRows(holed, [bench], null, null).find((r) => r.h === "12M")!.stock != null);
+    ck("a benchmark with no history gives the stock's change and no comparison; no bars at all give empty rows", perfRows(own, [[]], null, null).every((r) => r.stock != null && r.bench[0] === null && r.rel[0] === null) && perfRows([], [[]], null, null).every((r) => r.stock === null && r.bench.length === 1) && perfRows([], [], null, null).length === 7);
+    // two benchmarks (Tokyo names: Nikkei 225 and TOPIX), the second with a shorter history
+    const second: Bar[] = days.slice(-800).map((t, i) => ({ t, c: 500 * 1.0001 ** i }));
+    const two = perfRows(own, [bench, second], own[n].c, own[n - 1].c);
+    ck("against two benchmarks: each has its own change and its own difference, in the order given", two.every((r) => r.bench.length === 2 && r.rel.length === 2) && two.find((r) => r.h === "12M")!.bench.every((x) => x != null) && near(two.find((r) => r.h === "12M")!.bench[1], (1.0001 ** (n - idx("2025-11-18")) - 1) * 100, 1e-7) && near(two.find((r) => r.h === "12M")!.rel[1], (two.find((r) => r.h === "12M")!.stock as number) - (two.find((r) => r.h === "12M")!.bench[1] as number)) && near(two[0].bench[1], 0.01, 1e-9), two.find((r) => r.h === "12M"));
+    ck("a benchmark whose history is shorter leaves only its own cells empty for the longer horizons", two.find((r) => r.h === "60M")!.bench[0] != null && two.find((r) => r.h === "60M")!.bench[1] === null && two.find((r) => r.h === "60M")!.rel[1] === null && two.find((r) => r.h === "60M")!.rel[0] != null && two.find((r) => r.h === "60M")!.stock != null);
+    // 52-week range: a spike older than a year must not count
+    const spiky = own.map((b) => ({ ...b })); const old = idx("2025-10-01"), hiI = idx("2026-03-10"), loI = idx("2026-06-15");
+    spiky[old].h = 9999; spiky[hiI].h = 500; spiky[loI].l = 50;
+    const rg = range52w(spiky, 200);
+    ck("the 52-week high and low are the highest high and lowest low of the last twelve months, with their dates", rg.hi === 500 && rg.hiDate === "2026-03-10" && rg.lo === 50 && rg.loDate === "2026-06-15", rg);
+    ck("and the price now is placed against them: per cent from the high, from the low, and its position between", near(rg.fromHi, -60) && near(rg.fromLo, 300) && near(rg.pos, (150 / 450) * 100) && range52w([], 1).hi === null, rg);
+    ck("without highs and lows in the feed the closes are used", range52w(bench, null).hi === bench[n].c && near(range52w(bench, null).fromHi, 0));
+    // volatility: returns of +1% and -1% in turn
+    const zig: Bar[] = [{ t: T("2026-01-01"), c: 100 }]; for (let i = 1; i <= 40; i++) zig.push({ t: T("2026-01-01") + i * 86400, c: zig[i - 1].c * Math.exp(i % 2 ? 0.01 : -0.01) });
+    ck("realised volatility is the standard deviation of the daily log returns times the square root of 252", near(realisedVol(zig, 20), 0.01 * Math.sqrt(20 / 19) * Math.sqrt(252) * 100, 1e-9) && near(realisedVol(zig, 40), 0.01 * Math.sqrt(40 / 39) * Math.sqrt(252) * 100, 1e-9) && realisedVol(zig, 41) === null && realisedVol(own, 20)! < 1e-6);
+    // beta: a stock that moves twice as far as the benchmark, one that moves half as far the other way
+    const bm: Bar[] = [{ t: T("2026-01-01"), c: 1000 }]; for (let i = 1; i <= 80; i++) bm.push({ t: T("2026-01-01") + i * 86400, c: bm[i - 1].c * Math.exp(((i * 7) % 11 - 5) / 500) });
+    const twice: Bar[] = bm.map((b, i) => ({ t: b.t, c: 50 * Math.exp(2 * Math.log(bm[i].c / 1000)) })), against: Bar[] = bm.map((b, i) => ({ t: b.t, c: 50 * Math.exp(-0.5 * Math.log(bm[i].c / 1000)) }));
+    const b2 = betaCorr(twice, bm, 60), bn = betaCorr(against, bm, 60);
+    ck("beta 2 and correlation 1 for a stock that moves twice the benchmark; beta -0.5 and correlation -1 for one that moves half as far the other way", near(b2.beta, 2, 1e-9) && near(b2.corr, 1, 1e-9) && b2.days === 60 && near(bn.beta, -0.5, 1e-9) && near(bn.corr, -1, 1e-9), [b2, bn]);
+    const gaps = twice.filter((_, i) => i % 5 !== 2);
+    ck("days on which only one of the two traded are left out, and the returns are taken between common days", near(betaCorr(gaps, bm, 50).beta, 2, 1e-9) && betaCorr(gaps, bm, 50).days === 50 && betaCorr(twice, bm, 81).beta === null && betaCorr(twice, bm.map((b) => ({ ...b, c: 1000 })), 60).beta === null);
+    // turnover: the latest bar (possibly a day in progress) is left out
+    const tv: Bar[] = [1, 2, 3, 4, 5].map((k) => ({ t: T("2026-11-0" + k), c: 10 * k, v: 100 * k }));
+    const at = avgTurnover(tv, 3);
+    ck("average daily volume and value traded are over the sessions before the latest one", at.shares === 300 && at.value === (200 * 20 + 300 * 30 + 400 * 40) / 3 && at.days === 3 && avgTurnover(tv, 5).shares === null && avgTurnover(tv.map((b) => ({ ...b, v: null })), 2).shares === null, at);
+    const path: Bar[] = [100, 120, 110, 90, 95, 110].map((c, i) => ({ t: T("2026-11-0" + (i + 1)), c }));
+    const dd = maxDrawdown(path, 12);
+    ck("the largest fall from a high to a later low, with both dates", near(dd.pct, -25) && dd.from === "2026-11-02" && dd.to === "2026-11-04" && near(maxDrawdown(own, 12).pct, 0) && maxDrawdown([], 12).pct === null, dd);
+  }
+
+  console.log("\n[M] a stock's page: statements in one shape, one unit, and the ratios");
+  {
+    const near = (a: number | null | undefined, b: number, eps = 1e-9) => a != null && Math.abs(a - b) < eps;
+    ck("a fiscal year is named by the month and year it ends in; a quarter by its number, or by its last month when that is all that is known", fyLabel("2026-03-31") === "FY3/26" && fyLabel("2025-12-31") === "FY12/25" && fyLabel("2009-09-30") === "FY9/09" && qLabel("2027-03-31", 1) === "1Q 3/27" && qEndLabel("2026-09-30") === "Sep 26");
+    ck("the last day of each quarter of a fiscal year", quarterEnd("2027-03-31", 1) === "2026-06-30" && quarterEnd("2027-03-31", 2) === "2026-09-30" && quarterEnd("2027-03-31", 3) === "2026-12-31" && quarterEnd("2027-03-31", 4) === "2027-03-31" && quarterEnd("2025-12-31", 1) === "2025-03-31" && quarterEnd("2024-02-29", 4) === "2024-02-29" && quarterEnd("2024-02-29", 3) === "2023-11-30" && quarterEnd("2026-08-31", 2) === "2026-02-28");
+    const P = (end: string, kind: FinPeriod["kind"] = "FY", months = 12): FinPeriod => ({ key: `${kind}:${end}`, end, label: end, kind, months, std: "JP", doc: null, url: null, note: null });
+    const set = (rev: Array<number | null>): FinSet => ({ periods: rev.map((_, i) => P(`${2020 + i}-03-31`)), lines: { revenue: rev } });
+    const u = (rev: number) => pickUnit(set([rev]));
+    ck("one unit per company, from the size of its revenue: bn from 100bn, tn from 100tn, m below, thousands below 100m", u(45.1e12).label === "bn" && u(1e11).label === "bn" && u(9.99e10).label === "m" && u(1e8).label === "m" && u(9.9e7).label === "k" && u(3e14).label === "tn" && u(45.1e12).div === 1e9 && u(45.1e12).dp === 1 && u(5e9).dp === 0);
+    ck("a company with no revenue line (a bank under some standards) is sized by its total assets; the largest year decides", pickUnit({ periods: [P("2026-03-31")], lines: { assets: [1.3e13] } }).label === "bn" && pickUnit(set([5e10, 2e11, 9e10])).label === "bn" && pickUnit(set([-3e11])).label === "bn" && pickUnit({ periods: [], lines: {} }).label === "k");
+    // ratios, annual: FY3/23 .. FY3/26 plus guidance
+    const A: FinSet = { periods: [P("2023-03-31"), P("2024-03-31"), P("2025-03-31"), P("2026-03-31"), P("2027-03-31", "FC")],
+      lines: { revenue: [1000, 1100, 990, null, 1320], gross: [400, 462, null, 500, null], op: [100, 132, -50, 120, 150], ni: [70, 88, -60, 80, 99], eps: [70, 88, -60, 80, 99], dps: [21, 30, 30, 32, 40], equity: [700, 800, 720, 800, null], assets: [1400, 1600, 1800, 2000, null] } };
+    const r = ratiosOf(A);
+    ck("sales growth is against the year that ended twelve months before; the first year, a year with no figure and the year after it have none", r.salesYoy![0] === null && near(r.salesYoy![1], 10) && near(r.salesYoy![2], -10) && r.salesYoy![3] === null && r.salesYoy![4] === null, r.salesYoy);
+    ck("margins are the profit over revenue; a missing figure on either side leaves the margin empty", near(r.gpm![0], 40) && near(r.gpm![1], 42) && r.gpm![2] === null && r.gpm![3] === null && near(r.opm![1], 12) && near(r.opm![2], -50 / 990 * 100) && r.opm![3] === null && near(r.npm![0], 7) && near(r.npm![4], 7.5), r);
+    ck("the payout ratio is the dividend over earnings per share, and empty in a loss-making year", near(r.payout![0], 30) && near(r.payout![1], 30 / 88 * 100) && r.payout![2] === null && near(r.payout![3], 40) && near(r.payout![4], 40 / 99 * 100), r.payout);
+    ck("return on equity and the equity ratio use the year-end balance sheet; guidance has neither", near(r.roe![0], 10) && near(r.roe![1], 11) && r.roe![4] === null && near(r.equityRatio![0], 50) && near(r.equityRatio![3], 40) && r.equityRatio![4] === null, r);
+    ck("a payout ratio the company states itself is used as stated", near(ratiosOf({ ...A, lines: { ...A.lines, payoutReported: [35.2, null, null, null, null] } }).payout![0], 35.2) && near(ratiosOf({ ...A, lines: { ...A.lines, payoutReported: [35.2, null, null, null, null] } }).payout![1], 30 / 88 * 100));
+    // quarterly: growth is against the same quarter a year earlier, never against the quarter before
+    const Q: FinSet = { periods: ["2025-06-30", "2025-09-30", "2025-12-31", "2026-03-31", "2026-06-30", "2026-09-30"].map((e) => P(e, "Q", 3)), lines: { revenue: [100, 200, 300, 400, 120, 190], op: [10, 30, 30, 20, 18, 19] } };
+    const rq = ratiosOf(Q);
+    ck("a quarter's sales growth is against the same quarter a year earlier", rq.salesYoy!.slice(0, 4).every((x) => x === null) && near(rq.salesYoy![4], 20) && near(rq.salesYoy![5], -5) && near(rq.opm![4], 15) && rq.roe!.every((x) => x === null), rq);
+    ck("a fiscal year that changed its year-end has no growth figure across the change", ratiosOf({ periods: [P("2024-03-31"), P("2024-12-31", "FY", 9), P("2025-12-31")], lines: { revenue: [100, 80, 120] } }).salesYoy!.every((x) => x === null));
+    // year-to-date into single quarters
+    const sq = singleQuarters([{ fy: "2026-03-31", q: 1, v: 100 }, { fy: "2026-03-31", q: 2, v: 250 }, { fy: "2026-03-31", q: 3, v: 370 }, { fy: "2026-03-31", q: 4, v: 600 }, { fy: "2027-03-31", q: 1, v: 130 }, { fy: "2027-03-31", q: 2, v: 240 }]);
+    ck("year-to-date figures become single quarters: the first as it is, each later one less the one before", sq.map((x) => x.v).join() === "100,150,120,230,130,110", sq);
+    const hole = singleQuarters([{ fy: "2026-03-31", q: 1, v: 100 }, { fy: "2026-03-31", q: 3, v: 370 }, { fy: "2026-03-31", q: 4, v: null }, { fy: "2027-03-31", q: 2, v: 240 }]);
+    ck("a quarter whose predecessor is missing stays empty: a half-year or nine-month figure is never shown as a quarter", hole.map((x) => x.v).join() === "100,,," && hole[1].v === null && hole[3].v === null, hole);
+    ck("a negative year-to-date change is a negative quarter (a loss, or a reversal), not an error", singleQuarters([{ fy: "x", q: 1, v: 50 }, { fy: "x", q: 2, v: 20 }])[1].v === -30);
+    // a single quarter's EPS from year-to-date rows: 1.5bn shares; H1 net income 300bn (EPS 200), Q1 120bn (EPS 80)
+    ck("the first quarter's EPS is the reported figure; a later quarter's is its net income over the share count the year-to-date EPS implies", quarterEps(1, { ni: 120e9, eps: 80 }, null) === 80 && near(quarterEps(2, { ni: 300e9, eps: 200 }, { ni: 120e9, eps: 80 }), 120) && near(quarterEps(3, { ni: 280e9, eps: 186.67 }, { ni: 300e9, eps: 200 }), -20e9 / (280e9 / 186.67)));
+    ck("a buyback of 2% between the two rows still gives a figure, on the later row's share count", near(quarterEps(2, { ni: 300e9, eps: 300e9 / 1.47e9 }, { ni: 120e9, eps: 80 }), 180e9 / 1.47e9));
+    ck("no quarterly EPS across a split (the implied share counts differ), on a missing figure, or on figures too small to imply a share count", quarterEps(2, { ni: 300e9, eps: 100 }, { ni: 120e9, eps: 80 }) === null && quarterEps(2, { ni: 300e9, eps: null }, { ni: 120e9, eps: 80 }) === null && quarterEps(2, { ni: 300e9, eps: 200 }, null) === null && quarterEps(2, { ni: 300e9, eps: 200 }, { ni: null, eps: 80 }) === null && quarterEps(2, { ni: 9e7, eps: 0.6 }, { ni: 5e7, eps: 0.33 }) === null && quarterEps(2, { ni: 300e9, eps: -200 }, { ni: 120e9, eps: 80 }) === null);
+    ck("a loss-making half is handled like any other: the signs of net income and EPS agree, so the share count is positive", near(quarterEps(2, { ni: -90e9, eps: -60 }, { ni: -30e9, eps: -20 }), -40));
+    ck("progress against full-year guidance is the year-to-date figure over the guidance, for the first three quarters only", near(progress(370, 600, 3), 370 / 600 * 100) && near(progress(100, 600, 1), 100 / 6) && progress(600, 700, 4) === null && progress(null, 600, 2) === null && progress(100, null, 2) === null && progress(100, -50, 2) === null && progress(100, 600, null) === null);
+    const val = valuation(3000, { eps: 200, epsGuide: 250, bps: 2400, dps: 60, dpsGuide: 75 });
+    ck("valuation: price over earnings (last year's and the guided), price over book, dividend yield", near(val.pe, 15) && near(val.peGuide, 12) && near(val.pb, 1.25) && near(val.yield, 2) && near(val.yieldGuide, 2.5), val);
+    const none = valuation(3000, { eps: -20, epsGuide: null, bps: 0, dps: null, dpsGuide: 0 });
+    ck("no multiple on a loss, on a missing figure or on zero book value; a guided dividend of nil is a yield of nil", none.pe === null && none.peGuide === null && none.pb === null && none.yield === null && none.yieldGuide === 0 && valuation(null, { eps: 1, epsGuide: 1, bps: 1, dps: 1, dpsGuide: 1 }).yield === null, none);
+    // stored statements around a results date
+    const H = 3600e3, D0 = Date.UTC(2026, 10, 10, 6);   // results due 10 Nov 2026, 06:00 UTC
+    ck("stored statements are asked for again daily from 18 hours after the results date until six days after it", !justReported(D0, D0 - H) && !justReported(D0, D0 + 17 * H) && justReported(D0, D0 + 18 * H) && justReported(D0, D0 + 5 * 24 * H) && !justReported(D0, D0 + 6 * 24 * H) && !justReported(null, D0) && !justReported(undefined, D0));
+    ck("the results date kept with the statements: a date just passed stays until its six days have run, even when the quote already shows next quarter's", resultsDateToWatch(D0, D0 + 91 * 24 * H, D0 + 2 * 24 * H) === D0 && resultsDateToWatch(D0, null, D0 + H) === D0);
+    ck("after those days the next date the quote knows is kept; a date still ahead is replaced by the quote's newer one, and kept when the quote has none", resultsDateToWatch(D0, D0 + 91 * 24 * H, D0 + 7 * 24 * H) === D0 + 91 * 24 * H && resultsDateToWatch(D0, D0 + 24 * H, D0 - 24 * H) === D0 + 24 * H && resultsDateToWatch(D0, null, D0 - 24 * H) === D0 && resultsDateToWatch(D0, null, D0 + 7 * 24 * H) === null && resultsDateToWatch(null, D0 - H, D0) === null && resultsDateToWatch(null, null, D0) === null);
+  }
+
+  console.log("\n[N] a stock's page: reading Yahoo's statements and key statistics (made-up answers in Yahoo's shape)");
+  {
+    const near = (a: number | null | undefined, b: number, eps = 1e-9) => a != null && Math.abs(a - b) < eps;
+    const ser = (type: string, vals: Array<[string, number | null]>) => ({ meta: { symbol: ["XYZ"], type: [type] }, timestamp: vals.map(() => 0), [type]: vals.map(([asOfDate, raw]) => (raw == null ? null : { asOfDate, periodType: type.startsWith("annual") ? "12M" : "3M", currencyCode: "USD", reportedValue: { raw, fmt: String(raw) } })) });
+    const A = ["2022-09-30", "2023-09-30", "2024-09-30", "2025-09-30"], Q = ["2025-09-30", "2025-12-31", "2026-03-31", "2026-06-30", "2026-09-30"];
+    const json = { timeseries: { error: null, result: [
+      ser("annualTotalRevenue", [[A[0], 394e9], [A[1], 383e9], [A[2], 391e9], [A[3], 416e9]]),
+      ser("annualCostOfRevenue", [[A[0], 224e9], [A[1], 214e9], [A[2], 210e9], [A[3], 221e9]]),
+      ser("annualGrossProfit", [[A[0], 170e9], [A[1], 169e9], [A[2], 181e9], [A[3], 195e9]]),
+      ser("annualOperatingIncome", [[A[0], 119e9], [A[1], 114e9], [A[2], 123e9], [A[3], 133e9]]),
+      ser("annualNetIncome", [[A[0], 99.8e9], [A[1], 97e9], [A[2], 93.7e9], [A[3], 112e9]]),
+      ser("annualDilutedEPS", [[A[0], 6.11], [A[1], 6.13], [A[2], 6.08], [A[3], 7.46]]),
+      ser("annualDilutedAverageShares", [[A[3], 15.0e9]]),
+      ser("annualCapitalExpenditure", [[A[2], -9.4e9], [A[3], -12.7e9]]),
+      ser("annualOperatingCashFlow", [[A[2], 118e9], [A[3], 111e9]]),
+      ser("annualTotalAssets", [[A[3], 359e9]]), ser("annualStockholdersEquity", [[A[3], 74e9]]), ser("annualCurrentDebt", [[A[3], 20e9]]), ser("annualLongTermDebt", [[A[3], 78e9]]), ser("annualCashAndCashEquivalents", [[A[3], 36e9]]),
+      ser("annualOrdinarySharesNumber", [[A[3], 14.8e9]]),
+      // the lines of a company outside Japan: R&D, interest and other income down to pretax income, tax; what it paid out
+      ser("annualResearchAndDevelopment", [[A[2], 31e9], [A[3], 34e9]]), ser("annualNetNonOperatingInterestIncomeExpense", [[A[3], -1.2e9]]), ser("annualOtherIncomeExpense", [[A[3], 0.9e9]]),
+      ser("annualPretaxIncome", [[A[3], 132.7e9]]), ser("annualTaxProvision", [[A[3], 20.7e9]]), ser("annualTotalUnusualItems", [[A[3], -0.4e9]]),
+      ser("annualCashCashEquivalentsAndShortTermInvestments", [[A[3], 55e9]]),
+      ser("annualRepurchaseOfCapitalStock", [[A[2], -95e9], [A[3], -90e9]]), ser("annualCashDividendsPaid", [[A[2], -15.2e9], [A[3], -15.4e9]]), ser("annualStockBasedCompensation", [[A[3], 12.9e9]]),
+      ser("annualSomethingNew", [[A[3], 1]]),
+      ser("quarterlyTotalRevenue", Q.map((d, i) => [d, 90e9 + i * 5e9] as [string, number])),
+      ser("quarterlyOperatingIncome", [[Q[0], 28e9], [Q[1], null], [Q[2], 30e9], [Q[4], 33e9]]),
+      { meta: { type: ["quarterlyNetIncome"] }, quarterlyNetIncome: [{ asOfDate: Q[4], reportedValue: { raw: "n/a" } }, { asOfDate: "not a date", reportedValue: { raw: 5 } }, { reportedValue: { raw: 5 } }] },
+      { meta: {}, nothing: [] }, null,
+    ] } };
+    const f = yahooFin(json, "USD", "2026-11-18");
+    const [reqA, reqQ] = yahooFinTypes();
+    ck("two requests, one naming every line by year and one by quarter, each short enough for any network path (under 1,000 characters)", yahooFinTypes().length === 2 && reqA.split(",").length === 30 && reqQ.split(",").length === 30 && reqA.split(",").every((x) => x.startsWith("annual")) && reqQ.split(",").every((x) => x.startsWith("quarterly")) && reqA.includes("annualTotalRevenue") && reqQ.includes("quarterlyCapitalExpenditure") && new Set([...reqA.split(","), ...reqQ.split(",")]).size === 60 && reqA.length < 1000 && reqQ.length < 1000, [reqA.length, reqQ.length]);
+    { const half = (pick: (t: string) => boolean) => ({ timeseries: { result: json.timeseries.result.filter((r) => { const t = (r as { meta?: { type?: string[] } } | null)?.meta?.type?.[0]; return typeof t === "string" && pick(t); }) } });
+      const split = yahooFin([half((t) => t.startsWith("annual")), half((t) => t.startsWith("quarterly"))], "USD", "2026-11-18");
+      ck("the two answers read together give the same statements as one answer holding everything", JSON.stringify(split.annual) === JSON.stringify(f.annual) && JSON.stringify(split.quarterly.lines.revenue) === JSON.stringify(f.quarterly.lines.revenue) && JSON.stringify(split.ratios) === JSON.stringify(f.ratios)); }
+    ck("years come out oldest first, named by the month and year they end in; quarters by their last month", f.annual.periods.map((p) => p.label).join() === "FY9/22,FY9/23,FY9/24,FY9/25" && f.quarterly.periods.map((p) => p.label).join() === "Sep 25,Dec 25,Mar 26,Jun 26,Sep 26" && f.annual.periods.every((p) => p.kind === "FY" && p.months === 12) && f.quarterly.periods.every((p) => p.kind === "Q" && p.months === 3));
+    ck("each figure lands on its line and its period, exactly as sent", f.annual.lines.revenue!.join() === "394000000000,383000000000,391000000000,416000000000" && f.annual.lines.eps!.join() === "6.11,6.13,6.08,7.46" && f.annual.lines.ni![3] === 112e9 && f.annual.lines.cogs![0] === 224e9);
+    ck("a line reported for some periods only is empty (not zero) in the others", f.annual.lines.ocf!.join() === ",,118000000000,111000000000" && f.annual.lines.assets!.slice(0, 3).every((v) => v === null) && f.annual.lines.assets![3] === 359e9 && f.quarterly.lines.op!.join() === "28000000000,,30000000000,,33000000000");
+    ck("cash paid out is shown as the amount paid, a positive number: capex, buybacks, dividends", f.annual.lines.capex![2] === 9.4e9 && f.annual.lines.capex![3] === 12.7e9 && f.annual.lines.buyback!.join() === ",,95000000000,90000000000" && f.annual.lines.divPaid![3] === 15.4e9);
+    ck("the lines of a company outside Japan land on their own rows, signs as sent: R&D, net interest, other income, pretax income, tax, unusual items, cash with short-term investments, stock-based compensation", f.annual.lines.rd!.join() === ",,31000000000,34000000000" && f.annual.lines.interestNet![3] === -1.2e9 && f.annual.lines.otherNonOp![3] === 0.9e9 && f.annual.lines.pretax![3] === 132.7e9 && f.annual.lines.tax![3] === 20.7e9 && f.annual.lines.unusual![3] === -0.4e9 && f.annual.lines.cashSti![3] === 55e9 && f.annual.lines.sbc![3] === 12.9e9);
+    ck("lines Yahoo does not have stay absent: no ordinary profit, no extraordinary items, no guidance; a dividend per share only when it is sent", f.annual.lines.ordinary === undefined && f.annual.lines.extraInc === undefined && f.annual.lines.dps === undefined && f.guidance === null && f.annual.periods.every((p) => p.kind !== "FC"));
+    ck("the table's rows are those of a company outside Japan: no row of Japanese accounting, and every row that is not common to all companies appears only when reported", f.layout === LAYOUT_FOREIGN && !LAYOUT_FOREIGN.is.some((x) => ["nonOpInc", "nonOpExp", "ordinary", "extraInc", "extraLoss"].includes(x)) && ["revenue", "pretax", "ni", "eps", "cash", "assets", "liabilities", "equity", "ocf", "icf", "fincf"].every((x) => !LAYOUT_FOREIGN.optional.includes(x as FinRowId)) && ["cogs", "gross", "rd", "sga", "op", "tax", "dps", "unusual", "stDebt", "ltDebt", "capex", "buyback", "divPaid", "sbc"].every((x) => LAYOUT_FOREIGN.optional.includes(x as FinRowId)) && [...LAYOUT_FOREIGN.is, ...LAYOUT_FOREIGN.bs, ...LAYOUT_FOREIGN.cf].length === new Set([...LAYOUT_FOREIGN.is, ...LAYOUT_FOREIGN.bs, ...LAYOUT_FOREIGN.cf]).size);
+    ck("a Japanese company keeps the lines asked for, in their order; only those that exist under Japanese accounting alone can drop out (for a company reporting under IFRS)", LAYOUT_JP.is.join() === "revenue,cogs,gross,sga,op,nonOpInc,nonOpExp,ordinary,extraInc,extraLoss,pretax,ni,eps,dps" && LAYOUT_JP.bs.join() === "cash,stDebt,ltDebt,netCash,assets,liabilities,equity" && LAYOUT_JP.cf.join() === "ocf,icf,fincf,capex,fcf" && LAYOUT_JP.optional.join() === "nonOpInc,nonOpExp,ordinary,extraInc,extraLoss,pretax");
+    ck("a series this page does not know, a value that is not a number, a date that is not a date and an empty entry are all skipped", f.quarterly.lines.ni === undefined && !Object.keys(f.annual.lines).includes("SomethingNew") && f.quarterly.periods.length === 5);
+    ck("the unit comes from the revenue (bn here), and the ratios are worked out from the lines", f.unit.label === "bn" && f.source === "yahoo" && f.currency === "USD" && near(f.ratios.annual.salesYoy![3], (416 / 391 - 1) * 100) && near(f.ratios.annual.gpm![3], 195 / 416 * 100) && near(f.ratios.annual.opm![0], 119 / 394 * 100) && near(f.ratios.quarterly.salesYoy![4], (110 / 90 - 1) * 100) && f.ratios.quarterly.salesYoy![3] === null, f.ratios);
+    ck("with no dividend per share from the source, the payout ratio is dividends paid over net income; empty where either is missing", f.ratios.annual.payout![0] === null && near(f.ratios.annual.payout![2], 15.2 / 93.7 * 100) && near(f.ratios.annual.payout![3], 15.4 / 112 * 100));
+    { const P = (end: string): FinPeriod => ({ key: `FY:${end}`, end, label: end, kind: "FY", months: 12, std: null, doc: null, url: null, note: null });
+      const withDps = ratiosOf({ periods: [P("2025-12-31")], lines: { eps: [10], dps: [4], divPaid: [9e9], ni: [10e9] } }), loss = ratiosOf({ periods: [P("2025-12-31")], lines: { divPaid: [9e9], ni: [-1e9] } });
+      ck("a dividend per share, where given, is what the payout ratio is made from (over EPS); no ratio on a loss", near(withDps.payout![0], 40) && loss.payout![0] === null); }
+    const none = yahooFin({ timeseries: { result: [] } }, "USD", null), junk = yahooFin({ nothing: true }, null, null), nul = yahooFin(null, null, null);
+    ck("an answer with no series, or not in the expected shape at all, gives empty statements and no error", none.annual.periods.length === 0 && none.quarterly.periods.length === 0 && junk.annual.periods.length === 0 && nul.quarterly.periods.length === 0);
+    const many = yahooFin({ timeseries: { result: [ser("annualTotalRevenue", Array.from({ length: 14 }, (_, i) => [`${2012 + i}-12-31`, 1e9 + i] as [string, number])), ser("quarterlyTotalRevenue", Array.from({ length: 20 }, (_, i) => [new Date(Date.UTC(2021, 3 * i + 3, 0)).toISOString().slice(0, 10), 1e8 + i] as [string, number]))] } }, "USD", null);
+    ck("at most the last ten years and the last twelve quarters are kept", many.annual.periods.length === 10 && many.annual.periods[0].end === "2016-12-31" && many.annual.periods[9].end === "2025-12-31" && many.quarterly.periods.length === 12 && many.quarterly.lines.revenue![11] === 1e8 + 19);
+    // the hover card reads a shorter shape, made from statements the page already holds
+    const full = yahooFin({ timeseries: { result: [ser("annualTotalRevenue", Array.from({ length: 7 }, (_, i) => [`${2019 + i}-03-31`, 1e12 + i * 1e11] as [string, number])), ser("annualOperatingIncome", Array.from({ length: 7 }, (_, i) => [`${2019 + i}-03-31`, 1e11 + i * 1e10] as [string, number])), ser("annualOperatingCashFlow", [["2025-03-31", 3e11]]), ser("quarterlyTotalRevenue", Array.from({ length: 8 }, (_, i) => [new Date(Date.UTC(2024, 3 * i + 12, 0)).toISOString().slice(0, 10), 2e11 + i] as [string, number]))] } }, "JPY", "2026-11-18");
+    full.annual.periods.push({ key: "FC:2026-03-31", end: "2026-03-31", label: "FY3/26", kind: "FC", months: 12, std: null, doc: null, url: null, note: null });
+    for (const k of Object.keys(full.annual.lines) as Array<keyof typeof full.annual.lines>) full.annual.lines[k]!.push(k === "revenue" ? 1.9e12 : null);
+    full.annual.lines.dps = [null, null, null, null, null, null, null, 80]; full.guidance = { end: "2026-03-31", disclosed: "2025-11-05", quarter: 2, progress: {}, ytdMonths: 6 };
+    const card = legacyStatements(full);
+    ck("for the hover card: the last five fiscal years (guidance is not a year), the last six quarters, and the guidance with its date", card.annual.map((r) => r.period).join() === "2021-03-31,2022-03-31,2023-03-31,2024-03-31,2025-03-31" && card.annual[4].revenue === 1.6e12 && card.annual[4].op === 1.6e11 && card.annual[4].cfo === 3e11 && card.annual[0].cfo === null && card.annual[4].ni === null && card.quarterly.length === 6 && card.quarterly[5].revenue === 2e11 + 7 && card.forecast?.fiscalYearEnd === "2026-03-31" && card.forecast.revenue === 1.9e12 && card.forecast.op === null && card.forecast.dps === 80 && card.forecast.disclosed === "2025-11-05" && card.source === "yahoo" && card.currency === "JPY", card);
+    ck("statements without guidance give a card without it", legacyStatements(f).forecast === null && legacyStatements(f).annual.length === 4 && legacyStatements(f).quarterly.length === 5);
+    const ks = keyStatsOf({ quoteSummary: { result: [{ defaultKeyStatistics: { sharesOutstanding: { raw: 14.8e9, fmt: "14.8B" }, floatShares: { raw: 14.7e9 }, sharesShort: { raw: 1.1e8 }, shortRatio: { raw: 2.3 }, shortPercentOfFloat: { raw: 0.0075 }, sharesPercentSharesOut: { raw: 0.0074 }, sharesShortPriorMonth: { raw: 1.0e8 }, dateShortInterest: { raw: 1793318400 }, sharesShortPreviousMonthDate: { raw: 1790726400 }, bookValue: {}, beta: { raw: 1.2 } } }], error: null } });
+    ck("key statistics: share counts and short interest are read from their raw values; an empty one is null", ks.sharesOutstanding === 14.8e9 && ks.floatShares === 14.7e9 && ks.sharesShort === 1.1e8 && ks.shortRatio === 2.3 && ks.shortPercentOfFloat === 0.0075 && ks.sharesPercentSharesOut === 0.0074 && ks.sharesShortPriorMonth === 1.0e8 && ks.dateShortInterest === 1793318400 && ks.bookValue === null, ks);
+    ck("an answer without the statistics (a Tokyo stock has no short interest there; a wrong shape) gives nulls, not an error", keyStatsOf({ quoteSummary: { result: [{}] } }).sharesShort === null && keyStatsOf({ quoteSummary: { result: null } }).sharesOutstanding === null && keyStatsOf(null).floatShares === null && keyStatsOf({ quoteSummary: { result: [{ defaultKeyStatistics: { sharesShort: { raw: "many" }, floatShares: 5e6 } }] } }).sharesShort === null);
+  }
+
+  console.log("\n[O] a stock's page: the big moves marked on the chart");
+  {
+    const T0 = Date.parse("2026-01-05T00:00:00Z") / 1000, D = (t: number) => new Date(t * 1000).toISOString().slice(0, 10);
+    const series = (closes: number[]): Bar[] => closes.map((c, i) => ({ t: T0 + i * 86400, c }));
+    const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) < eps;
+    const flat = (n: number, v = 100) => Array.from({ length: n }, () => v);
+    // one day
+    let m = bigMoves(series([...flat(10), 94, 94, 94]));
+    ck("a day that closes 5% or more from the previous close is a big move, dated that day, with both closes", m.length === 1 && m[0].kind === "d1" && m[0].dir === -1 && near(m[0].pct, -6) && m[0].to === D(T0 + 10 * 86400) && m[0].from === D(T0 + 9 * 86400) && m[0].fromPx === 100 && m[0].toPx === 94, m);
+    ck("exactly 5% counts (up and down); 4.99% does not", bigMoves(series([...flat(8), 95])).length === 1 && bigMoves(series([...flat(8), 105])).length === 1 && bigMoves(series([...flat(8), 105]))[0].dir === 1 && bigMoves(series([...flat(8), 95.01])).length === 0 && bigMoves(series([...flat(8), 104.99])).length === 0);
+    // a week: five sessions, no single day of 5%
+    m = bigMoves(series([...flat(6), 102, 104.5, 107, 109, 111.5, 111.5, 111.5]));
+    ck("five sessions that move the close 10% or more are one big move, even when no single day is", m.length === 1 && m[0].kind === "w1" && near(m[0].pct, 11.5) && m[0].from === D(T0 + 5 * 86400) && m[0].to === D(T0 + 10 * 86400), m);
+    m = bigMoves(series([...flat(6), 103, 106, 109, 112, 115, 118, 121, 124, 124, 124, 124, 124, 124]));
+    ck("a rise that runs on gives one mark for its largest week, not one for every overlapping window", m.filter((x) => x.kind === "w1").length === 1 && near(m.find((x) => x.kind === "w1")!.pct, 15) && m.filter((x) => x.kind === "d1").length === 0, m);
+    const twoWeeks = bigMoves(series([...flat(6), 97, 94, 91, 88, 86, ...flat(10, 86), 89, 92, 95, 98, 101, 101]));
+    ck("a week down and, later, a week up are two moves, each in its own direction", twoWeeks.filter((x) => x.kind === "w1").length === 2 && twoWeeks.filter((x) => x.kind === "w1").map((x) => x.dir).sort().join() === "-1,1", twoWeeks);
+    // a month: a slide of 1.2% a day
+    const slide = Array.from({ length: 31 }, (_, i) => 100 * 0.988 ** i);
+    m = bigMoves(series([...flat(5), ...slide, ...flat(5, slide[30])]));
+    const month = m.filter((x) => x.kind === "m1");
+    ck("a fall of 20% or more from a high to a later low within 21 sessions is one big move, from the high to the low", month.length === 1 && month[0].dir === -1 && near(month[0].pct, (0.988 ** 21 - 1) * 100, 1e-6) && m.filter((x) => x.kind === "d1").length === 0 && m.filter((x) => x.kind === "w1").length === 0, m);
+    ck("a slide of under 20% in a month is not one (1% a day for a month is 19%)", bigMoves(series([...flat(5), ...Array.from({ length: 31 }, (_, i) => 100 * 0.99 ** i)])).length === 0);
+    const vee = [...flat(4), ...Array.from({ length: 16 }, (_, i) => 100 * 0.985 ** (i + 1)), ...Array.from({ length: 16 }, (_, i) => 100 * 0.985 ** 16 * 1.016 ** (i + 1))];
+    m = bigMoves(series(vee)).filter((x) => x.kind === "m1");
+    ck("a fall and the recovery after it are two moves: one ending at the low, one starting from it", m.length === 2 && m.some((x) => x.dir === -1 && x.to === D(T0 + 19 * 86400)) && m.some((x) => x.dir === 1 && x.from === D(T0 + 19 * 86400) && x.pct >= 20), m);
+    // everything at once: a crash day at the end of a bad week in a bad month
+    const crash = [...flat(10), 99, 98, 97, 96, 95, 94, 93, 92, 91, 90, 89, 88, 87, 86, 85, 77];
+    m = bigMoves(series(crash));
+    ck("a crash day that ends a bad week and a bad month gives all three, on the same day, newest first", m.length >= 3 && m.slice(0, 3).map((x) => x.kind).join() === "d1,m1,w1" && new Set(m.slice(0, 3).map((x) => x.to)).size === 1 && m.every((x) => x.dir === -1), m);
+    ck("only moves ending on or after the day asked for are returned", bigMoves(series(crash), T0 + 26 * 86400).length === 0 && bigMoves(series(crash), T0 + 25 * 86400).every((x) => x.t === T0 + 25 * 86400) && bigMoves(series(crash), T0 + 25 * 86400).length === 3);
+    ck("bars without a price are skipped, and too short a history gives nothing", bigMoves(series([100, 0, 100, 100])).length === 0 && bigMoves([]).length === 0 && bigMoves(series([100])).length === 0);
+    const live = series([...flat(10), 93]), lastDay = D(T0 + 10 * 86400);
+    ck("while the market is open today's bar is left out: a fall at lunchtime is not yet a day that closed down", bigMoves(settledBars(live, true, lastDay)).length === 0 && bigMoves(settledBars(live, false, lastDay)).length === 1 && settledBars(live, true, lastDay).length === 10);
+    ck("an open market with no bar for today yet (the feed is behind, or it is a holiday) drops nothing", settledBars(live, true, D(T0 + 11 * 86400)).length === 11 && settledBars([], true, lastDay).length === 0);
+    ck("large enough to be explained: 1tn yen and above, 10bn dollars and above, other currencies by their dollar value", isLargeCap(1e12, "JPY", 155) && !isLargeCap(9.99e11, "JPY", 155) && isLargeCap(1e10, "USD", 1) && !isLargeCap(9.9e9, "USD", 1) && isLargeCap(1.5e13, "KRW", 1400) && !isLargeCap(1.3e13, "KRW", 1400) && !isLargeCap(1e15, "KRW", null) && !isLargeCap(null, "JPY", 155) && !isLargeCap(1e13, null, 1));
+    ck("each move in words", moveText({ kind: "d1", pct: -8.23, from: "2026-08-04", to: "2026-08-05" }) === "−8.2% on the day" && moveText({ kind: "w1", pct: 12.44, from: "2026-08-03", to: "2026-08-10" }) === "+12.4% in five sessions (from 3 Aug)" && moveText({ kind: "m1", pct: -24, from: "2026-08-03", to: "2026-08-27" }) === "−24.0% from the high of 3 Aug to the low of 27 Aug" && moveText({ kind: "m1", pct: 21.5, from: "2026-04-07", to: "2026-04-30" }) === "+21.5% from the low of 7 Apr to the high of 30 Apr");
+  }
+
+  console.log("\n[P] a stock's page: asking why a big move happened, and reading the answer");
+  {
+    const ctx: MoveCtx = { symbol: "7203.T", name: "Toyota Motor Corp", exchange: "Tokyo", sector: "Consumer Discretionary", currency: "JPY", kind: "d1", from: "2026-08-04", to: "2026-08-05", pct: -8.23, fromPx: 3200, toPx: 2936.6, text: "−8.2% on the day", bench: "Nikkei 225", benchPct: -1.14 };
+    const q = causeQuestion(ctx);
+    ck("the question names the stock, the move with its dates and closes, and the benchmark's change over the same dates", q.includes("Toyota Motor Corp (7203.T, Tokyo, Consumer Discretionary)") && q.includes("-8.2% on the day on 5 August 2026 (previous close 4 August 2026); close 3,200 to 2,937 JPY.") && q.includes("Over the same dates the Nikkei 225 changed -1.1%.") && /reported reason/.test(q), q);
+    const qm = causeQuestion({ ...ctx, kind: "m1", from: "2026-07-07", to: "2026-08-05", pct: -24, fromPx: 96.5, toPx: 73.34, text: "−24.0% from the high of 7 Jul to the low of 5 Aug", bench: null, benchPct: null, currency: "USD", exchange: null, sector: null });
+    ck("a move over several days gives both closes' dates; a missing benchmark is said to be missing, not left as nought", qm.includes("between the close of 7 July 2026 and the close of 5 August 2026; close 96.50 to 73.34 USD.") && qm.includes("The benchmark's change over these dates is not available.") && qm.includes("Toyota Motor Corp (7203.T)"), qm);
+    ck("the instructions forbid guessing and ask for the reports relied on", /Never infer a reason from the price alone/.test(CAUSE_SYSTEM) && /a guess is harmful/.test(CAUSE_SYSTEM) && /"sources"/.test(CAUSE_SYSTEM) && /none was found/.test(CAUSE_SYSTEM));
+    const pages = [{ title: "Toyota cuts full-year outlook as tariffs bite | Example News", url: "https://www.example.com/business/toyota-outlook-cut?utm=x" }, { title: "Toyota Motor: Consolidated results for the first quarter", url: "https://global.example.org/ir/q1.pdf" }, { title: "Unrelated page", url: "https://other.example.net/page" }];
+    const good = readCause('I searched and found two reports.\n\n{"found": true, "cause": "Toyota cut its full-year operating profit forecast by 16% with first-quarter results, citing US tariffs.", "sources": ["https://example.com/business/toyota-outlook-cut", "https://global.example.org/ir/q1.pdf"]}', pages);
+    ck("a reason is read with the reports behind it, matched to the pages the search returned (their titles and addresses)", good.found && good.cause === "Toyota cut its full-year operating profit forecast by 16% with first-quarter results, citing US tariffs." && good.sources.length === 2 && good.sources[0].url === pages[0].url && good.sources[0].title === pages[0].title && good.sources[1].url === pages[1].url, good);
+    const invented = readCause('{"found": true, "cause": "The company announced a large recall of vehicles before the open.", "sources": ["https://made-up.example/recall"]}', pages);
+    ck("a reason whose only report is a page the search never returned is not shown: the move is stored as not found", invented.found === false && invented.cause === null && invented.sources.length === 0, invented);
+    const mixed = readCause('{"found": true, "cause": "Toyota cut its full-year forecast with first-quarter results.", "sources": ["https://made-up.example/x", "https://global.example.org/ir/q1.pdf", "https://global.example.org/ir/q1.pdf"]}', pages);
+    ck("an invented address among real ones is dropped, a repeated one counted once", mixed.found && mixed.sources.length === 1 && mixed.sources[0].url === pages[1].url, mixed);
+    ck("a reason with no report named is not shown either", readCause('{"found": true, "cause": "Probably profit-taking after a strong run in the shares.", "sources": []}', pages).found === false && readCause('{"found": true, "cause": "Likely sector rotation.", "sources": null}', pages).found === false);
+    ck("'not found' is read as that, whatever else the reply says", readCause('Several pages mention the stock but none explains this move.\n{"found": false, "cause": null, "sources": []}', pages).found === false && readCause('{"found": false, "cause": "maybe earnings", "sources": ["https://global.example.org/ir/q1.pdf"]}', pages).cause === null && readCause('{"found": "yes", "cause": "Toyota cut its forecast with results.", "sources": ["https://global.example.org/ir/q1.pdf"]}', pages).found === false);
+    const fenced = readCause('Here is my answer {see below}.\n```json\n{"found": true, "cause": "**Toyota** cut its `full-year` forecast with first-quarter results.", "sources": ["https://global.example.org/ir/q1.pdf/"]}\n```', pages);
+    ck("the answer is found inside a code fence and after other braces; marks are taken out of the sentence", fenced.found && fenced.cause === "Toyota cut its full-year forecast with first-quarter results." && fenced.sources[0].url === pages[1].url, fenced);
+    const long = readCause(`{"found": true, "cause": "${"Toyota cut its full-year forecast and announced further measures in response to tariffs ".repeat(5).trim()}", "sources": ["https://global.example.org/ir/q1.pdf"]}`, pages);
+    ck("an over-long sentence is cut at a word and marked as cut; at most three reports are kept", long.found && long.cause!.length <= 258 && long.cause!.endsWith("…") && readCause(`{"found": true, "cause": "Toyota cut its forecast with results.", "sources": ${JSON.stringify([...pages.map((p) => p.url), "https://fourth.example/x"])}}`, [...pages, { title: "4", url: "https://fourth.example/x" }]).sources.length === 3, long.cause);
+    let threw = 0; for (const bad of ["I could not find anything.", "{not json}", "", '["found", true]', '{"cause": "x"}']) { try { readCause(bad, pages); } catch { threw++; } }
+    ck("a reply with no answer object is an error, so the job tries that move again instead of storing nothing", threw === 5);
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

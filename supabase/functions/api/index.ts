@@ -11,6 +11,7 @@ import { fetchText } from "../_shared/http.ts";
 import { CCY, loadUniverse } from "../_shared/newsalerts.ts";
 import { quotes } from "../_shared/yahoo.ts";
 import { pushState, pushSubscribe, pushTest, pushUnsubscribe } from "../_shared/push.ts";
+import { stockPage } from "../_shared/stock.ts";
 
 const RANGES: Record<string, number> = { "1W": 7, "1M": 31, "3M": 93, "12M": 366, "36M": 1096 };
 const SIGMA_LOOKBACK_DAYS = 1120;   // 756 trading days ≈ 1,100 calendar days, so the 36M band is defined from the first point shown
@@ -84,6 +85,7 @@ Deno.serve(async (req) => {
       case "breadth_history": return json(req, await breadthHistory(q("idx") ?? "SP500", Math.min(1200, Number(q("days") ?? 400))));
       case "jp_shorts": return json(req, await jpShorts(q("idx") ?? "NK225"));
       case "asset": return json(req, await asset(q("symbol") ?? "", q("range") ?? "12M", q("lite") === "1"));
+      case "stock": return json(req, await stockPage(q("symbol") ?? ""));
       case "search": return json(req, await search(q("q") ?? ""));
       case "alerts": {
         // newest first by the time shown on the page: when the alert was first raised (`upd` moves whenever a move is re-measured)

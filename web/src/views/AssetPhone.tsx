@@ -1,32 +1,33 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Empty } from "../components/Panel";
 import { ChartPanel, CHART_PERIODS, type ChartPeriod } from "../components/ChartPanel";
 import type { SigmaWindow } from "../components/SigmaChart";
 import { Pick, type PickOption } from "../components/Pick";
 import { Star } from "../components/Star";
 import { money } from "../components/CompanyCard";
+import { FinTable } from "../components/FinTable";
 import { Section, Stat } from "../components/PhoneKit";
 import { useApi } from "../lib/useApi";
-import type { TableRow } from "../lib/types";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtStamp } from "../lib/time";
-import { marketOf, StatementTable, type AssetFull } from "./Asset";
+import { chartMarks, finSections, fmtCount, fmtPc, fmtX, siteOf, whyText, type StockPage } from "../lib/stock";
+import { chartRow, GuidanceLine, shortLine } from "./Asset";
+import { AssetPhoneLegacy } from "./AssetPhoneLegacy";
 
-/** A stock's own page for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026): the price and its change over the
- *  period picked, the chart, the quote and liquidity figures, short data and the statements. */
+/** A stock's own page for a phone (Shota, 18 Nov 2026): the same content as the desktop page (views/Asset.tsx),
+ *  laid out as cards. The performance table is turned on its side (a row per horizon) so its four figures fit the
+ *  width; the statements scroll sideways under line names that stay put, opening at the latest periods. */
 const WINDOWS: PickOption<SigmaWindow>[] = [{ value: "m1", label: "1M" }, { value: "m12", label: "12M" }, { value: "m36", label: "36M" }];
-/** A table wider than the card scrolls sideways inside it, and opens at its right end: the latest periods. */
-function Wide({ children }: { children: ReactNode }) {
-  const box = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => { const el = box.current; if (el) el.scrollLeft = el.scrollWidth; }, []);
-  return <div className="mp-xs" ref={box}>{children}</div>;
-}
+const VIEWS: PickOption<"annual" | "quarterly">[] = [{ value: "annual", label: "Annual" }, { value: "quarterly", label: "Quarterly" }];
 const back = () => { if (history.length > 1) history.back(); else location.hash = "market"; };
+const KV = ({ k, children, sub }: { k: ReactNode; children: ReactNode; sub?: ReactNode }) => <tr><td>{k}{sub != null && <small>{sub}</small>}</td><td>{children}</td></tr>;
 
 export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
   const [period, setPeriod] = useState<ChartPeriod>("12M");
   const [sigmaWindow, setSigmaWindow] = useState<SigmaWindow>("m12");
-  const a = useApi<AssetFull>(symbol ? "asset" : null, { symbol, lite: 1 }, Math.floor(tick / 5));
+  const [view, setView] = useState<"annual" | "quarterly">("annual");
+  const a = useApi<StockPage>(symbol ? "stock" : null, { symbol }, Math.floor(tick / 5));
+  if (a.error === "unknown action") return <AssetPhoneLegacy symbol={symbol} tick={tick} />;   // a server from before this page
   const d = a.data && a.data.symbol ? a.data : null;
   const backBtn = <button type="button" className="mp-back" onClick={back}>&#8249; Back</button>;
   if (!d) return (
@@ -34,65 +35,125 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
       <div className="mp-card gap">{!symbol ? <Empty title="No symbol">Use the search button at the top.</Empty> : a.error ? <Empty title="Not found">{a.error}</Empty> : <Empty title="Loading">{symbol}</Empty>}</div>
     </div>
   );
-  const dec = d.price != null && d.price >= 1000 ? 0 : 2;
-  const row: TableRow = { symbol: d.symbol, name: d.name, cls: "Equities", market: marketOf(d.symbol), currency: d.currency ?? "", decimals: dec, group: "equity", order: 0, last: d.price, lastAt: d.asOf, live: false, closes: { d1: d.prevClose }, closeDates: {}, pct: { d1: d.pct } };
-  const st = d.statements, f = st?.forecast;
+  const row = chartRow(d), dec = row.decimals, ccy = d.currency;
+  const f = d.fin, s = d.short, sh = shortLine(d), bms = d.benchmarks;
+  const pp = (v: number | null) => (v == null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1).replace("-", "\u2212")}`);
+  const fs = f ? finSections(f, view) : null;
+  const marks = d.moves.eligible ? chartMarks(d.moves.rows) : undefined;
   return (
     <div className="mp">
       <header className="mp-head doc">{backBtn}<Star symbol={d.symbol} name={d.name} /></header>
       <div className="mp-doc asset">
-        <div className="meta"><span>{d.symbol}</span>{d.exchange && <span>{d.exchange}</span>}{d.sector && <span>{d.sector}</span>}{d.currency && <span>{d.currency}</span>}</div>
+        <div className="meta"><span>{d.symbol}</span>{d.exchange && <span>{d.exchange}</span>}{d.sector && <span>{d.sector}</span>}{ccy && <span>{ccy}</span>}</div>
         <h1>{d.name}</h1>
       </div>
       <div className="mp-picks">
         <Pick label="Period" value={period} options={CHART_PERIODS} onChange={setPeriod} />
         <Pick label="σ window" value={sigmaWindow} options={WINDOWS} onChange={setSigmaWindow} />
       </div>
-      <div className="mp-card pad mp-hero"><ChartPanel row={row} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes /></div>
-      <Section title="Quote" aux={d.asOf ? `as of ${fmtStamp(d.asOf)}` : ""} card={false}>
-        <div className="mp-card pad">
+      <div className="mp-card pad mp-hero"><ChartPanel row={row} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes volume marks={marks} /></div>
+      {d.moves.eligible && d.moves.rows.length > 0 && <p className="mp-note">Circles on the 3M, 12M and 36M charts are big moves. Tap one for the reason; the list is under Big moves below.</p>}
+
+      <Section title="Key data" aux={d.asOf ? `as of ${fmtStamp(d.asOf)}` : ""} card={false}>
+        <div className="mp-card pad" id="st-key">
           <div className="mp-grid in">
             <Stat k="Day" cls={signCls(d.pct)}>{fmtPct(d.pct, 2)}</Stat>
-            <Stat k="Previous close">{fmtNum(d.prevClose, dec)}</Stat>
-            <Stat k="Market cap">{money(d.mcap, d.currency)}</Stat>
+            <Stat k="Market cap">{money(d.mcap, ccy)}</Stat>
+            <Stat k="P/E, guidance" title={d.val.basis ?? undefined}>{fmtX(d.val.peGuide)}</Stat>
+            <Stat k="52-week low">{fmtNum(d.range.lo, dec)}<span className="bar">{d.range.pos != null && <i style={{ left: `${d.range.pos}%` }} />}</span></Stat>
+            <Stat k="52-week high">{fmtNum(d.range.hi, dec)}</Stat>
+            <Stat k="From the high" cls={signCls(d.range.fromHi)}>{fmtPc(d.range.fromHi, true)}</Stat>
           </div>
           <table className="mp-t left kv"><tbody>
-            <tr><td>Volume</td><td>{d.volume == null ? "–" : fmtNum(d.volume, 0)}</td></tr>
-            <tr><td>Average daily volume, 3 months</td><td>{d.adv3m == null ? "–" : fmtNum(d.adv3m, 0)}</td></tr>
-            <tr><td>Average daily volume, 10 days</td><td>{d.adv10d == null ? "–" : fmtNum(d.adv10d, 0)}</td></tr>
-            <tr><td>Volume against the 3-month average</td><td>{d.volume != null && d.adv3m ? `${Math.round((d.volume / d.adv3m) * 100)}%` : "–"}</td></tr>
-            <tr><td>Turnover (day)</td><td>{d.volume != null && d.price != null ? money(d.volume * d.price, d.currency) : "–"}</td></tr>
+            <KV k="Shares outstanding" sub={[d.shares.source, d.shares.asOf].filter(Boolean).join(" · ") || undefined}>{fmtCount(d.shares.outstanding)}</KV>
+            <KV k="Diluted shares" sub={d.shares.dilutedNote ?? undefined}>{fmtCount(d.shares.diluted)}</KV>
+            <KV k="Average daily volume, 60 sessions">{fmtCount(d.turnover.d60.shares)}</KV>
+            <KV k="Average daily value traded, 60 sessions">{money(d.turnover.d60.value, ccy)}</KV>
+            <KV k="Volume today" sub={d.volume != null && d.turnover.d60.shares ? `${Math.round((d.volume / d.turnover.d60.shares) * 100)}% of the 60-session average` : undefined}>{fmtCount(d.volume)}</KV>
+            <KV k={sh.label} sub={s?.kind === "jpx" ? `positions of 0.5% and above · ${s.d}` : s?.kind === "finra" ? "not short interest" : undefined}>{sh.value}</KV>
+            <KV k="Volatility, 1M / 3M / 12M" sub="yearly figure from daily returns">{fmtPc(d.vol.m1, false, 0)} / {fmtPc(d.vol.m3, false, 0)} / {fmtPc(d.vol.m12, false, 0)}</KV>
+            {bms.map((b, k) => <KV key={b.symbol} k={`Beta vs ${b.name}, 12M`}>{d.beta[k]?.beta == null ? "–" : d.beta[k].beta!.toFixed(2)}</KV>)}
+            <KV k="Largest fall, 12M" sub={d.drawdown.from ? `${d.drawdown.from} to ${d.drawdown.to}` : undefined}><span className={signCls(d.drawdown.pct)}>{fmtPc(d.drawdown.pct)}</span></KV>
+            <KV k="P/E, last year">{fmtX(d.val.pe)}</KV>
+            <KV k="P/B">{fmtX(d.val.pb, 2)}</KV>
+            <KV k="Dividend yield, last year / guidance">{fmtPc(d.val.yield, false, 2)} / {fmtPc(d.val.yieldGuide, false, 2)}</KV>
+            <KV k="Next earnings" sub={d.earningsEst ? "estimated, not confirmed by the company" : undefined}>{d.earningsAt ? fmtStamp(d.earningsAt) : "–"}</KV>
           </tbody></table>
         </div>
       </Section>
-      <Section title="Short data" card={false}>
+
+      <Section title="Performance" aux={bms.length ? `vs ${bms.map((b) => b.name).join(", ")}` : ""} card={false}>
         <div className="mp-card pad">
-          {d.short ? (
-            <table className="mp-t left kv"><tbody>
-              {d.short.kind === "finra"
-                ? <tr><td>FINRA short-volume share · {d.short.d}</td><td>{(d.short.ratio * 100).toFixed(0)}%</td></tr>
-                : <><tr><td><b>Reported short positions (≥0.5%) · {d.short.d}</b></td><td><b>{(d.short.ratio * 100).toFixed(2)}%</b></td></tr>{d.short.holders.slice(0, 8).map((h) => <tr key={h.holder}><td>{h.holder} · {h.d}</td><td>{(h.ratio * 100).toFixed(2)}%</td></tr>)}</>}
-            </tbody></table>
-          ) : <Empty title="No short data">None reported for this name.</Empty>}
+          <table className="mp-t perf" id="st-perf">
+            <thead><tr><th /><th>Price then</th><th>{d.symbol}</th>{bms.map((b) => <th key={b.symbol}>vs {b.name}</th>)}</tr></thead>
+            <tbody>{d.perf.map((r) => (
+              <tr key={r.h}><td>{r.h}</td><td className="mut">{fmtNum(r.base, dec)}</td><td className={signCls(r.stock)}>{fmtPc(r.stock, true)}</td>{bms.map((b, k) => <td key={b.symbol} className={signCls(r.rel[k])}>{pp(r.rel[k])}</td>)}</tr>
+            ))}</tbody>
+          </table>
+          {bms.length > 0 && <>
+            <p className="mp-note in">"vs" is the stock's change less the index's, in percentage points (plus = the stock did better).</p>
+            <table className="mp-t perf idx" id="st-bench">
+              <thead><tr><th />{bms.map((b) => <th key={b.symbol}>{b.name}</th>)}</tr></thead>
+              <tbody>{d.perf.map((r) => <tr key={r.h}><td>{r.h}</td>{bms.map((b, k) => <td key={b.symbol} className={signCls(r.bench[k])}>{fmtPc(r.bench[k], true)}</td>)}</tr>)}</tbody>
+            </table>
+          </>}
+          <p className="mp-note in">Price changes, dividends not included. Each row is the price now against the last close on or before the same day that long ago; an index is measured between the same two dates.</p>
+          {bms.filter((b) => b.note).map((b) => <p key={b.symbol} className="mp-note in">{b.note}</p>)}
         </div>
       </Section>
-      <Section title="Statements" aux={st?.source ? (st.source === "edinetdb" ? "EDINET DB" : "Yahoo Finance") : ""} card={false}>
-        <div className="mp-card pad mp-legacy">
-          {st && (st.annual.length || st.quarterly.length) ? (
-            <>
-              <Wide><StatementTable rows={st.annual} title="Annual" ccy={st.currency} /></Wide>
-              {f && <>
-                <div className="minih">Company guidance · FY ending {f.fiscalYearEnd ?? "–"}{f.disclosed ? ` · disclosed ${f.disclosed}` : ""}</div>
-                <table className="secT"><tbody>
-                  <tr><td className="l">Revenue</td><td className="num">{money(f.revenue)}</td></tr><tr><td className="l">Operating income</td><td className="num">{money(f.op)}</td></tr>
-                  <tr><td className="l">Net income</td><td className="num">{money(f.ni)}</td></tr><tr><td className="l">EPS / DPS</td><td className="num">{f.eps == null ? "–" : fmtNum(f.eps, 2)} / {f.dps == null ? "–" : fmtNum(f.dps, 2)}</td></tr>
-                </tbody></table>
-              </>}
-              <Wide><StatementTable rows={st.quarterly} title={st.source === "edinetdb" ? "Quarterly (決算短信, year to date)" : "Quarterly"} ccy={st.currency} /></Wide>
-              <p className="mp-note in">Latest periods first in view; swipe a table sideways for the earlier ones.</p>
-            </>
-          ) : <Empty title="No statements">{st?.note ?? "Statements are available for equities only."}</Empty>}
+
+      {d.moves.eligible && (
+        <Section title="Big moves" aux="and why" card={false}>
+          <div className="mp-card pad" id="st-moves">
+            {d.moves.rows.length ? (
+              <ul className="mp-moves">{d.moves.rows.map((m) => (
+                <li key={`${m.kind}${m.to}`} data-kind={m.kind} data-status={m.status}>
+                  <div className="h"><span className={`dot ${m.dir > 0 ? "up" : "dn"}`} /><b className={m.dir > 0 ? "up" : "dn"}>{m.text}</b><span className="d">{m.to}</span></div>
+                  <div className="w">{whyText(m)}</div>
+                  {m.sources.length > 0 && <div className="s">{m.sources.map((x) => <a key={x.url} href={x.url} target="_blank" rel="noreferrer">{siteOf(x.url)}</a>)}</div>}
+                </li>
+              ))}</ul>
+            ) : <Empty title="No big moves">None in the last three years by these measures.</Empty>}
+            <p className="mp-note in">A day of 5% or more, five sessions of 10% or more, or 20% from a high to a low (or a low to a high) within a month.</p>
+          </div>
+        </Section>
+      )}
+
+      <Section title="Short interest" aux={s ? (s.kind === "jpx" ? "JPX reports" : s.kind === "interest" ? "exchange-reported" : "FINRA") : ""} card={false}>
+        <div className="mp-card pad" id="st-short">
+          {!s ? <Empty title="No short data">None reported for this name.</Empty> : s.kind === "jpx" ? (
+            <table className="mp-t left kv"><tbody>
+              <KV k={<b>Reported positions (0.5% and above)</b>} sub={s.d}><b>{(s.ratio * 100).toFixed(2)}%</b></KV>
+              <KV k="Shares" sub={s.daysToCover != null ? `${s.daysToCover.toFixed(1)} days of 60-session volume` : undefined}>{fmtCount(s.shares)}</KV>
+              {s.holders.slice(0, 8).map((h) => <KV key={h.holder} k={h.holder} sub={h.d}>{(h.ratio * 100).toFixed(2)}%</KV>)}
+            </tbody></table>
+          ) : s.kind === "interest" ? (
+            <table className="mp-t left kv"><tbody>
+              <KV k="Shares short" sub={s.d ?? undefined}>{fmtCount(s.shares)}</KV>
+              <KV k="Per cent of float">{fmtPc(s.pctFloat)}</KV>
+              <KV k="Per cent of shares outstanding">{fmtPc(s.pctOut)}</KV>
+              <KV k="Days to cover">{s.daysToCover == null ? "–" : s.daysToCover.toFixed(1)}</KV>
+              <KV k="A month earlier" sub={s.priorDate ?? undefined}>{fmtCount(s.prior)}</KV>
+              {s.finra && <KV k="FINRA short-volume share" sub={`${s.finra.d} · not short interest`}>{(s.finra.ratio * 100).toFixed(0)}%</KV>}
+            </tbody></table>
+          ) : (
+            <table className="mp-t left kv"><tbody><KV k="FINRA short-volume share" sub={`${s.d} · the share of the day's volume sold short, not short interest`}>{(s.ratio * 100).toFixed(0)}%</KV></tbody></table>
+          )}
         </div>
+      </Section>
+
+      <Section title="Financials" aux={f ? (f.source === "edinetdb" ? "EDINET DB" : "Yahoo Finance") : ""} card={false}>
+        {f && fs ? (
+          <>
+            <div className="mp-picks"><Pick label="Periods" id="st-view" value={view} options={VIEWS} onChange={setView} /></div>
+            <div className="mp-card pad fin-card">
+              {view === "annual" ? <GuidanceLine f={f} /> : <div className="finguide">Single quarters (three months each), not year to date.</div>}
+              {fs.periods.length ? <FinTable periods={fs.periods} sections={fs.sections} unit={f.unit} currency={f.currency} /> : <Empty title={view === "annual" ? "No annual statements" : "No quarterly statements"}>{d.finNote ?? "The source has none for this name."}</Empty>}
+            </div>
+            <p className="mp-note">The latest periods are in view; swipe the table sideways for the earlier ones.{f.asOf ? ` Fetched ${f.asOf}.` : ""}</p>
+            {f.notes.map((n) => <p key={n} className="mp-note">{n}</p>)}
+          </>
+        ) : <div className="mp-card pad"><Empty title="No statements">{d.finNote ?? "Statements are available for equities only."}</Empty></div>}
       </Section>
     </div>
   );

@@ -1,0 +1,60 @@
+name: move-causes
+
+# The reasons for big moves on the stock pages (Shota, 18 Nov 2026). A page of a large company puts each big move
+# without a reason on a queue; this job looks each one up with web search and stores the reported reason with
+# its sources, or "not found" (jobs/move_causes.ts). Each look-up costs model tokens and searches; the run prints
+# the cost of each and the total.
+#   - Normally started by the database the moment a page queues a move (move_causes_kick, at most once in ten
+#     minutes; it needs the GitHub token stored for the Morning Note, supabase/README.md).
+#   - Once a day by GitHub's own schedule, as the fallback when that token is not stored.
+#   - By hand: Actions > move-causes > Run workflow.
+on:
+  schedule:
+    - cron: "40 9 * * *"
+  workflow_dispatch:
+    inputs:
+      max:
+        description: "How many moves to look up at most in this run"
+        required: false
+        default: "60"
+      dry:
+        description: "Dry run (ask and print, store nothing)"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+
+# one run at a time; a second request waits for the first, it is not dropped
+concurrency:
+  group: move-causes
+  cancel-in-progress: false
+
+jobs:
+  look-up:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: jobs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: jobs/package-lock.json
+      - run: npm ci
+      - name: Look the moves up
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MOVE_CAUSE_MODEL: ${{ vars.MOVE_CAUSE_MODEL }}
+          MOVE_CAUSE_EFFORT: ${{ vars.MOVE_CAUSE_EFFORT }}
+          MAX: ${{ github.event.inputs.max || '60' }}
+          DRY: ${{ github.event.inputs.dry || 'false' }}
+        run: |
+          ARGS="--max $MAX"
+          if [ "$DRY" = "true" ]; then ARGS="$ARGS --dry"; fi
+          npx tsx move_causes.ts $ARGS

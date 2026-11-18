@@ -117,3 +117,19 @@ export async function profiles(symbols: string[], concurrency = 4): Promise<Reco
   }));
   return out;
 }
+
+// ---- key statistics: share counts and US short interest (the exchange-reported figure Yahoo republishes) ----
+export interface KeyStats { sharesOutstanding: number | null; floatShares: number | null; sharesShort: number | null; shortRatio: number | null; shortPercentOfFloat: number | null; sharesPercentSharesOut: number | null; sharesShortPriorMonth: number | null; dateShortInterest: number | null; sharesShortPreviousMonthDate: number | null; bookValue: number | null }
+/** Reads the figures out of a quoteSummary answer (module defaultKeyStatistics). Each arrives as { raw, fmt };
+ *  only a numeric `raw` counts, anything else is null. Ratios are fractions (0.0123 = 1.23%); dates are Unix seconds. */
+export function keyStatsOf(json: unknown): KeyStats {
+  const k = ((json as { quoteSummary?: { result?: Array<{ defaultKeyStatistics?: Record<string, unknown> }> } } | null)?.quoteSummary?.result?.[0]?.defaultKeyStatistics ?? {}) as Record<string, unknown>;
+  const raw = (name: string): number | null => { const v = k[name]; const x = v && typeof v === "object" ? (v as { raw?: unknown }).raw : v; return typeof x === "number" && Number.isFinite(x) ? x : null; };
+  return { sharesOutstanding: raw("sharesOutstanding"), floatShares: raw("floatShares"), sharesShort: raw("sharesShort"), shortRatio: raw("shortRatio"), shortPercentOfFloat: raw("shortPercentOfFloat"), sharesPercentSharesOut: raw("sharesPercentSharesOut"), sharesShortPriorMonth: raw("sharesShortPriorMonth"), dateShortInterest: raw("dateShortInterest"), sharesShortPreviousMonthDate: raw("sharesShortPreviousMonthDate"), bookValue: raw("bookValue") };
+}
+export async function keyStats(symbol: string): Promise<KeyStats> {
+  const { cookie, crumb: cr } = await crumb();
+  const r = await fetch(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=defaultKeyStatistics&crumb=${encodeURIComponent(cr)}`, { headers: { "user-agent": headers["user-agent"], accept: "*/*", cookie }, signal: AbortSignal.timeout(20000) });
+  if (!r.ok) throw new Error(`yahoo key statistics: HTTP ${r.status}`);
+  return keyStatsOf(await r.json());
+}

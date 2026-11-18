@@ -14,7 +14,7 @@ const FALLBACK_MODEL = "claude-opus-5-5";
 const MAX_TOKENS = 64000;          // room to think and act across many searches at xhigh
 const MAX_RESUMES = 6;
 // USD per million tokens (input, output), for the cost line in the log
-const PRICE: Record<string, [number, number]> = { "claude-fable-5-2": [8, 40], "claude-opus-5-5": [4, 20] };
+const PRICE: Record<string, [number, number]> = { "claude-fable-5-2": [8, 40], "claude-opus-5-5": [4, 20], "claude-sonnet-5-5": [2, 10], "claude-haiku-5-5": [0.1, 0.5] };
 
 export const newClient = (): Anthropic => new Anthropic({ timeout: 50 * 60 * 1000, maxRetries: 2 });   // a turn at xhigh can run for many minutes
 
@@ -75,6 +75,10 @@ async function run(client: Anthropic, system: string, user: string, maxSearches:
 }
 
 export const write = (client: Anthropic, system: string, user: string, maxSearches: number): Promise<Turn> => run(client, system, user, maxSearches);
+
+/** One short look-up on a named model at a named effort, with web search (the reasons for big moves,
+ *  jobs/move_causes.ts). No second model is tried: a look-up that fails is simply tried again later. */
+export const ask = (client: Anthropic, o: { model: string; effort: string; system: string; user: string; maxSearches: number }): Promise<Turn> => runOnce(client, o.model, o.effort, o.system, o.user, o.maxSearches);
 
 const REVIEW = `You are now the reader this piece is written for: a portfolio manager who has asked for depth and will not accept a first answer. Read the DRAFT below against the instructions you were given and against the NUMBERS PACK, then return the finished piece.
 

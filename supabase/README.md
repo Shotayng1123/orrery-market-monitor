@@ -184,6 +184,64 @@ Checked without the live project: `sim/logic.test.ts` section K (the code, the b
 conversation with a mail server), `sim/sql/signup.test.cjs` (the database functions, on an in-memory Postgres) and
 `web/e2e/accounts.cjs` (the screens).
 
+## The stock page and its sources (added 2026-11-18)
+
+`api?action=stock&symbol=…` answers the whole page in one go (`_shared/stock.ts`): the quote, the change over each
+horizon against the benchmark(s), the figures worked out from the price history, share counts, short interest,
+valuation, the big moves with their reasons, and the statements. The arithmetic is in `_shared/stockstats.ts`,
+`_shared/bigmoves.ts` and `_shared/fin.ts`; what each source sends is read in `_shared/finsrc.ts`. All four are
+checked in `sim/logic.test.ts` (sections L to P).
+
+- **Statements are stored**, because they change four times a year and the sources are rationed. The finished
+  statements sit in `asset_cache` under `fin2:SYMBOL`: a week for a name read from Yahoo, a day when Yahoo had to
+  stand in for EDINET DB. The next results date known from the quote is stored with them; from 18 hours after
+  that date until six days after it they are asked for again daily, so new results do not wait for the weekly
+  refresh. The hover card reads the same store and otherwise Yahoo; it never asks EDINET DB.
+- **EDINET DB is not read by the page yet.** `_shared/edinet.ts` asks, stores and rations as described next, but
+  the reading of its answers (`edinetFin` in `_shared/finsrc.ts`) is the next change; until it is merged a Tokyo
+  name gets Yahoo's statements like any other.
+- **EDINET DB allows a hundred requests a day** on its free plan (the day is Japan's; `EDINETDB_DAILY_BUDGET`,
+  default 90, is this server's share). A Tokyo name takes one request to find its EDINET code (kept a year) and
+  three for its statements, each stored on its own (`_shared/edinet.ts`): the 決算短信 for a week, and daily once
+  the next one is due (70 days after the last); the annual figures and the single quarters for thirty days, and
+  every second day while a full-year 決算短信 is out whose 有価証券報告書 is not in yet. When the allowance is
+  used up, or no `EDINETDB_API_KEY` is set, Yahoo stands in for that name until the next day and the page says so.
+  The key is a server secret: add `EDINETDB_API_KEY` to the repository's secrets and the next server deploy
+  stores it (or once by hand, `npx supabase secrets set EDINETDB_API_KEY='<key>'`). An EDINET DB connector used
+  with the same account draws on the same hundred requests.
+- **A page from before this action** (`asset`) is still answered, for the hover card and for a web build older
+  than the server. The web falls back the other way too: a server that answers `unknown action` to `stock` gets
+  the earlier page.
+- **Benchmarks**: Tokyo names are set against the Nikkei 225 and TOPIX, others against their home index
+  (`benchmarksFor` in `_shared/assets.ts`). TOPIX is read from the `1306.T` fund.
+
+## Big moves and why (added 2026-11-18)
+
+For a company of 1tn yen and above, or 10bn US dollars and above, the stock page marks on the chart: a day that
+closed 5% or more from the previous close; five sessions that moved the close 10% or more; and, within 21
+sessions, a fall of 20% or more from a high to a later low or a rise of 20% or more from a low to a later high.
+Overlapping weeks (or months) in the same direction give one mark, the largest. A session still in progress is
+not counted. The rules are `_shared/bigmoves.ts`.
+
+The reason for each move is found outside the database:
+
+1. The page puts a move of the last twelve months that has no reason yet on the queue (table `move_causes`,
+   status `queued`; at most 15 per opening of a page) and calls `move_causes_kick()`, which asks GitHub for the
+   job at most once in ten minutes. That request uses the GitHub token stored for the Morning Note
+   (`monitor_set_github_token`); without it the job runs on its daily schedule (09:40 UTC) or by hand.
+2. `jobs/move_causes.ts` (workflow `move-causes`) takes the queue, newest move first, and asks the model with web
+   search for the reported reason, giving it the stock, the dates, the closes and the benchmark's change over
+   the same dates.
+3. A reason is stored only when the reply names reports that the search itself returned (`readCause` in
+   `_shared/movecause.ts` drops any other address). Otherwise the move is stored as `not_found` and the page says
+   "No reliable report of the reason was found". A look-up that fails is tried three times.
+
+It costs model tokens and searches. Every run prints the cost of each look-up and the total. The knobs:
+repository **variables** `MOVE_CAUSE_MODEL` (default `claude-opus-5-5`) and `MOVE_CAUSE_EFFORT` (default
+`medium`), and the run's `max` input (default 60 moves a run). It needs the `ANTHROPIC_API_KEY`, `SUPABASE_URL`
+and `SUPABASE_SERVICE_ROLE_KEY` secrets the Morning Note already uses. To see what is waiting or stored:
+`select status, count(*) from move_causes group by 1;`
+
 ## Changing the shared sign-in password
 
 The password exists only as the function secret `MONITOR_PASSWORD`; it is not in git or in the database, and
@@ -205,7 +263,7 @@ Browsers already signed in stay signed in (tokens are signed with `MONITOR_TOKEN
 ## Notes
 
 - Yahoo's chart and spark endpoints are unofficial. The code keeps nulls as gaps, never fills them, and rotates hosts on failure. If Yahoo breaks, `source_status.yahoo` records the error and the page shows stale stamps rather than wrong numbers.
-- TOPIX has no Yahoo ticker. `1306.T` is the live proxy; the official JPX daily index close is a planned addition.
+- TOPIX has no Yahoo ticker. `1306.T` is the live proxy (also for the stock page's "against TOPIX"); the official JPX daily index close is a planned addition.
 - `fn_table_anchors()` computes the 1D/1W/1M/3M/12M/36M anchors in SQL; the table is rebuilt once per minute, not per visitor.
 
 ## Added 2026-11-07 evening
