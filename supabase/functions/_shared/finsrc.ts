@@ -64,3 +64,21 @@ export function yahooFin(json: unknown, currency: string | null, asOf: string | 
   const notes = ["Yahoo Finance fundamentals, as reported. It carries about four years and five quarters, no dividend per share, no company guidance, and none of the lines that exist only under Japanese accounting (ordinary profit, extraordinary items). Debt is borrowings without lease obligations."];
   return finish("yahoo", currency, annual.periods.length ? annual : emptySet(), quarterly.periods.length ? quarterly : emptySet(), null, notes, asOf);
 }
+
+// ---- the shorter shape the hover card (and the page before 18 Nov 2026) reads ----
+export interface LegacyRow { period: string; label: string; revenue: number | null; op: number | null; ni: number | null; eps: number | null; assets?: number | null; equity?: number | null; cfo?: number | null; cfi?: number | null; cff?: number | null; fcf?: number | null }
+export interface LegacyStatements { source: "edinetdb" | "yahoo" | null; currency: string | null; unit: string; annual: LegacyRow[]; quarterly: LegacyRow[]; forecast: { fiscalYearEnd: string | null; disclosed: string | null; revenue: number | null; op: number | null; ni: number | null; eps: number | null; dps: number | null } | null; note: string | null; asOf: string | null }
+/** The last five years, the last six quarters and the guidance of a company's statements, in the card's shape.
+ *  So a card can be drawn from statements the page has already fetched, without asking the source again. */
+export function legacyStatements(f: Fin): LegacyStatements {
+  const at = (set: FinSet, id: FinLine, i: number): number | null => set.lines[id]?.[i] ?? null;
+  const rows = (set: FinSet, kind: "FY" | "Q", keep: number, label: (p: FinPeriod) => string): LegacyRow[] =>
+    set.periods.map((p, i) => ({ p, i })).filter(({ p }) => p.kind === kind).slice(-keep).map(({ p, i }) => ({ period: p.end, label: label(p), revenue: at(set, "revenue", i), op: at(set, "op", i), ni: at(set, "ni", i), eps: at(set, "eps", i), assets: at(set, "assets", i), equity: at(set, "equity", i), cfo: at(set, "ocf", i), cfi: at(set, "icf", i), cff: at(set, "fincf", i), fcf: null }));
+  const g = f.annual.periods.findIndex((p) => p.kind === "FC");
+  return {
+    source: f.source, currency: f.currency, unit: "1",
+    annual: rows(f.annual, "FY", 5, (p) => `FY ${p.end.slice(0, 7)}`), quarterly: rows(f.quarterly, "Q", 6, (p) => p.label),
+    forecast: g < 0 ? null : { fiscalYearEnd: f.annual.periods[g].end, disclosed: f.guidance?.disclosed ?? null, revenue: at(f.annual, "revenue", g), op: at(f.annual, "op", g), ni: at(f.annual, "ni", g), eps: at(f.annual, "eps", g), dps: at(f.annual, "dps", g) },
+    note: f.notes[0] ?? null, asOf: f.asOf,
+  };
+}

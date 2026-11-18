@@ -5,6 +5,8 @@ import { db } from "./db.ts";
 import { chart, quotes } from "./yahoo.ts";
 import { fetchText } from "./http.ts";
 import type { Bar } from "./stockstats.ts";
+import type { Fin } from "./fin.ts";
+import { legacyStatements } from "./finsrc.ts";
 
 export interface SeriesOut { symbol: string; res: "1m" | "15m" | "1h" | "1d"; points: Array<{ t: number; v: number; q?: number | null }>; asOf: string | null; shownFrom?: string; source?: string }
 type Pt = { t: number; v: number; q: number | null };
@@ -154,22 +156,20 @@ async function edinetStatements(symbol: string): Promise<Statements | null> {
 }
 const mul = (v: number | null, k: number) => (v == null ? null : v * k);
 
-/** Statements are cached for a week (they change quarterly); a Yahoo fallback taken because the EDINET DB quota
- *  was exhausted is cached for a day only, so the name is retried with EDINET DB the next day. */
+/** The short statements of the hover card (and of the page as it was before 18 Nov 2026). They come from the
+ *  fuller statements the stock page has already fetched for this name when there are any (asset_cache key
+ *  fin2:SYMBOL, written by stock.ts), otherwise from Yahoo, kept a week. A card never asks EDINET DB: that
+ *  source allows a hundred requests a day, and pointing at a name must not spend them. */
 export async function statementsFor(symbol: string, currency: string | null): Promise<Statements> {
+  const { data: full } = await db.from("asset_cache").select("payload").eq("key", `fin2:${symbol}`).maybeSingle();
+  const fin = (full?.payload as { fin?: Fin | null } | null)?.fin;
+  if (fin && (fin.annual.periods.length || fin.quarterly.periods.length)) return legacyStatements(fin);
   const key = `stmt:${symbol}`;
   const { data } = await db.from("asset_cache").select("payload,fetched_at").eq("key", key).maybeSingle();
-  if (data) {
-    const st = data.payload as Statements, age = Date.now() - Date.parse(data.fetched_at);
-    const ttl = st.source === "edinetdb" || !/\.T$/.test(symbol) ? 7 * 86400e3 : 86400e3;
-    if (age < ttl) return st;
-  }
-  let st: Statements | null = null, why = "";
-  if (/\.T$/.test(symbol)) { try { st = await edinetStatements(symbol); } catch (err) { why = err instanceof Error ? err.message : String(err); console.log("edinetdb", why); } }
-  if (!st) {
-    try { st = await yahooStatements(symbol, currency); if (why) st.note = `${st.note}; EDINET DB: ${why}`; }
-    catch (err) { st = { source: null, currency, unit: "1", annual: [], quarterly: [], forecast: null, note: `statements unavailable: ${err instanceof Error ? err.message : err}`, asOf: null }; }
-  }
+  if (data && Date.now() - Date.parse(data.fetched_at) < 7 * 86400e3) return data.payload as Statements;
+  let st: Statements;
+  try { st = await yahooStatements(symbol, currency); }
+  catch (err) { st = { source: null, currency, unit: "1", annual: [], quarterly: [], forecast: null, note: `statements unavailable: ${err instanceof Error ? err.message : err}`, asOf: null }; }
   await db.from("asset_cache").upsert({ key, payload: st as unknown as Record<string, unknown>, fetched_at: new Date().toISOString() });
   return st;
 }
