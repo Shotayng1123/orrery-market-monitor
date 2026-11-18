@@ -333,34 +333,59 @@ Browsers already signed in stay signed in (tokens are signed with `MONITOR_TOKEN
 
 ### When the price feed stops (added 2026-11-19)
 
-On 18 Nov 2026, from 15:52 UTC, the source went on answering every request, with the same prices: the S&P 500,
-USD/JPY, the futures and all 503 constituents carried a print time of 15:52 or earlier for more than an hour and
-a half, with New York open. The minute job ran on time throughout (it asked, and was answered), so the header
-said DATA OK. From a GitHub runner the source answered HTTP 429, so whether it had stopped for everyone or only
-for the Monitor's server could not be told from outside.
+On 18 Nov 2026, from 15:52 UTC to 23:26 UTC, the source went on answering every request from the Monitor's
+server with the same prices, for everything but crypto: the S&P 500, USD/JPY, the futures and all 503
+constituents carried a print time of 15:52 or earlier, with New York open. The minute job ran on time throughout
+(it asked, and was answered), so the header said DATA OK. The source itself had not stopped: asked from GitHub's
+machines through the jobs' reader (which waits and asks again when refused with HTTP 429) it gave current prices
+the whole time (at 23:13 UTC the S&P 500's close of 7323.63 and a USD/JPY bar of that minute). Why the server
+was handed old answers is not established. Prices came back by themselves; the minutes of the stop are missing
+from the minute bars the server stores, except for the futures, whose day the source gave again in full.
 
-`health.feed` (`_shared/feedhealth.ts`) now reads the prints themselves: among the instruments whose market is
-open, and has been for half an hour, it takes the one that printed most recently, allowing each market its
-feed's own delay; if even that one is more than twenty minutes behind, the feed has stopped. The page then shows
-DATA ✕ with the reason, and a red bar at the foot of every screen: "No new prices since … The source has stopped
-sending them; the figures on screen are as of then." Both go when prices arrive again. Nothing else changes:
-the prices already on screen stay, with their own times. While the feed is stopped no move can be seen, so no
-alert is raised either; the bar is the only sign.
+What the Monitor does about it:
 
-The Morning Note is written after New York has closed, from the last prices the Monitor holds. If the feed
-stopped during a session those are not closing levels. `stoppedBeforeClose` (same file) finds a market's most
-recent regular close and whether a print falls more than half an hour short of it; `jobs/lib/pack.ts` asks it
-for New York (the S&P 500) and Tokyo (the Nikkei 225) whenever the market table's value is still a quote (once
-the day's close is booked the table carries that, stamped with its date alone, and a booked close is a closing
-level) and, when the quote stopped short, puts a line in the pack's `warnings`: "Prices from New York stopped arriving at 18 Nov 10:52 New York time, before the close at
-18 Nov 16:00. The US figures in these tables are as of then, not closing levels." The writer is told to say so
-at the start of "In brief" and never to present those figures as where the market closed, and the note's page
-shows the warning above its tables. Exchange holidays come from `sessions_cal`; New York's usual half days
-(the Friday after Thanksgiving, 24 December, 3 July) end at 13:00 and a last print then is taken as the close.
-Where the close is booked but the session's minute feed stopped short of it, the writer is told, in the pack's
-`notes`, that the closing levels were booked afterwards from the daily history. To see what a note would be
-written from without writing one: Actions › morning-note › Run workflow with `pack_only` = true (it builds the
-pack from the live data, prints the last prints and any warnings, asks no model and stores nothing).
+- **On screen.** `health.feed` (`_shared/feedhealth.ts`) reads the prints themselves: among the instruments whose
+  market is open, and has been for half an hour, it takes the one that printed most recently, allowing each
+  market its feed's own delay; if even that one is more than twenty minutes behind, the feed has stopped. The
+  page then shows DATA ✕ with the reason, and a red bar at the foot of every screen: "No new prices since … The
+  source has stopped sending them; the figures on screen are as of then." Both go when prices arrive again. The
+  prices already on screen stay, with their own times. While the feed is stopped no move can be seen, so no alert
+  is raised either; the bar is the only sign. The reading is made twice, for crypto and for everything else, and
+  the one further behind is the state: on 18 Nov crypto kept arriving, and read together with the rest its fresh
+  prints vouched for the feed, so the first version of this check (deployed that evening, two hours into the stop) never raised
+  the bar. Currencies and futures are judged only inside their real week, Sunday 17:00 New York to Friday 17:00.
+- **Daily closes.** After the bell on 18 Nov the daily history, on the server, booked the stopped prices as that
+  day's closes (7303.98 for the S&P 500). `history` now reads how far the answers in hand reach (the newest
+  minute bar it is given: for crypto, for everything else together, and for each market on its own) and books a
+  bar only when they reach the end of that bar's day (`barSettled`: an exchange's last bell, 13:00 on New York's
+  usual half days; 17:00 New York for a currency pair or a future; midnight UTC for crypto; half an hour's grace,
+  75 minutes for a market read on its own). A run that is handed old answers books nothing new and overwrites
+  nothing, and says `NOT BOOKED …` in its line in `job_runs`. On an exchange's half day other than New York's
+  the close is held until that exchange's next session prints.
+- **Putting wrong closes right.** `history-catchup` (Actions › Run workflow) is the same job run from GitHub's
+  machines. On 19 Nov at 23:16 UTC it replaced the closes of 18 Nov wherever the source had a daily bar for the
+  day. It cannot replace a future's close while that future is trading again (its day is skipped as still open
+  until 05:00 UTC), nor a close whose daily bar the source has not published yet (four European indices that
+  night); a later run does.
+- **The Morning Note.** It is written after New York has closed, from the last prices the Monitor holds.
+  `jobs/lib/pack.ts` puts a line in the pack's `warnings` in three cases. (1) The market table's value for the
+  S&P 500 or the Nikkei 225 is still a quote and `stoppedBeforeClose` finds it more than half an hour short of
+  the market's most recent close: "Prices from New York stopped arriving at 18 Nov 10:52 New York time, before
+  the close at 18 Nov 16:00. The US figures in these tables are as of then, not closing levels." (2) The close is
+  booked but equals such a quote. (3) Row by row: the stop is read as a silence of 45 minutes or more in the
+  stored minute bars of USD/JPY (`silence`), and a row is named when its day ended after the silence began and
+  its latest close was last written by a run of the server's daily history during the silence (`job_runs` gives
+  the run's time and length, `prices_daily.updated_at` the time a row was written). This also holds once prices
+  are arriving again, and for a row that already shows a new price while its one-day change is still measured
+  from that close. With no silence on record the row check does nothing. The writer is told (rule 9) to say so at
+  the start of "In brief" and never to present those figures as closing levels, and the note's page shows the
+  warnings above its tables. Where the close was booked again from the real one, the writer is only told, in the
+  pack's `notes`, that the minute feed had stopped and the closing levels were booked afterwards.
+- **Looking.** Actions › live-check with `only` = `market,source` prints each quote with the time it last
+  printed, the last three booked closes beside it (a close equal to a stopped quote is marked), and the source's
+  own daily closes and newest minute bar as GitHub's machines are given them. Actions › morning-note with
+  `pack_only` = true builds the note's pack from the live data and prints its warnings; it asks no model and
+  stores nothing.
 - Spot-check the table against the exchange: Nikkei 225 close on JPX/Nikkei, S&P 500 on S&P DJI, USD/JPY on a bank page, UST 10Y on treasury.gov for the same date.
 - Holidays: `sessions_cal` rows are `verified = false` until checked against each exchange's published calendar; the DATA chip says so.
 

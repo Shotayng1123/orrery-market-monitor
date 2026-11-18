@@ -6,6 +6,7 @@
 //   npx tsx live_check.ts
 // Needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (workflow live-check: Actions > live-check > Run workflow).
 import { db } from "./lib/db.js";
+import { spark } from "./lib/yahoo.js";
 
 const now = Date.now();
 const age = (iso: string | null | undefined): string => { if (!iso) return "never"; const m = Math.round((now - Date.parse(iso)) / 60000); return m < 120 ? `${m} min ago` : m < 2880 ? `${(m / 60).toFixed(1)} h ago` : `${Math.round(m / 1440)} days ago`; };
@@ -46,7 +47,7 @@ async function main(): Promise<void> {
   });
 
   await part("market", "the market table's own quotes (pulled every minute): when each last printed", async () => {
-    const rows = must(await sb.from("quotes_latest").select("symbol,price,market_time,fetched_at").in("symbol", ["^GSPC", "^IXIC", "^N225", "^VIX", "ES=F", "NKD=F", "USDJPY=X", "EURUSD=X", "^TNX", "CL=F", "GC=F"])) as Array<{ symbol: string; price: number; market_time: string; fetched_at: string }>;
+    const rows = must(await sb.from("quotes_latest").select("symbol,price,market_time,fetched_at").in("symbol", ["^GSPC", "^IXIC", "^N225", "^VIX", "ES=F", "NKD=F", "USDJPY=X", "EURUSD=X", "^TNX", "CL=F", "GC=F", "^GDAXI", "^STOXX50E", "^FCHI", "^SSMI", "^FTSE", "^MXX", "^BVSP", "BTC-USD"])) as Array<{ symbol: string; price: number; market_time: string; fetched_at: string }>;
     for (const r of rows.sort((a, b) => a.symbol.localeCompare(b.symbol))) console.log(`  ${r.symbol.padEnd(9)} ${String(r.price).padEnd(11)} printed ${utc(r.market_time)} (${age(r.market_time)}), pulled ${age(r.fetched_at)}`);
     if (!rows.length) console.log("  none of the instruments asked for is in the table");
     // the closes booked for the same instruments: a close booked while the quotes stood still shows here as a
@@ -69,6 +70,18 @@ async function main(): Promise<void> {
         const x = j.chart?.result?.[0], last = x?.timestamp?.at(-1), mt = x?.meta?.regularMarketTime;
         console.log(`  ${symbol.padEnd(9)} at ${host}: price ${x?.meta?.regularMarketPrice ?? "–"}, market time ${mt ? utc(new Date(mt * 1000).toISOString()) + " (" + age(new Date(mt * 1000).toISOString()) + ")" : "–"}, last minute bar ${last ? utc(new Date(last * 1000).toISOString()) : "–"}`);
       } catch (e) { console.log(`  ${symbol} at ${host}: ${e instanceof Error ? e.message : String(e)}`); }
+    }
+    // The same question through the reader the batch jobs use (it waits and asks again on HTTP 429): the daily
+    // closes and the newest minute bar as GitHub's machine is given them. Set beside the booked closes above,
+    // this tells whether the source itself has the real closes while the Monitor's server is handed old ones.
+    const syms = ["^GSPC", "^IXIC", "ES=F", "CL=F", "USDJPY=X", "AAPL", "^GDAXI", "^STOXX50E", "^FCHI", "^SSMI", "^FTSE", "^MXX", "^BVSP"];
+    const daily = await spark(syms, "5d", "1d"), minute = await spark(syms, "1d", "1m");
+    console.log("  through the jobs' reader (daily closes, newest last; then the newest minute bar):");
+    for (const sym of syms) {
+      const d = daily[sym], m = minute[sym];
+      const bars = d ? d.timestamp.map((t, k) => ({ t, c: d.close[k] })).filter((x) => x.c != null).slice(-3).map((x) => `${utc(new Date(x.t * 1000).toISOString())} ${x.c}`).join("; ") : "no answer";
+      const lastMin = m ? m.timestamp.map((t, k) => ({ t, c: m.close[k] })).filter((x) => x.c != null).at(-1) : null;
+      console.log(`  ${sym.padEnd(9)} ${bars} | minute: ${lastMin ? `${utc(new Date(lastMin.t * 1000).toISOString())} ${lastMin.c} (${age(new Date(lastMin.t * 1000).toISOString())})` : "no answer"}`);
     }
   });
 

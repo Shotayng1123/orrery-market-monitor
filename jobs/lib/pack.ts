@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { nikkei225, sp500, type ConstituentList } from "./constituents.js";
 import { lastTwo, spark } from "./yahoo.js";
 import { selectAll, SGT, ymdIn } from "./db.js";
-import { stoppedBeforeClose } from "../../supabase/functions/_shared/feedhealth.js";
+import { barDayEnd, silence, stoppedBeforeClose } from "../../supabase/functions/_shared/feedhealth.js";
 
 export interface Move { symbol: string; name: string; last: number; prev: number; pct: number; sector?: string; weight?: number | null }
 export interface SectorMove { sector: string; pct: number; n: number; weighted: boolean }
@@ -58,7 +58,7 @@ export async function buildPack(sb: SupabaseClient, log: (s: string) => void = c
   const now = new Date();
   // 1. the market table (last, 1D/1W/1M) from the snapshot the tick keeps
   const { data: snap } = await sb.from("snapshots").select("payload,at").eq("key", "table").maybeSingle();
-  type Row = { symbol: string; name: string; cls: string; group: string; last: number | null; lastAt: string | null; pct: Record<string, number | null>; chg: Record<string, number | null> };
+  type Row = { symbol: string; name: string; cls: string; group: string; last: number | null; lastAt: string | null; pct: Record<string, number | null>; chg: Record<string, number | null>; closes?: Record<string, number | null>; closeDates?: Record<string, string | null> };
   const rows: Row[] = (snap?.payload as { rows?: Row[] } | null)?.rows ?? [];
   if (!rows.length) notes.push("market table snapshot missing: the backend has not run yet");
   const table: Pack["table"] = rows.map((r) => ({ symbol: r.symbol, name: r.name, cls: r.cls, last: r.last, lastAt: r.lastAt, d1Pct: r.pct?.d1 ?? null, d1Chg: r.chg?.d1 ?? null, w1Pct: r.pct?.w1 ?? null, m1Pct: r.pct?.m1 ?? null, unit: r.group === "rates" ? "bp" : "pct" }));
@@ -97,6 +97,40 @@ export async function buildPack(sb: SupabaseClient, log: (s: string) => void = c
         if (st && q && booked != null && q.price > 0 && Math.abs(booked / q.price - 1) < 1e-6) warnings.push(`Prices from ${place} stopped arriving at ${clock(st.last, tz)} ${place} time, before the close at ${clock(st.close, tz)}, and the level booked as that day's close is that last price. The ${whose} figures in these tables are as of then, not closing levels.`);
         else if (st) notes.push(`the minute feed from ${place} stopped at ${clock(st.last, tz)} ${place} time, before the close at ${clock(st.close, tz)}; the ${whose} closing levels here were booked afterwards from the daily history`);
       }
+    }
+    // Row by row, for everything else in the table, and also once prices are arriving again. The stop of 18 Nov
+    // 2026 ended at 23:27 UTC; the closes booked during it stayed (oil's "close" of 18 Nov was its price of
+    // 10:42 New York time, the DAX's its level 53 minutes before the bell). The stop itself is on record as a
+    // silence in the stored minute bars of USD/JPY, which prints every minute round the clock on weekdays. A
+    // row whose day ended after the silence began, and whose latest close was booked by the server during the
+    // silence, was booked from the stopped prices. No silence, no check: nothing here reads a healthy day.
+    const since = new Date(now.getTime() - 34 * 3600e3).toISOString(), prints: number[] = [];
+    for (let from = 0; from < 4000; from += 1000) { const { data: page } = await sb.from("bars_intraday").select("t").eq("symbol", "USDJPY=X").gte("t", since).order("t").range(from, from + 999); const p = (page ?? []) as Array<{ t: string }>; prints.push(...p.map((x) => Date.parse(x.t))); if (p.length < 1000) break; }
+    const gap = prints.length ? silence(prints, now.getTime()) : null;
+    log(gap ? `a silence in the stored prices: ${new Date(gap.from).toISOString().slice(5, 16).replace("T", " ")} to ${new Date(gap.to).toISOString().slice(5, 16).replace("T", " ")} UTC` : `no silence in the stored prices of the last 34 hours (${prints.length} minute bars of USD/JPY)`);
+    if (gap) {
+      const { data: inst } = await sb.from("instruments").select("symbol,market,provider");
+      const marketOf = new Map(((inst ?? []) as Array<{ symbol: string; market: string; provider: string }>).filter((i) => i.provider === "yahoo" && i.market !== "CRYPTO").map((i) => [i.symbol, i.market]));
+      // a row's latest booked close: its value itself where the table shows the close, otherwise the close its
+      // one-day change is measured from (a future that is trading again shows its new price against that close)
+      const booked = (r: Row): { v: number; d: string } | null => (r.lastAt && dated(r.lastAt) && r.last != null ? { v: r.last, d: r.lastAt.slice(0, 10) } : r.closes?.d1 != null && r.closeDates?.d1 ? { v: r.closes.d1, d: r.closeDates.d1 } : null);
+      const cand = rows.filter((r) => { const m = marketOf.get(r.symbol), bk = booked(r); if (!m || !bk) return false; const end = barDayEnd(m, bk.d); return end != null && end - 30 * 60000 > gap.from; });
+      // Which of those closes were booked while prices were stopped: the ones last written by a run of the
+      // server's own daily history during the silence (job_runs gives each run's time and length; a row carries
+      // the time of the run that wrote it) and not written again since. Not a comparison of prices: when prices
+      // came back the missing minutes of the futures were filled in and the minute they had stood at was
+      // revised, so nothing stored still equals the price they were booked at.
+      const { data: runs } = await sb.from("job_runs").select("at,ms").eq("job", "daily:history").eq("ok", true).gte("at", new Date(gap.from).toISOString()).lte("at", new Date(gap.to + 60000).toISOString());
+      const spans = ((runs ?? []) as Array<{ at: string; ms: number | null }>).map((r) => ({ a: Date.parse(r.at) - (r.ms ?? 0) - 2000, b: Date.parse(r.at) + 2000 }));
+      const wrote = new Map<string, number>();
+      if (cand.length && spans.length) {
+        const first = cand.map((r) => booked(r)!.d).sort()[0];
+        const { data: bk } = await sb.from("prices_daily").select("symbol,d,updated_at").in("symbol", cand.map((r) => r.symbol)).gte("d", first);
+        for (const x of (bk ?? []) as Array<{ symbol: string; d: string; updated_at: string | null }>) if (x.updated_at) wrote.set(`${x.symbol}|${x.d}`, Date.parse(x.updated_at));
+      }
+      const frozen = cand.filter((r) => { const t = wrote.get(`${r.symbol}|${booked(r)!.d}`); return t != null && spans.some((sp) => t >= sp.a && t <= sp.b); });
+      log(`the daily history ran ${spans.length} time(s) on the server during the silence; ${cand.length} rows had a day that ended after it began, ${frozen.length} of them still carry the close booked then`);
+      if (frozen.length) warnings.push(`Prices stopped arriving at ${clock(new Date(gap.from).toISOString(), "UTC")} UTC${gap.to < now.getTime() - 60000 ? ` and came back at ${clock(new Date(gap.to).toISOString(), "UTC")} UTC` : ""}. For these rows that was before the end of their day, and the level booked as their latest close was booked while prices were stopped: it is their last price before the stop, not a closing level (where a row shows a newer price, its one-day change is measured from that level): ${frozen.map((r) => r.name).join(", ")}.`);
     }
   } catch (e) { log(`the check for prices that stopped before a close could not be made: ${e instanceof Error ? e.message : String(e)}`); }
   if (warnings.length) log(`WARNING: ${warnings.join(" ")}`);

@@ -5,7 +5,8 @@
 //
 // The reading here: among the instruments whose market is open now, and has been for half an hour, take the one
 // that printed most recently, allowing each market its feed's own delay. If even that one is more than twenty
-// minutes behind, no price is arriving. One quiet instrument proves nothing; all of them at once do.
+// minutes behind, no price is arriving. One quiet instrument proves nothing; all of them at once do. It is made
+// twice, for crypto and for everything else, and the one further behind is the state (see feedState).
 // No network and no database here; checked in sim/logic.test.ts.
 import { marketById, marketState, partsIn, type Holidays } from "./sessions.ts";
 
@@ -25,7 +26,14 @@ export const FEED_OPEN_MIN = 30;   // a market open for less than this (plus its
 
 export function feedState(prints: Print[], nowMs: number, holidays: Holidays = {}): FeedState {
   const now = new Date(nowMs);
-  let best: { late: number; p: Print } | null = null;
+  // Currencies and futures are kept in sessions.ts by the day of the week alone; their real week runs from Sunday
+  // 17:00 New York to Friday 17:00 (fxTrading, which also knows 25 December and 1 January). Outside it their old
+  // prints say nothing about the feed.
+  const open = (m: NonNullable<ReturnType<typeof marketById>>, at: Date): boolean => marketState(m, at, holidays) === "OPEN" && ((m.id !== "FX" && m.id !== "CME") || fxTrading(at.getTime()));
+  // Two readings, crypto and everything else. On 18 Nov 2026 crypto went on arriving while every other price
+  // stood still for seven and a half hours: read together, crypto's fresh prints vouched for a feed that had
+  // stopped, and the bar this reading exists for was never raised.
+  const best: Record<"crypto" | "rest", { late: number; p: Print } | null> = { crypto: null, rest: null };
   for (const p of prints) {
     const m = marketById(p.market), t = Date.parse(p.marketTime);
     if (!m || !Number.isFinite(t)) continue;
@@ -34,13 +42,15 @@ export function feedState(prints: Print[], nowMs: number, holidays: Holidays = {
     if ((m.id === "FX" || m.id === "CME") && WORLD_SHUT.has(now.toISOString().slice(5, 10))) continue;
     // open now, and already open a while ago: just after an open or a lunch break the newest print is the one
     // from before it, and says nothing about the feed
-    if (marketState(m, now, holidays) !== "OPEN" || marketState(m, new Date(nowMs - (FEED_OPEN_MIN + m.delayMin) * 60000), holidays) !== "OPEN") continue;
-    const late = (nowMs - t) / 60000 - m.delayMin;
-    if (!best || late < best.late) best = { late, p };
+    if (!open(m, now) || !open(m, new Date(nowMs - (FEED_OPEN_MIN + m.delayMin) * 60000))) continue;
+    const late = (nowMs - t) / 60000 - m.delayMin, k = m.id === "CRYPTO" ? "crypto" : "rest";
+    if (!best[k] || late < best[k]!.late) best[k] = { late, p };
   }
-  if (!best) return { expected: false, ok: true, newest: null, symbol: null, lateMin: null };
-  const lateMin = Math.max(0, Math.round(best.late));
-  return { expected: true, ok: best.late <= FEED_LATE_MIN, newest: new Date(Date.parse(best.p.marketTime)).toISOString(), symbol: best.p.symbol, lateMin };
+  // the reading that is further behind is the state: either one stopped is a feed that has stopped
+  const worst = [best.rest, best.crypto].filter((x): x is { late: number; p: Print } => !!x).sort((x, y) => y.late - x.late)[0];
+  if (!worst) return { expected: false, ok: true, newest: null, symbol: null, lateMin: null };
+  const lateMin = Math.max(0, Math.round(worst.late));
+  return { expected: true, ok: worst.late <= FEED_LATE_MIN, newest: new Date(Date.parse(worst.p.marketTime)).toISOString(), symbol: worst.p.symbol, lateMin };
 }
 
 // ---- after the close: did the prices stop before it? ----
@@ -78,4 +88,59 @@ export function stoppedBeforeClose(marketId: string, lastPrint: string | null, n
     return { close: new Date(close).toISOString(), last: new Date(last).toISOString() };
   }
   return null;
+}
+
+// ---- a daily bar is a close only once the answers in hand reach the end of its day ----
+// On 18 Nov 2026 the source went on answering the Monitor's server with the prices of 10:52 New York time, while
+// it gave GitHub's machines the real ones. After the bell the daily history, on the server, booked that last
+// price as the day's close for every market still open at the stop: 7303.98 for the S&P 500, which closed at
+// 7323.63. Crypto went on arriving the whole time, so the stop is read twice: for crypto, and for everything
+// else together. The history now reads how far the answers in hand reach (the newest minute bar it is given)
+// and books a bar only when they reach the end of that bar's day (_shared/history.ts). A run that is handed
+// old answers books nothing new and overwrites nothing; a run that is handed current ones books as before.
+
+/** When the day of a daily bar dated `ymd` ends (ms): an exchange's at the end of its last session (13:00 on New
+ *  York's usual half days), a currency pair's and a CME future's at 17:00 New York, a crypto day at midnight
+ *  UTC. Null for a market not known. */
+export function barDayEnd(marketId: string, ymd: string): number | null {
+  const m = marketById(marketId);
+  if (!m) return null;
+  if (m.id === "FX" || m.id === "CME") return zonedMs("America/New_York", ymd, 17 * 60);
+  if (m.id === "CRYPTO") return zonedMs("UTC", ymd, 24 * 60);
+  const [y, mo, d] = ymd.split("-").map(Number);
+  if (m.id === "NYSE" && nyseHalfDay(ymd, new Date(Date.UTC(y, mo - 1, d)).getUTCDay())) return zonedMs(m.tz, ymd, 13 * 60);
+  return zonedMs(m.tz, ymd, m.sessions[m.sessions.length - 1][1]);
+}
+/** Whether answers that reach `freshMs` can hold the close of this market's bar dated `ymd`: they must reach
+ *  the end of that day, less the half hour an index may stop printing before its close. */
+export function barSettled(marketId: string, ymd: string, freshMs: number, graceMin = CLOSE_SHORT_MIN): boolean {
+  const end = barDayEnd(marketId, ymd);
+  return end == null || end - graceMin * 60000 <= freshMs;
+}
+/** The grace when a market is read on its own minute bars alone: wider, because the Monitor's hours for a market
+ *  can be off (Mexico's index is given minute bars that end an hour before the bell kept in sessions.ts). */
+export const OWN_SHORT_MIN = 75;
+
+// ---- a stop that is over leaves a silence in the stored minute bars ----
+// Once prices arrive again the quotes no longer show that they had stopped, but the closes booked meanwhile are
+// still there. The stop itself stays on record: an instrument that prints every minute round the clock on
+// weekdays (USD/JPY) has a hole in its stored minute bars (bars_intraday).
+
+/** Whether currencies trade at this moment: not from Friday 17:00 New York to Sunday 17:00, nor on 25 December
+ *  or 1 January. */
+export function fxTrading(ms: number): boolean {
+  const p = partsIn("America/New_York", new Date(ms)), md = p.ymd.slice(5);
+  if (md === "12-25" || md === "01-01") return false;
+  return !(p.wd === 6 || (p.wd === 5 && p.h >= 17) || (p.wd === 0 && p.h < 17));
+}
+/** The longest silence of `minMin` minutes or more in the print times (ms, ascending) of an instrument that
+ *  trades round the clock, among those that began while currencies trade; a silence that has not ended runs to
+ *  `nowMs`. Null when there is none. `from` is the last print before it, `to` the first after it. */
+export function silence(printsMs: number[], nowMs: number, minMin = 45): { from: number; to: number } | null {
+  let best: { from: number; to: number } | null = null;
+  for (let k = 1; k <= printsMs.length; k++) {
+    const a = printsMs[k - 1], b = k < printsMs.length ? printsMs[k] : nowMs;
+    if (b - a >= minMin * 60000 && fxTrading(a + 60000) && (!best || b - a > best.to - best.from)) best = { from: a, to: b };
+  }
+  return best;
 }
