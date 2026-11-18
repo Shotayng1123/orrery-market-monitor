@@ -42,6 +42,27 @@ intraday prices, yield curves, calendar, news, notes, reports and sign-ins; pg_c
    The Fed target range is not a `daily` job (the edge runtime cannot reach FRED): run the `fed-target` workflow in GitHub Actions.
 7. GitHub: repository variable `VITE_API_URL = https://<ref>.supabase.co/functions/v1/api`; Pages source = GitHub Actions; secrets `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY` for the jobs.
 
+## Push notifications (added 2026-11-18)
+
+Alerts reach phones and browsers as notifications once the server has a signing key. Until then the page says
+"Notifications are not set up on the server yet" and nothing is sent.
+
+1. `npx supabase db push` (migration `20261118000001_push.sql`: the `push_subs` table and `alerts.pushed_at`).
+2. The key pair, made once and never shown:
+   ```bash
+   node jobs/tools/gen_vapid.mjs                              # writes jobs/.env.vapid (git-ignored)
+   npx supabase secrets set --env-file jobs/.env.vapid
+   ```
+   Keep the file. A different key ends every device's subscription without telling anyone.
+3. `npx supabase functions deploy tick daily api`.
+
+How it works: the tick offers every alert not yet marked (`alerts.pushed_at`) to the devices in `push_subs`, within a
+minute of the alert being written, whichever job wrote it. A device set to "My watchlist only" gets alerts on its
+account's watchlist names; more than four alerts at once arrive as one notification. Addresses the push service
+reports gone are deleted. The encryption and signing are in `functions/_shared/webpush.ts`, checked against the
+example of RFC 8291 in `sim/logic.test.ts`. On an iPhone, notifications exist only in the app added to the Home Screen
+(iOS 16.4 or later).
+
 ## Changing the shared sign-in password
 
 The password exists only as the function secret `MONITOR_PASSWORD`; it is not in git or in the database, and

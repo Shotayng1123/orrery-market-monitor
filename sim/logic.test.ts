@@ -5,6 +5,9 @@ import * as srv from "../supabase/functions/_shared/sessions.ts";
 import { rollingBands, pct } from "../web/src/lib/stats.ts";
 import { fxClosesFromDaily, fxClosesFromHourly, fxDay, suspectBars } from "../supabase/functions/_shared/fx.ts";
 import { AFTER_CLOSE_MIN, quoteMove, scanDue, sessionMove, stockMarket } from "../supabase/functions/_shared/moves.ts";
+import { b64u, encryptPush, pushEndpointOk, unb64u, vapidHeader } from "../supabase/functions/_shared/webpush.ts";
+import { alertNote, notesFor, stampSgt, wanted, type AlertLite } from "../supabase/functions/_shared/pushrules.ts";
+import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
 let pass = 0, fail = 0;
 const ck = (name: string, cond: boolean, detail?: unknown) => { if (cond) { pass++; console.log("  ✓ " + name); } else { fail++; console.log("  ✗ " + name + (detail !== undefined ? "  ->  " + JSON.stringify(detail) : "")); } };
@@ -158,5 +161,67 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
   ck("a watched Hong Kong stock is scanned in Hong Kong hours and after its close, not at Tokyo's open", scanDue(srv.marketById("HKEX")!, at("2026-11-18T03:00:00Z")) && scanDue(srv.marketById("HKEX")!, at("2026-11-18T08:20:00Z")) && !scanDue(srv.marketById("HKEX")!, at("2026-11-18T00:30:00Z")));
 }
 
-console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");
-process.exit(fail ? 1 : 0);
+// The checks below wait on the browser-grade cryptography, so the file ends inside this function.
+(async () => {
+  console.log("\n[I] push notifications: the message encryption (RFC 8291) and the sender's signature (RFC 8292)");
+  {
+    // the example of RFC 8291, Appendix A: with its keys and salt the message body must come out exactly as printed there
+    const rfc = { plain: "When I grow up, I want to be a watermelon", p256dh: "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4", auth: "BTBZMqHH6r4Tts7J_aSIgg",
+      asPublic: "BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8", asPrivate: "yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw", salt: "DGv6ra1nlYgDCS1FRnbzlw",
+      body: "DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A_yl95bQpu6cVPTpK4Mqgkf1CXztLVBSt2Ks3oZwbuwXPXLWyouBWLVWGNWQexSgSxsj_Qulcy4a-fN" };
+    const got = b64u(await encryptPush(new TextEncoder().encode(rfc.plain), { p256dh: rfc.p256dh, auth: rfc.auth }, { key: { publicKey: rfc.asPublic, privateKey: rfc.asPrivate }, salt: unb64u(rfc.salt) }));
+    ck("the RFC 8291 example comes out byte for byte", got === rfc.body, got);
+
+    // a message of our own, read back the way a browser would, with Node's separate cryptography
+    const ua = createECDH("prime256v1"); ua.generateKeys(); const auth = new Uint8Array(16).map((_, i) => (i * 37 + 11) & 255);
+    const payload = JSON.stringify({ title: "Rakuten Bank down 17% intraday", body: "Stock move · 11/18 10:05 SGT", hash: "#asset/5838.T", tag: "alert-1" });
+    const msg = Buffer.from(await encryptPush(new TextEncoder().encode(payload), { p256dh: b64u(new Uint8Array(ua.getPublicKey())), auth: b64u(auth) }));
+    const salt = msg.subarray(0, 16), rs = msg.readUInt32BE(16), idlen = msg[20], asPub = msg.subarray(21, 21 + idlen), sealed = msg.subarray(21 + idlen);
+    const shared = ua.computeSecret(asPub);
+    const ikm = Buffer.from(hkdfSync("sha256", shared, auth, Buffer.concat([Buffer.from("WebPush: info\0"), ua.getPublicKey(), asPub]), 32));
+    const cek = Buffer.from(hkdfSync("sha256", ikm, salt, Buffer.from("Content-Encoding: aes128gcm\0"), 16)), nonce = Buffer.from(hkdfSync("sha256", ikm, salt, Buffer.from("Content-Encoding: nonce\0"), 12));
+    const d = createDecipheriv("aes-128-gcm", cek, nonce); d.setAuthTag(sealed.subarray(sealed.length - 16));
+    const plain = Buffer.concat([d.update(sealed.subarray(0, sealed.length - 16)), d.final()]);
+    ck("a message of ours decrypts on the receiving side to the same text, with the end-of-record byte", rs === 4096 && idlen === 65 && plain[plain.length - 1] === 2 && plain.subarray(0, plain.length - 1).toString() === payload, { rs, idlen });
+    const again = Buffer.from(await encryptPush(new TextEncoder().encode(payload), { p256dh: b64u(new Uint8Array(ua.getPublicKey())), auth: b64u(auth) }));
+    ck("every message has its own salt and one-time key", !again.subarray(0, 16).equals(salt) && !again.subarray(21, 86).equals(asPub));
+    let refused = 0; for (const bad of [{ p256dh: "AAAA", auth: b64u(auth) }, { p256dh: b64u(new Uint8Array(ua.getPublicKey())), auth: "AAAA" }]) { try { await encryptPush(new Uint8Array(4), bad); } catch { refused++; } }
+    try { await encryptPush(new Uint8Array(5000), { p256dh: b64u(new Uint8Array(ua.getPublicKey())), auth: b64u(auth) }); } catch { refused++; }
+    ck("malformed subscription keys and an over-long message are refused", refused === 3, refused);
+
+    // VAPID: a signed token for the push service's origin, checked with the public key
+    const { privateKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" }); const jwk = privateKey.export({ format: "jwk" }) as { x: string; y: string; d: string };
+    const pub = b64u(new Uint8Array(Buffer.concat([Buffer.from([4]), Buffer.from(jwk.x, "base64url"), Buffer.from(jwk.y, "base64url")])));
+    const t0 = Date.parse("2026-11-18T01:00:00Z");
+    const h = await vapidHeader("https://web.push.apple.com/QGk3example", { publicKey: pub, privateKey: jwk.d }, "https://shotayng1123.github.io/orrery-market-monitor/", t0);
+    const m = h.match(/^vapid t=([^.]+)\.([^.]+)\.([^,]+), k=(.+)$/);
+    const claims = m ? JSON.parse(Buffer.from(m[2], "base64url").toString()) : null, head = m ? JSON.parse(Buffer.from(m[1], "base64url").toString()) : null;
+    ck("the header names the push service's origin, expires in twelve hours and carries the public key", !!m && head.alg === "ES256" && head.typ === "JWT" && claims.aud === "https://web.push.apple.com" && claims.exp === t0 / 1000 + 43200 && /^https:/.test(claims.sub) && m[4] === pub, { head, claims });
+    const vk = await crypto.subtle.importKey("jwk", { kty: "EC", crv: "P-256", x: jwk.x, y: jwk.y, ext: true }, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+    const good = !!m && await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, vk, Buffer.from(m[3], "base64url"), new TextEncoder().encode(`${m[1]}.${m[2]}`));
+    const forged = !!m && await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, vk, Buffer.from(m[3], "base64url"), new TextEncoder().encode(`${m[1]}.${m[2]}x`));
+    ck("its signature verifies with the public key, and not for an altered token", good && !forged, { good, forged });
+
+    ck("push addresses: Apple, Google, Mozilla and Windows are accepted", ["https://web.push.apple.com/QGk3", "https://fcm.googleapis.com/fcm/send/abc:def", "https://updates.push.services.mozilla.com/wpush/v2/gAAA", "https://wns2-sg2p.notify.windows.com/w/?token=x"].every(pushEndpointOk));
+    ck("anything else is refused: another host, a look-alike, plain http, not an address", ["https://example.com/push", "https://push.apple.com.evil.example/x", "https://evilfcm.googleapis.com.example/", "http://fcm.googleapis.com/fcm/send/x", "https://169.254.169.254/latest", "not a url", ""].every((u) => !pushEndpointOk(u)));
+  }
+
+  console.log("\n[J] push notifications: what they say and who gets them");
+  {
+    const a = (id: number, symbol: string, kind: string, msg: string, at = "2026-11-18T02:05:00Z"): AlertLite => ({ id, at, symbol, name: msg.split(" ")[0], kind, pct: -7.5, msg });
+    const bank = a(1, "5838.T", "stock", "Rakuten Bank down 17% intraday"), idx = a(2, "^N225", "index", "Nikkei 225 down 3.2%"), buy = a(3, "7203.T", "buyback", "Buyback: Toyota to buy back up to ¥1.2tn"), deal = a(4, "news:812", "mna", "M&A: a USD 4.0bn deal for a private company");
+    const n = alertNote(bank);
+    ck("a stock move: the alert's line as the title, its kind and Singapore time under it, a tap opens the stock", n.title === "Rakuten Bank down 17% intraday" && n.body === "Stock move · 11/18 10:05 SGT" && n.hash === "#asset/5838.T" && n.tag === "alert-1", n);
+    ck("an index move opens the index; a headline about a company opens the company; one about no listed company opens NEWS", alertNote(idx).hash === "#asset/%5EN225" && alertNote(idx).body.startsWith("Index move") && alertNote(buy).hash === "#asset/7203.T" && alertNote(buy).body.startsWith("Buyback") && alertNote(deal).hash === "#news" && alertNote(deal).body.startsWith("M&A"), [alertNote(idx), alertNote(buy), alertNote(deal)]);
+    ck("times are written as on the page, across midnight too", stampSgt("2026-11-18T15:59:00Z") === "11/18 23:59 SGT" && stampSgt("2026-11-18T16:00:00Z") === "11/19 00:00 SGT");
+    const watch = new Set(["5838.T", "NVDA"]);
+    ck("'my names': only alerts on the account's watchlist", wanted("mine", watch, bank) && !wanted("mine", watch, idx) && !wanted("mine", watch, buy) && !wanted("mine", watch, deal) && [bank, idx, buy, deal].every((x) => wanted("all", watch, x)));
+    ck("up to four alerts at once: one notification each", notesFor([bank, idx, buy, deal], "all", watch).length === 4 && notesFor([bank, idx, buy, deal], "mine", watch).length === 1 && notesFor([idx], "mine", watch).length === 0);
+    const many = Array.from({ length: 30 }, (_, i) => a(100 + i, `${7000 + i}.T`, "stock", `Company ${i} down 8% intraday`, `2026-11-18T02:${String(10 + i).padStart(2, "0")}:00Z`));
+    const sum = notesFor(many, "all", watch);
+    ck("thirty at once (a sell-off): a single notification with the count and the three newest", sum.length === 1 && sum[0].title === "30 new alerts" && sum[0].body === "Company 29 down 8% intraday · Company 28 down 8% intraday · Company 27 down 8% intraday and 27 more" && sum[0].hash === "#market", sum);
+  }
+
+  console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");
+  process.exit(fail ? 1 : 0);
+})();

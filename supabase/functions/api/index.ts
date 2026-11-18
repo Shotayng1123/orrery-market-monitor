@@ -10,6 +10,7 @@ import { homeIndex, quoteFor, relativeLine, statementsFor, yahooSeries } from ".
 import { fetchText } from "../_shared/http.ts";
 import { CCY, loadUniverse } from "../_shared/newsalerts.ts";
 import { quotes } from "../_shared/yahoo.ts";
+import { pushState, pushSubscribe, pushTest, pushUnsubscribe } from "../_shared/push.ts";
 
 const RANGES: Record<string, number> = { "1W": 7, "1M": 31, "3M": 93, "12M": 366, "36M": 1096 };
 const SIGMA_LOOKBACK_DAYS = 1120;   // 756 trading days ≈ 1,100 calendar days, so the 36M band is defined from the first point shown
@@ -98,6 +99,16 @@ Deno.serve(async (req) => {
         return json(req, { rows: (data ?? []).map((r) => ({ bank: r.bank, name: r.name, rateLabel: r.rate_label, rate: r.rate, asOf: r.as_of, lastChange: r.last_change, nextMeeting: r.next_meeting, sourceUrl: r.source_url, sourceNote: r.source_note, updatedAt: r.updated_at })) });
       }
       case "earnings": return json(req, await earnings(Math.min(60, Math.max(1, Number(q("days") ?? 21)))));
+      // alerts as notifications on this device (_shared/push.ts); the key is null until the server has one
+      case "push_key": return json(req, { key: Deno.env.get("VAPID_PUBLIC_KEY") ?? null });
+      case "push_state": case "push_sub": case "push_unsub": case "push_test": {
+        if (req.method !== "POST") return json(req, { error: "POST required" }, 405);
+        const b = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+        if (action === "push_state") return json(req, await pushState(user.id, b));
+        if (action === "push_unsub") return json(req, await pushUnsubscribe(user.id, b));
+        const r = action === "push_sub" ? await pushSubscribe(user.id, b, req.headers.get("user-agent")) : await pushTest(user.id, b, new Date());
+        return json(req, r.body, r.status);
+      }
       case "watch_syms": return json(req, { symbols: (await watchSymbols(user.id)).map((w) => w.symbol) });
       case "watch_list": return json(req, await watchList(user.id));
       case "watch_feed": return json(req, await watchFeed(user.id));

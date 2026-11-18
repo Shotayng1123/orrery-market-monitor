@@ -8,6 +8,7 @@ import { marketById, marketState, recentlyClosed } from "../_shared/sessions.ts"
 import { computeTable, loadHolidays } from "../_shared/table.ts";
 import { chart, lastPrint, spark } from "../_shared/yahoo.ts";
 import { scanIndexAlerts, scanStockAlerts } from "../_shared/alerts.ts";
+import { pushNewAlerts } from "../_shared/push.ts";
 
 const CONCURRENCY = 6;
 
@@ -78,6 +79,8 @@ Deno.serve(async (req) => {
       const sa = now.getUTCMinutes() % 5 === 0 ? await scanStockAlerts(now, holidays) : { scanned: 0, alerts: 0 };
       alertNote = `, alerts idx ${ia}${sa.scanned ? ` / stocks ${sa.alerts} of ${sa.scanned}` : ""}`;
     } catch (e) { alertNote = `, alerts failed: ${e instanceof Error ? e.message : e}`; }
+    // new alerts, whichever job wrote them, go to the devices that asked for notifications
+    try { alertNote += await pushNewAlerts(now); } catch (e) { alertNote += `, push failed: ${e instanceof Error ? e.message : e}`; }
     const missing = got.filter((g) => !g.ok).map((g) => g.i.symbol);
     const detail = `${quotes.length}/${due.length} quotes, ${bars.length} 1m bars, table ${n} rows${failed.length ? `, spark fallback for ${failed.length}` : ""}${missing.length ? `, missing: ${missing.join(" ")}` : ""}${alertNote}`;
     await logRun("tick", true, detail, t0);
