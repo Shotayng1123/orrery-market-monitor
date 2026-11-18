@@ -26,6 +26,14 @@ on:
         description: "Also look again at moves stored as 'no report found' (true/false)"
         required: false
         default: "false"
+      symbol:
+        description: "Only this stock's moves (a symbol such as CRWV or 7203.T); empty for all"
+        required: false
+        default: ""
+      redo:
+        description: "With a symbol: look up its moves again even where an answer is stored (true/false)"
+        required: false
+        default: "false"
       trace:
         description: "Print what each look-up did: its searches, the pages returned, its reply (true/false)"
         required: false
@@ -66,9 +74,14 @@ jobs:
           DRY: ${{ github.event.inputs.dry || 'false' }}
           AGAIN: ${{ github.event.inputs.again || 'false' }}
           TRACE: ${{ github.event.inputs.trace || 'false' }}
+          SYMBOL: ${{ github.event.inputs.symbol || '' }}
+          REDO: ${{ github.event.inputs.redo || 'false' }}
         run: |
           ARGS="--max $MAX"
           if [ "$DRY" = "true" ]; then ARGS="$ARGS --dry"; fi
           if [ "$AGAIN" = "true" ]; then ARGS="$ARGS --again"; fi
           if [ "$TRACE" = "true" ]; then ARGS="$ARGS --trace"; fi
+          # the symbol goes in as one quoted word; the job refuses anything that is not a symbol
+          if [ "$REDO" = "true" ]; then ARGS="$ARGS --redo"; fi
+          if [ -n "$SYMBOL" ]; then npx tsx move_causes.ts $ARGS --symbol "$SYMBOL"; exit $?; fi
           npx tsx move_causes.ts $ARGS

@@ -8,6 +8,8 @@
 //   npx tsx move_causes.ts --max 10        fewer
 //   npx tsx move_causes.ts --dry           ask and print, store nothing
 //   npx tsx move_causes.ts --again         also look again at moves stored as "not found" (fewer than three tries)
+//   npx tsx move_causes.ts --symbol CRWV   only that stock's moves
+//   npx tsx move_causes.ts --redo          every move chosen, also one that already has its answer (with --symbol)
 //   npx tsx move_causes.ts --parallel 1    look-ups at a time (default 3)
 //   npx tsx move_causes.ts --trace         print what each look-up did: its searches, the pages returned, its reply
 // Needs ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY. Optional: MOVE_CAUSE_MODEL (default
@@ -18,7 +20,11 @@ import { ask, newClient } from "./lib/llm.js";
 import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabase/functions/_shared/movecause.js";
 
 const arg = (k: string, d = ""): string => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] ?? d : d; };
-const DRY = process.argv.includes("--dry"), AGAIN = process.argv.includes("--again"), TRACE = process.argv.includes("--trace");
+const DRY = process.argv.includes("--dry"), AGAIN = process.argv.includes("--again"), TRACE = process.argv.includes("--trace"), REDO = process.argv.includes("--redo");
+const SYMBOL = arg("symbol").trim().toUpperCase();
+if (SYMBOL && !/^[A-Z0-9^.=&-]{1,24}$/.test(SYMBOL)) { console.error(`not a symbol: ${SYMBOL}`); process.exit(2); }
+// --redo spends again on moves that are already answered, so it is taken only for one named stock
+if (REDO && !SYMBOL) { console.error("--redo needs --symbol"); process.exit(2); }
 const MAX = Math.max(1, Math.min(300, Number(arg("max", "30")) || 30));
 const PARALLEL = Math.max(1, Math.min(6, Number(arg("parallel", "3")) || 3));
 const MODEL = process.env.MOVE_CAUSE_MODEL || "claude-opus-5-5", EFFORT = process.env.MOVE_CAUSE_EFFORT || "medium";
@@ -32,14 +38,17 @@ interface Row { symbol: string; kind: string; d: string; ctx: MoveCtx; tries: nu
 
 async function main(): Promise<void> {
   const sb = db(), client = newClient();
-  const { data, error } = await sb.from("move_causes").select("symbol,kind,d,ctx,tries").in("status", AGAIN ? ["queued", "error", "not_found"] : ["queued", "error"]).lt("tries", MAX_TRIES).order("d", { ascending: false }).limit(MAX);
+  let q = sb.from("move_causes").select("symbol,kind,d,ctx,tries");
+  if (SYMBOL) q = q.eq("symbol", SYMBOL);
+  if (!REDO) q = q.in("status", AGAIN ? ["queued", "error", "not_found"] : ["queued", "error"]).lt("tries", MAX_TRIES);
+  const { data, error } = await q.order("d", { ascending: false }).limit(MAX);
   if (error) {
     // a database from before this change has no queue: that is not a failure of this job
     if (error.code === "PGRST205" || error.code === "42P01" || /could not find the table|does not exist/i.test(error.message)) { console.log("The move_causes table is not in the database yet (the database change of 18 Nov 2026 has not been applied): nothing to look up."); return; }
     throw new Error(error.message);
   }
   const rows = (data ?? []) as Row[];
-  console.log(`${rows.length} move(s) to look up (model ${MODEL}, effort ${EFFORT}, up to ${SEARCHES} searches each, ${PARALLEL} at a time${AGAIN ? ", including those stored as not found" : ""})`);
+  console.log(`${rows.length} move(s) to look up (model ${MODEL}, effort ${EFFORT}, up to ${SEARCHES} searches each, ${PARALLEL} at a time${SYMBOL ? `, ${SYMBOL} only` : ""}${REDO ? ", including those already answered" : AGAIN ? ", including those stored as not found" : ""})`);
   let found = 0, none = 0, failed = 0, cost = 0;
   const work = [...rows];
   await Promise.all(Array.from({ length: PARALLEL }, async () => {
