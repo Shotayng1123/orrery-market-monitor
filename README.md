@@ -40,7 +40,8 @@ npm run build          # typecheck + production build into web/dist
 2. Repository variable `VITE_API_URL` = the Monitor API URL.
 3. Push to `main` (or run the `deploy-web` workflow). The site is served at `https://shotayng1123.github.io/orrery-market-monitor/`.
 
-Backend deployment steps are in `supabase/README.md`.
+The server (database changes and the functions) is deployed by the `deploy-server` workflow on a push to `main` that
+touches `supabase/`, once its two secrets exist; the set-up and the first-time steps are in `supabase/README.md`.
 
 ## Tests
 
