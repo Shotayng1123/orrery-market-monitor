@@ -6,6 +6,7 @@ import { nikkei225, sp500, type ConstituentList } from "./constituents.js";
 import { lastTwo, spark } from "./yahoo.js";
 import { selectAll, SGT, ymdIn } from "./db.js";
 import { barDayEnd, silence, stoppedBeforeClose } from "../../supabase/functions/_shared/feedhealth.js";
+import { marketById } from "../../supabase/functions/_shared/sessions.js";
 
 export interface Move { symbol: string; name: string; last: number; prev: number; pct: number; sector?: string; weight?: number | null }
 export interface SectorMove { sector: string; pct: number; n: number; weighted: boolean }
@@ -115,16 +116,19 @@ export async function buildPack(sb: SupabaseClient, log: (s: string) => void = c
       // one-day change is measured from (a future that is trading again shows its new price against that close)
       const booked = (r: Row): { v: number; d: string } | null => (r.lastAt && dated(r.lastAt) && r.last != null ? { v: r.last, d: r.lastAt.slice(0, 10) } : r.closes?.d1 != null && r.closeDates?.d1 ? { v: r.closes.d1, d: r.closeDates.d1 } : null);
       const cand = rows.filter((r) => { const m = marketOf.get(r.symbol), bk = booked(r); if (!m || !bk) return false; const end = barDayEnd(m, bk.d); return end != null && end - 30 * 60000 > gap.from; });
-      const before = new Map<string, number[]>();
+      // The last price each of them had before the stop. A delayed feed stood a little earlier than the stop
+      // (a future ten minutes, a European index fifteen), and a future's minutes were filled in afterwards when
+      // prices came back, so it is the last bar stored up to the stop less the market's delay. (Any minute of the
+      // half hour before the stop named the VIX and a Treasury yield, whose closes had been booked again from
+      // the real ones: each equalled an earlier minute by chance.)
+      const before = new Map<string, number>();
       if (cand.length) for (let from = 0; from < 6000; from += 1000) {
-        const { data: page } = await sb.from("bars_intraday").select("symbol,close").in("symbol", cand.map((r) => r.symbol)).gte("t", new Date(gap.from - 30 * 60000).toISOString()).lte("t", new Date(gap.from).toISOString()).order("t").range(from, from + 999);
-        const p = (page ?? []) as Array<{ symbol: string; close: number }>;
-        for (const x of p) { const a = before.get(x.symbol) ?? []; a.push(x.close); before.set(x.symbol, a); }
+        const { data: page } = await sb.from("bars_intraday").select("symbol,t,close").in("symbol", cand.map((r) => r.symbol)).gte("t", new Date(gap.from - 45 * 60000).toISOString()).lte("t", new Date(gap.from).toISOString()).order("t").range(from, from + 999);
+        const p = (page ?? []) as Array<{ symbol: string; t: string; close: number }>;
+        for (const x of p) if (Date.parse(x.t) <= gap.from - (marketById(marketOf.get(x.symbol) ?? "")?.delayMin ?? 0) * 60000 + 60000) before.set(x.symbol, x.close);   // ascending: the latest wins
         if (p.length < 1000) break;
       }
-      // the last price stored before the stop, not any of that half hour: the VIX and a Treasury yield, whose
-      // closes had been booked again from the real ones, each matched an earlier minute by chance
-      const frozen = cand.filter((r) => { const c = (before.get(r.symbol) ?? []).at(-1); return c != null && c > 0 && Math.abs(booked(r)!.v / c - 1) < 1e-6; });
+      const frozen = cand.filter((r) => { const c = before.get(r.symbol); return c != null && c > 0 && Math.abs(booked(r)!.v / c - 1) < 1e-6; });
       if (frozen.length) warnings.push(`Prices stopped arriving at ${clock(new Date(gap.from).toISOString(), "UTC")} UTC${gap.to < now.getTime() - 60000 ? ` and came back at ${clock(new Date(gap.to).toISOString(), "UTC")} UTC` : ""}. For these rows that was before the end of their day, and the level booked as their latest close is their last price before the stop, not a closing level (where a row shows a newer price, its one-day change is measured from that level): ${frozen.map((r) => r.name).join(", ")}.`);
     }
   } catch (e) { log(`the check for prices that stopped before a close could not be made: ${e instanceof Error ? e.message : String(e)}`); }
