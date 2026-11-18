@@ -79,3 +79,28 @@ export function stoppedBeforeClose(marketId: string, lastPrint: string | null, n
   }
   return null;
 }
+
+// ---- a daily bar is a close only once the answers in hand reach the end of its day ----
+// On 18 Nov 2026 the source went on answering the Monitor's server with the prices of 10:52 New York time, while
+// it gave GitHub's machines the real ones. After the bell the daily history, on the server, booked that last
+// price as the day's close for every market still open at the stop: 7303.98 for the S&P 500, which closed at
+// 7323.63. The history now reads how far the answers in hand reach (the newest minute bar it is given for the
+// instruments that trade round the clock: crypto, currencies, futures) and books a bar only when they reach the
+// end of that bar's day (_shared/history.ts). A run that is handed old answers then books nothing new and
+// overwrites nothing; a run that is handed current ones books as before.
+
+/** When the day of a daily bar dated `ymd` ends (ms): an exchange's at the end of its last session, a currency
+ *  pair's and a CME future's at 17:00 New York, a crypto day at midnight UTC. Null for a market not known. */
+export function barDayEnd(marketId: string, ymd: string): number | null {
+  const m = marketById(marketId);
+  if (!m) return null;
+  if (m.id === "FX" || m.id === "CME") return zonedMs("America/New_York", ymd, 17 * 60);
+  if (m.id === "CRYPTO") return zonedMs("UTC", ymd, 24 * 60);
+  return zonedMs(m.tz, ymd, m.sessions[m.sessions.length - 1][1]);
+}
+/** Whether answers that reach `freshMs` can hold the close of the bar dated `ymd`: they must reach the end of
+ *  that day, less the half hour an index may stop printing before its close. */
+export function barSettled(marketId: string, ymd: string, freshMs: number): boolean {
+  const end = barDayEnd(marketId, ymd);
+  return end == null || end - CLOSE_SHORT_MIN * 60000 <= freshMs;
+}

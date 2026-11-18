@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { nikkei225, sp500, type ConstituentList } from "./constituents.js";
 import { lastTwo, spark } from "./yahoo.js";
 import { selectAll, SGT, ymdIn } from "./db.js";
-import { stoppedBeforeClose } from "../../supabase/functions/_shared/feedhealth.js";
+import { barDayEnd, stoppedBeforeClose } from "../../supabase/functions/_shared/feedhealth.js";
 
 export interface Move { symbol: string; name: string; last: number; prev: number; pct: number; sector?: string; weight?: number | null }
 export interface SectorMove { sector: string; pct: number; n: number; weighted: boolean }
@@ -97,6 +97,24 @@ export async function buildPack(sb: SupabaseClient, log: (s: string) => void = c
         if (st && q && booked != null && q.price > 0 && Math.abs(booked / q.price - 1) < 1e-6) warnings.push(`Prices from ${place} stopped arriving at ${clock(st.last, tz)} ${place} time, before the close at ${clock(st.close, tz)}, and the level booked as that day's close is that last price. The ${whose} figures in these tables are as of then, not closing levels.`);
         else if (st) notes.push(`the minute feed from ${place} stopped at ${clock(st.last, tz)} ${place} time, before the close at ${clock(st.close, tz)}; the ${whose} closing levels here were booked afterwards from the daily history`);
       }
+    }
+    // Row by row, for everything else in the table. When no instrument at all has printed for an hour and a half
+    // (crypto trades round the clock, so on a working feed one always has), the prices have stopped; a row whose
+    // day had not ended by then and whose booked close still equals its last quote was booked from that quote.
+    // (19 Nov 2026: the indices and currencies had been booked again from the source's real closes, the futures
+    // and commodities not yet: oil's "close" of 18 Nov was its price of 10:42 New York time.)
+    const [{ data: allQ }, { data: inst }] = await Promise.all([sb.from("quotes_latest").select("symbol,price,market_time").in("symbol", rows.map((r) => r.symbol)), sb.from("instruments").select("symbol,market")]);
+    const qBy = new Map(((allQ ?? []) as Array<{ symbol: string; price: number; market_time: string }>).map((q) => [q.symbol, q]));
+    const marketOf = new Map(((inst ?? []) as Array<{ symbol: string; market: string }>).map((i) => [i.symbol, i.market]));
+    const reach = Math.max(...[...qBy.values()].map((q) => Date.parse(q.market_time)).filter(Number.isFinite));
+    if (Number.isFinite(reach) && now.getTime() - reach > 90 * 60000) {
+      const frozen = rows.filter((r) => {
+        const q = qBy.get(r.symbol), m = marketOf.get(r.symbol);
+        if (!q || !m || r.last == null || !r.lastAt || !dated(r.lastAt) || !(q.price > 0)) return false;
+        const end = barDayEnd(m, r.lastAt.slice(0, 10));
+        return end != null && end - 30 * 60000 > reach && Math.abs(r.last / q.price - 1) < 1e-6;
+      });
+      if (frozen.length) warnings.push(`All prices stopped arriving at ${clock(new Date(reach).toISOString(), "UTC")} UTC. For these rows the level booked as the latest close is the last price before that, not a closing level: ${frozen.map((r) => r.name).join(", ")}.`);
     }
   } catch (e) { log(`the check for prices that stopped before a close could not be made: ${e instanceof Error ? e.message : String(e)}`); }
   if (warnings.length) log(`WARNING: ${warnings.join(" ")}`);

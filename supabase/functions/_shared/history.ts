@@ -5,7 +5,8 @@ import { chunk, db, sourceErr, sourceOk, type InstrumentRow } from "./db.ts";
 import { localDate, marketById, marketState, partsIn } from "./sessions.ts";
 import { FX_SOURCE_HOURLY, fxClosesFromHourly, isFxPair, spikeThreshold, suspectBars } from "./fx.ts";
 import { loadHolidays, saveTableSnapshot } from "./table.ts";
-import { chart, spark } from "./yahoo.ts";
+import { chart, lastPrint, spark } from "./yahoo.ts";
+import { barSettled } from "./feedhealth.ts";
 
 // ---------- history ----------
 export async function history(): Promise<string> {
@@ -20,6 +21,18 @@ export async function history(): Promise<string> {
   const rows: Array<Record<string, unknown>> = [];
   const missing: string[] = [];
   const suspects: string[] = [];
+  // How far do the answers in hand reach? The newest minute bar given for the instruments that trade round the
+  // clock (crypto first: it also trades at the weekend). A bar is booked only when they reach the end of its day
+  // (feedhealth.ts, barSettled): on 18 Nov 2026 the server was handed the prices of 10:52 New York time all
+  // evening and booked them as that day's closes. Where this reading cannot be made, bars are booked as before.
+  let fresh: number | null = null;
+  try {
+    const order = ["CRYPTO", "FX", "CME"];
+    const refs = everything.filter((i) => order.includes(i.market)).sort((a, b) => order.indexOf(a.market) - order.indexOf(b.market)).slice(0, 20).map((i) => i.symbol);
+    if (refs.length) for (const s of Object.values(await spark(refs, "1d", "1m"))) { const lp = lastPrint(s); if (lp && (fresh == null || lp.t * 1000 > fresh)) fresh = lp.t * 1000; }
+  } catch { /* no reading */ }
+  const held = new Set<string>();
+  const settled = (symbol: string, market: string, d: string): boolean => { if (fresh == null || barSettled(market, d, fresh)) return true; held.add(symbol); return false; };
   // A vendor misprint (a close far from the days on both sides) is neither written nor kept if already stored.
   const guard = async (symbol: string, wild: boolean, series: Array<{ d: string; close: number }>): Promise<Set<string>> => {
     const bad = suspectBars(series, spikeThreshold(symbol, wild));
@@ -41,7 +54,7 @@ export async function history(): Promise<string> {
           const c = await chart(p.symbol, "1mo", "1h");
           const closes = fxClosesFromHourly(c.timestamp, c.close, now.getTime() / 1000);
           const bad = await guard(p.symbol, false, closes);
-          for (const x of closes) if (!bad.has(x.d)) rows.push({ symbol: p.symbol, d: x.d, close: x.close, source: FX_SOURCE_HOURLY, updated_at: now.toISOString() });
+          for (const x of closes) if (!bad.has(x.d) && settled(p.symbol, "FX", x.d)) rows.push({ symbol: p.symbol, d: x.d, close: x.close, source: FX_SOURCE_HOURLY, updated_at: now.toISOString() });
         } catch { missing.push(p.symbol); }
       }
     }));
@@ -62,7 +75,7 @@ export async function history(): Promise<string> {
       if (mine.length && mine[mine.length - 1].d === d) mine[mine.length - 1].close = v; else mine.push({ d, close: v });   // two bars on one local date: keep the last
     }
     const bad = await guard(i.symbol, i.market === "CRYPTO" || i.cls === "Volatility", mine);
-    for (const x of mine) if (!bad.has(x.d)) rows.push({ symbol: i.symbol, d: x.d, close: x.close, source: "yahoo", updated_at: now.toISOString() });
+    for (const x of mine) if (!bad.has(x.d) && settled(i.symbol, i.market, x.d)) rows.push({ symbol: i.symbol, d: x.d, close: x.close, source: "yahoo", updated_at: now.toISOString() });
   }
   const uniq = [...new Map(rows.map((r) => [`${r.symbol}|${r.d}`, r])).values()];   // two bars can land on one exchange-local date (DST edges, Sydney): keep the last
   for (const part of chunk(uniq, 1000)) {
@@ -70,5 +83,5 @@ export async function history(): Promise<string> {
     if (ue) throw new Error("prices_daily: " + ue.message);
   }
   const n = await saveTableSnapshot(now);
-  return `${rows.length} closes for ${everything.length - missing.length} instruments (${pairs.length} currency pairs at the 17:00 New York close)${missing.length ? `, missing: ${missing.join(" ")}` : ""}${suspects.length ? `; misprints dropped: ${suspects.join(", ")}` : ""}; table ${n} rows`;
+  return `${rows.length} closes for ${everything.length - missing.length} instruments (${pairs.length} currency pairs at the 17:00 New York close)${missing.length ? `, missing: ${missing.join(" ")}` : ""}${suspects.length ? `; misprints dropped: ${suspects.join(", ")}` : ""}${held.size ? `; NOT BOOKED, the answers in hand reaching only ${new Date(fresh!).toISOString().slice(0, 16).replace("T", " ")} UTC: the newest close of ${held.size} instruments (${[...held].slice(0, 8).join(" ")}${held.size > 8 ? " …" : ""})` : ""}; table ${n} rows`;
 }
