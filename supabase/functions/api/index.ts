@@ -12,6 +12,8 @@ import { CCY, loadUniverse } from "../_shared/newsalerts.ts";
 import { quotes } from "../_shared/yahoo.ts";
 import { pushState, pushSubscribe, pushTest, pushUnsubscribe } from "../_shared/push.ts";
 import { stockPage } from "../_shared/stock.ts";
+import { liveRows } from "../_shared/intraday.ts";
+import { localDate } from "../_shared/sessions.ts";
 
 const RANGES: Record<string, number> = { "1W": 7, "1M": 31, "3M": 93, "12M": 366, "36M": 1096 };
 const SIGMA_LOOKBACK_DAYS = 1120;   // 756 trading days ≈ 1,100 calendar days, so the 36M band is defined from the first point shown
@@ -242,10 +244,20 @@ async function curve(country: string, ago: string | null) {
 
 // ---------- index statistics (EQUITIES pages) ----------
 interface StatRow { symbol: string; name: string; sector: string | null; weight: number | null; d: string; close: number; prev: number | null; pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct12m: number | null; dma50: number | null; dma200: number | null; hi52: number | null; lo52: number | null; mcap: number | null; volume: number | null; adv3m: number | null; turnover: number | null; adv_turnover: number | null; quote_at: string | null; pct6m: number | null; pct36m: number | null; industry: string | null; mf_up: number | null; mf_down: number | null; mf_net: number | null; mf_d: string | null; mf_at: string | null }
+/** The exchange whose calendar dates a list's sessions. */
+const LIST_TZ: Record<string, string> = { SP500: "America/New_York", NDX: "America/New_York", NK225: "Asia/Tokyo", TOPIX: "Asia/Tokyo", KOSPI200: "Asia/Seoul", HSI: "Asia/Hong_Kong", SSE180: "Asia/Shanghai" };
 async function indexStats(idx: string) {
-  const rows = await selectAll<StatRow>(() => db.from("constituent_stats").select("symbol,name,sector,industry,weight,d,close,prev,pct1d,pct1w,pct1m,pct3m,pct6m,pct12m,pct36m,dma50,dma200,hi52,lo52,mcap,volume,adv3m,turnover,adv_turnover,quote_at,mf_up,mf_down,mf_net,mf_d,mf_at").eq("idx", idx).order("symbol"));
-  if (!rows.length) return { idx, asOf: null, rows: [], breadth: null, sectors: [], movers: { top: [], bottom: [] }, shorts: null };
-  const asOf = rows.map((r) => r.d).sort().pop() ?? null;
+  const COLS = "symbol,name,sector,industry,weight,d,close,prev,pct1d,pct1w,pct1m,pct3m,pct6m,pct12m,pct36m,dma50,dma200,hi52,lo52,mcap,volume,adv3m,turnover,adv_turnover,quote_at,mf_up,mf_down,mf_net,mf_d,mf_at";
+  // the quote's own price is kept since migration 20261119000001; a database from before it has no such columns,
+  // and then the tab reads from the closes as it always did
+  let booked: StatRow[];
+  try { booked = await selectAll<StatRow>(() => db.from("constituent_stats").select(COLS + ",q_price,q_prev,q_time").eq("idx", idx).order("symbol")); }
+  catch { booked = await selectAll<StatRow>(() => db.from("constituent_stats").select(COLS).eq("idx", idx).order("symbol")); }
+  if (!booked.length) return { idx, asOf: null, live: null, rows: [], breadth: null, sectors: [], movers: { top: [], bottom: [] }, shorts: null };
+  const asOf = booked.map((r) => r.d).sort().pop() ?? null;
+  // while the market is open: today's prices and today's moves (intraday.ts)
+  const tz = LIST_TZ[idx] ?? "UTC";
+  const { rows, live } = liveRows(booked, (iso) => localDate(tz, Date.parse(iso) / 1000));
   const n = rows.length;
   const cnt = (f: (r: StatRow) => boolean) => rows.filter(f).length;
   const breadth = {
@@ -289,7 +301,7 @@ async function indexStats(idx: string) {
     const byCode = new Map(((jp ?? []) as Array<{ code: string; total_ratio: number; holders: number; latest: string }>).map((x) => [x.code, x]));
     for (const r of rows as Array<StatRow & { shortRatio?: number | null; shortHolders?: number | null }>) { const x = byCode.get(r.symbol.replace(/\.T$/, "")); r.shortRatio = x ? x.total_ratio : null; r.shortHolders = x ? x.holders : null; }
   }
-  return { idx, asOf, quoteAt, mfAt, mfD, breadth, sectors, movers: { top: sorted.slice(0, 15), bottom: sorted.slice(-15).reverse() }, shorts, rows };
+  return { idx, asOf, live, quoteAt, mfAt, mfD, breadth, sectors, movers: { top: sorted.slice(0, 15), bottom: sorted.slice(-15).reverse() }, shorts, rows };
 }
 async function breadthHistory(idx: string, days: number) {
   const from = new Date(Date.now() - days * 86400e3).toISOString().slice(0, 10);

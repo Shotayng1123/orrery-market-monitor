@@ -1024,6 +1024,7 @@ body.pv2 .pick select{font-size:17px;top:-5px;bottom:auto;height:calc(100% + 10p
 .mp-head{position:sticky;top:0;z-index:6;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:-8px -8px 0;padding:12px 8px 10px 16px;background:var(--bg);border-bottom:1px solid var(--bord)}
 .mp-head h1{margin:0;font-family:var(--serif);font-weight:700;font-size:31px;line-height:1.05;letter-spacing:.01em}
 .mp-asof{margin-top:4px;color:var(--mut);font-family:var(--mono);font-size:12.5px;display:flex;align-items:center;gap:8px}
+.mp-asof .badge{flex:0 0 auto;margin:0;font-size:11px;padding:1px 6px;border-radius:4px}
 .mp-head .pick{margin:0;flex:0 0 auto}
 .mp-sec h2{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:28px;margin:22px 8px 8px;font-family:var(--mono);font-size:12.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
 .mp-sec h2 .aux{flex:0 0 auto;font-weight:400;letter-spacing:0;text-transform:none;color:var(--mut)}

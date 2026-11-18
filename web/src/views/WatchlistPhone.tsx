@@ -71,7 +71,7 @@ export function WatchlistPhone({ tick }: { tick: number }) {
         {alerts.length ? alerts.map((a) => {
           const body = <><span className="nw-meta"><span>{fmtStamp(a.at)}</span>{a.pct != null && <b className={signCls(a.pct)}>{fmtPct(a.pct, 1)}</b>}</span><span className="nw-title">{a.msg}</span></>;
           return a.url ? <a className="nw-row" key={a.id} href={a.url} target="_blank" rel="noreferrer">{body}</a> : <div className="nw-row" key={a.id} role="button" tabIndex={0} onClick={() => openAsset(a.symbol)}>{body}</div>;
-        }) : <Empty title="No alerts">{feed.error ?? "Moves beyond ±7%, buybacks, guidance changes and large deals on your names appear here."}</Empty>}
+        }) : <Empty title="No alerts">{feed.error ?? "Moves beyond ±5% (large companies) or ±7%, buybacks, guidance changes and large deals on your names appear here."}</Empty>}
       </Section>
       <Section title="Headlines on my names" aux={feed.data ? `${news.length} in the feed` : ""}>
         {news.length ? news.slice(0, 30).map((it) => (

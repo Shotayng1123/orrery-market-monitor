@@ -11,6 +11,7 @@ import { useApi } from "../lib/useApi";
 import type { TableRow } from "../lib/types";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { mergeClasses } from "../lib/classes";
+import { fmtStamp } from "../lib/time";
 import { InstrumentRow } from "./MarketPhone";
 import { CCY, HeatMap, INDICES, JpShortPanel, PERIODS, pos52, shortName, signed, vs, type BreadthRow, type IndexStats, type SectorRow, type StatRow } from "./Equities";
 
@@ -145,7 +146,9 @@ export function EquitiesPhone({ sub, onSub, tick }: { sub: string; onSub: (s: st
   const movers = useMemo(() => { const xs = merged.filter((r) => r.pct1d != null).sort((a, b) => b.pct1d! - a.pct1d!); return { top: xs.slice(0, 10), bottom: xs.slice(-10).reverse() }; }, [merged]);
   const noStats = <div className="mp-card"><Empty title="Statistics not computed yet">{st.error ?? "The daily statistics job runs after each close."}</Empty></div>;
   const sk = SECTOR_KEY[period], sLabel = period === "36M" ? "12M" : period;
-  const of = s ? `${s.idx} names · closes of ${s.asOf ?? "–"}` : "";
+  // while the market is open the 1D figures are today's moves so far (Shota, 19 Nov 2026: the S&P 500 was open and
+  // the movers were still the day before's)
+  const of = s ? (s.live ? <><span className="badge live" id="eq-live" title={`Today's moves so far. Longer periods are measured to the close of ${s.asOf ?? "–"}.`}>INTRADAY</span>{s.idx} names · 1D at {fmtStamp(s.live.asOf)}</> : `${s.idx} names · closes of ${s.asOf ?? "–"}`) : "";
   return (
     <Screen title="Equities" sub={<>{of || "loading…"}{ix.statsNote && <span className="badge proxy" title={ix.statsNote}>STAND-IN</span>}</>}
       right={<Pick label="Index" value={ix.id} options={INDICES.map((i) => ({ value: i.id, label: i.label }))} onChange={(v) => { setOpen(null); onSub(v); }} />}>

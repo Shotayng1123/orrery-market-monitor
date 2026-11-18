@@ -90,7 +90,7 @@ export async function computeIndexStats(idx: IndexId, log: (s: string) => void =
     for (const r of rows) {
       const x = q[r.symbol as string]; if (!x) continue;
       const px = x.price ?? (r.close as number);
-      Object.assign(r, { mcap: x.marketCap, volume: x.volume, adv3m: x.adv3m, turnover: x.volume != null ? x.volume * px : null, adv_turnover: x.adv3m != null ? x.adv3m * px : null, quote_at: at, ...flowFromQuote(x, px), mf_at: at, earnings_at: x.earningsAt ? new Date(x.earningsAt * 1000).toISOString() : null, earnings_est: x.earningsEst });
+      Object.assign(r, { mcap: x.marketCap, volume: x.volume, adv3m: x.adv3m, turnover: x.volume != null ? x.volume * px : null, adv_turnover: x.adv3m != null ? x.adv3m * px : null, quote_at: at, ...lastPrint(x), ...flowFromQuote(x, px), mf_at: at, earnings_at: x.earningsAt ? new Date(x.earningsAt * 1000).toISOString() : null, earnings_est: x.earningsEst });
       quoted++;
     }
   } catch (e) { log(`quotes failed: ${e instanceof Error ? e.message : e}`); }
@@ -106,6 +106,10 @@ export async function computeIndexStats(idx: IndexId, log: (s: string) => void =
   return `${idx}: ${rows.length} names, ${quoted} quoted, ${bh.length} breadth days${missing ? `, ${missing} without data` : ""}${stale.length ? `, ${stale.length} removed` : ""}`;
 }
 
+/** The quote's own price, the previous close it is measured against and the time it printed: what EQUITIES shows
+ *  while the market is open (intraday.ts). Columns of migration 20261119000001. */
+const lastPrint = (x: { price: number | null; prevClose: number | null; time: number | null }) => ({ q_price: x.price, q_prev: x.prevClose, q_time: x.time ? new Date(x.time * 1000).toISOString() : null });
+
 /** Intraday refresh of market cap, day volume and turnover for one index (no history), for flow by sector. */
 export async function refreshQuotes(idx: IndexId): Promise<string> {
   const rows = await keyRows(idx);
@@ -116,7 +120,7 @@ export async function refreshQuotes(idx: IndexId): Promise<string> {
   for (const r of rows) {
     const x = q[r.symbol]; if (!x) continue;
     const px = x.price ?? r.close;
-    upd.push({ idx, symbol: r.symbol, name: r.name, d: r.d, close: r.close, mcap: x.marketCap, volume: x.volume, adv3m: x.adv3m, turnover: x.volume != null ? x.volume * px : null, adv_turnover: x.adv3m != null ? x.adv3m * px : null, quote_at: at, ...flowFromQuote(x, px), mf_at: at, earnings_at: x.earningsAt ? new Date(x.earningsAt * 1000).toISOString() : null, earnings_est: x.earningsEst });
+    upd.push({ idx, symbol: r.symbol, name: r.name, d: r.d, close: r.close, mcap: x.marketCap, volume: x.volume, adv3m: x.adv3m, turnover: x.volume != null ? x.volume * px : null, adv_turnover: x.adv3m != null ? x.adv3m * px : null, quote_at: at, ...lastPrint(x), ...flowFromQuote(x, px), mf_at: at, earnings_at: x.earningsAt ? new Date(x.earningsAt * 1000).toISOString() : null, earnings_est: x.earningsEst });
   }
   for (const part of chunk(upd, 500)) { const { error: ue } = await db.from("constituent_stats").upsert(part, { onConflict: "idx,symbol" }); if (ue) throw new Error("constituent_stats: " + ue.message); }
   // excessive moves among the companies of this list that the minute scan does not cover (alerts.ts)

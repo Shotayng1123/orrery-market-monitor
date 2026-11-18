@@ -51,4 +51,22 @@ const sec = (p, startsWith) => p.locator(".mp-sec", { has: p.locator(`h2 > span:
     ck("Index -> S&P 500: the whole screen follows (address, title, statistics, FINRA short data)", us.hash === "#equities/spx" && us.first === "S&P 500" && /^SP500 names/.test(us.sub) && /^FINRA/.test(us.shortAux ?? ""), us);
     await sec(p, "Movers").locator(".mp-row").first().tap(); await p.waitForTimeout(500); ck("tap a mover: its page opens", p.url().includes("#asset/"), p.url());
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+  // While a list's market is open the 1D figures are today's (Shota, 19 Nov 2026: the S&P 500 was open and the
+  // movers were still the day before's). The mock sends the list that way when om_mock_live is set.
+  console.log("\n[EQUITIES with the market open]");
+  { const ctx = await b.newContext({ ...devices["iPhone 13"] }); await ctx.addInitScript(() => { try { localStorage.setItem("om_mock_live", "1"); } catch {} }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+    await p.goto(MOCK + "?phone=new#equities/spx", { waitUntil: "networkidle" }); await p.waitForSelector(".mp-asof"); await p.waitForSelector("#eq-live"); await p.waitForTimeout(600);
+    const h = await p.evaluate(() => { const a = document.querySelector(".mp-asof"), b = document.querySelector("#eq-live"); return { text: a.textContent, badge: b.textContent, px: parseFloat(getComputedStyle(b).fontSize), tip: b.title, ox: document.documentElement.scrollWidth - innerWidth }; });
+    ck(`phone: the header says the figures are today's and of what time (INTRADAY, ${h.px}px), not "closes of"`, h.badge === "INTRADAY" && /SP500 names · 1D at \d\d\/\d\d \d\d:\d\d/.test(h.text) && !/closes of/.test(h.text) && /Longer periods are measured to the close of \d{4}-\d\d-\d\d/.test(h.tip) && h.px >= 11 && h.ox <= 0, h);
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+  { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); await ctx.addInitScript(() => { try { localStorage.setItem("om_mock_live", "1"); } catch {} }); const p = await ctx.newPage();
+    await p.goto(MOCK + "#equities/spx", { waitUntil: "networkidle" }); await p.waitForSelector("#eq-live"); await p.waitForTimeout(500);
+    const d = await p.evaluate(() => [...document.querySelectorAll(".panel .aux")].map((e) => e.textContent).filter((t) => /INTRADAY/.test(t)));
+    ck("desktop: the panels that rest on the 1D figures say so, with the time of the quotes and the close the longer periods are measured to", d.length >= 2 && d.every((t) => /INTRADAY ?SP500 constituents · 1D at .* · longer periods at the close of \d{4}-\d\d-\d\d/.test(t)), d);
+    await ctx.close(); }
+  { const ctx = await b.newContext({ ...devices["iPhone 13"] }); const p = await ctx.newPage();
+    await p.goto(MOCK + "?phone=new#equities/spx", { waitUntil: "networkidle" }); await p.waitForSelector(".mp-asof"); await p.waitForTimeout(600);
+    const t = await p.locator(".mp-asof").textContent();
+    ck("with the market closed the header reads \"closes of\" as before, with no INTRADAY mark", /^SP500 names · closes of \d{4}-\d\d-\d\d/.test(t) && (await p.locator("#eq-live").count()) === 0, t);
+    await ctx.close(); }
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0); })();

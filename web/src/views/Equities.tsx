@@ -28,6 +28,9 @@ export interface StatRow {
 export interface SectorRow { sector: string; n: number; weight: number | null; mcapShare?: number | null; pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct12m: number | null; above200: number; turnover?: number | null; turnoverShare?: number | null; flow?: number | null; mfUp?: number | null; mfDown?: number | null; mfNet?: number | null }
 export interface IndexStats {
   idx: string; asOf: string | null; quoteAt?: string | null; mfAt?: string | null; mfD?: string | null; rows: StatRow[];
+  /** Set while the list's market is open: the rows' price and 1D change are today's (the quotes of `asOf`, pulled
+   *  every ten to twenty minutes); changes over longer periods are still measured to the last close. */
+  live?: { asOf: string; n: number } | null;
   breadth: { n: number; adv: number; dec: number; above50: number; above200: number; newHi: number; newLo: number; over2: number; under2: number } | null;
   sectors: SectorRow[]; movers: { top: StatRow[]; bottom: StatRow[] };
   shorts: { d: string; avgRatio: number; top: Array<{ symbol: string; name: string; ratio: number }>; history?: Array<{ d: string; v: number | null }> } | null;
@@ -273,7 +276,9 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
     </div>
   );
   const standIn = ix.statsNote ? <span className="badge proxy" title={ix.statsNote}>STAND-IN</span> : null;
-  const statsAux = s ? <>{s.idx} constituents · closes of {s.asOf}{standIn}</> : "";
+  const statsAux = s ? (s.live
+    ? <><span className="badge live" id="eq-live" title={`The market is open: the 1D figures (movers, breadth, sectors, heat map) are today's moves so far, from quotes pulled every ten to twenty minutes. Changes over longer periods are measured to the close of ${s.asOf}.`}>INTRADAY</span>{s.idx} constituents · 1D at {fmtStamp(s.live.asOf)} · longer periods at the close of {s.asOf}{standIn}</>
+    : <>{s.idx} constituents · closes of {s.asOf}{standIn}</>) : "";
   const noStats = <Empty title="Statistics not computed yet">{st.error ?? "The daily statistics job runs after each close."}</Empty>;
   const hasMcap = !!s?.rows.some((r) => r.mcap != null);
   const merged = useMemo(() => (s ? mergeClasses(s.rows) : []), [s]);

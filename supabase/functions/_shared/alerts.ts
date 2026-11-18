@@ -1,5 +1,6 @@
-// Excessive-move alerts. Thresholds (Shota): single stock ±7% intraday, index ±3%. One row per symbol, session
-// date and kind; while the move extends the magnitude and message are updated, so the top bar shows the latest.
+// Excessive-move alerts. Thresholds (Shota): index ±3%; single stock ±5% intraday for a large company (1tn yen /
+// 10bn US dollars and above) and ±7% for the rest (moves.ts stockLine; 7% for all until 19 Nov 2026). One row per
+// symbol, session date and kind; while the move extends the magnitude and message are updated, so the top bar shows the latest.
 // For a stock the magnitude is the largest move of the session (moves.ts): it stays when the stock comes back.
 //
 // Which stocks (18 Nov 2026; until then only the first line, so Rakuten Bank's limit-down raised nothing):
@@ -12,12 +13,12 @@
 //     pulls every 10 to 20 minutes (scanQuoteAlerts). The alert's time is when the move was seen.
 import { db, selectAll } from "./db.ts";
 import { localDate, marketById, recentlyClosed, type Holidays, type MarketId } from "./sessions.ts";
-import { AFTER_CLOSE_MIN, closeMove, quoteMove, scanDue, sessionMove, stockMarket } from "./moves.ts";
+import { AFTER_CLOSE_MIN, closeMove, quoteMove, scanDue, sessionMove, stockLine, stockMarket, STOCK_PCT } from "./moves.ts";
 import { CCY, MIN_MCAP_USD } from "./newsalerts.ts";
 import { quotes, spark, type QuoteRow } from "./yahoo.ts";
 import type { TableRow } from "./table.ts";
 
-export const STOCK_PCT = 7, INDEX_PCT = 3;
+export const INDEX_PCT = 3;
 const r1 = (x: number) => Math.round(x * 10) / 10;
 const fmtPct = (p: number) => `${Math.abs(p) >= 10 ? Math.round(Math.abs(p)) : r1(Math.abs(p))}%`;
 export const alertMsg = (name: string, pct: number, intraday: boolean) => `${name} ${pct >= 0 ? "up" : "down"} ${fmtPct(pct)}${intraday ? " intraday" : ""}`;
@@ -69,6 +70,23 @@ async function watchedStocks(): Promise<Array<{ symbol: string; name: string | n
   return [...by.values()];
 }
 
+/** The alert line of each of `symbols` (moves.ts stockLine), from the market value the flow job last stored for it
+ *  in any list the Monitor follows. A stock in none of them, or with no value stored yet, is held to 7%. */
+async function linesFor(symbols: string[]): Promise<(symbol: string) => number> {
+  const line = new Map<string, number>(), rate = new Map<string, number | null>();
+  for (let i = 0; i < symbols.length; i += 200) {
+    const { data, error } = await db.from("constituent_stats").select("idx,symbol,mcap").in("symbol", symbols.slice(i, i + 200)).not("mcap", "is", null);
+    if (error) throw new Error("sizes: " + error.message);
+    for (const r of (data ?? []) as Array<{ idx: string; symbol: string; mcap: number }>) {
+      const ccy = CCY[r.idx]; if (!ccy) continue;
+      if (!rate.has(ccy)) rate.set(ccy, ccy === "USD" || ccy === "JPY" ? 1 : await perUsd(ccy).catch(() => null));
+      // a company in two lists (Nikkei 225 and TOPIX) has the same size in both: the lower line wins if they ever differ
+      line.set(r.symbol, Math.min(line.get(r.symbol) ?? STOCK_PCT, stockLine(r.mcap, ccy, rate.get(ccy))));
+    }
+  }
+  return (symbol) => line.get(symbol) ?? STOCK_PCT;
+}
+
 /** Stock alerts from one-minute bars: Nikkei 225 and S&P 500 members and every watched stock whose market is open
  *  or has just closed (moves.ts: scanDue), each measured over all of the session's bars against the previous
  *  close (moves.ts: sessionMove). */
@@ -93,11 +111,11 @@ export async function scanStockAlerts(now: Date, holidays: Holidays): Promise<{ 
     for (const w of extra) list.set(w.symbol, { symbol: w.symbol, name: nm.get(w.symbol) ?? w.name ?? w.symbol, market: w.market });
   }
   if (!list.size) return { scanned: 0, alerts: 0 };
-  const s = await spark([...list.keys()], "1d", "1m");
+  const [s, lineOf] = await Promise.all([spark([...list.keys()], "1d", "1m"), linesFor([...list.keys()])]);
   const cand: Cand[] = [];
   for (const c of list.values()) {
     const x = s[c.symbol]; if (!x) continue;
-    const mv = sessionMove(x.timestamp, x.close, x.chartPreviousClose ?? x.previousClose, STOCK_PCT);
+    const mv = sessionMove(x.timestamp, x.close, x.chartPreviousClose ?? x.previousClose, lineOf(c.symbol));
     if (!mv) continue;
     // The alert's time is the minute the stock first passed the threshold in this session, read from its own
     // one-minute bars. (The scan runs every five minutes for all names at once; stamping alerts with the scan
@@ -115,7 +133,7 @@ export async function scanStockAlerts(now: Date, holidays: Holidays): Promise<{ 
     for (const c of late) {
       const x = q[c.symbol];
       if (!x || x.time == null || x.time < oldest) continue;     // no print today: nothing to say about this session
-      const mv = closeMove(x.prevClose, x.price, STOCK_PCT);
+      const mv = closeMove(x.prevClose, x.price, lineOf(c.symbol));
       if (!mv) continue;
       const i = at.get(c.symbol);
       // already raised from its bars: the larger of the two figures stands
@@ -150,7 +168,8 @@ async function perUsd(ccy: string): Promise<number> {
 }
 
 /** Stock alerts for the wide lists, from the quotes the flow job has just pulled for `idx`: a company worth
- *  USD 5bn or more whose low or high of the day lies beyond ±7% of the previous close. Returns the rows written. */
+ *  USD 5bn or more whose low or high of the day lies beyond its line (5% for a large company, 7% otherwise)
+ *  from the previous close. Returns the rows written. */
 export async function scanQuoteAlerts(idx: string, rows: Array<{ symbol: string; name: string; q: QuoteRow }>, now: Date): Promise<number> {
   const market = WIDE_MARKET[idx], ccy = CCY[idx];
   if (!market || !ccy || !rows.length) return 0;
@@ -160,7 +179,7 @@ export async function scanQuoteAlerts(idx: string, rows: Array<{ symbol: string;
   for (const r of rows) {
     const q = r.q;
     if (skip.has(r.symbol) || q.time == null || q.time < oldest || q.marketCap == null || q.marketCap / rate < MIN_MCAP_USD) continue;
-    const mv = quoteMove(q.prevClose, q.low, q.high, STOCK_PCT);
+    const mv = quoteMove(q.prevClose, q.low, q.high, stockLine(q.marketCap, ccy, rate));
     if (!mv) continue;
     seenAt.set(r.symbol, q.time);
     cand.push({ d: localDate(tz, q.time), symbol: r.symbol, name: r.name, kind: "stock", pct: mv.pct, price: mv.price, market, msg: alertMsg(r.name, mv.pct, true), upd: now.toISOString() });

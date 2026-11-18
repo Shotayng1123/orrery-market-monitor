@@ -86,7 +86,7 @@ export function WatchlistView({ tick }: { tick: number }) {
       <Panel no="03" title="ALERTS ON MY NAMES" span={4} k="wl-alerts" aux={feed.data ? `${feed.data.alerts.length} recent` : ""}>
         {feed.data?.alerts.length ? (
           <table className="secT"><tbody>{feed.data.alerts.map((a) => <tr key={a.id}><td className="l mut num">{fmtStamp(a.at).replace(" SGT", "")}</td><td className="l">{a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.msg}</a> : <span className="lnk" onClick={() => openAsset(a.symbol)}>{a.msg}</span>}</td><td className={`num ${signCls(a.pct)}`}>{a.pct == null ? "" : fmtPct(a.pct, 1)}</td></tr>)}</tbody></table>
-        ) : <Empty title="No alerts">{feed.error ?? "Moves beyond ±7%, buybacks, guidance changes and large deals on your names appear here."}</Empty>}
+        ) : <Empty title="No alerts">{feed.error ?? "Moves beyond ±5% (large companies) or ±7%, buybacks, guidance changes and large deals on your names appear here."}</Empty>}
       </Panel>
       <Panel no="04" title="HEADLINES ON MY NAMES" span={8} k="wl-news" aux={feed.data ? `${feed.data.news.length} in the feed` : ""}>
         {feed.data?.news.length ? <div className="nwlist">{feed.data.news.map((it) => (
