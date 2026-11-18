@@ -124,7 +124,9 @@ jobs:
           echo "$verdict"
           case "$verdict" in OK*) ;; *) exit 1 ;; esac
 
-      # --yes: a change to a hosted database is only made when it is said in so many words; nobody is here to be asked
+      # --yes: version 3 of the CLI makes a change to a hosted project (database, secrets, functions) only when it is
+      # said in so many words; nobody is here to be asked. The first deploy (18 Nov 2026) applied the database
+      # changes and then stopped at the next step, which had no --yes.
       - name: Database changes
         if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy'
         run: supabase db push --remote --yes
@@ -144,7 +146,7 @@ jobs:
             echo "the server already has its notification key"
           else
             node jobs/tools/gen_vapid.mjs > /dev/null
-            supabase secrets set --env-file jobs/.env.vapid --project-ref "$REF" > /dev/null
+            supabase secrets set --env-file jobs/.env.vapid --project-ref "$REF" --yes > /dev/null
             rm -f jobs/.env.vapid
             echo "a notification key was made and stored on the server"
           fi
@@ -163,13 +165,13 @@ jobs:
           if [ "${#args[@]}" -eq 0 ]; then
             echo "no email-sender or data-key secrets in the repository: nothing stored (the server keeps whatever it already has)"
           else
-            supabase secrets set "${args[@]}" --project-ref "$REF" > /dev/null
+            supabase secrets set "${args[@]}" --project-ref "$REF" --yes > /dev/null
             echo "stored on the server:$names"
           fi
 
       - name: Functions
         if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy'
-        run: supabase functions deploy tick daily api --project-ref "$REF"
+        run: supabase functions deploy tick daily api --project-ref "$REF" --yes
 
       # optional: hands the database the token with which it asks GitHub for the Morning Note at 22:15 UTC
       - name: Morning Note token
