@@ -6,7 +6,7 @@ import { Pick, type PickOption } from "../components/Pick";
 import { Star } from "../components/Star";
 import { money } from "../components/CompanyCard";
 import { FinTable } from "../components/FinTable";
-import { Section, Stat } from "../components/PhoneKit";
+import { JumpPick, Section, Stat } from "../components/PhoneKit";
 import { useApi } from "../lib/useApi";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtStamp } from "../lib/time";
@@ -50,6 +50,7 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
       <div className="mp-picks">
         <Pick label="Period" value={period} options={CHART_PERIODS} onChange={setPeriod} />
         <Pick label="σ window" value={sigmaWindow} options={WINDOWS} onChange={setSigmaWindow} />
+        <JumpPick dep={`${d.symbol}|${d.moves.eligible}|${!!f}`} />
       </div>
       <div className="mp-card pad mp-hero"><ChartPanel row={row} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes volume marks={marks} /></div>
       {d.moves.eligible && d.moves.rows.length > 0 && <p className="mp-note">Circles on the 3M, 12M and 36M charts are big moves. Tap one for the reason; the list is under Big moves below.</p>}
@@ -106,7 +107,8 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
         <Section title="Big moves" aux="and why" card={false}>
           <div className="mp-card pad" id="st-moves">
             {d.moves.rows.length ? (
-              <ul className="mp-moves">{d.moves.rows.map((m) => (
+              // a short box with its own scrolling (Shota, 19 Nov 2026): the whole list pushed the statements a long way down
+              <ul className="mp-moves" id="st-movebox" tabIndex={0} aria-label="Big moves, newest first">{d.moves.rows.map((m) => (
                 <li key={`${m.kind}${m.to}`} data-kind={m.kind} data-status={m.status}>
                   <div className="h"><span className={`dot ${m.dir > 0 ? "up" : "dn"}`} /><b className={m.dir > 0 ? "up" : "dn"}>{m.text}</b><span className="d">{m.to}</span></div>
                   <div className="w">{whyText(m)}</div>
@@ -114,7 +116,7 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
                 </li>
               ))}</ul>
             ) : <Empty title="No big moves">None in the last three years by these measures.</Empty>}
-            <p className="mp-note in">A day of 5% or more, five sessions of 10% or more, or 20% from a high to a low (or a low to a high) within a month.</p>
+            <p className="mp-note in">{d.moves.rows.length > 3 ? `${d.moves.rows.length} moves in three years, newest first: scroll inside the box for earlier ones. ` : ""}A day of 5% or more, five sessions of 10% or more, or 20% from a high to a low (or a low to a high) within a month.</p>
           </div>
         </Section>
       )}

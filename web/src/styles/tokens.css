@@ -924,6 +924,10 @@ button.go.ghost:hover{color:var(--txt);border-color:var(--amber)}
 .mvtip .l{font-family:var(--mono);font-size:10.5px;color:var(--txt2)}
 .mvtip .l{margin-top:5px;padding-top:5px;border-top:1px solid var(--bord2)}
 .mvtip .w{margin-top:2px}
+/* the list of big moves in a short box with its own scrolling, the column heads staying in view */
+.mvbox{max-height:236px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--bord2) transparent}
+.mvbox:focus-visible{outline:1px solid var(--amber);outline-offset:-1px}
+.mvbox thead th{position:sticky;top:0;z-index:1;background:var(--panel)}
 .mvT th:nth-child(1),.mvT td.d{width:118px}
 .mvT th:nth-child(2),.mvT td.m{width:30%}
 .mvT td.d{white-space:nowrap;font-family:var(--mono)}
@@ -1300,7 +1304,8 @@ body.pv2 .gtabs{border-radius:10px;margin-bottom:14px}
 body.pv2 .gtabs span{padding:13px 4px;font-size:12.5px}
 body.pv2 .mvtip{font-size:13px;padding:9px 11px;border-radius:9px}
 body.pv2 .mvtip .t,body.pv2 .mvtip .l{font-size:12px}
-.mp-moves{list-style:none;margin:0;padding:0}
+.mp-moves{list-style:none;margin:0;padding:0 6px 0 0;max-height:min(46vh,372px);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:var(--bord2) transparent}
+.mp-moves:focus-visible{outline:1px solid var(--amber);outline-offset:2px}
 .mp-moves li{padding:11px 2px;border-bottom:1px solid var(--bord)}
 .mp-moves li:last-child{border-bottom:0}
 .mp-moves .h{display:flex;align-items:baseline;gap:8px;font-family:var(--mono);font-size:13px}
