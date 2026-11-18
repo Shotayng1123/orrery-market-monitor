@@ -47,7 +47,7 @@ async function main(): Promise<void> {
   });
 
   await part("market", "the market table's own quotes (pulled every minute): when each last printed", async () => {
-    const rows = must(await sb.from("quotes_latest").select("symbol,price,market_time,fetched_at").in("symbol", ["^GSPC", "^IXIC", "^N225", "^VIX", "ES=F", "NKD=F", "USDJPY=X", "EURUSD=X", "^TNX", "CL=F", "GC=F"])) as Array<{ symbol: string; price: number; market_time: string; fetched_at: string }>;
+    const rows = must(await sb.from("quotes_latest").select("symbol,price,market_time,fetched_at").in("symbol", ["^GSPC", "^IXIC", "^N225", "^VIX", "ES=F", "NKD=F", "USDJPY=X", "EURUSD=X", "^TNX", "CL=F", "GC=F", "^GDAXI", "^STOXX50E", "^FCHI", "^SSMI", "^FTSE", "^MXX", "^BVSP", "BTC-USD"])) as Array<{ symbol: string; price: number; market_time: string; fetched_at: string }>;
     for (const r of rows.sort((a, b) => a.symbol.localeCompare(b.symbol))) console.log(`  ${r.symbol.padEnd(9)} ${String(r.price).padEnd(11)} printed ${utc(r.market_time)} (${age(r.market_time)}), pulled ${age(r.fetched_at)}`);
     if (!rows.length) console.log("  none of the instruments asked for is in the table");
     // the closes booked for the same instruments: a close booked while the quotes stood still shows here as a
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
     // The same question through the reader the batch jobs use (it waits and asks again on HTTP 429): the daily
     // closes and the newest minute bar as GitHub's machine is given them. Set beside the booked closes above,
     // this tells whether the source itself has the real closes while the Monitor's server is handed old ones.
-    const syms = ["^GSPC", "^IXIC", "ES=F", "USDJPY=X", "AAPL"];
+    const syms = ["^GSPC", "^IXIC", "ES=F", "CL=F", "USDJPY=X", "AAPL", "^GDAXI", "^STOXX50E", "^FCHI", "^SSMI", "^FTSE", "^MXX", "^BVSP"];
     const daily = await spark(syms, "5d", "1d"), minute = await spark(syms, "1d", "1m");
     console.log("  through the jobs' reader (daily closes, newest last; then the newest minute bar):");
     for (const sym of syms) {
