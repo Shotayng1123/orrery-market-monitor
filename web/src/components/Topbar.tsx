@@ -5,6 +5,7 @@ import { Help } from "./Help";
 import { Search } from "./Search";
 import { Pick } from "./Pick";
 import { setPhoneV2 } from "../lib/phone";
+import { askInstallHint, useInstall } from "../lib/install";
 import { allStatuses, haveHolidays, type MarketId } from "../lib/sessions";
 import { fmtClock, fmtStamp, SGT, TZ_ABBR } from "../lib/time";
 import { SIZES, type Prefs, type SizeKey } from "../lib/prefs";
@@ -41,6 +42,7 @@ export function Topbar(p: TopbarProps) {
   const hol = haveHolidays() ? "" : " (holiday calendar not loaded yet)";
   // phone preview: search, clocks, data status and the account sit in a menu under the header
   const [menu, setMenu] = useState(false);
+  const inst = useInstall();
   useEffect(() => { setMenu(false); }, [p.view, p.pv2]);
   const ico = (d: string) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>;
   return (
@@ -73,6 +75,7 @@ export function Topbar(p: TopbarProps) {
         <span id="hlth" className={`chip-sm hl hl-${p.health}`} title={p.healthTitle}>DATA {p.health === "ok" ? "OK" : p.health === "warn" ? "!" : p.health === "bad" ? "✕" : "?"}</span>
         <Help />
         {p.canPreview && !p.pv2 && <span id="pv2-on" className="chip-sm" title="The layout made for phones. Only this browser changes; switch back from its menu" onClick={() => setPhoneV2(true)}>NEW LAYOUT</span>}
+        {p.pv2 && !inst.installed && <span id="a2hs" className="chip-sm" title="How to put the Monitor on this phone's home screen, where it opens full screen like an app" onClick={() => { askInstallHint(); setMenu(false); window.scrollTo(0, 0); }}>ADD TO HOME SCREEN</span>}
         {p.pv2 && <span id="pv2-off" className="chip-sm" title="Back to the earlier layout, on this browser only; NEW LAYOUT in its header returns" onClick={() => setPhoneV2(false)}>CLASSIC LAYOUT</span>}
         <Pick<SizeKey> id="sz-ctl" label="Text size" value={p.prefs.size} options={SIZES.map((s) => s.k)} onChange={(k) => p.onPrefs({ ...p.prefs, size: k })} title="Text size. AUTO scales the text and layout to this window; S, M, L and XL fix the size" />
         <span id="cmp-ctl" className={`chip-sm${p.prefs.compact ? " on" : ""}`} title="Terminal layout: one screen per tab, sized to the window" onClick={() => p.onPrefs({ ...p.prefs, compact: !p.prefs.compact })}>COMPACT</span>

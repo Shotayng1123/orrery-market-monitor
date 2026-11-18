@@ -1176,3 +1176,16 @@ body.pv2 .modal button.go{display:block;width:100%;min-height:46px;font-size:15p
 body.pv2 .gtabs{border-radius:10px;margin-bottom:14px}
 body.pv2 .gtabs span{padding:13px 4px;font-size:12.5px}
 body.pv2 .modal.acct h3 .x{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;margin:-12px -10px -12px 0;font-size:20px}
+
+/* phone layout: the "add to your home screen" hint (Shota, 18 Nov 2026; lib/install.ts) */
+.mp-a2hs{display:grid;grid-template-columns:28px minmax(0,1fr) 44px;gap:0 10px;align-items:start;margin:2px 0 16px;padding:13px 2px 13px 13px;border:1px solid var(--amber);border-radius:14px;background:var(--sel);font-family:var(--sans)}
+.mp-a2hs .ic{width:28px;height:28px;margin-top:1px;color:var(--amber)}
+.mp-a2hs .tx{min-width:0;display:flex;flex-direction:column;gap:5px}
+.mp-a2hs .tx>b{font-size:15.5px;font-weight:600;line-height:1.25}
+.mp-a2hs .tx>span{font-size:13.5px;line-height:1.5;color:var(--txt2)}
+.mp-a2hs .how b{color:var(--txt);font-weight:600}
+.mp-a2hs .sh{display:inline-block;width:17px;height:17px;margin:0 1px;vertical-align:-3px;color:var(--amber)}
+.mp-a2hs .go{align-self:flex-start;min-height:44px;margin-top:6px;padding:0 22px;border:0;border-radius:11px;background:var(--amber);color:#000;font-family:var(--sans);font-size:15px;font-weight:700;cursor:pointer}
+.mp-a2hs .x{width:44px;height:44px;margin:-10px 0 0;padding:0;border:0;border-radius:10px;background:transparent;color:var(--txt2);font-size:24px;line-height:1;cursor:pointer}
+.mp-a2hs .x:active{background:var(--panel2)}
+.mp-a2hs .go:focus,.mp-a2hs .x:focus{outline:none}

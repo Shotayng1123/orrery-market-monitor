@@ -17,6 +17,7 @@ import { RatesPhone } from "./views/RatesPhone";
 import { WatchlistPhone } from "./views/WatchlistPhone";
 import { AssetPhone } from "./views/AssetPhone";
 import { PhoneNav } from "./components/PhoneNav";
+import { InstallHint } from "./components/InstallHint";
 import { usePhone, usePhoneV2 } from "./lib/phone";
 import { NewsView } from "./views/News";
 import { ResearchView } from "./views/Research";
@@ -150,6 +151,7 @@ export default function App() {
       <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={me?.email ?? userId} onSignOut={() => (me ? setAcct(true) : signOut())} updatedAt={updatedAt} nextIn={nextIn} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} pv2={pv2} canPreview={phone} />
       <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–6 TABS · ESC</span><span>&#9974;</span></div>
       <div id="wrap">
+        {pv2 && <InstallHint home={view === "market"} />}
         <div id="grid" data-view={view}>
           {view === "market" && (pv2 ? <MarketPhone tick={tick} /> : <MarketView tick={tick} />)}
           {view === "news" && (pv2 ? <NewsPhone tick={tick} /> : <NewsView tick={tick} />)}
