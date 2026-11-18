@@ -107,6 +107,8 @@ export async function buildPack(sb: SupabaseClient, log: (s: string) => void = c
     const qBy = new Map(((allQ ?? []) as Array<{ symbol: string; price: number; market_time: string }>).map((q) => [q.symbol, q]));
     const marketOf = new Map(((inst ?? []) as Array<{ symbol: string; market: string }>).map((i) => [i.symbol, i.market]));
     const reach = Math.max(...[...qBy.values()].map((q) => Date.parse(q.market_time)).filter(Number.isFinite));
+    const newest = [...qBy.values()].filter((q) => Number.isFinite(Date.parse(q.market_time))).sort((x, y) => Date.parse(y.market_time) - Date.parse(x.market_time)).slice(0, 4);
+    log(`newest prints in the table: ${newest.map((q) => `${q.symbol} ${q.market_time.slice(0, 16).replace("T", " ")} UTC (${marketOf.get(q.symbol) ?? "?"})`).join("; ") || "none"}`);
     if (Number.isFinite(reach) && now.getTime() - reach > 90 * 60000) {
       const frozen = rows.filter((r) => {
         const q = qBy.get(r.symbol), m = marketOf.get(r.symbol);
