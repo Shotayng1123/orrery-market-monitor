@@ -84,11 +84,10 @@ export function stoppedBeforeClose(marketId: string, lastPrint: string | null, n
 // On 18 Nov 2026 the source went on answering the Monitor's server with the prices of 10:52 New York time, while
 // it gave GitHub's machines the real ones. After the bell the daily history, on the server, booked that last
 // price as the day's close for every market still open at the stop: 7303.98 for the S&P 500, which closed at
-// 7323.63. Crypto went on arriving the whole time: the stop is not all or nothing, so it is read market by market.
-// The history now reads how far the answers in hand reach for each market (the newest minute bar it is given
-// for any instrument of that market) and books a bar only when they reach the end of that bar's day
-// (_shared/history.ts). A run that is handed old answers for a market books nothing new for it and overwrites
-// nothing; a run that is handed current ones books as before.
+// 7323.63. Crypto went on arriving the whole time, so the stop is read twice: for crypto, and for everything
+// else together. The history now reads how far the answers in hand reach (the newest minute bar it is given)
+// and books a bar only when they reach the end of that bar's day (_shared/history.ts). A run that is handed
+// old answers books nothing new and overwrites nothing; a run that is handed current ones books as before.
 
 /** When the day of a daily bar dated `ymd` ends (ms): an exchange's at the end of its last session (13:00 on New
  *  York's usual half days), a currency pair's and a CME future's at 17:00 New York, a crypto day at midnight
@@ -102,9 +101,33 @@ export function barDayEnd(marketId: string, ymd: string): number | null {
   if (m.id === "NYSE" && nyseHalfDay(ymd, new Date(Date.UTC(y, mo - 1, d)).getUTCDay())) return zonedMs(m.tz, ymd, 13 * 60);
   return zonedMs(m.tz, ymd, m.sessions[m.sessions.length - 1][1]);
 }
-/** Whether answers that reach `freshMs` for a market can hold the close of its bar dated `ymd`: they must reach
+/** Whether answers that reach `freshMs` can hold the close of this market's bar dated `ymd`: they must reach
  *  the end of that day, less the half hour an index may stop printing before its close. */
 export function barSettled(marketId: string, ymd: string, freshMs: number): boolean {
   const end = barDayEnd(marketId, ymd);
   return end == null || end - CLOSE_SHORT_MIN * 60000 <= freshMs;
+}
+
+// ---- a stop that is over leaves a silence in the stored minute bars ----
+// Once prices arrive again the quotes no longer show that they had stopped, but the closes booked meanwhile are
+// still there. The stop itself stays on record: an instrument that prints every minute round the clock on
+// weekdays (USD/JPY) has a hole in its stored minute bars (bars_intraday).
+
+/** Whether currencies trade at this moment: not from Friday 17:00 New York to Sunday 17:00, nor on 25 December
+ *  or 1 January. */
+export function fxTrading(ms: number): boolean {
+  const p = partsIn("America/New_York", new Date(ms)), md = p.ymd.slice(5);
+  if (md === "12-25" || md === "01-01") return false;
+  return !(p.wd === 6 || (p.wd === 5 && p.h >= 17) || (p.wd === 0 && p.h < 17));
+}
+/** The longest silence of `minMin` minutes or more in the print times (ms, ascending) of an instrument that
+ *  trades round the clock, among those that began while currencies trade; a silence that has not ended runs to
+ *  `nowMs`. Null when there is none. `from` is the last print before it, `to` the first after it. */
+export function silence(printsMs: number[], nowMs: number, minMin = 45): { from: number; to: number } | null {
+  let best: { from: number; to: number } | null = null;
+  for (let k = 1; k <= printsMs.length; k++) {
+    const a = printsMs[k - 1], b = k < printsMs.length ? printsMs[k] : nowMs;
+    if (b - a >= minMin * 60000 && fxTrading(a + 60000) && (!best || b - a > best.to - best.from)) best = { from: a, to: b };
+  }
+  return best;
 }

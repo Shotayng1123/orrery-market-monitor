@@ -19,7 +19,7 @@ import { bigMoves, isLargeCap, moveText, settledBars } from "../supabase/functio
 import { liveRows } from "../supabase/functions/_shared/intraday.ts";
 import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabase/functions/_shared/movecause.ts";
 import { ALERTS, COMPANY, FIRST, PHILOSOPHY, PHONE, TABS, WELCOME_SUBJECT, welcomeMail } from "../supabase/functions/_shared/welcome.ts";
-import { FEED_LATE_MIN, barDayEnd, barSettled, feedState, stoppedBeforeClose, type Print } from "../supabase/functions/_shared/feedhealth.ts";
+import { FEED_LATE_MIN, barDayEnd, barSettled, feedState, fxTrading, silence, stoppedBeforeClose, type Print } from "../supabase/functions/_shared/feedhealth.ts";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
 let pass = 0, fail = 0;
@@ -756,6 +756,22 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck("current answers hold everything that has ended: at 22:35 UTC New York's close, the currencies' and the futures' day; crypto's day only after midnight UTC", ["NYSE", "FX", "CME", "LSE", "TSE"].every((m) => barSettled(m, "2026-11-18", at("2026-11-18T22:34:00Z"))) && !barSettled("CRYPTO", "2026-11-18", at("2026-11-18T22:34:00Z")) && barSettled("CRYPTO", "2026-11-18", at("2026-11-19T00:05:00Z")));
     ck("on New York's usual half days the bell is at 13:00, and answers that reach it hold that day's close", iso(barDayEnd("NYSE", "2026-11-27")) === "2026-11-27T18:00:00.000Z" && iso(barDayEnd("NYSE", "2026-12-24")) === "2026-12-24T18:00:00.000Z" && barSettled("NYSE", "2026-11-27", at("2026-11-27T18:00:00Z")) && !barSettled("NYSE", "2026-11-27", at("2026-11-27T16:00:00Z")) && iso(barDayEnd("NYSE", "2026-11-20")) === "2026-11-20T21:00:00.000Z");
     ck("over a weekend, Friday's bars are held by answers that reach Friday's 17:00 New York; a market not known is not judged", ["NYSE", "FX", "CME"].every((m) => barSettled(m, "2026-11-20", at("2026-11-20T21:59:00Z"))) && barSettled("MARS", "2026-11-18", stop));
+  }
+
+  console.log("\n[a stop that is over leaves a silence in the stored minute bars]");
+  {
+    const at = (iso: string) => Date.parse(iso), iso = (ms: number) => new Date(ms).toISOString().slice(0, 16);
+    const every = (from: string, to: string) => { const out: number[] = []; for (let t = at(from); t <= at(to); t += 60000) out.push(t); return out; };
+    // 18 Nov 2026: USD/JPY printed to 15:52 UTC and again from 22:00 (the bars of the new day were filled in when prices came back at 23:27)
+    const day = [...every("2026-11-18T08:00:00Z", "2026-11-18T15:52:00Z"), ...every("2026-11-18T22:00:00Z", "2026-11-18T23:40:00Z")];
+    const g = silence(day, at("2026-11-18T23:41:00Z"));
+    ck("the stop of 18 Nov is found in the stored minute bars, from the last print before it to the first after it", !!g && iso(g.from) === "2026-11-18T15:52" && iso(g.to) === "2026-11-18T22:00", g && [iso(g.from), iso(g.to)]);
+    const open = silence(every("2026-11-18T08:00:00Z", "2026-11-18T15:52:00Z"), at("2026-11-18T18:00:00Z"));
+    ck("a stop that has not ended runs to now", !!open && iso(open.from) === "2026-11-18T15:52" && iso(open.to) === "2026-11-18T18:00");
+    ck("a day of prints every minute has no silence; a hole of half an hour is not one, of 45 minutes is", silence(every("2026-11-18T00:00:00Z", "2026-11-18T23:40:00Z"), at("2026-11-18T23:41:00Z")) === null && silence([...every("2026-11-18T08:00:00Z", "2026-11-18T09:00:00Z"), ...every("2026-11-18T09:30:00Z", "2026-11-18T10:00:00Z")], at("2026-11-18T10:01:00Z")) === null && silence([...every("2026-11-18T08:00:00Z", "2026-11-18T09:00:00Z"), ...every("2026-11-18T09:45:00Z", "2026-11-18T10:00:00Z")], at("2026-11-18T10:01:00Z")) !== null);
+    ck("the weekend is not a stop: currencies close on Friday at 17:00 New York and open on Sunday at 17:00", silence([...every("2026-11-20T18:00:00Z", "2026-11-20T21:59:00Z"), ...every("2026-11-22T22:00:00Z", "2026-11-22T23:00:00Z")], at("2026-11-22T23:01:00Z")) === null && silence(every("2026-11-20T18:00:00Z", "2026-11-20T21:59:00Z"), at("2026-11-21T12:00:00Z")) === null);
+    ck("currencies trade from Sunday 17:00 New York to Friday 17:00, and not on 25 December or 1 January", fxTrading(at("2026-11-18T15:53:00Z")) && !fxTrading(at("2026-11-20T22:00:00Z")) && fxTrading(at("2026-11-20T21:59:00Z")) && !fxTrading(at("2026-11-21T12:00:00Z")) && !fxTrading(at("2026-11-22T21:59:00Z")) && fxTrading(at("2026-11-22T22:00:00Z")) && !fxTrading(at("2026-12-25T15:00:00Z")) && !fxTrading(at("2027-01-01T15:00:00Z")) && fxTrading(at("2026-07-17T20:59:00Z")) && !fxTrading(at("2026-07-17T21:00:00Z")));
+    ck("of two silences the longer is given; no prints at all gives none", iso(silence([...every("2026-11-18T08:00:00Z", "2026-11-18T09:00:00Z"), ...every("2026-11-18T10:00:00Z", "2026-11-18T11:00:00Z"), ...every("2026-11-18T14:00:00Z", "2026-11-18T14:10:00Z")], at("2026-11-18T14:11:00Z"))!.from) === "2026-11-18T11:00" && silence([], at("2026-11-18T14:11:00Z")) === null);
   }
 
   console.log("\n[the welcome email]");

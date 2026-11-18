@@ -21,16 +21,18 @@ export async function history(): Promise<string> {
   const rows: Array<Record<string, unknown>> = [];
   const missing: string[] = [];
   const suspects: string[] = [];
-  // How far do the answers in hand reach, market by market? The newest minute bar given for any instrument of a
-  // market (a currency pair: its newest hourly bar, below). A bar is booked only when they reach the end of its
-  // day (feedhealth.ts, barSettled): on 18 Nov 2026 the server was handed the prices of 10:52 New York time all
-  // evening for everything but crypto, and booked them as that day's closes. A market for which this reading
-  // cannot be made is booked as before.
+  // How far do the answers in hand reach? On 18 Nov 2026 the server was handed the prices of 10:52 New York time
+  // all evening for everything but crypto, and booked them as that day's closes. So two readings are made from
+  // the answers themselves: for crypto, its newest minute bar; for everything else together, the newest minute
+  // bar of any instrument (a currency pair: its newest hourly bar, below). A bar is booked only when the reading
+  // reaches the end of its day (feedhealth.ts, barSettled). Not market by market: Mexico's index is given
+  // minute bars that end an hour before its bell, and a reading of its own would hold its close back every day.
+  // Where no reading can be made, bars are booked as before.
   const reach = new Map<string, number>();
-  const reaches = (market: string, ms: number) => { if (Number.isFinite(ms) && ms > (reach.get(market) ?? 0)) reach.set(market, ms); };
+  const reaches = (market: string, ms: number) => { const k = market === "CRYPTO" ? "crypto" : "rest"; if (Number.isFinite(ms) && ms > (reach.get(k) ?? 0)) reach.set(k, ms); };
   try { const m1 = await spark(inst.map((i) => i.symbol), "1d", "1m"); for (const i of inst) { const lp = m1[i.symbol] ? lastPrint(m1[i.symbol]) : null; if (lp) reaches(i.market, lp.t * 1000); } } catch { /* no reading */ }
   const held = new Set<string>();
-  const settled = (symbol: string, market: string, d: string): boolean => { const r = reach.get(market); if (r == null || barSettled(market, d, r)) return true; held.add(symbol); return false; };
+  const settled = (symbol: string, market: string, d: string): boolean => { const r = reach.get(market === "CRYPTO" ? "crypto" : "rest"); if (r == null || barSettled(market, d, r)) return true; held.add(symbol); return false; };
   // A vendor misprint (a close far from the days on both sides) is neither written nor kept if already stored.
   const guard = async (symbol: string, wild: boolean, series: Array<{ d: string; close: number }>): Promise<Set<string>> => {
     const bad = suspectBars(series, spikeThreshold(symbol, wild));
@@ -59,7 +61,7 @@ export async function history(): Promise<string> {
         } catch { missing.push(p.symbol); }
       }
     }));
-    // booked once every pair has been read: the reach of the currencies is the newest bar of any of them
+    // booked once every pair has been read, so that the reading has the newest bar of any of them
     for (const p of fx) for (const x of p.closes) if (settled(p.symbol, "FX", x.d)) rows.push({ symbol: p.symbol, d: x.d, close: x.close, source: FX_SOURCE_HOURLY, updated_at: now.toISOString() });
   }
   for (const i of inst) {
@@ -86,5 +88,5 @@ export async function history(): Promise<string> {
     if (ue) throw new Error("prices_daily: " + ue.message);
   }
   const n = await saveTableSnapshot(now);
-  return `${rows.length} closes for ${everything.length - missing.length} instruments (${pairs.length} currency pairs at the 17:00 New York close)${missing.length ? `, missing: ${missing.join(" ")}` : ""}${suspects.length ? `; misprints dropped: ${suspects.join(", ")}` : ""}${held.size ? `; NOT BOOKED, the answers in hand not reaching the end of the day (${[...reach].filter(([m]) => everything.some((i) => held.has(i.symbol) && (isFxPair(i.symbol) ? "FX" : i.market) === m)).map(([m, t]) => `${m} to ${new Date(t).toISOString().slice(5, 16).replace("T", " ")}`).join(", ")} UTC): the newest close of ${held.size} instruments (${[...held].slice(0, 8).join(" ")}${held.size > 8 ? " …" : ""})` : ""}; table ${n} rows`;
+  return `${rows.length} closes for ${everything.length - missing.length} instruments (${pairs.length} currency pairs at the 17:00 New York close)${missing.length ? `, missing: ${missing.join(" ")}` : ""}${suspects.length ? `; misprints dropped: ${suspects.join(", ")}` : ""}${held.size ? `; NOT BOOKED, the answers in hand reaching only ${[...reach].map(([k, t]) => `${new Date(t).toISOString().slice(5, 16).replace("T", " ")} UTC${k === "crypto" ? " for crypto" : ""}`).join(", ")}: the newest close of ${held.size} instruments (${[...held].slice(0, 8).join(" ")}${held.size > 8 ? " …" : ""})` : ""}; table ${n} rows`;
 }
