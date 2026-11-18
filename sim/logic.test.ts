@@ -15,7 +15,7 @@ import { avgTurnover, barOnOrBefore, betaCorr, maxDrawdown, monthsBack, perfRows
 import { fyLabel, pickUnit, progress, qEndLabel, qLabel, quarterEnd, ratiosOf, singleQuarters, valuation, type FinPeriod, type FinSet } from "../supabase/functions/_shared/fin.ts";
 import { legacyStatements, yahooFin, yahooFinTypes } from "../supabase/functions/_shared/finsrc.ts";
 import { keyStatsOf } from "../supabase/functions/_shared/yahoo.ts";
-import { bigMoves, isLargeCap, moveText } from "../supabase/functions/_shared/bigmoves.ts";
+import { bigMoves, isLargeCap, moveText, settledBars } from "../supabase/functions/_shared/bigmoves.ts";
 import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabase/functions/_shared/movecause.ts";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
@@ -446,7 +446,7 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
       ser("annualCostOfRevenue", [[A[0], 224e9], [A[1], 214e9], [A[2], 210e9], [A[3], 221e9]]),
       ser("annualGrossProfit", [[A[0], 170e9], [A[1], 169e9], [A[2], 181e9], [A[3], 195e9]]),
       ser("annualOperatingIncome", [[A[0], 119e9], [A[1], 114e9], [A[2], 123e9], [A[3], 133e9]]),
-      ser("annualNetIncomeCommonStockholders", [[A[0], 99.8e9], [A[1], 97e9], [A[2], 93.7e9], [A[3], 112e9]]),
+      ser("annualNetIncome", [[A[0], 99.8e9], [A[1], 97e9], [A[2], 93.7e9], [A[3], 112e9]]),
       ser("annualDilutedEPS", [[A[0], 6.11], [A[1], 6.13], [A[2], 6.08], [A[3], 7.46]]),
       ser("annualDilutedAverageShares", [[A[3], 15.0e9]]),
       ser("annualCapitalExpenditure", [[A[2], -9.4e9], [A[3], -12.7e9]]),
@@ -456,7 +456,7 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
       ser("annualSomethingNew", [[A[3], 1]]),
       ser("quarterlyTotalRevenue", Q.map((d, i) => [d, 90e9 + i * 5e9] as [string, number])),
       ser("quarterlyOperatingIncome", [[Q[0], 28e9], [Q[1], null], [Q[2], 30e9], [Q[4], 33e9]]),
-      { meta: { type: ["quarterlyNetIncomeCommonStockholders"] }, quarterlyNetIncomeCommonStockholders: [{ asOfDate: Q[4], reportedValue: { raw: "n/a" } }, { asOfDate: "not a date", reportedValue: { raw: 5 } }, { reportedValue: { raw: 5 } }] },
+      { meta: { type: ["quarterlyNetIncome"] }, quarterlyNetIncome: [{ asOfDate: Q[4], reportedValue: { raw: "n/a" } }, { asOfDate: "not a date", reportedValue: { raw: 5 } }, { reportedValue: { raw: 5 } }] },
       { meta: {}, nothing: [] }, null,
     ] } };
     const f = yahooFin(json, "USD", "2026-11-18");
@@ -517,6 +517,9 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck("a crash day that ends a bad week and a bad month gives all three, on the same day, newest first", m.length >= 3 && m.slice(0, 3).map((x) => x.kind).join() === "d1,m1,w1" && new Set(m.slice(0, 3).map((x) => x.to)).size === 1 && m.every((x) => x.dir === -1), m);
     ck("only moves ending on or after the day asked for are returned", bigMoves(series(crash), T0 + 26 * 86400).length === 0 && bigMoves(series(crash), T0 + 25 * 86400).every((x) => x.t === T0 + 25 * 86400) && bigMoves(series(crash), T0 + 25 * 86400).length === 3);
     ck("bars without a price are skipped, and too short a history gives nothing", bigMoves(series([100, 0, 100, 100])).length === 0 && bigMoves([]).length === 0 && bigMoves(series([100])).length === 0);
+    const live = series([...flat(10), 93]), lastDay = D(T0 + 10 * 86400);
+    ck("while the market is open today's bar is left out: a fall at lunchtime is not yet a day that closed down", bigMoves(settledBars(live, true, lastDay)).length === 0 && bigMoves(settledBars(live, false, lastDay)).length === 1 && settledBars(live, true, lastDay).length === 10);
+    ck("an open market with no bar for today yet (the feed is behind, or it is a holiday) drops nothing", settledBars(live, true, D(T0 + 11 * 86400)).length === 11 && settledBars([], true, lastDay).length === 0);
     ck("large enough to be explained: 1tn yen and above, 10bn dollars and above, other currencies by their dollar value", isLargeCap(1e12, "JPY", 155) && !isLargeCap(9.99e11, "JPY", 155) && isLargeCap(1e10, "USD", 1) && !isLargeCap(9.9e9, "USD", 1) && isLargeCap(1.5e13, "KRW", 1400) && !isLargeCap(1.3e13, "KRW", 1400) && !isLargeCap(1e15, "KRW", null) && !isLargeCap(null, "JPY", 155) && !isLargeCap(1e13, null, 1));
     ck("each move in words", moveText({ kind: "d1", pct: -8.23, from: "2026-08-04", to: "2026-08-05" }) === "−8.2% on the day" && moveText({ kind: "w1", pct: 12.44, from: "2026-08-03", to: "2026-08-10" }) === "+12.4% in five sessions (from 3 Aug)" && moveText({ kind: "m1", pct: -24, from: "2026-08-03", to: "2026-08-27" }) === "−24.0% from the high of 3 Aug to the low of 27 Aug" && moveText({ kind: "m1", pct: 21.5, from: "2026-04-07", to: "2026-04-30" }) === "+21.5% from the low of 7 Apr to the high of 30 Apr");
   }

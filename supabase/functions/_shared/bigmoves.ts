@@ -44,6 +44,14 @@ export function bigMoves(bars: Bar[], sinceT = 0): BigMove[] {
   return [...d1, ...largestApart(w1), ...largestApart(m1)].filter((m) => m.t >= sinceT).sort((x, y) => y.t - x.t || x.kind.localeCompare(y.kind));
 }
 
+/** The bars a move may be read from: every finished session. While the stock's market is open, today's bar is a
+ *  day still in progress (its "close" is only the latest price), so it is left out: a fall of 5% at lunchtime is
+ *  not yet a day that closed 5% down. `today` is the date at the exchange (YYYY-MM-DD). */
+export function settledBars(bars: Bar[], marketOpen: boolean, today: string): Bar[] {
+  const last = bars.length ? bars[bars.length - 1] : null;
+  return marketOpen && last && iso(last.t) === today ? bars.slice(0, -1) : bars;
+}
+
 /** Large enough to have its big moves explained: 1tn yen and above for a yen stock, otherwise 10bn US dollars
  *  and above. `perUsd` is how many units of the stock's currency one dollar buys (1 for a dollar stock); a
  *  currency with no rate known is not judged large. */

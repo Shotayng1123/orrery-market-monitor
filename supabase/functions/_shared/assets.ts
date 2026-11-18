@@ -79,6 +79,7 @@ export function benchmarksFor(symbol: string): Benchmark[] {
     { symbol: "^N225", name: "Nikkei 225", note: null },
     { symbol: "1306.T", name: "TOPIX", note: "TOPIX is read from the 1306.T exchange-traded fund that tracks it (the feed has no TOPIX series). The fund pays out the dividends it has collected once a year, so over a period that starts or ends near that payout its change differs a little from the index's." },
   ];
+  if (/^\^|=|-USD$/.test(symbol)) return [];   // an index, a currency, a future or a coin is not set against a stock index
   return [{ ...homeIndex(symbol), note: null }];
 }
 

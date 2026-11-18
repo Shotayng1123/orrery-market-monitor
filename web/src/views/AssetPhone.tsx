@@ -82,7 +82,7 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
         </div>
       </Section>
 
-      <Section title="Performance" aux={`vs ${bms.map((b) => b.name).join(", ")}`} card={false}>
+      <Section title="Performance" aux={bms.length ? `vs ${bms.map((b) => b.name).join(", ")}` : ""} card={false}>
         <div className="mp-card pad">
           <table className="mp-t perf" id="st-perf">
             <thead><tr><th /><th>Price then</th><th>{d.symbol}</th>{bms.map((b) => <th key={b.symbol}>vs {b.name}</th>)}</tr></thead>
@@ -90,11 +90,13 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
               <tr key={r.h}><td>{r.h}</td><td className="mut">{fmtNum(r.base, dec)}</td><td className={signCls(r.stock)}>{fmtPc(r.stock, true)}</td>{bms.map((b, k) => <td key={b.symbol} className={signCls(r.rel[k])}>{pp(r.rel[k])}</td>)}</tr>
             ))}</tbody>
           </table>
-          <p className="mp-note in">"vs" is the stock's change less the index's, in percentage points (plus = the stock did better).</p>
-          <table className="mp-t perf idx" id="st-bench">
-            <thead><tr><th />{bms.map((b) => <th key={b.symbol}>{b.name}</th>)}</tr></thead>
-            <tbody>{d.perf.map((r) => <tr key={r.h}><td>{r.h}</td>{bms.map((b, k) => <td key={b.symbol} className={signCls(r.bench[k])}>{fmtPc(r.bench[k], true)}</td>)}</tr>)}</tbody>
-          </table>
+          {bms.length > 0 && <>
+            <p className="mp-note in">"vs" is the stock's change less the index's, in percentage points (plus = the stock did better).</p>
+            <table className="mp-t perf idx" id="st-bench">
+              <thead><tr><th />{bms.map((b) => <th key={b.symbol}>{b.name}</th>)}</tr></thead>
+              <tbody>{d.perf.map((r) => <tr key={r.h}><td>{r.h}</td>{bms.map((b, k) => <td key={b.symbol} className={signCls(r.bench[k])}>{fmtPc(r.bench[k], true)}</td>)}</tr>)}</tbody>
+            </table>
+          </>}
           <p className="mp-note in">Price changes, dividends not included. Each row is the price now against the last close on or before the same day that long ago; an index is measured between the same two dates.</p>
           {bms.filter((b) => b.note).map((b) => <p key={b.symbol} className="mp-note in">{b.note}</p>)}
         </div>

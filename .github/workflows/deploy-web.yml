@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # The browser checks (web/e2e, about 650 of them) and the logic checks (sim/logic.test.ts). Since 18 Nov 2026
+  # The browser checks (web/e2e, about 700 of them) and the logic checks (sim/logic.test.ts). Since 18 Nov 2026
   # the site is published only when they pass: until then a publish checked only that the site builds.
   test:
     runs-on: ubuntu-latest

@@ -32,9 +32,13 @@ function setOf(rows: Map<string, Partial<Record<FinLine, number | null>>>, perio
 //   { timeseries: { result: [ { meta: { type: ["annualTotalRevenue"] }, annualTotalRevenue: [ { asOfDate: "2025-09-30", reportedValue: { raw: 1 } }, ... ] }, ... ] } }
 // A series Yahoo does not have for a company is simply absent. Quarterly figures are single quarters.
 // Debt here is borrowings without lease obligations (Yahoo keeps those in separate series).
+// Ten of these names were already read by the page before 18 Nov 2026 (TotalRevenue, OperatingIncome, NetIncome,
+// DilutedEPS, TotalAssets, StockholdersEquity and the three cash flows): those are known to arrive. The others
+// follow Yahoo's naming for the same statements and have not been seen live from this repository's tests; a
+// name Yahoo does not answer leaves its line empty, it cannot put a wrong figure on the page.
 export const YAHOO_FIN: Array<[string, FinLine]> = [
   ["TotalRevenue", "revenue"], ["CostOfRevenue", "cogs"], ["GrossProfit", "gross"], ["SellingGeneralAndAdministration", "sga"], ["OperatingIncome", "op"],
-  ["PretaxIncome", "pretax"], ["NetIncomeCommonStockholders", "ni"], ["DilutedEPS", "eps"], ["DilutedAverageShares", "dilutedShares"],
+  ["PretaxIncome", "pretax"], ["NetIncome", "ni"], ["DilutedEPS", "eps"], ["DilutedAverageShares", "dilutedShares"],
   ["CashAndCashEquivalents", "cash"], ["CurrentDebt", "stDebt"], ["LongTermDebt", "ltDebt"], ["TotalAssets", "assets"], ["TotalLiabilitiesNetMinorityInterest", "liabilities"], ["StockholdersEquity", "equity"], ["OrdinarySharesNumber", "shares"],
   ["OperatingCashFlow", "ocf"], ["InvestingCashFlow", "icf"], ["FinancingCashFlow", "fincf"], ["CapitalExpenditure", "capex"],
 ];

@@ -47,14 +47,17 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, about 650 checks in 14 suites): every tab on a desktop and in the phone layout, the
-  classic phone layout, the sign-in screen, creating an account by verification email, the manager's accounts list, the
+- **Browser checks** (`web/e2e`, about 700 checks in 15 suites): every tab on a desktop and in the phone layout, the
+  stock page (chart marks, performance, statements), the classic phone layout, the sign-in screen, creating an
+  account by verification email, the manager's accounts list, the
   home-screen hint, the new-version bar, opening without a connection, and notifications. `cd web && npm run e2e` starts the test servers it needs and runs them all (about three
   minutes); `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
   Needs Playwright's browser once: `npx playwright install chromium`.
 - **Logic checks** (`sim/logic.test.ts`): exchange sessions, rolling bands, alert measures, the push encryption,
-  the verification email for a new account. `cd jobs && npx tsx ../sim/logic.test.ts`.
-- **Database checks** (`sim/sql`): the rules that live in database functions (today: the limits on verification emails),
+  the verification email for a new account, and every figure of the stock page (performance, ratios, statements
+  as read from each source, big moves, the reading of a move's reason). `cd jobs && npx tsx ../sim/logic.test.ts`.
+- **Database checks** (`sim/sql`): the rules that live in database functions (the limits on verification emails;
+  the queue for the reasons of big moves),
   run with the migration file itself on PGlite, a Postgres inside Node. `cd sim/sql && npm ci && npm test`.
 
 The `deploy-web` workflow runs the browser and logic checks before it publishes: a failing check stops the publish.
@@ -74,6 +77,22 @@ when the server's functions or migrations change.
 | Constituents | Wikipedia lists (S&P 500, Nikkei 225), checked monthly |
 
 TOPIX has no Yahoo ticker: the `1306.T` ETF stands in for the live level (badge PROXY) and the official JPX close is used for daily figures.
+
+### The stock page (`#asset/SYMBOL`, since 2026-11-18)
+
+| On the page | Where it comes from |
+|---|---|
+| Chart with σ corridors and volume; price history | Yahoo Finance daily and intraday bars (split-adjusted, dividends not included) |
+| Change over 1D, 1M, 3M, 6M, 12M, 36M, 60M against the benchmark | Worked out from those bars (`_shared/stockstats.ts`). Tokyo names are set against the Nikkei 225 and TOPIX; TOPIX is read from the `1306.T` fund (PROXY). Other names against their home index |
+| 52-week range, volatility, beta, largest fall, average daily volume and value | Worked out from the same bars |
+| Market cap, shares outstanding, float, next earnings date | Yahoo Finance quote and key statistics |
+| Short interest | Tokyo: the positions of 0.5% and above reported to JPX (already stored for the EQUITIES tab). Elsewhere: the exchange-reported short interest Yahoo republishes, with FINRA's daily short-volume share beside it |
+| Statements (income statement, balance sheet, cash flow), ratios, guidance | Tokyo: EDINET DB (有価証券報告書 and 決算短信), ten fiscal years, the company's guidance and twelve single quarters. Elsewhere: Yahoo Finance fundamentals (about four years and five quarters; no guidance, no dividend per share) |
+| Big moves and why (companies of 1tn yen / 10bn US dollars and above) | The moves from the bars (`_shared/bigmoves.ts`); each reason from a web search by the `move-causes` job, kept only with the reports behind it |
+
+A figure a source does not give is shown as a dash. Nothing on the page is estimated; the two sums made on the
+page itself (net cash, free cash flow) say so where they stand. One unit (m, bn or tn) is chosen per company from
+its revenue and written once, in the statements table's header.
 
 ## Morning Notes
 

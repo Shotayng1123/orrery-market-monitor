@@ -9,7 +9,9 @@ import { benchmarksFor, dailyBars, quoteFor } from "./assets.ts";
 import { avgTurnover, betaCorr, maxDrawdown, perfRows, range52w, realisedVol, type Bar } from "./stockstats.ts";
 import { valuation, type Fin, type FinLine } from "./fin.ts";
 import { yahooFin, yahooFinTypes } from "./finsrc.ts";
-import { bigMoves, isLargeCap, moveText, type BigMove } from "./bigmoves.ts";
+import { bigMoves, isLargeCap, moveText, settledBars, type BigMove } from "./bigmoves.ts";
+import { stockMarket } from "./moves.ts";
+import { localDate, marketById, marketState } from "./sessions.ts";
 import { barOnOrBefore } from "./stockstats.ts";
 import type { MoveCtx } from "./movecause.ts";
 
@@ -78,7 +80,9 @@ type MoveOut = BigMove & { text: string; status: "found" | "not_found" | "queued
 async function movesFor(symbol: string, q: { name: string | null; exchange: string | null; currency: string | null; marketCap: number | null }, sector: string | null, own: Bar[], bench: { name: string; bars: Bar[] } | null): Promise<{ eligible: boolean; rows: MoveOut[] }> {
   if (!isLargeCap(q.marketCap, q.currency, q.currency === "JPY" ? 1 : await perUsd(q.currency))) return { eligible: false, rows: [] };
   const now = Date.now() / 1000;
-  const found = bigMoves(own, now - MOVES_SHOWN_MONTHS * 30.5 * 86400);
+  // a session still in progress is not yet a day's move
+  const market = marketById(stockMarket(symbol) ?? ""), state = market ? marketState(market, new Date()) : "CLOSED";
+  const found = bigMoves(settledBars(own, state === "OPEN" || state === "BREAK", market ? localDate(market.tz, now) : ""), now - MOVES_SHOWN_MONTHS * 30.5 * 86400);
   const { data, error } = await db.from("move_causes").select("kind,d,status,cause,sources,tries").eq("symbol", symbol);
   const stored = new Map(((data ?? []) as Array<{ kind: string; d: string; status: string; cause: string | null; sources: Array<{ title: string; url: string }> | null; tries: number }>).map((r) => [`${r.kind}|${r.d}`, r]));
   const queue: Array<Record<string, unknown>> = [];

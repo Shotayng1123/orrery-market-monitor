@@ -102,7 +102,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
           <KV k="Next earnings" title={d.earningsEst ? "Estimated by Yahoo Finance; not confirmed by the company" : undefined}>{d.earningsAt ? `${fmtStamp(d.earningsAt)}${d.earningsEst ? " (est.)" : ""}` : "–"}</KV>
         </tbody></table>
       </Panel>
-      <Panel no="03" title={`PERFORMANCE VS ${title.toUpperCase()}`} span={8} aux="price change, dividends not included">
+      <Panel no="03" title={bms.length ? `PERFORMANCE VS ${title.toUpperCase()}` : "PERFORMANCE"} span={8} aux="price change, dividends not included">
         <table className="secT perfT" id="st-perf">
           <thead><tr><th className="l" />{d.perf.map((r) => <th key={r.h} title={r.from ? `from the close of ${r.from}` : undefined}>{r.h}</th>)}</tr></thead>
           <tbody>
