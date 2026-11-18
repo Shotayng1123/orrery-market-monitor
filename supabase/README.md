@@ -58,7 +58,9 @@ Alerts reach phones and browsers as notifications once the server has a signing 
 
 How it works: the tick offers every alert not yet marked (`alerts.pushed_at`) to the devices in `push_subs`, within a
 minute of the alert being written, whichever job wrote it. A device set to "My watchlist only" gets alerts on its
-account's watchlist names; more than four alerts at once arrive as one notification. Addresses the push service
+account's watchlist names; more than four alerts at once arrive as one notification. A move carries a green (up) or
+red (down) round mark in front of its line: a phone draws notification text in its own colour, so that is how the
+colour gets there; headline alerts have no mark. Addresses the push service
 reports gone are deleted. The encryption and signing are in `functions/_shared/webpush.ts`, checked against the
 example of RFC 8291 in `sim/logic.test.ts`. On an iPhone, notifications exist only in the app added to the Home Screen
 (iOS 16.4 or later).
