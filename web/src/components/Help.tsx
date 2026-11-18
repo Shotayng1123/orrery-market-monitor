@@ -27,7 +27,9 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
     ["STAND-IN", "A narrower index whose members stand in for a broader one, for example the Nasdaq-100 for the Nasdaq Composite."],
   ] },
   { title: "Alerts", rows: [
-    ["Moves", "A single stock beyond ±7% intraday, or an index beyond ±3%, against the previous close. The time is the minute the threshold was passed."],
+    ["Moves", "A single stock beyond ±7% at any point in the session, or an index beyond ±3%, against the previous close. For a stock the figure is the largest move of the session, also after it has come back."],
+    ["Stocks covered", "Nikkei 225 and S&P 500 members and every stock on a watchlist, read from one-minute prices. Other companies in the lists the Monitor follows (TOPIX, Nasdaq-100, KOSPI 200, Hang Seng, SSE 180) when worth USD 5bn or more, checked every 10 to 20 minutes."],
+    ["Time", "The minute the threshold was passed; for the wider lists, the time the move was seen."],
     ["Buyback, guidance", "Raised from headlines, for companies worth USD 5bn or more."],
     ["M&A", "Raised from headlines that state a deal size of USD 1bn or more."],
     ["NEW ALERT", "An alert you have not opened yet, raised in the last half hour."],
