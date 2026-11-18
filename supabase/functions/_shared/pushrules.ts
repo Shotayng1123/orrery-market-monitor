@@ -16,11 +16,16 @@ export function stampSgt(iso: string): string {
 /** Alerts raised from headlines about no listed company carry a made-up symbol ("news:123"): no page to open. */
 const hasPage = (symbol: string): boolean => !!symbol && !symbol.startsWith("news:");
 
-/** One alert as a notification: the alert's own line as the title, its kind and time under it; a tap opens the
- *  stock's page (a move, or a headline about a company), or NEWS for a headline about none. */
+/** Green for a rise, red for a fall, as on the page (Shota, 18 Nov 2026). A phone draws a notification's text in
+ *  its own colour and a web app cannot change that, so the colour is carried by a round mark in front of the
+ *  line. Headline alerts (a buyback, a guidance change, an acquisition) have no direction and get no mark. */
+export const moveMark = (a: AlertLite): string => ((a.kind === "stock" || a.kind === "index") && a.pct ? (a.pct > 0 ? "\u{1F7E2} " : "\u{1F534} ") : "");
+
+/** One alert as a notification: the alert's own line as the title (with its mark), its kind and time under it; a
+ *  tap opens the stock's page (a move, or a headline about a company), or NEWS for a headline about none. */
 export function alertNote(a: AlertLite): Note {
   const move = a.kind === "stock" || a.kind === "index";
-  return { title: a.msg, body: `${LABEL[a.kind] ?? "Alert"} · ${stampSgt(a.at)}`, hash: hasPage(a.symbol) ? `#asset/${encodeURIComponent(a.symbol)}` : move ? "#market" : "#news", tag: `alert-${a.id}` };
+  return { title: moveMark(a) + a.msg, body: `${LABEL[a.kind] ?? "Alert"} · ${stampSgt(a.at)}`, hash: hasPage(a.symbol) ? `#asset/${encodeURIComponent(a.symbol)}` : move ? "#market" : "#news", tag: `alert-${a.id}` };
 }
 export const wanted = (scope: PushScope, watch: ReadonlySet<string>, a: AlertLite): boolean => scope === "all" || watch.has(a.symbol);
 
@@ -31,5 +36,5 @@ export function notesFor(alerts: AlertLite[], scope: PushScope, watch: ReadonlyS
   const mine = alerts.filter((a) => wanted(scope, watch, a));
   if (mine.length <= MAX_SINGLE) return mine.map(alertNote);
   const newest = [...mine].sort((x, y) => y.at.localeCompare(x.at));
-  return [{ title: `${mine.length} new alerts`, body: `${newest.slice(0, 3).map((a) => a.msg).join(" · ")} and ${mine.length - 3} more`, hash: "#market", tag: `alerts-${newest[0].id}` }];
+  return [{ title: `${mine.length} new alerts`, body: `${newest.slice(0, 3).map((a) => moveMark(a) + a.msg).join(" · ")} and ${mine.length - 3} more`, hash: "#market", tag: `alerts-${newest[0].id}` }];
 }

@@ -6,7 +6,7 @@ import { rollingBands, pct } from "../web/src/lib/stats.ts";
 import { fxClosesFromDaily, fxClosesFromHourly, fxDay, suspectBars } from "../supabase/functions/_shared/fx.ts";
 import { AFTER_CLOSE_MIN, quoteMove, scanDue, sessionMove, stockMarket } from "../supabase/functions/_shared/moves.ts";
 import { b64u, encryptPush, pushEndpointOk, unb64u, vapidHeader } from "../supabase/functions/_shared/webpush.ts";
-import { alertNote, notesFor, stampSgt, wanted, type AlertLite } from "../supabase/functions/_shared/pushrules.ts";
+import { alertNote, moveMark, notesFor, stampSgt, wanted, type AlertLite } from "../supabase/functions/_shared/pushrules.ts";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
 let pass = 0, fail = 0;
@@ -208,18 +208,22 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
 
   console.log("\n[J] push notifications: what they say and who gets them");
   {
-    const a = (id: number, symbol: string, kind: string, msg: string, at = "2026-11-18T02:05:00Z"): AlertLite => ({ id, at, symbol, name: msg.split(" ")[0], kind, pct: -7.5, msg });
+    const a = (id: number, symbol: string, kind: string, msg: string, at = "2026-11-18T02:05:00Z", pct: number | null = kind === "stock" || kind === "index" ? -7.5 : null): AlertLite => ({ id, at, symbol, name: msg.split(" ")[0], kind, pct, msg });
+    const GREEN = "\u{1F7E2}", RED = "\u{1F534}";
     const bank = a(1, "5838.T", "stock", "Rakuten Bank down 17% intraday"), idx = a(2, "^N225", "index", "Nikkei 225 down 3.2%"), buy = a(3, "7203.T", "buyback", "Buyback: Toyota to buy back up to ¥1.2tn"), deal = a(4, "news:812", "mna", "M&A: a USD 4.0bn deal for a private company");
     const n = alertNote(bank);
-    ck("a stock move: the alert's line as the title, its kind and Singapore time under it, a tap opens the stock", n.title === "Rakuten Bank down 17% intraday" && n.body === "Stock move · 11/18 10:05 SGT" && n.hash === "#asset/5838.T" && n.tag === "alert-1", n);
+    ck("a fall: a red mark, then the alert's line as the title, its kind and Singapore time under it; a tap opens the stock", n.title === `${RED} Rakuten Bank down 17% intraday` && n.body === "Stock move · 11/18 10:05 SGT" && n.hash === "#asset/5838.T" && n.tag === "alert-1", n);
+    const up = a(5, "7203.T", "stock", "Toyota Motor up 8.2% intraday", undefined, 8.2), idxUp = a(6, "^GSPC", "index", "S&P 500 up 3.1%", undefined, 3.1);
+    ck("a rise: a green mark, for a stock and for an index", alertNote(up).title === `${GREEN} Toyota Motor up 8.2% intraday` && alertNote(idxUp).title === `${GREEN} S&P 500 up 3.1%` && alertNote(idx).title === `${RED} Nikkei 225 down 3.2%`, [alertNote(up).title, alertNote(idxUp).title, alertNote(idx).title]);
+    ck("an acquisition, a buyback and a guidance change carry no mark (no direction to show)", alertNote(deal).title === deal.msg && alertNote(buy).title === buy.msg && alertNote(a(7, "6758.T", "revision", "Guidance: Sony raises its full-year outlook")).title === "Guidance: Sony raises its full-year outlook" && moveMark({ ...bank, pct: 0 }) === "" && moveMark({ ...bank, pct: null }) === "");
     ck("an index move opens the index; a headline about a company opens the company; one about no listed company opens NEWS", alertNote(idx).hash === "#asset/%5EN225" && alertNote(idx).body.startsWith("Index move") && alertNote(buy).hash === "#asset/7203.T" && alertNote(buy).body.startsWith("Buyback") && alertNote(deal).hash === "#news" && alertNote(deal).body.startsWith("M&A"), [alertNote(idx), alertNote(buy), alertNote(deal)]);
     ck("times are written as on the page, across midnight too", stampSgt("2026-11-18T15:59:00Z") === "11/18 23:59 SGT" && stampSgt("2026-11-18T16:00:00Z") === "11/19 00:00 SGT");
     const watch = new Set(["5838.T", "NVDA"]);
     ck("'my names': only alerts on the account's watchlist", wanted("mine", watch, bank) && !wanted("mine", watch, idx) && !wanted("mine", watch, buy) && !wanted("mine", watch, deal) && [bank, idx, buy, deal].every((x) => wanted("all", watch, x)));
     ck("up to four alerts at once: one notification each", notesFor([bank, idx, buy, deal], "all", watch).length === 4 && notesFor([bank, idx, buy, deal], "mine", watch).length === 1 && notesFor([idx], "mine", watch).length === 0);
-    const many = Array.from({ length: 30 }, (_, i) => a(100 + i, `${7000 + i}.T`, "stock", `Company ${i} down 8% intraday`, `2026-11-18T02:${String(10 + i).padStart(2, "0")}:00Z`));
+    const many = Array.from({ length: 30 }, (_, i) => a(100 + i, `${7000 + i}.T`, "stock", `Company ${i} ${i === 28 ? "up" : "down"} 8% intraday`, `2026-11-18T02:${String(10 + i).padStart(2, "0")}:00Z`, i === 28 ? 8 : -8));
     const sum = notesFor(many, "all", watch);
-    ck("thirty at once (a sell-off): a single notification with the count and the three newest", sum.length === 1 && sum[0].title === "30 new alerts" && sum[0].body === "Company 29 down 8% intraday · Company 28 down 8% intraday · Company 27 down 8% intraday and 27 more" && sum[0].hash === "#market", sum);
+    ck("thirty at once (a sell-off): a single notification with the count and the three newest, each with its mark", sum.length === 1 && sum[0].title === "30 new alerts" && sum[0].body === `${RED} Company 29 down 8% intraday · ${GREEN} Company 28 up 8% intraday · ${RED} Company 27 down 8% intraday and 27 more` && sum[0].hash === "#market", sum);
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

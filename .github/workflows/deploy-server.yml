@@ -1,0 +1,143 @@
+name: deploy-server
+
+# The server (database changes, the notification key, the three functions) is deployed from main, like the website
+# (Shota, 18 Nov 2026). Until then it was deployed by hand from one laptop, which held the only keys, so a change
+# written anywhere else waited for that laptop. The keys are repository secrets now (supabase/README.md):
+#   SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD   needed; without them this workflow says so and does nothing
+#   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY       already there for the jobs
+#   NOTE_DISPATCH_TOKEN                           optional: the GitHub token that lets the database start the Morning Note
+# A push to main that touches the server deploys it. Run by hand it only shows what a deploy would do ("check"),
+# unless "deploy" is chosen.
+on:
+  push:
+    branches: [main]
+    paths: ["supabase/migrations/**", "supabase/functions/**", "supabase/config.toml", ".github/workflows/deploy-server.yml"]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check = show what a deploy would change and change nothing; deploy = do it"
+        type: choice
+        options: [check, deploy]
+        default: check
+
+permissions:
+  contents: read
+
+# one at a time, and a deploy under way is never cancelled half-way through a database change
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      NOTE_DISPATCH_TOKEN: ${{ secrets.NOTE_DISPATCH_TOKEN }}
+      MODE: ${{ github.event_name == 'push' && 'deploy' || inputs.mode }}
+    steps:
+      - name: Are the keys in place?
+        id: keys
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD" ] || [ -z "$SUPABASE_URL" ]; then
+            echo "::notice title=Not set up yet::The repository secrets SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD are not both there (supabase/README.md). Nothing was deployed."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            ref=$(printf '%s' "$SUPABASE_URL" | sed -E 's#^https://([a-z0-9]+)\.supabase\.co.*$#\1#')
+            echo "::add-mask::$ref"
+            echo "REF=$ref" >> "$GITHUB_ENV"
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "mode: $MODE"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.keys.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.keys.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: jobs/package-lock.json
+
+      # nothing is deployed if the logic checks fail
+      - name: Logic checks
+        if: steps.keys.outputs.ready == 'true'
+        working-directory: jobs
+        run: npm ci && npx tsx ../sim/logic.test.ts
+
+      - uses: supabase/setup-cli@v1
+        if: steps.keys.outputs.ready == 'true'
+        with:
+          version: latest
+      - name: Link the project
+        if: steps.keys.outputs.ready == 'true'
+        run: supabase link --project-ref "$REF"
+
+      - name: What a deploy would change
+        if: steps.keys.outputs.ready == 'true'
+        run: |
+          echo "== migrations: in the repository (local) and applied to the database (remote)"
+          supabase migration list | tee /tmp/migrations.txt
+          echo "== database changes waiting to be applied"
+          supabase db push --dry-run
+          echo "== functions as deployed now"
+          supabase functions list --project-ref "$REF"
+          echo "== secrets the functions have (names only)"
+          supabase secrets list --project-ref "$REF" | awk '{ print $1 }'
+
+      # A deploy applies every migration the database has no record of. That is only right when the record is
+      # complete: if the database was ever changed by hand, old migrations would look new and be run again. So a
+      # deploy goes ahead only when what is waiting is strictly newer than everything already applied.
+      - name: The database's record must match the repository
+        if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy'
+        run: |
+          sed 's/│/|/g' /tmp/migrations.txt | awk -F'|' '
+            { l = $1; r = $2; gsub(/[^0-9]/, "", l); gsub(/[^0-9]/, "", r) }
+            length(l) == 14 || length(r) == 14 {
+              rows++
+              if (length(r) == 14) { applied++; if (r > last) last = r; if (length(l) != 14) unknown = unknown " " r }
+              else waiting[++n] = l
+            }
+            END {
+              if (!rows)   { print "could not read the list of migrations: run this workflow with check and look at its output"; exit 1 }
+              if (!applied && n) { print "the database has no record of any migration, but " n " are in the repository: applying them all again would be wrong"; exit 1 }
+              if (unknown != "") { print "the database has migrations the repository does not:" unknown; exit 1 }
+              for (i = 1; i <= n; i++) if (waiting[i] < last) old = old " " waiting[i]
+              if (old != "") { print "waiting migrations older than the newest applied one (" last "):" old; exit 1 }
+              print (n ? n " migration(s) waiting, all newer than " last : "nothing waiting; the newest applied is " last)
+            }'
+
+      - name: Database changes
+        if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy'
+        run: supabase db push
+
+      # made once, on the runner, and stored straight on the server: it is never shown and never in git
+      - name: Notification key
+        if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy'
+        run: |
+          if supabase secrets list --project-ref "$REF" | grep -q "VAPID_PUBLIC_KEY"; then
+            echo "the server already has its notification key"
+          else
+            node jobs/tools/gen_vapid.mjs > /dev/null
+            supabase secrets set --env-file jobs/.env.vapid --project-ref "$REF" > /dev/null
+            rm -f jobs/.env.vapid
+            echo "a notification key was made and stored on the server"
+          fi
+
+      - name: Functions
+        if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy'
+        run: supabase functions deploy tick daily api --project-ref "$REF"
+
+      # optional: hands the database the token with which it asks GitHub for the Morning Note at 22:15 UTC
+      - name: Morning Note token
+        if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy' && env.NOTE_DISPATCH_TOKEN != ''
+        run: |
+          code=$(curl -sS -o /tmp/answer -w '%{http_code}' -X POST "$SUPABASE_URL/rest/v1/rpc/monitor_set_github_token" \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" -H "Content-Type: application/json" \
+            --data "$(jq -n --arg t "$NOTE_DISPATCH_TOKEN" '{p_token: $t}')")
+          if [ "$code" = "200" ]; then echo "the database holds the token that starts the Morning Note"
+          else echo "::warning title=Morning Note token::could not be stored (HTTP $code): $(head -c 300 /tmp/answer)"; fi

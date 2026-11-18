@@ -42,10 +42,43 @@ intraday prices, yield curves, calendar, news, notes, reports and sign-ins; pg_c
    The Fed target range is not a `daily` job (the edge runtime cannot reach FRED): run the `fed-target` workflow in GitHub Actions.
 7. GitHub: repository variable `VITE_API_URL = https://<ref>.supabase.co/functions/v1/api`; Pages source = GitHub Actions; secrets `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY` for the jobs.
 
+## Deploying the server (since 2026-11-18: from GitHub)
+
+The database changes and the three functions are deployed by the `deploy-server` workflow, the way `deploy-web` publishes
+the site: a push to `main` that touches `supabase/` deploys it. Nobody needs the Supabase CLI or a key on their own
+machine, so a change can come from any session. Deploying by hand (`npx supabase db push`, `npx supabase functions
+deploy tick daily api`) still works, but then deploy only what is already on `main`, or the next automatic deploy
+will put `main`'s code back.
+
+Set up once, in the repository's Settings › Secrets and variables › Actions › Secrets:
+
+| Secret | What it is | Where to get it |
+|---|---|---|
+| `SUPABASE_ACCESS_TOKEN` | lets the workflow act on the Supabase project | Supabase dashboard › Account › Access Tokens › Generate new token |
+| `SUPABASE_DB_PASSWORD` | the database password, for applying migrations | chosen when the project was created; Project Settings › Database can reset it |
+| `NOTE_DISPATCH_TOKEN` (optional) | lets the database start the Morning Note on time | the GitHub token described under "The Morning Note on time" below |
+
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are there already for the jobs. Until the first two exist the
+workflow says "Not set up yet" and does nothing.
+
+What a deploy does, in order: the logic checks (`sim/logic.test.ts`; a failure stops it); a list of what is waiting;
+a guard; `supabase db push`; the notification key, made on the runner and stored on the server if the server has
+none (never shown, never in git); `supabase functions deploy tick daily api`; and, if `NOTE_DISPATCH_TOKEN` is set,
+storing it in the database with `monitor_set_github_token`.
+
+The guard: a deploy applies every migration the database has no record of. That is only right when the record is
+complete, so the deploy stops unless everything waiting is newer than everything applied. If it stops, run the
+workflow by hand with **check** (Actions › deploy-server › Run workflow), which changes nothing and prints the
+migrations in the repository beside those the database has recorded, what would be applied, the functions as
+deployed and the names of their secrets.
+
 ## Push notifications (added 2026-11-18)
 
 Alerts reach phones and browsers as notifications once the server has a signing key. Until then the page says
 "Notifications are not set up on the server yet" and nothing is sent.
+
+With the `deploy-server` workflow set up (above) none of these steps is needed: it applies the migration, makes the
+key if the server has none, and deploys. By hand:
 
 1. `npx supabase db push` (migration `20261118000001_push.sql`: the `push_subs` table and `alerts.pushed_at`).
 2. The key pair, made once and never shown:
@@ -58,7 +91,9 @@ Alerts reach phones and browsers as notifications once the server has a signing 
 
 How it works: the tick offers every alert not yet marked (`alerts.pushed_at`) to the devices in `push_subs`, within a
 minute of the alert being written, whichever job wrote it. A device set to "My watchlist only" gets alerts on its
-account's watchlist names; more than four alerts at once arrive as one notification. Addresses the push service
+account's watchlist names; more than four alerts at once arrive as one notification. A move carries a green (up) or
+red (down) round mark in front of its line: a phone draws notification text in its own colour, so that is how the
+colour gets there; headline alerts have no mark. Addresses the push service
 reports gone are deleted. The encryption and signing are in `functions/_shared/webpush.ts`, checked against the
 example of RFC 8291 in `sim/logic.test.ts`. On an iPhone, notifications exist only in the app added to the Home Screen
 (iOS 16.4 or later).
@@ -76,7 +111,8 @@ as the fallback. Until a token is stored, `monitor_dispatch` does nothing.
    access tokens › Fine-grained tokens › Generate new token: *Repository access* = Only select repositories ›
    `orrery-market-monitor`; *Repository permissions* › **Actions: Read and write**. Note its expiry date: when it
    expires the note falls back to GitHub's schedule and arrives late again.
-3. Store it, in the SQL editor of the Supabase project (the token goes nowhere else, and not into git):
+3. Store it: either as the repository secret `NOTE_DISPATCH_TOKEN`, which the next `deploy-server` run hands to the
+   database, or in the SQL editor of the Supabase project (it goes nowhere else, and not into git):
    ```sql
    select monitor_set_github_token('<the token>');
    ```
