@@ -5,7 +5,8 @@
 // So the model must name the pages it relied on, and a page it names that the search did not return is thrown
 // away; an answer left with no page is "not found", whatever it says.
 export interface MoveCtx { symbol: string; name: string; exchange: string | null; sector: string | null; currency: string | null; kind: "d1" | "w1" | "m1"; from: string; to: string; pct: number; fromPx: number; toPx: number; text: string; bench: string | null; benchPct: number | null }
-export interface CauseAnswer { found: boolean; cause: string | null; sources: Array<{ title: string; url: string }> }
+/** `why` is set on an answer that is not found: which of the three ways it came to that (for the job's log). */
+export interface CauseAnswer { found: boolean; cause: string | null; sources: Array<{ title: string; url: string }>; why?: "none reported" | "no sentence" | "no returned page cited" }
 
 export const CAUSE_SYSTEM = `You find the reported reason for one specific move in one stock, for a portfolio manager who will act on it.
 
@@ -47,10 +48,10 @@ export function readCause(reply: string, pages: Array<{ title: string; url: stri
     if (start === 0) break;
   }
   if (!obj) throw new Error("the reply has no answer object");
-  const none: CauseAnswer = { found: false, cause: null, sources: [] };
-  if (obj.found !== true) return none;
+  const none = (why: NonNullable<CauseAnswer["why"]>): CauseAnswer => ({ found: false, cause: null, sources: [], why });
+  if (obj.found !== true) return none("none reported");
   const cause = typeof obj.cause === "string" ? obj.cause.replace(/\s+/g, " ").replace(/[*_`#]/g, "").trim() : "";
-  if (cause.length < 12) return none;
+  if (cause.length < 12) return none("no sentence");
   const known = new Map<string, { title: string; url: string }>();
   for (const p of pages) { const k = hostKey(p.url); if (k && !known.has(k)) known.set(k, p); }
   const sources: CauseAnswer["sources"] = [];
@@ -59,6 +60,6 @@ export function readCause(reply: string, pages: Array<{ title: string; url: stri
     if (hit && !sources.some((s) => s.url === hit.url)) sources.push({ title: hit.title.replace(/\s+/g, " ").trim().slice(0, 160), url: hit.url });
     if (sources.length === 3) break;
   }
-  if (!sources.length) return none;   // a reason with no report behind it is not shown
+  if (!sources.length) return none("no returned page cited");   // a reason with no report behind it is not shown
   return { found: true, cause: cause.length > 260 ? cause.slice(0, 257).replace(/\s+\S*$/, "") + "…" : cause, sources };
 }

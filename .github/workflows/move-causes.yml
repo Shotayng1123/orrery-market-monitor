@@ -21,6 +21,10 @@ on:
         description: "Dry run (ask and print, store nothing)"
         required: false
         default: "false"
+      again:
+        description: "Also look again at moves stored as 'no report found' (true/false)"
+        required: false
+        default: "false"
 
 permissions:
   contents: read
@@ -54,7 +58,9 @@ jobs:
           MOVE_CAUSE_EFFORT: ${{ vars.MOVE_CAUSE_EFFORT }}
           MAX: ${{ github.event.inputs.max || '60' }}
           DRY: ${{ github.event.inputs.dry || 'false' }}
+          AGAIN: ${{ github.event.inputs.again || 'false' }}
         run: |
           ARGS="--max $MAX"
           if [ "$DRY" = "true" ]; then ARGS="$ARGS --dry"; fi
+          if [ "$AGAIN" = "true" ]; then ARGS="$ARGS --again"; fi
           npx tsx move_causes.ts $ARGS

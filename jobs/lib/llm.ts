@@ -18,13 +18,16 @@ const PRICE: Record<string, [number, number]> = { "claude-fable-5-2": [8, 40], "
 
 export const newClient = (): Anthropic => new Anthropic({ timeout: 50 * 60 * 1000, maxRetries: 2 });   // a turn at xhigh can run for many minutes
 
-export interface Turn { text: string; model: string; inputTokens: number; outputTokens: number; searches: number; costUsd: number; pages: Array<{ title: string; url: string }> }
+export interface Turn { text: string; model: string; inputTokens: number; outputTokens: number; searches: number; costUsd: number; pages: Array<{ title: string; url: string }>;
+  /** One entry per search that came back as an error instead of results: the error's code (too_many_requests,
+   *  unavailable, max_uses_exceeded, ...). */
+  searchErrors: string[] }
 
 type Msg = { role: "user" | "assistant"; content: unknown };
 
 async function runOnce(client: Anthropic, model: string, effort: string, system: string, user: string, maxSearches: number): Promise<Turn> {
   const messages: Msg[] = [{ role: "user", content: user }];
-  const out: Turn = { text: "", model, inputTokens: 0, outputTokens: 0, searches: 0, costUsd: 0, pages: [] };
+  const out: Turn = { text: "", model, inputTokens: 0, outputTokens: 0, searches: 0, costUsd: 0, pages: [], searchErrors: [] };
   for (let i = 0; i <= MAX_RESUMES; i++) {
     const stream = client.beta.messages.stream({
       model,
@@ -46,7 +49,9 @@ async function runOnce(client: Anthropic, model: string, effort: string, system:
     out.searches += (msg.usage as { server_tool_use?: { web_search_requests?: number } }).server_tool_use?.web_search_requests ?? 0;
     for (const b of msg.content as Array<{ type: string; text?: string; content?: unknown }>) {
       if (b.type === "text" && b.text) out.text += b.text;
-      else if (b.type === "web_search_tool_result" && Array.isArray(b.content)) for (const r of b.content as Array<{ type: string; title?: string; url?: string }>) if (r.type === "web_search_result" && r.url) out.pages.push({ title: r.title ?? r.url, url: r.url });
+      else if (b.type === "web_search_tool_result" && Array.isArray(b.content)) { for (const r of b.content as Array<{ type: string; title?: string; url?: string }>) if (r.type === "web_search_result" && r.url) out.pages.push({ title: r.title ?? r.url, url: r.url }); }
+      // a search that failed carries an error object where its results would be (the SDK's BetaWebSearchToolResultError)
+      else if (b.type === "web_search_tool_result") out.searchErrors.push(String((b.content as { error_code?: unknown } | null)?.error_code ?? "unknown"));
     }
     if (msg.stop_reason !== "pause_turn") {
       if (msg.stop_reason === "max_tokens") console.warn("the turn stopped at max_tokens: the text may be cut short");
