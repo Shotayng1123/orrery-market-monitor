@@ -1,17 +1,24 @@
 -- Accounts by email (Shota, 18 Nov 2026). A new account no longer waits for the manager: the person gives an
--- email address, the Monitor emails it a 6-digit code, and entering the code together with a password of their
--- own opens the account. Receiving the code is what proves the address is theirs.
+-- email address, the Monitor sends it an email with a "Verify my email" button (and, for where a button cannot
+-- be used, the same thing as a 6-digit code), and after that they choose a password of their own and are in.
+-- Receiving the email is what proves the address is theirs.
 --
--- email_codes holds the one code that currently counts for an address (as an HMAC, never the code itself) and
--- the counters that fence it in. The rules live in the two functions below, each one transaction, so that a
--- burst of requests at the same instant cannot get past them:
---   email_code_issue   may a code be sent to this address now? If so the row is written and 'ok' comes back.
---                      Refusals: 'gap' (one was sent less than p_gap_sec ago), 'email_hour' (p_per_email_hour codes
---                      to this address within the hour), 'ip_hour' (this network address asked for p_per_ip_hour
---                      different addresses within the hour), 'day' (p_per_day addresses within a day, everyone
---                      together). The limits protect strangers from being mailed and the sender's daily allowance.
---   email_code_check   one try at the code. 'ok' uses the code up; 'wrong' counts the try; after p_max_tries
---                      wrong tries the code is 'spent'; past its time it is 'expired'; 'none' when no code waits.
+-- email_codes holds the one code that currently counts for an address (as an HMAC, never the code itself; the
+-- button carries the same code) and the counters that fence it in. The rules live in the functions below, each
+-- one transaction, so that a burst of requests at the same instant cannot get past them:
+--   email_code_issue   may an email be sent to this address now? If so the row is written and 'ok' comes back.
+--                      Refusals: 'gap' (one was sent less than p_gap_sec ago), 'email_hour' (p_per_email_hour
+--                      emails to this address within the hour), 'ip_hour' (this network address asked for
+--                      p_per_ip_hour different addresses within the hour), 'day' (p_per_day addresses within a day,
+--                      everyone together). The limits protect strangers from being mailed and the sender's daily
+--                      allowance.
+--   email_code_check   one try at the code. 'ok' when it is right: with p_use false the code stays (pressing the
+--                      button, or a mail scanner opening it first, changes nothing), with p_use true it is used
+--                      up (the account is being created). 'wrong' counts the try; after p_max_tries wrong tries
+--                      the code is 'spent'; past its time it is 'expired'; 'none' when no code waits.
+-- An address that already has an account is treated the same from the outside (a row, the same answers), but
+-- the hash stored for it matches no code and the email it gets says "you already have an account": the sign-up
+-- form must not tell a stranger whose address is registered.
 -- accounts.verified_at records when an account's address was confirmed this way (null for accounts the manager
 -- approved before this change). The status 'pending' stays for those older sign-ups and for a server that has
 -- no email sender set up, where the manager's approval remains the rule.
@@ -72,7 +79,7 @@ begin
   return query select 'ok'::text, 0;
 end $$;
 
-create or replace function email_code_check(p_email text, p_hash text, p_max_tries int)
+create or replace function email_code_check(p_email text, p_hash text, p_max_tries int, p_use boolean)
 returns table (status text, tries_left int)
 language plpgsql security definer set search_path = public as $$
 declare r email_codes%rowtype;
@@ -82,7 +89,7 @@ begin
   if r.expires_at <= clock_timestamp() then return query select 'expired'::text, 0; return; end if;
   if r.tries >= p_max_tries then return query select 'spent'::text, 0; return; end if;
   if r.code_hash = p_hash then
-    delete from email_codes where email = p_email;
+    if p_use then delete from email_codes where email = p_email; end if;
     return query select 'ok'::text, p_max_tries - r.tries; return;
   end if;
   update email_codes set tries = r.tries + 1 where email = p_email;
@@ -96,5 +103,5 @@ language sql security definer set search_path = public as $$
 $$;
 
 revoke all on function email_code_issue(text, text, text, int, int, int, int, int) from public, anon, authenticated;
-revoke all on function email_code_check(text, text, int) from public, anon, authenticated;
+revoke all on function email_code_check(text, text, int, boolean) from public, anon, authenticated;
 revoke all on function email_code_void(text) from public, anon, authenticated;

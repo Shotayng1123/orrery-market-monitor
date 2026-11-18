@@ -60,7 +60,7 @@ function ConfirmOff({ row, busy, onYes, onNo }: { row: AccountRow; busy: boolean
 const STATUS: Record<AccountRow["status"], string> = { active: "active", pending: "waiting", disabled: "deactivated" };
 
 /** Manager only: who has an account, with deactivate (asked twice) / reactivate / reset password, and approve for
- *  an account that still waits (only where the server has no email sender, or from before accounts by email). */
+ *  an account that still waits (only where the server has no email sender, or from before verification emails). */
 function Accounts({ me }: { me: Me }) {
   const [data, setData] = useState<AdminUsers | null>(null);
   const [err, setErr] = useState("");
@@ -95,7 +95,7 @@ function Accounts({ me }: { me: Me }) {
       <div className="minih">Accounts{rows ? ` · ${rows.length}` : ""}{pending ? ` · ${pending} waiting for approval` : ""}</div>
       {mail && (
         <div className="mailline" id="mailline">
-          {mail.ready ? <>New accounts open by themselves: a code is emailed from <b>{mail.from}</b>{mail.via ? ` (${mail.via})` : ""}.<span className="chip-sm" id="mailtest" onClick={() => { if (busy !== "mailtest") void sendTest(); }}>{busy === "mailtest" ? "SENDING…" : "SEND A TEST EMAIL"}</span></>
+          {mail.ready ? <>New accounts open by themselves: the verification email comes from <b>{mail.from}</b>{mail.via ? ` (${mail.via})` : ""}.<span className="chip-sm" id="mailtest" onClick={() => { if (busy !== "mailtest") void sendTest(); }}>{busy === "mailtest" ? "SENDING…" : "SEND A TEST EMAIL"}</span></>
             : mail.problem ? <><span className="warn">The email sender's set-up has a mistake: {mail.problem}.</span> Until it is put right, a new account waits here for your approval.</>
             : <>No email sender is set up on the server, so a new account waits here for your approval.</>}
           {test && <div className={test.ok ? "up" : "dn"} id="mailtest-r">{test.text}</div>}
@@ -114,7 +114,7 @@ function Accounts({ me }: { me: Me }) {
         <table className="secT"><thead><tr><th className="l">Email</th><th className="l">Status</th><th>Last sign-in</th><th>Watch</th><th /></tr></thead>
           <tbody>{(rows ?? []).map((r) => (
             <tr key={r.email}>
-              <td className="l" title={`created ${fmtStampSafe(r.createdAt)} · ${r.logins} sign-ins${r.verifiedAt ? ` · address confirmed by code ${fmtStampSafe(r.verifiedAt)}` : ""}`}>{r.email}{r.role === "manager" && <span className="badge">MANAGER</span>}</td>
+              <td className="l" title={`created ${fmtStampSafe(r.createdAt)} · ${r.logins} sign-ins${r.verifiedAt ? ` · address verified by email ${fmtStampSafe(r.verifiedAt)}` : ""}`}>{r.email}{r.role === "manager" && <span className="badge">MANAGER</span>}</td>
               <td className={`l ${r.status === "pending" ? "warn" : r.status === "disabled" ? "dn" : ""}`}>{STATUS[r.status] ?? r.status}{r.mustChange ? " · temp pw" : ""}</td>
               <td className="num mut">{r.lastSeen ? fmtStampSafe(r.lastSeen) : "–"}</td>
               <td className="num">{r.watch}</td>

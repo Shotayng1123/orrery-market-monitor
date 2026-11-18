@@ -1,6 +1,10 @@
 // HTTP helpers shared by the Edge Functions: CORS for the Pages origin, JSON responses, cron auth, fetch.
 export const ALLOWED_ORIGINS = ["https://shotayng1123.github.io", "http://127.0.0.1:5173", "http://localhost:5173"];
 
+/** Where the Monitor's page lives: what a button in an email opens. Fixed here (or in the MONITOR_SITE_URL secret),
+ *  never taken from a request, so nobody can make the Monitor email a link to somewhere else. */
+export const siteUrl = (): string => { const v = (Deno.env.get("MONITOR_SITE_URL") ?? "").trim(); return /^https:\/\/[^\s#?]+\/$/.test(v) ? v : `${ALLOWED_ORIGINS[0]}/orrery-market-monitor/`; };
+
 export function corsHeaders(req: Request): Record<string, string> {
   const o = req.headers.get("origin") ?? "";
   return {

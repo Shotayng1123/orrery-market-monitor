@@ -1,14 +1,19 @@
 // Creating an account by email (Shota, 18 Nov 2026): the rules, with no database and no network in this file
 // so they can be checked on their own (sim/logic.test.ts).
-//   1  the person gives an email address; the Monitor emails it a 6-digit code
-//   2  they enter the code and choose a password; the account is active and they are signed in
-// The manager's approval is no longer part of it: receiving the code is what proves the address is theirs.
+//   1  the person gives an email address; the Monitor sends it an email with a "Verify my email" button
+//   2  the button opens the Monitor with the address confirmed; they choose a password and are signed in
+// The button carries a 6-digit code, which the email also shows: on a phone the button opens the browser, so
+// someone using the Home Screen app types the code there instead. The manager's approval is no longer part of
+// it: receiving the email is what proves the address is theirs.
 //
 // A 6-digit code is short, so it is fenced in: valid for 15 minutes, void after 5 wrong tries, and only the
 // newest code for an address counts. Sending is limited too (per address, per network address, and in total per
 // day), so the form cannot be used to mail strangers or to use up the sender's daily allowance. The limits are
 // the numbers below; they are applied inside the database (email_code_issue and email_code_check in
 // supabase/migrations/20261118000003_signup_by_email.sql), one request at a time, so a burst cannot slip past.
+//
+// Nobody but the manager may learn whose address has an account. So asking for an email is answered the same
+// way for every address; one that already has an account is sent a note saying so (noticeMail) instead of a button.
 export const CODE_TTL_MIN = 15;
 export const CODE_MAX_TRIES = 5;
 export const RESEND_GAP_SEC = 60;      // between two codes to one address
@@ -43,11 +48,11 @@ export type CheckStatus = "ok" | "wrong" | "none" | "expired" | "spent";
 export function sendRefusal(status: string, waitSec: number): Refusal | null {
   switch (status) {
     case "ok": return null;
-    case "gap": return { status: 429, error: `A code was sent a moment ago. A new one can be sent in ${Math.max(1, waitSec)} s.`, waitSec: Math.max(1, waitSec) };
-    case "email_hour": return { status: 429, error: `Too many codes were sent to this address. Try again in ${Math.max(1, Math.ceil(waitSec / 60))} min.`, waitSec: Math.max(1, waitSec) };
+    case "gap": return { status: 429, error: `An email was sent a moment ago. A new one can be sent in ${Math.max(1, waitSec)} s.`, waitSec: Math.max(1, waitSec) };
+    case "email_hour": return { status: 429, error: `Too many emails were sent to this address. Try again in ${Math.max(1, Math.ceil(waitSec / 60))} min.`, waitSec: Math.max(1, waitSec) };
     case "ip_hour": return { status: 429, error: "Too many accounts were asked for from this network in the last hour. Try again later." };
-    case "day": return { status: 429, error: "The Monitor has sent as many codes as it sends in a day. Try again tomorrow." };
-    default: return { status: 500, error: "The code could not be prepared" };
+    case "day": return { status: 429, error: "The Monitor has sent as many emails as it sends in a day. Try again tomorrow." };
+    default: return { status: 500, error: "The email could not be prepared" };
   }
 }
 
@@ -55,28 +60,59 @@ export function sendRefusal(status: string, waitSec: number): Refusal | null {
 export function checkRefusal(status: string, triesLeft: number): string | null {
   switch (status) {
     case "ok": return null;
-    case "wrong": return triesLeft > 0 ? `That code is not right. ${triesLeft} ${triesLeft === 1 ? "try" : "tries"} left.` : "That code is not right, and it can no longer be used. Send a new code.";
-    case "none": return "No code is waiting for this address. Send a new code.";
-    case "expired": return "This code has expired. Send a new code.";
-    case "spent": return "Too many wrong tries. Send a new code.";
+    case "wrong": return triesLeft > 0 ? `That code is not right. ${triesLeft} ${triesLeft === 1 ? "try" : "tries"} left.` : "That code is not right, and it can no longer be used. Send a new email.";
+    case "none": return "Nothing is waiting to be verified for this address. Send a new email.";
+    case "expired": return "This email is older than its 15 minutes. Send a new email.";
+    case "spent": return "Too many wrong tries. Send a new email.";
     default: return "The code could not be checked";
   }
 }
 
-/** The email that carries the code. Plain words only: no links to press, so it cannot be mistaken for phishing. */
-export function codeMail(code: string): { subject: string; text: string; html: string } {
+/** What the button in the email opens: the Monitor's page with the code and the address after the #, a part of
+ *  an address that browsers keep to themselves (it is not sent to the server the page comes from). The web reads
+ *  it in web/src/lib/verify.ts. */
+export function verifyLink(site: string, email: string, code: string): string {
+  return `${site}#verify=${code}.${btoa(email).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
+}
+
+const esc = (t: string): string => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const FRAME = (inner: string): string => `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1a1a1a;max-width:480px">${inner}</div>`;
+
+/** The email with the button. One link only, to the Monitor's own page; the code is the same key for where a
+ *  button is no use (the Home Screen app). */
+export function codeMail(code: string, link: string): { subject: string; text: string; html: string } {
   const spaced = `${code.slice(0, 3)} ${code.slice(3)}`;
   const text = [
-    `Your Orrery Monitor code is ${spaced}`,
+    "Verify your email address to finish creating your Orrery Monitor account. Open this link and choose your password:",
     "",
-    `Enter it on the page where you are creating your account. It is valid for ${CODE_TTL_MIN} minutes.`,
+    link,
     "",
-    "If you did not ask for this, ignore this email: no account is created without the code.",
+    `Using the Orrery Monitor from your phone's Home Screen? Enter this code there instead: ${spaced}`,
+    "",
+    `The link and the code are valid for ${CODE_TTL_MIN} minutes.`,
+    "If you did not ask for an account, ignore this email: none is created unless the link or the code is used.",
   ].join("\n");
-  const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#1a1a1a">`
-    + `<p style="margin:0 0 10px">Your Orrery Monitor code is</p>`
-    + `<p style="margin:0 0 14px;font-size:30px;font-weight:700;letter-spacing:4px;font-family:Menlo,Consolas,monospace">${spaced}</p>`
-    + `<p style="margin:0 0 10px">Enter it on the page where you are creating your account. It is valid for ${CODE_TTL_MIN} minutes.</p>`
-    + `<p style="margin:0;color:#666;font-size:13px">If you did not ask for this, ignore this email: no account is created without the code.</p></div>`;
-  return { subject: `${spaced} is your Orrery Monitor code`, text, html };
+  const html = FRAME(
+    `<p style="margin:0 0 16px">Verify your email address to finish creating your Orrery Monitor account.</p>`
+    + `<p style="margin:0 0 18px"><a href="${esc(link)}" style="display:inline-block;background:#ff6f61;color:#141005;font-weight:700;font-size:16px;text-decoration:none;padding:13px 26px;border-radius:8px">Verify my email</a></p>`
+    + `<p style="margin:0 0 6px">Using the Orrery Monitor from your phone's Home Screen? Enter this code there instead:</p>`
+    + `<p style="margin:0 0 16px;font-size:26px;font-weight:700;letter-spacing:4px;font-family:Menlo,Consolas,monospace">${spaced}</p>`
+    + `<p style="margin:0;color:#666;font-size:13px">The button and the code are valid for ${CODE_TTL_MIN} minutes. If you did not ask for an account, ignore this email: none is created unless the button or the code is used.</p>`);
+  return { subject: "Verify your email for Orrery Monitor", text, html };
+}
+
+/** The email to an address that asked for a new account but cannot have one: it has one already ("have"), or its
+ *  account was switched off by the manager ("off"). The page shows the asker nothing of this; only the mailbox's
+ *  owner reads it. */
+export function noticeMail(kind: "have" | "off", site: string): { subject: string; text: string; html: string } {
+  const first = "Someone, probably you, asked to create an Orrery Monitor account with this email address.";
+  const then = kind === "have"
+    ? "The address already has an account, so nothing was created. Open the Monitor and sign in with your password; if you have forgotten it, ask the Monitor's manager to reset it."
+    : "The account for this address has been switched off, so nothing was created. Please contact the Monitor's manager.";
+  const last = "If it was not you, there is nothing to do: nobody was let in.";
+  const text = [first, "", then, ...(kind === "have" ? ["", site] : []), "", last].join("\n");
+  const html = FRAME(`<p style="margin:0 0 12px">${first}</p><p style="margin:0 0 12px">${then}</p>`
+    + (kind === "have" ? `<p style="margin:0 0 12px"><a href="${esc(site)}">${esc(site)}</a></p>` : "")
+    + `<p style="margin:0;color:#666;font-size:13px">${last}</p>`);
+  return { subject: "Your Orrery Monitor account", text, html };
 }

@@ -6,7 +6,7 @@ name: deploy-server
 #   SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD   needed; without them this workflow says so and does nothing
 #   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY       already there for the jobs
 #   NOTE_DISPATCH_TOKEN                           optional: the GitHub token that lets the database start the Morning Note
-#   SMTP_USER + SMTP_PASS, or RESEND_API_KEY + MAIL_FROM   optional: the email sender for new accounts' codes
+#   SMTP_USER + SMTP_PASS, or RESEND_API_KEY + MAIL_FROM   optional: the sender of new accounts' verification emails
 #                                                 (also SMTP_HOST, SMTP_PORT; supabase/README.md, "Accounts by email")
 # A push to main that touches the server deploys it. Run by hand it only shows what a deploy would do ("check"),
 # unless "deploy" is chosen.
@@ -136,7 +136,7 @@ jobs:
             echo "a notification key was made and stored on the server"
           fi
 
-      # optional: what the Monitor emails a new account's code with. Whichever of these repository secrets are set
+      # optional: what the Monitor sends a new account's verification email with. Whichever of these repository secrets are set
       # are stored on the server under the same names; nothing already there is removed, and no value is printed.
       - name: Email sender
         if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy'

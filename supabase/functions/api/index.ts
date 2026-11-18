@@ -2,7 +2,7 @@
 // needs it as a bearer. The research desk publishes with POST report_put and the x-report-secret header.
 import { db, selectAll } from "../_shared/db.ts";
 import { bearer, verifyToken } from "../_shared/auth.ts";
-import { accountFor, adminSet, adminUsers, authInfo, changePassword, login, mailTest, signup, signupFinish, signupStart } from "../_shared/accounts.ts";
+import { accountFor, adminSet, adminUsers, authInfo, changePassword, login, mailTest, signup, signupFinish, signupStart, signupVerify } from "../_shared/accounts.ts";
 import { corsHeaders, json, timingSafeEqual } from "../_shared/http.ts";
 import { computeTable } from "../_shared/table.ts";
 import { CURVE_LABELS } from "../_shared/curves.ts";
@@ -26,6 +26,7 @@ Deno.serve(async (req) => {
     if (action === "signup") return await signup(req);
     if (action === "auth_info") return authInfo(req);
     if (action === "signup_start") return await signupStart(req);
+    if (action === "signup_verify") return await signupVerify(req);
     if (action === "signup_finish") return await signupFinish(req);
     const user = await verifyToken(bearer(req));
     const account = user ? await accountFor(user) : null;

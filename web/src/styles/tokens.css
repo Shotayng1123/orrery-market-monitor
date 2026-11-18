@@ -894,6 +894,9 @@ button.go.ghost:hover{color:var(--txt);border-color:var(--amber)}
 .gatewrap .modal{margin:auto}   /* centred while it fits; from the top, and scrollable, when the keyboard leaves less room than the form needs */
 .gsent{font-size:12px;line-height:1.5;color:var(--txt2);margin:0 0 12px;overflow-wrap:anywhere}
 .gsent b{color:var(--txt)}
+.gtick{color:var(--up);font-weight:700;margin-right:6px}
+.gor{font-size:11.5px;line-height:1.5;color:var(--mut);margin:14px 0 8px;padding-top:12px;border-top:1px solid var(--bord2)}
+.gsent+.glinks{margin:0 0 2px}
 .gkeep{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0}
 .modal input.gcode{font-family:var(--mono);font-size:18px;letter-spacing:.3em;font-variant-numeric:tabular-nums}
 .modal input.gcode::placeholder{letter-spacing:.04em;font-size:12px}
@@ -1199,6 +1202,7 @@ body.pv2 .modal button.go{display:block;width:100%;min-height:46px;font-size:15p
 body.pv2 .gtabs{border-radius:10px;margin-bottom:14px}
 body.pv2 .gtabs span{padding:13px 4px;font-size:12.5px}
 body.pv2 .gsent{font-size:13.5px;margin-bottom:14px}
+body.pv2 .gor{font-size:13px;margin:16px 0 10px;padding-top:14px}
 body.pv2 .modal input.gcode{font-size:22px;letter-spacing:.32em}
 body.pv2 .modal input.gcode::placeholder{font-size:15px}
 body.pv2 .glinks{gap:10px;margin-top:12px}

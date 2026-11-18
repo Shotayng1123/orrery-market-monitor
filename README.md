@@ -47,14 +47,14 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, about 620 checks in 14 suites): every tab on a desktop and in the phone layout, the
-  classic phone layout, the sign-in screen, creating an account by emailed code, the manager's accounts list, the
+- **Browser checks** (`web/e2e`, about 650 checks in 14 suites): every tab on a desktop and in the phone layout, the
+  classic phone layout, the sign-in screen, creating an account by verification email, the manager's accounts list, the
   home-screen hint, the new-version bar, opening without a connection, and notifications. `cd web && npm run e2e` starts the test servers it needs and runs them all (about three
   minutes); `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
   Needs Playwright's browser once: `npx playwright install chromium`.
 - **Logic checks** (`sim/logic.test.ts`): exchange sessions, rolling bands, alert measures, the push encryption,
-  the code and the email for a new account. `cd jobs && npx tsx ../sim/logic.test.ts`.
-- **Database checks** (`sim/sql`): the rules that live in database functions (today: the limits on emailed codes),
+  the verification email for a new account. `cd jobs && npx tsx ../sim/logic.test.ts`.
+- **Database checks** (`sim/sql`): the rules that live in database functions (today: the limits on verification emails),
   run with the migration file itself on PGlite, a Postgres inside Node. `cd sim/sql && npm ci && npm test`.
 
 The `deploy-web` workflow runs the browser and logic checks before it publishes: a failing check stops the publish.

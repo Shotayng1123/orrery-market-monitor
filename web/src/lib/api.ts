@@ -72,7 +72,7 @@ export async function login(email: string, password: string, remember: boolean):
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Network error" }; }
 }
 
-/** How a new account is opened on this server: with a code sent by email, or (no email sender set up, or a
+/** How a new account is opened on this server: with a verification email, or (no email sender set up, or a
  *  server from before 18 Nov 2026, which answers this question with "unauthorised") by the manager's approval. */
 export interface AuthInfo { signup: "email" | "approval"; codeMin: number; resendSec: number }
 const BY_APPROVAL: AuthInfo = { signup: "approval", codeMin: 15, resendSec: 60 };
@@ -96,19 +96,30 @@ export async function signup(email: string, password: string): Promise<Result> {
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Network error" }; }
 }
 
-/** A new account, step 1: ask for a 6-digit code to be emailed to the address. `sentAgo` is set when the server
- *  did not send because it had sent one moments ago: that code is still the one to enter. */
+/** A new account, step 1: ask for the verification email. `sentAgo` is set when the server did not send because
+ *  it had sent one moments ago: that email is still the one to use. */
 export async function signupStart(email: string): Promise<{ ok: true; sentAgo?: number } | { ok: false; error: string }> {
   if (!apiConfigured) return { ok: false, error: "The Monitor API is not configured yet (VITE_API_URL)." };
   try {
     const { status, j } = await post("signup_start", { email });
     if (status === 200) return { ok: true };
     if (status === 429 && j.why === "gap" && typeof j.waitSec === "number" && typeof j.resendSec === "number") return { ok: true, sentAgo: Math.max(0, j.resendSec - j.waitSec) };
-    return { ok: false, error: failed(status, j, "Sending the code") };
+    return { ok: false, error: failed(status, j, "Sending the email") };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Network error" }; }
 }
 
-/** A new account, step 2: the code from the email and the person's password. On success they are signed in. */
+/** A new account, step 2: the button in the email was pressed (it carries the code) or the code was typed. Says
+ *  whether the address is verified; the code stays good for step 3. */
+export async function signupVerify(email: string, code: string): Promise<Result> {
+  if (!apiConfigured) return { ok: false, error: "The Monitor API is not configured yet (VITE_API_URL)." };
+  try {
+    const { status, j } = await post("signup_verify", { email, code });
+    return status === 200 ? { ok: true } : { ok: false, error: failed(status, j, "Verifying the address") };
+  } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Network error" }; }
+}
+
+/** A new account, step 3: the verified address (its code again) and the person's password. On success they are
+ *  signed in. */
 export async function signupFinish(email: string, code: string, password: string, remember: boolean): Promise<Result> {
   try {
     const { status, j } = await post("signup_finish", { email, code, password, remember });

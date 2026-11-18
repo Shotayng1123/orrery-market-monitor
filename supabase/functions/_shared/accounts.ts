@@ -1,20 +1,24 @@
-// Personal accounts: email + the person's own password (Shota, 16 Nov 2026; by emailed code since 18 Nov 2026).
-//   sign-up   the person gives an email address and is sent a 6-digit code (signupStart); the code and a password
-//             of their own open the account and sign them in (signupFinish). No approval by the manager.
-//             On a server with no email sender set up (mail.ts) the older rule still holds: sign-up creates a
-//             pending account and the manager approves it.
+// Personal accounts: email + the person's own password (Shota, 16 Nov 2026; by emailed button since 18 Nov 2026).
+//   sign-up   the person gives an email address and is sent an email with a "Verify my email" button, which
+//             carries a 6-digit code (signupStart); the button, or the code typed in, confirms the address
+//             (signupVerify); then a password of their own opens the account and signs them in (signupFinish).
+//             No approval by the manager. On a server with no email sender set up (mail.ts) the older rule
+//             still holds: sign-up creates a pending account and the manager approves it.
 //   sign-in   issues the HMAC token (see auth.ts) for an active account
 //   change    the signed-in person replaces their password
 //   manager   lists accounts, switches one off (and on again), and resets a password to a temporary one that
 //             must be replaced at the next sign-in ("forgot my password" still goes through the manager)
+// Who may see whose address: an account sees its own (action me); the manager sees all (admin_users, refused to
+// everyone else in api/index.ts); nobody else sees any. That includes the sign-up form: it answers the same way
+// whether or not an address has an account, and tells the difference only to the mailbox itself, by email.
 // The manager is the email in the MONITOR_MANAGER_EMAIL secret. That account is created at the manager's first
 // sign-in with the old shared password (MONITOR_PASSWORD), which then has to be changed: nobody can claim the
 // manager's email by signing up first.
 import { db } from "./db.ts";
 import { signToken, type TokenPayload } from "./auth.ts";
-import { clientIp, json, timingSafeEqual } from "./http.ts";
+import { clientIp, json, siteUrl, timingSafeEqual } from "./http.ts";
 import { mailReady, mailSetup, sendMail } from "./mail.ts";
-import { CODE_MAX_TRIES, CODE_TTL_MIN, PER_DAY_ALL, PER_EMAIL_HOUR, PER_IP_HOUR, RESEND_GAP_SEC, checkRefusal, cleanCode, codeHash, codeMail, newCode, sendRefusal } from "./signup.ts";
+import { CODE_MAX_TRIES, CODE_TTL_MIN, PER_DAY_ALL, PER_EMAIL_HOUR, PER_IP_HOUR, RESEND_GAP_SEC, checkRefusal, cleanCode, codeHash, codeMail, newCode, noticeMail, sendRefusal, verifyLink } from "./signup.ts";
 
 const ITER = 150_000;
 const enc = new TextEncoder();
@@ -71,16 +75,20 @@ export function authInfo(req: Request): Response {
 
 const TAKEN = "This email already has an account. Sign in instead; a forgotten password is reset by the manager.";
 const OFF = "This account is switched off. Contact the manager.";
-/** Why this address cannot open a new account, or null when it can (no account yet, or one still unverified). */
-async function taken(email: string): Promise<{ status: number; error: string } | null> {
+/** Why this address cannot open a new account ("have": it has one; "off": switched off by the manager), or null
+ *  when it can (no account yet, or an older sign-up that never got in). Never told to the asker: see signupStart. */
+async function taken(email: string): Promise<"have" | "off" | null> {
   const a = await getAccount(email);
-  if (a?.status === "disabled") return { status: 403, error: OFF };
-  if (a?.status === "active" || (!a && email === managerEmail())) return { status: 409, error: TAKEN };
+  if (a?.status === "disabled") return "off";
+  if (a?.status === "active" || (!a && email === managerEmail())) return "have";
   return null;
 }
 const codeSecret = (): string => { const s = Deno.env.get("MONITOR_TOKEN_SECRET") ?? ""; if (s.length < 16) throw new Error("MONITOR_TOKEN_SECRET is not set"); return s; };
+const NO_CODE = "-";   // stored for an address that gets no code: no HMAC is ever equal to it
 
-/** Step 1 of a new account: email the address a 6-digit code. */
+/** Step 1 of a new account: email the address its "Verify my email" button. The answer is the same for every
+ *  address, with or without an account, so the form says nothing about who is registered; an address that
+ *  cannot open an account is told so in the email it gets instead. */
 export async function signupStart(req: Request): Promise<Response> {
   if (req.method !== "POST") return json(req, { error: "POST required" }, 405);
   if (!mailReady()) return json(req, { error: "Accounts by email are not set up on the server yet" }, 503);
@@ -89,15 +97,13 @@ export async function signupStart(req: Request): Promise<Response> {
   const b = (await req.json().catch(() => ({}))) as { email?: string };
   const email = cleanEmail(b.email);
   if (!email) return json(req, { error: "Enter a valid email address" }, 400);
-  const no = await taken(email);
-  if (no) { await db.from("login_attempts").insert({ ip, ok: false }); return json(req, { error: no.error }, no.status); }   // asking which addresses have accounts is rationed like wrong passwords
-  const code = newCode();
-  const { data, error } = await db.rpc("email_code_issue", { p_email: email, p_hash: await codeHash(codeSecret(), email, code), p_ip: ip, p_ttl_min: CODE_TTL_MIN, p_gap_sec: RESEND_GAP_SEC, p_per_email_hour: PER_EMAIL_HOUR, p_per_ip_hour: PER_IP_HOUR, p_per_day: PER_DAY_ALL });
+  const no = await taken(email), code = newCode();
+  const { data, error } = await db.rpc("email_code_issue", { p_email: email, p_hash: no ? NO_CODE : await codeHash(codeSecret(), email, code), p_ip: ip, p_ttl_min: CODE_TTL_MIN, p_gap_sec: RESEND_GAP_SEC, p_per_email_hour: PER_EMAIL_HOUR, p_per_ip_hour: PER_IP_HOUR, p_per_day: PER_DAY_ALL });
   if (error) return json(req, { error: error.message }, 500);
   const r = ((data ?? []) as Array<{ status: string; wait_sec: number }>)[0];
   const refused = sendRefusal(r?.status ?? "", r?.wait_sec ?? 0);
   if (refused) return json(req, { error: refused.error, why: r?.status ?? "", resendSec: RESEND_GAP_SEC, ...(refused.waitSec ? { waitSec: refused.waitSec } : {}) }, refused.status);
-  try { await sendMail({ to: email, ...codeMail(code) }); } catch (e) {
+  try { await sendMail({ to: email, ...(no ? noticeMail(no, siteUrl()) : codeMail(code, verifyLink(siteUrl(), email, code))) }); } catch (e) {
     console.error("sign-up email not sent:", e instanceof Error ? e.message : String(e));
     await db.rpc("email_code_void", { p_email: email });
     return json(req, { error: "The email could not be sent. Try again in a minute; if it keeps failing, tell the manager." }, 502);
@@ -105,26 +111,47 @@ export async function signupStart(req: Request): Promise<Response> {
   return json(req, { ok: true, email, codeMin: CODE_TTL_MIN, resendSec: RESEND_GAP_SEC });
 }
 
-/** Step 2: the code from the email and a password. The account is active at once and the reply signs it in. */
+/** One try at the code for an address: 400 with the words to show when it does not pass. `use` uses the code up. */
+async function tryCode(req: Request, ip: string, email: string, code: string, use: boolean): Promise<Response | null> {
+  const { data, error } = await db.rpc("email_code_check", { p_email: email, p_hash: await codeHash(codeSecret(), email, code), p_max_tries: CODE_MAX_TRIES, p_use: use });
+  if (error) return json(req, { error: error.message }, 500);
+  const r = ((data ?? []) as Array<{ status: string; tries_left: number }>)[0];
+  const refused = checkRefusal(r?.status ?? "", r?.tries_left ?? 0);
+  if (!refused) return null;
+  await db.from("login_attempts").insert({ ip, ok: false });
+  return json(req, { error: refused }, 400);
+}
+
+/** Step 2: the button was pressed (it carries the code), or the code was typed. Says whether the address is
+ *  confirmed; the code stays good for step 3, so a mail scanner that opens the button first spoils nothing. */
+export async function signupVerify(req: Request): Promise<Response> {
+  if (req.method !== "POST") return json(req, { error: "POST required" }, 405);
+  const ip = clientIp(req);
+  if (await tooMany(ip)) return json(req, { error: "Too many attempts; wait ten minutes" }, 429);
+  const b = (await req.json().catch(() => ({}))) as { email?: string; code?: string };
+  const email = cleanEmail(b.email), code = cleanCode(b.code);
+  if (!email || !code) return json(req, { error: "Enter the 6-digit code from the email" }, 400);
+  return (await tryCode(req, ip, email, code, false)) ?? json(req, { ok: true, email });
+}
+
+/** Step 3: the confirmed address (email + code again) and a password. The account is active at once and the
+ *  reply signs it in. */
 export async function signupFinish(req: Request): Promise<Response> {
   if (req.method !== "POST") return json(req, { error: "POST required" }, 405);
   const ip = clientIp(req);
   if (await tooMany(ip)) return json(req, { error: "Too many attempts; wait ten minutes" }, 429);
   const b = (await req.json().catch(() => ({}))) as { email?: string; code?: string; password?: string; remember?: boolean };
-  const email = cleanEmail(b.email);
-  if (!email) return json(req, { error: "Enter a valid email address" }, 400);
-  const code = cleanCode(b.code);
-  if (!code) return json(req, { error: "Enter the 6-digit code from the email" }, 400);
+  const email = cleanEmail(b.email), code = cleanCode(b.code);
+  if (!email || !code) return json(req, { error: "Enter the 6-digit code from the email" }, 400);
   const pw = String(b.password ?? "");
   const bad = pwProblem(pw);
   if (bad) return json(req, { error: bad }, 400);
+  const refused = await tryCode(req, ip, email, code, true);
+  if (refused) return refused;
+  // Only the mailbox's owner gets this far, so they may be told. (No code is sent to an address that has an
+  // account; this catches one that got its account between the email and now.)
   const no = await taken(email);
-  if (no) return json(req, { error: no.error }, no.status);
-  const { data, error: e1 } = await db.rpc("email_code_check", { p_email: email, p_hash: await codeHash(codeSecret(), email, code), p_max_tries: CODE_MAX_TRIES });
-  if (e1) return json(req, { error: e1.message }, 500);
-  const r = ((data ?? []) as Array<{ status: string; tries_left: number }>)[0];
-  const refused = checkRefusal(r?.status ?? "", r?.tries_left ?? 0);
-  if (refused) { await db.from("login_attempts").insert({ ip, ok: false }); return json(req, { error: refused }, 400); }
+  if (no) return json(req, { error: no === "off" ? OFF : TAKEN }, no === "off" ? 403 : 409);
   // the address is theirs: open the account (an older sign-up still waiting for approval is taken over by its owner)
   const at = new Date().toISOString(), remember = b.remember === true;
   const { error } = await db.from("accounts").upsert({ email, ...(await newHash(pw)), role: "user", status: "active", must_change: false, tokens_after: at, verified_at: at, last_seen: at, logins: 1 }, { onConflict: "email" });
@@ -139,7 +166,7 @@ export async function signupFinish(req: Request): Promise<Response> {
 /** The older sign-up (email + password, then the manager approves): only where no email sender is set up. */
 export async function signup(req: Request): Promise<Response> {
   if (req.method !== "POST") return json(req, { error: "POST required" }, 405);
-  if (mailReady()) return json(req, { error: "Accounts are now opened with a code sent by email. Reload the page and create the account again." }, 400);
+  if (mailReady()) return json(req, { error: "Accounts are now opened with a verification email. Reload the page and create the account again." }, 400);
   const ip = clientIp(req);
   if (await tooMany(ip)) return json(req, { error: "Too many attempts; wait ten minutes" }, 429);
   const b = (await req.json().catch(() => ({}))) as { email?: string; password?: string };
@@ -149,7 +176,9 @@ export async function signup(req: Request): Promise<Response> {
   const bad = pwProblem(pw);
   if (bad) return json(req, { error: bad }, 400);
   await db.from("login_attempts").insert({ ip, ok: false });   // sign-ups count against the same limit
-  if (email === managerEmail() || (await getAccount(email))) return json(req, { error: "An account with this email already exists. Sign in, or ask the manager to reset the password." }, 409);
+  // an address that already has an account gets the same answer and nothing is changed: the form must not tell a
+  // stranger whose address is registered (their own password still works; a forgotten one is reset by the manager)
+  if (email === managerEmail() || (await getAccount(email))) return json(req, { ok: true, pending: true });
   const { error } = await db.from("accounts").insert({ email, ...(await newHash(pw)), role: "user", status: "pending" });
   if (error) return json(req, { error: error.message }, 500);
   return json(req, { ok: true, pending: true });
@@ -174,7 +203,7 @@ export async function login(req: Request): Promise<Response> {
     a = await getAccount(email);
   }
   if (!a || !timingSafeEqual(await hashPw(pw, unhex(a.pw_salt), a.pw_iter), a.pw_hash)) return await fail();
-  if (a.status === "pending") return json(req, { error: mailReady() ? "This email address has not been confirmed yet. Choose CREATE ACCOUNT to get a code by email." : "Your account is waiting for the manager's approval" }, 403);
+  if (a.status === "pending") return json(req, { error: mailReady() ? "This email address has not been verified yet. Choose CREATE ACCOUNT to get the verification email." : "Your account is waiting for the manager's approval" }, 403);
   if (a.status === "disabled") return json(req, { error: OFF }, 403);
   const remember = b.remember === true;
   const token = await signToken(email, ttlOf(remember));
@@ -222,7 +251,7 @@ export async function mailTest(req: Request, me: Account): Promise<Response> {
   if (req.method !== "POST") return json(req, { error: "POST required" }, 405);
   try {
     if (!mailSetup()) return json(req, { error: "No email sender is set up on the server (supabase/README.md, Accounts by email)" }, 503);
-    const answer = await sendMail({ to: me.email, subject: "Orrery Monitor: test email", text: "This is the test email you asked the Orrery Monitor to send.\n\nIt arrived, so the Monitor can email a code to someone who creates an account." });
+    const answer = await sendMail({ to: me.email, subject: "Orrery Monitor: test email", text: "This is the test email you asked the Orrery Monitor to send.\n\nIt arrived, so the Monitor can send the verification email to someone who creates an account." });
     return json(req, { ok: true, to: me.email, answer: answer.slice(0, 200) });
   } catch (e) { return json(req, { error: e instanceof Error ? e.message : String(e) }, 502); }
 }
@@ -237,7 +266,9 @@ export async function adminSet(req: Request, me: Account): Promise<Response> {
   const email = cleanEmail(b.email);
   const target = email ? await getAccount(email) : null;
   if (!target) return json(req, { error: "No such account" }, 404);
-  const now = new Date().toISOString();
+  // Tokens carry whole seconds, and one made in the very second of this change would still pass "not older than
+  // the change". So the mark is put at the start of the next second: every token that exists now is refused.
+  const now = new Date((Math.floor(Date.now() / 1000) + 1) * 1000).toISOString();
   let patch: Record<string, unknown>, temp: string | undefined;
   switch (b.op) {
     case "approve": case "enable": patch = { status: "active" }; break;

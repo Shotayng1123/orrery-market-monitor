@@ -7,7 +7,8 @@ import { fxClosesFromDaily, fxClosesFromHourly, fxDay, suspectBars } from "../su
 import { AFTER_CLOSE_MIN, quoteMove, scanDue, sessionMove, stockMarket } from "../supabase/functions/_shared/moves.ts";
 import { b64u, encryptPush, pushEndpointOk, unb64u, vapidHeader } from "../supabase/functions/_shared/webpush.ts";
 import { alertNote, moveMark, notesFor, stampSgt, wanted, type AlertLite } from "../supabase/functions/_shared/pushrules.ts";
-import { CODE_MAX_TRIES, CODE_TTL_MIN, checkRefusal, cleanCode, codeHash, codeMail, newCode, sendRefusal } from "../supabase/functions/_shared/signup.ts";
+import { CODE_MAX_TRIES, CODE_TTL_MIN, checkRefusal, cleanCode, codeHash, codeMail, newCode, noticeMail, sendRefusal, verifyLink } from "../supabase/functions/_shared/signup.ts";
+import { readVerify } from "../web/src/lib/verify.ts";
 import { SmtpError, appPassword, buildMessage, dotStuff, parseFrom, smtpTalk, type Wire } from "../supabase/functions/_shared/smtp.ts";
 import { mailReady, mailSetup, resendRequest } from "../supabase/functions/_shared/mail.ts";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
@@ -229,7 +230,7 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck("thirty at once (a sell-off): a single notification with the count and the three newest, each with its mark", sum.length === 1 && sum[0].title === "30 new alerts" && sum[0].body === `${RED} Company 29 down 8% intraday · ${GREEN} Company 28 up 8% intraday · ${RED} Company 27 down 8% intraday and 27 more` && sum[0].hash === "#market", sum);
   }
 
-  console.log("\n[K] an account by email: the code, the words, the email, the sender");
+  console.log("\n[K] an account by email: the code, the button's link, the words, the emails, the sender");
   {
     // the code
     const seq = (...v: number[]) => { let i = 0; return () => v[i++]; };
@@ -243,14 +244,26 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     // the words
     ck("a code that was sent: no refusal", sendRefusal("ok", 0) === null && checkRefusal("ok", 5) === null);
     const gap = sendRefusal("gap", 37)!, hour = sendRefusal("email_hour", 1790)!;
-    ck("too soon: says how many seconds", gap.status === 429 && gap.error === "A code was sent a moment ago. A new one can be sent in 37 s." && gap.waitSec === 37, gap);
-    ck("too many to one address: says how many minutes", hour.status === 429 && hour.error === "Too many codes were sent to this address. Try again in 30 min." && hour.waitSec === 1790, hour);
+    ck("too soon: says how many seconds", gap.status === 429 && gap.error === "An email was sent a moment ago. A new one can be sent in 37 s." && gap.waitSec === 37, gap);
+    ck("too many to one address: says how many minutes", hour.status === 429 && hour.error === "Too many emails were sent to this address. Try again in 30 min." && hour.waitSec === 1790, hour);
     ck("too many from one network, and the daily total, are refusals too; an answer the code does not know is an error, not a pass", sendRefusal("ip_hour", 0)!.status === 429 && sendRefusal("day", 0)!.status === 429 && sendRefusal("", 0)!.status === 500 && checkRefusal("", 0) !== null);
-    ck("a wrong code says how many tries are left", checkRefusal("wrong", 4) === "That code is not right. 4 tries left." && checkRefusal("wrong", 1) === "That code is not right. 1 try left." && checkRefusal("wrong", 0) === "That code is not right, and it can no longer be used. Send a new code.");
-    ck("no code, an expired code and a used-up code each say to send a new one", ["none", "expired", "spent"].every((x) => /Send a new code\.$/.test(checkRefusal(x, 0) ?? "")));
-    // the email
-    const mail = codeMail("048213");
-    ck("the email: the code in the subject and the text, how long it is valid, and no link to press", mail.subject === "048 213 is your Orrery Monitor code" && mail.text.includes("048 213") && mail.text.includes(`${CODE_TTL_MIN} minutes`) && mail.html.includes("048 213") && !/https?:|href/i.test(mail.text + mail.html) && CODE_MAX_TRIES === 5, mail);
+    ck("a wrong code says how many tries are left", checkRefusal("wrong", 4) === "That code is not right. 4 tries left." && checkRefusal("wrong", 1) === "That code is not right. 1 try left." && checkRefusal("wrong", 0) === "That code is not right, and it can no longer be used. Send a new email.");
+    ck("nothing waiting, an email past its time and a used-up code each say to send a new email", ["none", "expired", "spent"].every((x) => /Send a new email\.$/.test(checkRefusal(x, 0) ?? "")));
+    // the button's link: made on the server, read by the page
+    const SITE = "https://shotayng1123.github.io/orrery-market-monitor/";
+    const link = verifyLink(SITE, "new.person+desk@example.co.jp", "048213");
+    ck("the button opens the Monitor's own page, with the code and the address after the # (the part browsers do not send to a server)", link.startsWith(SITE + "#verify=048213.") && !link.includes("?") && !link.slice(SITE.length + 1).includes("#") && !link.includes("@") && /^[A-Za-z0-9_.=#-]+$/.test(link.slice(SITE.length)), link);
+    const back = readVerify(link.slice(SITE.length));
+    ck("the page reads the same address and code back out of it", back?.email === "new.person+desk@example.co.jp" && back.code === "048213", back);
+    ck("addresses of every length read back the same (base64 with and without padding)", ["a@b.co", "ab@b.co", "abc@b.co", "x_y-z.w+tag@sub.example.com"].every((e) => { const r = readVerify(verifyLink(SITE, e, "000001").slice(SITE.length)); return r?.email === e && r.code === "000001"; }));
+    ck("anything else after the # is not a verification link: a tab, a stock page, a short or lettered code, a payload that is not an address", [ "#market", "#asset/7203.T", "#verify=", "#verify=12345.YUBiLmNv", "#verify=12345a.YUBiLmNv", "#verify=123456", "#verify=123456.", "#verify=123456.!!!!", `#verify=123456.${Buffer.from("not an address").toString("base64url")}`, `#verify=123456.${Buffer.from("a@b.co").toString("base64url")}&x=1`, "" ].every((h) => readVerify(h) === null));
+    // the emails
+    const mail = codeMail("048213", link);
+    const hrefs = [...mail.html.matchAll(/href="([^"]*)"/g)].map((m) => m[1]);
+    ck("the email: a Verify my email button that opens that link and nothing else, the code for the Home Screen app, how long both are valid", mail.subject === "Verify your email for Orrery Monitor" && hrefs.length === 1 && hrefs[0] === link && />Verify my email<\/a>/.test(mail.html) && mail.html.includes("048 213") && mail.text.includes(link) && mail.text.includes("048 213") && mail.text.includes(`${CODE_TTL_MIN} minutes`) && mail.html.includes(`${CODE_TTL_MIN} minutes`) && (mail.text.match(/https?:\/\//g) ?? []).length === 1 && CODE_MAX_TRIES === 5, mail);
+    const have = noticeMail("have", SITE), off = noticeMail("off", SITE);
+    ck("an address that already has an account is told so by email, with where to sign in, and gets no button and no code", /already has an account/.test(have.text) && /sign in with your password/.test(have.text) && have.text.includes(SITE) && !/verify=|\d{3} \d{3}|Verify my email/.test(have.text + have.html) && [...have.html.matchAll(/href="([^"]*)"/g)].every((m) => m[1] === SITE), have);
+    ck("an address whose account was switched off is told to contact the manager, with no link at all", /switched off/.test(off.text) && /contact the Monitor's manager/.test(off.text) && !/https?:|href|verify=/.test(off.text + off.html) && off.subject === have.subject, off);
     // who it comes from
     const env = (o: Record<string, string>) => (k: string) => o[k];
     ck("no sender set up: none, and that is not an error", mailSetup(env({})) === null && !mailReady(env({})));

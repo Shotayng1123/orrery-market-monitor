@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Topbar, VIEWS, type ViewId } from "./components/Topbar";
 import { Gate } from "./auth/Gate";
+import { takeVerifyLink } from "./lib/verify";
 import { api, apiConfigured, clearToken, getToken, tokenId, type Me } from "./lib/api";
 import { AccountModal, ChangePassword } from "./auth/Account";
 import { Logo } from "./components/Logo";
@@ -39,6 +40,9 @@ function parseHash(): Route {
 }
 const setHash = (view: ViewId, sub = "") => { location.hash = sub ? `${view}/${sub}` : view; };
 
+// Opened by the "Verify my email" button of the Monitor's email? Read once, before the address is used for the tab.
+const VERIFY = takeVerifyLink();
+
 // Dev-only preview without a backend: `VITE_DEV_BYPASS=1 npm run dev`. Never set in production builds.
 const DEV_BYPASS = import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS === "1";
 
@@ -63,6 +67,9 @@ export default function App() {
   // Who is signed in (role, and whether a manager-set password still has to be replaced)
   const [me, setMe] = useState<Me | null>(null);
   const [acct, setAcct] = useState(false);
+  // the email button's link, until it has been dealt with; one for the address already signed in here has nothing left to do
+  const [verify, setVerify] = useState(VERIFY);
+  useEffect(() => { if (verify && userId && userId === verify.email) setVerify(null); }, [verify, userId]);
   const [notify, setNotify] = useState(false);
   useEffect(() => { const f = () => setNotify(true); window.addEventListener(NOTIFY_EVENT, f); return () => window.removeEventListener(NOTIFY_EVENT, f); }, []);
   useEffect(() => {
@@ -141,7 +148,7 @@ export default function App() {
   const healthState: "ok" | "warn" | "bad" | "unk" = !apiConfigured ? "unk" : healthErr ? "bad" : !health ? "unk" : health.ok ? (health.tick.ok && health.daily.ok ? "ok" : "warn") : "bad";
   const healthTitle = !apiConfigured ? "DATA HEALTH: API not configured" : healthErr ? `DATA HEALTH: ${healthErr}` : health ? `DATA HEALTH: tick ${health.tick.ageMin ?? "?"} min old (${health.tick.ok ? "ok" : health.tick.note ?? "late"}), daily ${health.daily.ok ? "ok" : health.daily.note ?? "late"}${health.holidaysVerified ? "" : "; holiday calendar unverified"}` : "DATA HEALTH: loading";
 
-  if (!signedIn) return <div className="gatewrap"><Gate onSignedIn={() => setTok(getToken())} /><FootBars /></div>;
+  if (!signedIn) return <div className="gatewrap"><Gate verify={verify} onSignedIn={() => { setVerify(null); setTok(getToken()); }} /><FootBars /></div>;
   if (me?.mustChange) return (
     <div className="gatewrap"><FootBars /><div className="modal-bg"><div className="modal">
       <h3><Logo />Choose a new password</h3>
@@ -158,6 +165,17 @@ export default function App() {
       <CardLayer />
       {acct && me && <AccountModal me={me} onClose={() => setAcct(false)} onSignOut={signOut} onChanged={() => setTok(getToken())} />}
       {notify && <Notify onClose={() => setNotify(false)} />}
+      {verify && !DEV_BYPASS && userId !== verify.email && (
+        <div className="modal-bg confirm"><div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="vf-title" aria-describedby="vf-text">
+          <h3 id="vf-title">Verification link</h3>
+          <div className="cf-who">{verify.email}</div>
+          <div className="sub2" id="vf-text">This link finishes creating an account for the address above, but this browser is signed in as <b>{me?.email ?? userId}</b>. Sign out here to carry on with the new account, or stay signed in and press the email's button in another browser.</div>
+          <div className="cf-btns">
+            <button type="button" className="go ghost" id="vf-stay" onClick={() => setVerify(null)} autoFocus>STAY SIGNED IN</button>
+            <button type="button" className="go" id="vf-out" onClick={signOut}>SIGN OUT AND CONTINUE</button>
+          </div>
+        </div></div>
+      )}
       <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={me?.email ?? userId} onSignOut={() => (me ? setAcct(true) : signOut())} updatedAt={updatedAt} nextIn={nextIn} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} pv2={pv2} canPreview={phone} />
       <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–6 TABS · ESC</span><span>&#9974;</span></div>
       <div id="wrap">

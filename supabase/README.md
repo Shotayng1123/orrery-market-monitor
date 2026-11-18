@@ -127,9 +127,17 @@ as the fallback. Until a token is stored, `monitor_dispatch` does nothing.
 
 ## Accounts by email (added 2026-11-18)
 
-A new account no longer waits for the manager. The person gives an email address, the Monitor emails it a 6-digit
-code, and the code together with a password of their own opens the account and signs them in. The manager still sees
-every address in Account › Accounts and can deactivate one (asked twice) or reactivate it.
+A new account no longer waits for the manager. The person gives an email address; the Monitor sends it an email with
+a **Verify my email** button; the button opens the Monitor with the address verified, where a password of their own
+finishes the account and signs them in. The same email shows a 6-digit code: on a phone the button opens the
+browser, so someone using the Home Screen app types the code there instead. The manager still sees every address in
+Account › Accounts and can deactivate one (asked first) or reactivate it.
+
+**Who sees whose address.** An account sees its own; the manager sees all (`admin_users`, refused to everyone else);
+nobody else sees any. That includes the sign-up form: it answers the same way whether or not an address has an
+account, and an address that already has one (or was deactivated) is told so only by an email to that address.
+Sign-in answers "Wrong email or password" for both a wrong password and an unknown address. Each email goes to one
+recipient. With the Gmail way below, recipients see the sending Gmail address.
 
 This needs an **email sender**, set as function secrets. Until one is set, nothing changes: sign-up stays "email +
 password, then the manager approves", and the Accounts panel says so.
@@ -138,8 +146,8 @@ Two ways to send; set one of them.
 
 | Way | Secrets | What you need |
 |---|---|---|
-| A mailbox's own server (Gmail) | `SMTP_USER` = the address, `SMTP_PASS` = an app password. Optional: `MAIL_FROM`, `SMTP_HOST` (default `smtp.gmail.com`), `SMTP_PORT` (default `465`) | No domain. The Google account needs 2-Step Verification; then Google Account › Security › 2-Step Verification › App passwords gives a 16-character password ([Google's help](https://support.google.com/accounts/answer/185833)). Codes come from that Gmail address. Google's limit for a personal account is 500 messages a day. Google withdraws app passwords when the account's password is changed. |
-| Resend | `RESEND_API_KEY`, `MAIL_FROM` = `Orrery Monitor <name@your-domain>` | A domain of your own, verified at resend.com by adding the DNS records it shows (without one Resend only delivers to your own address). Free plan at the time of writing: 3,000 emails a month, 100 a day. |
+| A mailbox's own server (Gmail) | `SMTP_USER` = the address, `SMTP_PASS` = an app password. Optional: `MAIL_FROM`, `SMTP_HOST` (default `smtp.gmail.com`), `SMTP_PORT` (default `465`) | No domain. The Google account needs 2-Step Verification; then Google Account › Security › 2-Step Verification › App passwords gives a 16-character password ([Google's help](https://support.google.com/accounts/answer/185833)). The emails come from that Gmail address, so everyone who signs up sees it. Google's limit for a personal account is 500 messages a day. Google withdraws app passwords when the account's password is changed. |
+| Resend | `RESEND_API_KEY`, `MAIL_FROM` = `Orrery Monitor <name@your-domain>` | A domain of your own, verified at resend.com by adding the DNS records it shows (without one Resend only delivers to your own address). Free plan at the time of writing: 3,000 emails a month, 100 a day. Recipients see the address on your domain, not a personal one. |
 
 Only port 465 (encrypted from the first byte) is spoken: Supabase does not let a function reach ports 25 and 587
 ([Edge Functions limits](https://supabase.com/docs/guides/functions/limits)).
@@ -152,22 +160,29 @@ Then check it: sign in as the manager, Account › Accounts › **SEND A TEST EM
 manager's address and, if the mail server refuses, shows the server's own words (a wrong app password reads
 "535 … Username and Password not accepted").
 
+The button opens `https://shotayng1123.github.io/orrery-market-monitor/` (set the secret `MONITOR_SITE_URL` if the
+site moves); the address is never taken from a request. The code and the address travel after the `#` of that link,
+the part a browser does not send to the server the page comes from, and the page takes them out of the address bar.
+
 The rules, in `supabase/functions/_shared/signup.ts` and enforced in the database (`email_code_issue`,
 `email_code_check` in `migrations/20261118000003_signup_by_email.sql`), one request at a time:
 
-- a code is valid for 15 minutes; 5 wrong tries void it; only the newest code for an address counts;
-- to one address: one code a minute, 5 an hour; from one network address: 10 different addresses an hour; in
+- the button and the code are valid for 15 minutes; 5 wrong tries void them; only the newest email for an address
+  counts;
+- pressing the button only checks the code (so a mail scanner that opens links first spoils nothing); it is used up
+  when the account is created;
+- to one address: one email a minute, 5 an hour; from one network address: 10 different addresses an hour; in
   total: 200 addresses a day;
-- the code is stored as an HMAC (keyed with `MONITOR_TOKEN_SECRET`), never as itself, and is used up by a
-  correct try;
-- an address that already has an account, or whose account is deactivated, gets no code.
+- the code is stored as an HMAC (keyed with `MONITOR_TOKEN_SECRET`), never as itself.
 
 Deactivating an account signs it out everywhere within a minute (the functions cache an account for 60 s), removes
-its phone-notification subscriptions and blocks signing in and signing up again; the watchlist stays. A forgotten
+its phone-notification subscriptions and blocks signing in and signing up again; the watchlist stays. After a
+reactivation the person signs in again and turns notifications back on. A forgotten
 password is still reset by the manager (RESET PW).
 
-Checked without the live project: `sim/logic.test.ts` section K (the code, the email, the conversation with a mail
-server) and `sim/sql/signup.test.cjs` (the two database functions, on an in-memory Postgres).
+Checked without the live project: `sim/logic.test.ts` section K (the code, the button's link, the emails, the
+conversation with a mail server), `sim/sql/signup.test.cjs` (the database functions, on an in-memory Postgres) and
+`web/e2e/accounts.cjs` (the screens).
 
 ## Changing the shared sign-in password
 
