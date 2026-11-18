@@ -58,7 +58,7 @@ export async function buildPack(sb: SupabaseClient, log: (s: string) => void = c
   const now = new Date();
   // 1. the market table (last, 1D/1W/1M) from the snapshot the tick keeps
   const { data: snap } = await sb.from("snapshots").select("payload,at").eq("key", "table").maybeSingle();
-  type Row = { symbol: string; name: string; cls: string; group: string; last: number | null; lastAt: string | null; pct: Record<string, number | null>; chg: Record<string, number | null> };
+  type Row = { symbol: string; name: string; cls: string; group: string; last: number | null; lastAt: string | null; pct: Record<string, number | null>; chg: Record<string, number | null>; closes?: Record<string, number | null>; closeDates?: Record<string, string | null> };
   const rows: Row[] = (snap?.payload as { rows?: Row[] } | null)?.rows ?? [];
   if (!rows.length) notes.push("market table snapshot missing: the backend has not run yet");
   const table: Pack["table"] = rows.map((r) => ({ symbol: r.symbol, name: r.name, cls: r.cls, last: r.last, lastAt: r.lastAt, d1Pct: r.pct?.d1 ?? null, d1Chg: r.chg?.d1 ?? null, w1Pct: r.pct?.w1 ?? null, m1Pct: r.pct?.m1 ?? null, unit: r.group === "rates" ? "bp" : "pct" }));
@@ -111,7 +111,10 @@ export async function buildPack(sb: SupabaseClient, log: (s: string) => void = c
     if (gap) {
       const { data: inst } = await sb.from("instruments").select("symbol,market,provider");
       const marketOf = new Map(((inst ?? []) as Array<{ symbol: string; market: string; provider: string }>).filter((i) => i.provider === "yahoo" && i.market !== "CRYPTO").map((i) => [i.symbol, i.market]));
-      const cand = rows.filter((r) => { const m = marketOf.get(r.symbol); if (!m || r.last == null || !r.lastAt || !dated(r.lastAt)) return false; const end = barDayEnd(m, r.lastAt.slice(0, 10)); return end != null && end - 30 * 60000 > gap.from; });
+      // a row's latest booked close: its value itself where the table shows the close, otherwise the close its
+      // one-day change is measured from (a future that is trading again shows its new price against that close)
+      const booked = (r: Row): { v: number; d: string } | null => (r.lastAt && dated(r.lastAt) && r.last != null ? { v: r.last, d: r.lastAt.slice(0, 10) } : r.closes?.d1 != null && r.closeDates?.d1 ? { v: r.closes.d1, d: r.closeDates.d1 } : null);
+      const cand = rows.filter((r) => { const m = marketOf.get(r.symbol), bk = booked(r); if (!m || !bk) return false; const end = barDayEnd(m, bk.d); return end != null && end - 30 * 60000 > gap.from; });
       const before = new Map<string, number[]>();
       if (cand.length) for (let from = 0; from < 6000; from += 1000) {
         const { data: page } = await sb.from("bars_intraday").select("symbol,close").in("symbol", cand.map((r) => r.symbol)).gte("t", new Date(gap.from - 30 * 60000).toISOString()).lte("t", new Date(gap.from).toISOString()).order("t").range(from, from + 999);
@@ -121,8 +124,8 @@ export async function buildPack(sb: SupabaseClient, log: (s: string) => void = c
       }
       // the last price stored before the stop, not any of that half hour: the VIX and a Treasury yield, whose
       // closes had been booked again from the real ones, each matched an earlier minute by chance
-      const frozen = cand.filter((r) => { const c = (before.get(r.symbol) ?? []).at(-1); return c != null && c > 0 && Math.abs((r.last as number) / c - 1) < 1e-6; });
-      if (frozen.length) warnings.push(`Prices stopped arriving at ${clock(new Date(gap.from).toISOString(), "UTC")} UTC${gap.to < now.getTime() - 60000 ? ` and came back at ${clock(new Date(gap.to).toISOString(), "UTC")} UTC` : ""}. For these rows that was before the end of their day, and the level booked as their latest close is their last price before the stop, not a closing level: ${frozen.map((r) => r.name).join(", ")}.`);
+      const frozen = cand.filter((r) => { const c = (before.get(r.symbol) ?? []).at(-1); return c != null && c > 0 && Math.abs(booked(r)!.v / c - 1) < 1e-6; });
+      if (frozen.length) warnings.push(`Prices stopped arriving at ${clock(new Date(gap.from).toISOString(), "UTC")} UTC${gap.to < now.getTime() - 60000 ? ` and came back at ${clock(new Date(gap.to).toISOString(), "UTC")} UTC` : ""}. For these rows that was before the end of their day, and the level booked as their latest close is their last price before the stop, not a closing level (where a row shows a newer price, its one-day change is measured from that level): ${frozen.map((r) => r.name).join(", ")}.`);
     }
   } catch (e) { log(`the check for prices that stopped before a close could not be made: ${e instanceof Error ? e.message : String(e)}`); }
   if (warnings.length) log(`WARNING: ${warnings.join(" ")}`);
