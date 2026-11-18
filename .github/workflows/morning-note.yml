@@ -2,7 +2,13 @@ name: morning-note
 
 # The note is due at 07:00 SGT (23:00 UTC), Monday to Saturday (Saturday covers Friday's US session). On Sundays
 # the job starts and stops at once: the weekly view is the Friday Weekly Strategy (weekly-strategy.yml).
-# It must arrive without anyone opening anything, so the schedule is built for GitHub's habits:
+# It must arrive without anyone opening anything.
+#   - Since 18 Nov 2026 the database asks for the note itself at 22:15 UTC (pg_cron job monitor-morning-note,
+#     migration 20261118000002: a workflow_dispatch with if_missing=true). pg_cron is punctual, and runs started
+#     by an event rather than by GitHub's clock have begun within seconds in this repository, so this is the run
+#     that normally writes the note. It needs a GitHub token stored in the database (supabase/README.md);
+#     without one, what follows is all there is, as before.
+# GitHub's own schedule stays as the fallback, built for GitHub's habits:
 #   - GitHub starts this repository's scheduled runs 3.5 to 6.5 hours late (measured 9-15 Nov 2026). The main run
 #     is requested at 17:10 UTC and its first step waits until 22:15 UTC (writing and reviewing the note on Fable 5.2 at xhigh effort takes
 #     up to three quarters of an hour); a run that starts later goes at once.
@@ -22,6 +28,10 @@ on:
         default: ""
       dry:
         description: "Dry run (print only)"
+        required: false
+        default: "false"
+      if_missing:
+        description: "Write only if the note is not stored yet (the database's 22:15 UTC request sets this)"
         required: false
         default: "false"
 
@@ -61,7 +71,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           ARGS=""
-          if [ "${{ github.event_name }}" = "schedule" ]; then ARGS="--if-missing"; fi
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.if_missing }}" = "true" ]; then ARGS="--if-missing"; fi
           if [ -n "${{ github.event.inputs.date }}" ]; then ARGS="$ARGS --date ${{ github.event.inputs.date }}"; fi
           if [ "${{ github.event.inputs.dry }}" = "true" ]; then ARGS="$ARGS --dry"; fi
           for attempt in 1 2 3; do
