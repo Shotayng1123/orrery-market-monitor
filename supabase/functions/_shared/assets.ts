@@ -4,8 +4,10 @@
 import { db } from "./db.ts";
 import { chart, quotes } from "./yahoo.ts";
 import { fetchText } from "./http.ts";
+import type { Bar } from "./stockstats.ts";
 
-export interface SeriesOut { symbol: string; res: "1m" | "15m" | "1h" | "1d"; points: Array<{ t: number; v: number }>; asOf: string | null; shownFrom?: string; source?: string }
+export interface SeriesOut { symbol: string; res: "1m" | "15m" | "1h" | "1d"; points: Array<{ t: number; v: number; q?: number | null }>; asOf: string | null; shownFrom?: string; source?: string }
+type Pt = { t: number; v: number; q: number | null };
 const RANGES: Record<string, number> = { "1W": 7, "1M": 31, "3M": 93, "12M": 366, "36M": 1096 };
 const SIGMA_LOOKBACK_DAYS = 1120;
 
@@ -23,23 +25,31 @@ async function cached<T>(key: string, ttlMs: number, f: () => Promise<T>): Promi
   return v;
 }
 
+/** Ten years of daily bars from Yahoo (close, high, low, volume), one fetch per symbol per ten minutes. Prices
+ *  are adjusted for splits, not for dividends. The chart and the stock page's figures both read from this. */
+export async function dailyBars(symbol: string): Promise<Bar[]> {
+  return memo(`bars:1d:${symbol}`, 10 * 60e3, async () => {
+    const c = await chart(symbol, "10y", "1d");
+    const out: Bar[] = [];
+    for (let i = 0; i < c.timestamp.length; i++) { const close = c.close[i]; if (close != null) out.push({ t: Math.floor(c.timestamp[i] / 86400) * 86400, c: close, h: c.high[i], l: c.low[i], v: c.volume[i] }); }
+    return out;
+  });
+}
+
 /** Yahoo-backed series in the same shape as the instrument series (1D one-minute, 1W/1M hourly, 3M+ daily). */
 export async function yahooSeries(symbol: string, range: string): Promise<SeriesOut> {
   if (range === "1D") return memo(`s:1D:${symbol}`, 60e3, async () => {
     const c = await chart(symbol, "5d", "1m");
-    const points = c.timestamp.map((t, i) => ({ t, v: c.close[i] })).filter((p): p is { t: number; v: number } => p.v != null);
+    const points = c.timestamp.map((t, i) => ({ t, v: c.close[i], q: c.volume[i] ?? null })).filter((p): p is Pt => p.v != null);
     return { symbol, res: "1m" as const, points, asOf: points.length ? new Date(points[points.length - 1].t * 1000).toISOString() : null, source: "yahoo" };
   });
   if (range === "1W" || range === "1M") return memo(`s:${range}:${symbol}`, 5 * 60e3, async () => {
     const c = await chart(symbol, range === "1W" ? "1mo" : "3mo", range === "1W" ? "15m" : "60m");
-    const points = c.timestamp.map((t, i) => ({ t, v: c.close[i] })).filter((p): p is { t: number; v: number } => p.v != null);
+    const points = c.timestamp.map((t, i) => ({ t, v: c.close[i], q: c.volume[i] ?? null })).filter((p): p is Pt => p.v != null);
     return { symbol, res: (range === "1W" ? "15m" : "1h") as "15m" | "1h", points, asOf: points.length ? new Date(points[points.length - 1].t * 1000).toISOString() : null, source: "yahoo" };
   });
   const days = RANGES[range] ?? RANGES["12M"];
-  const daily = await memo(`s:1d:${symbol}`, 10 * 60e3, async () => {
-    const c = await chart(symbol, "10y", "1d");
-    return c.timestamp.map((t, i) => ({ t: Math.floor(t / 86400) * 86400, v: c.close[i] })).filter((p): p is { t: number; v: number } => p.v != null);
-  });
+  const daily = (await dailyBars(symbol)).map((b) => ({ t: b.t, v: b.c, q: b.v ?? null }));
   const from = Math.floor((Date.now() - (days * 2 + SIGMA_LOOKBACK_DAYS) * 86400e3) / 1000);
   const points = daily.filter((p) => p.t >= from);
   return { symbol, res: "1d", shownFrom: new Date(Date.now() - days * 86400e3).toISOString().slice(0, 10), points, asOf: points.length ? new Date(points[points.length - 1].t * 1000).toISOString().slice(0, 10) : null, source: "yahoo" };

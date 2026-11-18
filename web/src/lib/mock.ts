@@ -1,6 +1,7 @@
 // Dev-only mock feed: `VITE_DEV_MOCK=1 npm run dev` serves synthetic data so the panels can be laid out and
 // checked before the backend exists. Deterministic random walks with realistic volatility scaling, labelled
 // MOCK in the UI. Never active in production builds (gated on import.meta.env.DEV in useApi).
+import { mockStock } from "./mockStock";
 import type { TableRow, Health, Curve, Series } from "./types";
 
 const MASTER: Array<Pick<TableRow, "symbol" | "name" | "cls" | "group" | "market" | "currency" | "decimals" | "order"> & { base: number; vol: number; proxyFor?: string }> = [
@@ -86,13 +87,20 @@ export function mockTable(): { rows: TableRow[]; asOf: string } {
   return { rows, asOf: new Date().toISOString() };
 }
 
+/** A stock's bars carry a volume (an index's and a currency's do not), as the server's feed does. */
+const isStock = (symbol: string) => !/^\^|=|-USD$/.test(symbol);
+function withVolume<T extends { t: number; v: number }>(symbol: string, pts: T[], perBar: number): Array<T & { q?: number }> {
+  if (!isStock(symbol)) return pts;
+  const r = rng(seedOf(symbol) + 99);
+  return pts.map((p, i) => ({ ...p, q: Math.round(perBar * (0.45 + r() * 0.9) * (i % 37 === 0 ? 3.2 : 1)) }));
+}
 export function mockSeries(symbol: string, range: string): Series {
-  if (range === "1D") return { symbol, res: "1m", points: intradaySeries(symbol), asOf: new Date().toISOString() };
-  if (range === "1W") return { symbol, res: "15m", points: hourlySeries(symbol, 14, 4), asOf: new Date().toISOString() };
-  if (range === "1M") return { symbol, res: "1h", points: hourlySeries(symbol, 62), asOf: new Date().toISOString() };
+  if (range === "1D") return { symbol, res: "1m", points: withVolume(symbol, intradaySeries(symbol), 6e4), asOf: new Date().toISOString() };
+  if (range === "1W") return { symbol, res: "15m", points: withVolume(symbol, hourlySeries(symbol, 14, 4), 9e5), asOf: new Date().toISOString() };
+  if (range === "1M") return { symbol, res: "1h", points: withVolume(symbol, hourlySeries(symbol, 62), 3.5e6), asOf: new Date().toISOString() };
   const days: Record<string, number> = { "3M": 93, "12M": 366, "36M": 1096 };
   const n = Math.round(((days[range] ?? 366) * 2 + 1120) * 0.69);
-  const pts = dailySeries(symbol, n);
+  const pts = withVolume(symbol, dailySeries(symbol, n), 2e7);
   return { symbol, res: "1d", points: pts, asOf: new Date(pts[pts.length - 1].t * 1000).toISOString().slice(0, 10) };
 }
 
@@ -164,6 +172,7 @@ export function mockAction(action: string, params: Record<string, string | numbe
       const all = [{ symbol: "7203.T", name: "Toyota Motor Corp", kind: "Equity", note: "NK225 · Transportation" }, { symbol: "285A.T", name: "Kioxia Holdings", kind: "Equity", note: "NK225 · Technology" }, { symbol: "AAPL", name: "Apple Inc.", kind: "Equity", note: "SP500 · Information Technology" }, { symbol: "USDJPY=X", name: "USD/JPY", kind: "Currency", note: "Monitor instrument" }, { symbol: "^TNX", name: "US 10Y yield", kind: "Fixed income", note: "Monitor instrument" }];
       return { rows: all.filter((x) => x.symbol.toLowerCase().includes(term) || x.name.toLowerCase().includes(term)) };
     }
+    case "stock": { const sym = String(params?.symbol ?? "7203.T"), pts = dailySeries(sym, 300); return mockStock(sym, pts[pts.length - 1].v); }   // the price the mock chart ends at
     case "asset": {
       const symbol = String(params?.symbol ?? "7203.T"); const r = rng(seedOf(symbol)); const jp = /\.T$/.test(symbol);
       const price = jp ? 1000 + r() * 5000 : 50 + r() * 400; const pct = (r() - 0.5) * 6;

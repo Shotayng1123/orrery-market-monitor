@@ -31,6 +31,7 @@ const SUITES = [
   { name: "phone-news-research", needs: ["standin"] },
   { name: "phone-equities", needs: ["mock"] },
   { name: "phone-rates-watchlist-stock", needs: ["mock", "standin"] },
+  { name: "stock-page", needs: ["mock", "standin"] },
   { name: "phone-default", needs: ["mock", "gate"] },
   { name: "accounts", needs: ["gate"] },
   { name: "install-hint", needs: ["mock"] },

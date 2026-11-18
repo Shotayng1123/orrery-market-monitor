@@ -16,6 +16,10 @@ export const UP = "#3fd07e", DN = "#ff4d42", FLAT = "#b3afa4";
 export type SigmaWindow = "m1" | "m12" | "m36";
 const WIN_DAYS: Record<SigmaWindow, number> = { m1: 21, m12: 252, m36: 756 };
 const S1 = "rgba(90,167,255,0.85)", S2 = "rgba(255,197,61,0.80)", MEAN = "rgba(232,229,222,0.65)";   // ±1σ blue, ±2σ yellow, mean grey
+const VOL = "rgba(179,175,164,0.30)";   // volume bars: a quiet grey along the foot of the chart
+const VOL_SHARE = 0.2;                  // the tallest bar in view takes a fifth of the chart's height
+/** Compact count for a volume: 1.23bn, 45.6m, 789k. */
+export const fmtVol = (v: number | null | undefined): string => (v == null || !Number.isFinite(v) ? "–" : v >= 1e9 ? `${(v / 1e9).toFixed(2)}bn` : v >= 1e6 ? `${(v / 1e6).toFixed(v >= 1e8 ? 0 : 1)}m` : v >= 1e3 ? `${(v / 1e3).toFixed(v >= 1e5 ? 0 : 1)}k` : String(Math.round(v)));
 const AXIS = SHARED_AXIS;
 
 export interface SigmaChartProps {
@@ -28,28 +32,31 @@ export interface SigmaChartProps {
   fill?: boolean;                 // take the container's height (square and large tiles)
   axes?: boolean;                 // Analytics tiles have none; large charts may show them
   color?: string;                 // price line colour (UP / DN / FLAT)
-  onReadout?: (r: { t: number; v: number; z: number | null } | null) => void;
+  volume?: boolean;               // draw the bars' volumes (points[].q) along the foot of the chart
+  onReadout?: (r: { t: number; v: number; z: number | null; q?: number | null } | null) => void;
   onPan?: (offsetSec: number) => void;   // how far back the window has been dragged (0 = latest)
 }
 
 const nf = (d: number) => new Intl.NumberFormat("en-GB", { minimumFractionDigits: d, maximumFractionDigits: d });
 
-export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, sigmaWindow = "m12", height = 160, fill = false, axes = false, color = FLAT, onReadout, onPan }: SigmaChartProps) {
+export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, sigmaWindow = "m12", height = 160, fill = false, axes = false, color = FLAT, volume = false, onReadout, onPan }: SigmaChartProps) {
   const el = useRef<HTMLDivElement>(null);
   const panRef = useRef(0);   // bars back from the latest, kept across rebuilds
 
-  // data: [x, price, (bands…)]; `ts` holds the real timestamp of every x (x is a bar index on intraday views)
+  // data: [x, price, (bands…), (volume)]; `ts` holds the real timestamp of every x (x is a bar index on intraday
+  // views). Volume, when drawn, is always the last column, so the columns before it keep their places.
+  const hasVol = volume && points.some((p) => p.q != null && p.q > 0);
   const prepared = useMemo(() => {
-    let ts = points.map((p) => p.t), ys: Array<number | null> = points.map((p) => p.v);
+    let ts = points.map((p) => p.t), ys: Array<number | null> = points.map((p) => p.v), qs: Array<number | null> = points.map((p) => p.q ?? null);
     if (intraday && points.length > 2) {
       const diffs = ts.slice(1).map((t, i) => t - ts[i]).filter((d) => d > 0).sort((a, b) => a - b);
       const step = diffs[Math.floor(diffs.length / 2)] || 60;
-      const bt: number[] = [], by: Array<number | null> = [];
+      const bt: number[] = [], by: Array<number | null> = [], bq: Array<number | null> = [];
       for (let i = 0; i < ts.length; i++) {
-        if (i > 0 && ts[i] - ts[i - 1] > 4 * step) { bt.push(ts[i - 1] + step); by.push(null); }   // a one-slot break per session gap
-        bt.push(ts[i]); by.push(ys[i]);
+        if (i > 0 && ts[i] - ts[i - 1] > 4 * step) { bt.push(ts[i - 1] + step); by.push(null); bq.push(null); }   // a one-slot break per session gap
+        bt.push(ts[i]); by.push(ys[i]); bq.push(qs[i]);
       }
-      ts = bt; ys = by;
+      ts = bt; ys = by; qs = bq;
     }
     const xs = intraday ? ts.map((_, i) => i) : ts;
     const cols: Array<Array<number | null>> = [xs, ys];
@@ -61,8 +68,9 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
       cols.push(mean.map((m, i) => (m == null || sd[i] == null ? null : m - 2 * sd[i]!)));
       cols.push(mean); cols.push(sd);
     }
+    if (hasVol) cols.push(qs);
     return { data: cols as uPlot.AlignedData, ts };
-  }, [points, intraday, sigmaWindow]);
+  }, [points, intraday, sigmaWindow, hasVol]);
 
   useEffect(() => {
     const box = el.current;
@@ -81,6 +89,8 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
       series.push({ label: "mean", stroke: MEAN, width: 0.9, points: { show: false } });
       series.push({ label: "sd", show: false });
     }
+    const volAt = hasVol ? series.length : -1;   // the volume column's place in the data
+    if (hasVol) series.push({ label: "vol", scale: "vol", stroke: "rgba(0,0,0,0)", fill: VOL, width: 0, paths: uPlot.paths.bars!({ size: [0.7, 14] }), points: { show: false } });
     const axisFmt = (v: number) => (Math.abs(v) >= 1000 ? nf(0).format(v) : fmt.format(v));
     const ys = points.map((p) => p.v);
     const yMax = Math.max(...ys), yMin = Math.min(...ys);
@@ -102,7 +112,8 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
       ...size(),
       padding: axes ? [6, 8, 0, 0] : [4, 2, 4, 2],
       tzDate: (t) => uPlot.tzDate(new Date(t * 1e3), "UTC"),
-      scales: { x: { time: !intraday, range: () => [xsAll[i0], xsAll[i1]] }, y: { range: (_u, min, max) => { const pad = (max - min) * 0.03 || Math.abs(max) * 0.002 || 1; return [min - pad, max + pad]; } } },   // a flat window still gets a height
+      scales: { x: { time: !intraday, range: () => [xsAll[i0], xsAll[i1]] }, y: { range: (_u, min, max) => { const pad = (max - min) * 0.03 || Math.abs(max) * 0.002 || 1; return [min - pad, max + pad]; } },   // a flat window still gets a height
+        ...(hasVol ? { vol: { range: (_u: uPlot, _min: number, max: number) => [0, (max > 0 ? max : 1) / VOL_SHARE] as [number, number] } } : {}) },
       axes: axes
         ? [{ ...AXIS, space: 80, ...(intraday ? { values: (_u, vals) => vals.map(xLabel) } : {}) }, { ...AXIS, size: axisSize, values: (_u, vals) => vals.map(axisFmt) }]
         : [{ show: false }, { show: false }],
@@ -115,10 +126,11 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
           const v = i == null || i < 0 ? null : (u.data[1][i] as number | null);
           if (i == null || i < 0 || v == null) { onReadout?.(null); tip.style.display = "none"; return; }
           const zsel = (() => { if (intraday) return null; const m = u.data[6][i] as number | null, s = u.data[7][i] as number | null; return m == null || s == null || s === 0 ? null : (v - m) / s; })();
-          onReadout?.({ t: ts[i], v, z: zsel });
+          const q = volAt < 0 ? null : (u.data[volAt][i] as number | null);
+          onReadout?.({ t: ts[i], v, z: zsel, q });
           // the price at the pointer: time and level, plus the σ distance of the selected window on daily charts
           const when = intraday ? fmtStamp(ts[i] * 1000, SGT) : new Date(ts[i] * 1000).toISOString().slice(0, 10);
-          tip.textContent = `${when}  ${fmt.format(v)}${zsel == null ? "" : `  ${zsel >= 0 ? "+" : ""}${zsel.toFixed(2)}σ`}`;
+          tip.textContent = `${when}  ${fmt.format(v)}${zsel == null ? "" : `  ${zsel >= 0 ? "+" : ""}${zsel.toFixed(2)}σ`}${q == null ? "" : `  vol ${fmtVol(q)}`}`;
           tip.style.display = "block";
           const w = u.over.clientWidth, left = u.cursor.left ?? 0, top = u.cursor.top ?? 0;
           tip.style.left = `${left + 12 + tip.offsetWidth > w ? Math.max(0, left - 12 - tip.offsetWidth) : left + 12}px`;
@@ -159,7 +171,7 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
     over.addEventListener("dblclick", onDbl);
     return () => { ro.disconnect(); over.removeEventListener("pointerdown", onDown); over.removeEventListener("pointermove", onMove); over.removeEventListener("pointerup", onUp); over.removeEventListener("pointercancel", onUp); over.removeEventListener("dblclick", onDbl); u.destroy(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prepared, windowSec, intraday, decimals, height, fill, axes, color]);
+  }, [prepared, windowSec, intraday, decimals, height, fill, axes, color, hasVol]);
 
   return <div className={`chartbox${fill ? " fill" : ""}`} ref={el} style={fill ? undefined : { height }} />;
 }

@@ -34,7 +34,7 @@ export interface TableRow extends Instrument {
   vs200?: number | null; // % above the 200-day average (yield points for rates)
 }
 
-export interface SeriesPoint { t: number; v: number }   // epoch seconds, value
+export interface SeriesPoint { t: number; v: number; q?: number | null }   // epoch seconds, value; q = volume of the bar, where the feed has it (stocks)
 export interface Series { symbol: string; res: "1m" | "5m" | "15m" | "1h" | "1d"; points: SeriesPoint[]; asOf: string | null }
 
 /** An excessive move: a single stock beyond ±7% or an index beyond ±3% against the previous close. */
