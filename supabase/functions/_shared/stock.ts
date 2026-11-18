@@ -9,6 +9,7 @@ import { benchmarksFor, dailyBars, quoteFor } from "./assets.ts";
 import { avgTurnover, betaCorr, maxDrawdown, perfRows, range52w, realisedVol, type Bar } from "./stockstats.ts";
 import { justReported, resultsDateToWatch, valuation, type Fin, type FinLine } from "./fin.ts";
 import { yahooFin, yahooFinTypes } from "./finsrc.ts";
+import { edinetStatements } from "./edinet.ts";
 import { bigMoves, isLargeCap, moveText, settledBars, type BigMove } from "./bigmoves.ts";
 import { stockMarket } from "./moves.ts";
 import { localDate, marketById, marketState } from "./sessions.ts";
@@ -120,7 +121,7 @@ export async function stockPage(symbol: string) {
     db.from("constituents").select("idx,sector,gics_industry,gics_source").eq("symbol", symbol).limit(5),
     soft(dailyBars(symbol), [] as Bar[], "price history"),
     Promise.all(benchmarks.map((b) => soft(dailyBars(b.symbol), [] as Bar[], `${b.name} history`))),
-    equity ? finFor(symbol, q.currency, undefined, q.earningsAt) : Promise.resolve({ fin: null, note: "Statements are available for equities only." }),
+    equity ? finFor(symbol, q.currency, jp ? edinetStatements : undefined, q.earningsAt) : Promise.resolve({ fin: null, note: "Statements are available for equities only." }),
     equity ? soft(keyStats(symbol), null as KeyStats | null, "key statistics") : Promise.resolve(null),
   ]);
   const member = (con ?? []).find((c) => c.sector) ?? (con ?? [])[0] ?? null;
@@ -149,14 +150,18 @@ export async function stockPage(symbol: string) {
     else if (finra) short = { kind: "finra", ...finra };
   }
 
-  // share counts: the statements' own where they carry them, otherwise Yahoo's key statistics
+  // share counts. Japan: the company's own count in its latest 決算短信 (treasury shares included, and shown
+  // beside it), since that is the count its market value is quoted on. Elsewhere Yahoo's key statistics, and
+  // failing those the latest annual statements.
   const f = fin.fin;
-  const finShares = lastFy(f, "shares"), finDiluted = lastFy(f, "dilutedShares");
+  const finShares = lastFy(f, "shares"), finDiluted = lastFy(f, "dilutedShares"), now = f?.sharesNow ?? null;
   const shares = {
-    outstanding: ks?.sharesOutstanding ?? finShares, diluted: finDiluted,
-    dilutedNote: finDiluted != null ? "Weighted average diluted shares of the latest fiscal year, as in the statements" : "The source gives no diluted share count for this company",
-    treasury: null as number | null, float: ks?.floatShares ?? null,
-    asOf: ks?.sharesOutstanding != null ? today() : null, source: ks?.sharesOutstanding != null ? "Yahoo Finance" : finShares != null ? "the latest annual statements" : null,
+    outstanding: now?.outstanding ?? ks?.sharesOutstanding ?? finShares, diluted: finDiluted,
+    dilutedNote: finDiluted == null ? (f?.source === "edinetdb" ? "No diluted share count: the company reports no diluted EPS for the latest fiscal year (nothing that would dilute), or a later split changed the share basis" : "The source gives no diluted share count for this company")
+      : f?.source === "edinetdb" ? "Implied by the latest fiscal year's diluted EPS: net income over diluted EPS (a company in Japan reports the diluted EPS, not the share count behind it)" : "Weighted average diluted shares of the latest fiscal year, as in the statements",
+    treasury: now?.treasury ?? null, float: ks?.floatShares ?? null,
+    asOf: now ? now.asOf : ks?.sharesOutstanding != null ? today() : null,
+    source: now ? "The company's latest 決算短信 (EDINET DB); treasury shares included" : ks?.sharesOutstanding != null ? "Yahoo Finance" : finShares != null ? "the latest annual statements" : null,
   };
 
   // valuation on the latest fiscal year and on the company's guidance; book value per share from the statements
