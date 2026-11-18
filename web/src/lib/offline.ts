@@ -3,6 +3,8 @@
  *  could listen, so it tells the worker which files it is made of. */
 export function startOffline(): void {
   if (!import.meta.env.PROD || !("serviceWorker" in navigator)) return;
+  // a tapped notification asks the open window to show the screen its alert is about (public/sw.js)
+  navigator.serviceWorker.addEventListener("message", (e) => { const d = e.data as { type?: string; hash?: string } | null; if (d?.type === "goto" && typeof d.hash === "string" && d.hash.startsWith("#")) location.hash = d.hash; });
   const go = () => {
     const base = import.meta.env.BASE_URL;
     navigator.serviceWorker.register(`${base}sw.js`, { scope: base }).then(async () => {

@@ -4,6 +4,7 @@ import type { Alert } from "../lib/types";
 import { fmtStamp } from "../lib/time";
 import { fmtPct, signCls } from "../lib/fmt";
 import { openAsset } from "./CompanyCard";
+import { openNotify } from "../lib/push";
 
 const SEEN_KEY = "om_alert_seen";
 const NEW_FOR_MS = 30 * 60e3;   // an alert nobody has opened stays lit for half an hour after it was raised
@@ -46,7 +47,7 @@ export function Alerts({ tick }: { tick: number }) {
       </span>
       {open && (
         <div className="aldrop">
-          <div className="minih">Last {rows.length} alerts · stock ±7% intraday · index ±3% · buybacks and guidance (USD 5bn+ companies) · M&A (USD 1bn+)</div>
+          <div className="minih">Last {rows.length} alerts · stock ±7% intraday · index ±3% · buybacks and guidance (USD 5bn+ companies) · M&A (USD 1bn+)<span className="lnk alntf" title="Get these alerts as notifications on this device" onClick={() => { setOpen(false); openNotify(); }}>Notifications…</span></div>
           {rows.length ? (
             <table className="secT"><tbody>{rows.map((r) => <tr key={r.id}><td className="l mut num">{fmtStamp(r.at)}</td><td className="l">{isNews(r) && r.url ? <><a href={r.url} target="_blank" rel="noreferrer" title="Open the article">{r.msg}</a>{hasPage(r) && <span className="lnk alpg" title={`Open ${r.name}`} onClick={() => { setOpen(false); openAsset(r.symbol); }}> ›</span>}</> : hasPage(r) ? <span className="lnk" title={`Open ${r.name}`} onClick={() => { setOpen(false); openAsset(r.symbol); }}>{r.msg}</span> : r.msg}</td><td className="l mut">{isNews(r) ? KIND_LABEL[r.kind] : r.kind === "index" ? "index" : r.market}</td><td className={`num ${signCls(r.pct)}`}>{isNews(r) || r.pct == null ? "" : fmtPct(r.pct, 1)}</td></tr>)}</tbody></table>
           ) : <div className="empty">No excessive moves recorded yet.</div>}

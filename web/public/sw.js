@@ -1,5 +1,6 @@
-// Orrery Monitor service worker (Shota, 18 Nov 2026). It keeps the app's own files on the device so the Monitor
-// opens without a connection; the data itself is kept by the page (src/lib/keep.ts). Rules:
+// Orrery Monitor service worker (Shota, 18 Nov 2026). It shows the alerts the server pushes as notifications (at
+// the foot of this file), and it keeps the app's own files on the device so the Monitor opens without a
+// connection; the data itself is kept by the page (src/lib/keep.ts). Rules for the files:
 //   the page         network first, asked past the browser's cache, so a new version is never held back here;
 //                    the kept copy answers only when the network does not (or takes more than four seconds)
 //   assets/*         kept forever: their names change with every build
@@ -90,4 +91,25 @@ self.addEventListener("fetch", (e) => {
     return;
   }
   if (FONT_HOSTS.includes(u.hostname)) e.respondWith(keptThenRefresh(e));
+});
+
+// ---- alerts as notifications (the server's side: supabase/functions/_shared/push.ts) ----
+// A message is { title, body, hash, tag }: the alert's line, its kind and time, and the screen a tap opens.
+self.addEventListener("push", (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(typeof d.title === "string" && d.title ? d.title : "Orrery Monitor", {
+    body: typeof d.body === "string" ? d.body : "", tag: typeof d.tag === "string" ? d.tag : undefined,
+    data: { hash: typeof d.hash === "string" ? d.hash : "" }, icon: SCOPE + "icons/icon-192.png", badge: SCOPE + "icons/icon-192.png",
+  }));
+});
+// A tap: the Monitor comes to the front on the screen the alert is about (an open window is told to go there, or a new one opens on it).
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const raw = e.notification.data && e.notification.data.hash, hash = typeof raw === "string" && /^#[A-Za-z0-9/%.^=&_-]*$/.test(raw) ? raw : "";
+  e.waitUntil((async () => {
+    const open = (await self.clients.matchAll({ type: "window", includeUncontrolled: true })).find((c) => c.url.startsWith(self.registration.scope));
+    if (open) { await open.focus(); open.postMessage({ type: "goto", hash }); return; }
+    await self.clients.openWindow(self.registration.scope + hash);
+  })());
 });

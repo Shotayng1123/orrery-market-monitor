@@ -19,6 +19,8 @@ import { AssetPhone } from "./views/AssetPhone";
 import { PhoneNav } from "./components/PhoneNav";
 import { InstallHint } from "./components/InstallHint";
 import { FootBars } from "./components/FootBars";
+import { Notify } from "./components/Notify";
+import { NOTIFY_EVENT, pushOff } from "./lib/push";
 import { usePhone, usePhoneV2 } from "./lib/phone";
 import { NewsView } from "./views/News";
 import { ResearchView } from "./views/Research";
@@ -61,6 +63,8 @@ export default function App() {
   // Who is signed in (role, and whether a manager-set password still has to be replaced)
   const [me, setMe] = useState<Me | null>(null);
   const [acct, setAcct] = useState(false);
+  const [notify, setNotify] = useState(false);
+  useEffect(() => { const f = () => setNotify(true); window.addEventListener(NOTIFY_EVENT, f); return () => window.removeEventListener(NOTIFY_EVENT, f); }, []);
   useEffect(() => {
     if (!token || DEV_BYPASS) { setMe(null); return; }
     if (DEV_MOCK) { setMe({ email: "preview@mock.local", role: "manager", mustChange: false }); return; }
@@ -131,7 +135,8 @@ export default function App() {
   useEffect(() => { const f = () => void refresh(); window.addEventListener("online", f); return () => window.removeEventListener("online", f); }, [refresh]);
 
   const setPrefs = (p: Prefs) => { setPrefsState(p); savePrefs(p); };
-  const signOut = () => { clearToken(); setTok(null); setAcct(false); };
+  // signing out also ends this device's notifications: they belong to the account, and it is leaving this browser
+  const signOut = () => { void pushOff().catch(() => undefined).finally(() => { clearToken(); setTok(null); setAcct(false); setNotify(false); }); };
 
   const healthState: "ok" | "warn" | "bad" | "unk" = !apiConfigured ? "unk" : healthErr ? "bad" : !health ? "unk" : health.ok ? (health.tick.ok && health.daily.ok ? "ok" : "warn") : "bad";
   const healthTitle = !apiConfigured ? "DATA HEALTH: API not configured" : healthErr ? `DATA HEALTH: ${healthErr}` : health ? `DATA HEALTH: tick ${health.tick.ageMin ?? "?"} min old (${health.tick.ok ? "ok" : health.tick.note ?? "late"}), daily ${health.daily.ok ? "ok" : health.daily.note ?? "late"}${health.holidaysVerified ? "" : "; holiday calendar unverified"}` : "DATA HEALTH: loading";
@@ -152,6 +157,7 @@ export default function App() {
       {DEV_MOCK && <div id="mockbar">MOCK PREVIEW — synthetic data for layout checks only. Nothing here is real. The live Monitor is at https://shotayng1123.github.io/orrery-market-monitor/</div>}
       <CardLayer />
       {acct && me && <AccountModal me={me} onClose={() => setAcct(false)} onSignOut={signOut} onChanged={() => setTok(getToken())} />}
+      {notify && <Notify onClose={() => setNotify(false)} />}
       <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={me?.email ?? userId} onSignOut={() => (me ? setAcct(true) : signOut())} updatedAt={updatedAt} nextIn={nextIn} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} pv2={pv2} canPreview={phone} />
       <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–6 TABS · ESC</span><span>&#9974;</span></div>
       <div id="wrap">
