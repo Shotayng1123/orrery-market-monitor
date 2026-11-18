@@ -67,14 +67,17 @@ export async function buildPack(sb: SupabaseClient, log: (s: string) => void = c
   // and the feed went on answering with it: read at 22:15 UTC those are not closing levels, and a note that
   // presented them as such would be wrong in every table (supabase/functions/_shared/feedhealth.ts).
   const warnings: string[] = [];
-  const { data: shut } = await sb.from("sessions_cal").select("market,d").gte("d", new Date(now.getTime() - 20 * 86400e3).toISOString().slice(0, 10));
-  const holidays: Record<string, Set<string>> = {};
-  for (const r of (shut ?? []) as Array<{ market: string; d: string }>) (holidays[r.market] ??= new Set()).add(r.d);
-  const clock = (iso: string, tz: string) => new Intl.DateTimeFormat("en-GB", { timeZone: tz, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso)).replace(",", "");
-  for (const [symbol, market, tz, place, whose] of [["^GSPC", "NYSE", "America/New_York", "New York", "US"], ["^N225", "TSE", "Asia/Tokyo", "Tokyo", "Japanese"]] as const) {
-    const st = stoppedBeforeClose(market, byRow.get(symbol)?.lastAt ?? null, now.getTime(), holidays);
-    if (st) warnings.push(`Prices from ${place} stopped arriving at ${clock(st.last, tz)} ${place} time, before the close at ${clock(st.close, tz)}. The ${whose} figures in these tables are as of then, not closing levels.`);
-  }
+  // a fault in this reading must not cost the morning its note: it is logged, and the note is written without it
+  try {
+    const { data: shut } = await sb.from("sessions_cal").select("market,d").gte("d", new Date(now.getTime() - 20 * 86400e3).toISOString().slice(0, 10));
+    const holidays: Record<string, Set<string>> = {};
+    for (const r of (shut ?? []) as Array<{ market: string; d: string }>) (holidays[r.market] ??= new Set()).add(r.d);
+    const clock = (iso: string, tz: string) => new Intl.DateTimeFormat("en-GB", { timeZone: tz, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso)).replace(",", "");
+    for (const [symbol, market, tz, place, whose] of [["^GSPC", "NYSE", "America/New_York", "New York", "US"], ["^N225", "TSE", "Asia/Tokyo", "Tokyo", "Japanese"]] as const) {
+      const st = stoppedBeforeClose(market, byRow.get(symbol)?.lastAt ?? null, now.getTime(), holidays);
+      if (st) warnings.push(`Prices from ${place} stopped arriving at ${clock(st.last, tz)} ${place} time, before the close at ${clock(st.close, tz)}. The ${whose} figures in these tables are as of then, not closing levels.`);
+    }
+  } catch (e) { log(`the check for prices that stopped before a close could not be made: ${e instanceof Error ? e.message : String(e)}`); }
   if (warnings.length) log(`WARNING: ${warnings.join(" ")}`);
   const idx = (symbol: string, name: string): Move | null => { const r = byRow.get(symbol); if (!r || r.last == null || r.pct?.d1 == null) return null; const prev = r.last / (1 + r.pct.d1 / 100); return { symbol, name, last: r.last, prev, pct: r2(r.pct.d1) }; };
 
