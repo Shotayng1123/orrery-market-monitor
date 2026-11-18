@@ -1,6 +1,16 @@
 // The measuring half of the stock alerts, kept free of the database so it can be checked without one
 // (sim/logic.test.ts). The thresholds and the writing half are in alerts.ts.
 import { marketState, recentlyClosed, type Holidays, type Market, type MarketId } from "./sessions.ts";
+import { isLargeCap } from "./bigmoves.ts";
+
+/** The line a single stock must pass to raise an alert, in %: 5 for a large company, 7 for the rest (Shota, 19 Nov
+ *  2026; until then 7 for all: ServiceNow fell 6.5% on 17 Nov and raised nothing). "Large" is the size rule of the
+ *  stock page's big moves: 1tn yen and above, or 10bn US dollars and above (bigmoves.ts isLargeCap). A company
+ *  whose size is not known is held to 7. */
+export const STOCK_PCT = 7, LARGE_STOCK_PCT = 5;
+export function stockLine(mcap: number | null | undefined, currency: string | null | undefined, perUsd: number | null | undefined): number {
+  return isLargeCap(mcap ?? null, currency ?? null, perUsd ?? null) ? LARGE_STOCK_PCT : STOCK_PCT;
+}
 
 export interface SessionMove {
   pct: number;      // the largest move of the session against the previous close, signed, in %

@@ -37,7 +37,7 @@ export interface TableRow extends Instrument {
 export interface SeriesPoint { t: number; v: number; q?: number | null }   // epoch seconds, value; q = volume of the bar, where the feed has it (stocks)
 export interface Series { symbol: string; res: "1m" | "5m" | "15m" | "1h" | "1d"; points: SeriesPoint[]; asOf: string | null }
 
-/** An excessive move: a single stock beyond ±7% or an index beyond ±3% against the previous close. */
+/** An excessive move: a single stock beyond its line (±5% for a large company, ±7% otherwise) or an index beyond ±3%, against the previous close. */
 export interface Alert { id: number; at: string; upd?: string; d: string; symbol: string; name: string; kind: "stock" | "index" | "buyback" | "revision" | "mna"; pct: number | null; price: number | null; market: string; msg: string; url?: string | null }
 
 export interface CurvePoint { tenor: string; years: number; yield: number }

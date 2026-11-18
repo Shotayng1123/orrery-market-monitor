@@ -4,7 +4,7 @@ import * as web from "../web/src/lib/sessions.ts";
 import * as srv from "../supabase/functions/_shared/sessions.ts";
 import { rollingBands, pct } from "../web/src/lib/stats.ts";
 import { fxClosesFromDaily, fxClosesFromHourly, fxDay, suspectBars } from "../supabase/functions/_shared/fx.ts";
-import { AFTER_CLOSE_MIN, closeMove, quoteMove, scanDue, sessionMove, stockMarket } from "../supabase/functions/_shared/moves.ts";
+import { AFTER_CLOSE_MIN, closeMove, LARGE_STOCK_PCT, quoteMove, scanDue, sessionMove, STOCK_PCT, stockLine, stockMarket } from "../supabase/functions/_shared/moves.ts";
 import { b64u, encryptPush, pushEndpointOk, unb64u, vapidHeader } from "../supabase/functions/_shared/webpush.ts";
 import { alertNote, moveMark, notesFor, stampSgt, wanted, type AlertLite } from "../supabase/functions/_shared/pushrules.ts";
 import { CODE_MAX_TRIES, CODE_TTL_MIN, checkRefusal, cleanCode, codeHash, codeMail, newCode, noticeMail, sendRefusal, verifyLink } from "../supabase/functions/_shared/signup.ts";
@@ -16,6 +16,7 @@ import { fyLabel, justReported, LAYOUT_FOREIGN, LAYOUT_JP, pickUnit, progress, q
 import { edinetCodeOf, edinetFin, edinetWaiting, legacyStatements, yahooFin, yahooFinTypes } from "../supabase/functions/_shared/finsrc.ts";
 import { keyStatsOf } from "../supabase/functions/_shared/yahoo.ts";
 import { bigMoves, isLargeCap, moveText, settledBars } from "../supabase/functions/_shared/bigmoves.ts";
+import { liveRows } from "../supabase/functions/_shared/intraday.ts";
 import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabase/functions/_shared/movecause.ts";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
@@ -166,6 +167,12 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
   ck("a stock whose one-minute bars all stop short of the line but whose official close is beyond it is caught at the close", bars === null && !!shut && Math.abs(shut.pct - -7.2) < 1e-9 && shut.price === 928, { bars, shut });
   ck("a close inside the line raises nothing; exactly 7.0% counts, either way; a rise is reported as a rise", closeMove(1000, 935, 7) === null && closeMove(1000, 1069.9, 7) === null && closeMove(1000, 930, 7) !== null && closeMove(1000, 1070, 7)!.pct > 0);
   ck("no previous close or no closing price: nothing", closeMove(null, 900, 7) === null && closeMove(0, 900, 7) === null && closeMove(1000, null, 7) === null && closeMove(1000, 0, 7) === null);
+  // the line itself: 5% for a large company, 7% for the rest (Shota, 19 Nov 2026)
+  ck("a large company's line is 5%: 1tn yen and above in Tokyo, 10bn US dollars and above elsewhere (other currencies through the dollar)", stockLine(1e12, "JPY", null) === 5 && stockLine(9.99e11, "JPY", null) === 7 && stockLine(1e10, "USD", 1) === 5 && stockLine(9.9e9, "USD", 1) === 7 && stockLine(1.5e13, "KRW", 1400) === 5 && stockLine(1.3e13, "KRW", 1400) === 7 && LARGE_STOCK_PCT === 5 && STOCK_PCT === 7);
+  ck("a company whose size or currency rate is not known is held to 7%", stockLine(null, "USD", 1) === 7 && stockLine(5e11, null, 1) === 7 && stockLine(1e13, "KRW", null) === 7 && stockLine(undefined, undefined, undefined) === 7);
+  // ServiceNow, 17 Nov 2026: reported down about 6.5% at the close (figures here are made up to that shape)
+  const now65 = closeMove(1000, 935, stockLine(1.9e11, "USD", 1)), small65 = closeMove(1000, 935, stockLine(4e9, "USD", 1));
+  ck("a large company down 6.5% now raises an alert; a small one at the same figure does not", !!now65 && Math.abs(now65.pct - -6.5) < 1e-9 && small65 === null && sessionMove([1, 2], [962, 948], 1000, stockLine(2e12, "JPY", null))!.pct === (948 / 1000 - 1) * 100 && sessionMove([1, 2], [962, 948], 1000, stockLine(2e11, "JPY", null)) === null, { now65, small65 });
   ck("only one side known: that side is used", quoteMove(1000, null, 1090, 7)?.pct === 9.000000000000007 || Math.abs((quoteMove(1000, null, 1090, 7)?.pct ?? 0) - 9) < 1e-9);
   const mk = (s: string) => stockMarket(s);
   ck("Tokyo stocks, including the new-style codes: 5838.T, 7203.T, 285A.T", mk("5838.T") === "TSE" && mk("7203.T") === "TSE" && mk("285A.T") === "TSE");
@@ -671,6 +678,26 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     // which company
     const found = [{ edinetCode: "E04147", name: "A", secCode: "90200" }, { edinetCode: "E01892", name: "B", secCode: "69020" }];
     ck("the company is the one whose securities code is exactly the one asked for (with its check digit), not another whose code merely contains it", edinetCodeOf({ companies: found }, "9020") === "E04147" && edinetCodeOf({ data: [...found].reverse() }, "9020") === "E04147" && edinetCodeOf(found, "6902") === "E01892" && edinetCodeOf([{ edinet_code: "E1", sec_code: "285A0" }], "285a") === "E1" && edinetCodeOf(found, "902") === "" && edinetCodeOf({ companies: [] }, "9020") === "" && edinetCodeOf(null, "9020") === "");
+  }
+
+  console.log("\n[R] EQUITIES during a session: a list's names at today's prices while its market is open");
+  {
+    const near = (a: number | null | undefined, b: number) => a != null && Math.abs(a - b) < 1e-9;
+    const ny = (iso: string) => srv.localDate("America/New_York", Date.parse(iso) / 1000);
+    // closes booked for Tuesday the 17th; quotes printed on Wednesday the 18th, New York time (11:24 there)
+    const row = (symbol: string, close: number, pct1d: number, q: number | null, qt: string | null = "2026-11-18T16:24:00Z") => ({ symbol, d: "2026-11-17", close, prev: close / (1 + pct1d / 100), pct1d, pct1w: -3, dma200: 100, q_price: q, q_prev: q == null ? null : close, q_time: q == null ? null : qt });
+    const open = liveRows([row("A", 100, -7.2, 103), row("B", 50, -6.5, 49), row("C", 200, 1.0, 200), row("D", 80, 2.0, null)], ny);
+    ck("with the market open, a name's day change is its last price against the previous close, not yesterday's move", open.live !== null && open.live.n === 3 && open.live.asOf === "2026-11-18T16:24:00Z" && near(open.rows[0].pct1d, 3) && open.rows[0].close === 103 && open.rows[0].prev === 100 && near(open.rows[1].pct1d, -2) && near(open.rows[2].pct1d, 0));
+    ck("a name with no quote keeps its close; the longer periods are left as measured to the last close", open.rows[3].pct1d === 2.0 && open.rows[3].close === 80 && open.rows.every((r) => r.pct1w === -3 && r.d === "2026-11-17"));
+    const ranked = [...open.rows].sort((a, b) => (b.pct1d ?? 0) - (a.pct1d ?? 0)).map((r) => r.symbol).join("");
+    ck("so the movers are today's: yesterday's worst faller can be today's best riser", ranked === "ADCB", ranked);
+    // the quotes still carry Tuesday's close (before the open, or after the daily job has booked the session)
+    const shut = liveRows([row("A", 100, -7.2, 100, "2026-11-17T21:00:02Z"), row("B", 50, -6.5, 50, "2026-11-17T21:00:01Z")], ny);
+    ck("before the open, and once the session has been booked, the tab reads from the closes as before", shut.live === null && shut.rows[0].pct1d === -7.2 && shut.rows[1].close === 50);
+    ck("a print at 20:30 New York time on the 17th is still that session, though it is already the 18th in UTC", liveRows([row("A", 100, -7.2, 99, "2026-11-18T01:30:00Z")], ny).live === null && liveRows([row("A", 100, -7.2, 99, "2026-11-18T14:31:00Z")], ny).live !== null);
+    const few = liveRows([row("A", 100, 1, 103), row("B", 50, 1, 50, "2026-11-17T21:00:00Z"), row("C", 200, 1, 200, "2026-11-17T21:00:00Z")], ny);
+    ck("fresh quotes for under half of the names change nothing: a list half at today's prices would rank wrongly", few.live === null && few.rows[0].pct1d === 1 && few.rows[0].close === 100);
+    ck("a quote without a price, without its previous close or without a time is not used; an empty list is an empty list", liveRows([{ ...row("A", 100, 1, 103), q_prev: null }, { ...row("B", 50, 1, 51), q_time: null }, { ...row("C", 20, 1, 0) }], ny).live === null && liveRows([], ny).live === null && liveRows([], ny).rows.length === 0);
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");
