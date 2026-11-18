@@ -56,7 +56,7 @@ const ck = (name, cond, detail) => { if (cond) { pass++; console.log("  ✓ " + 
   const page = fs.readFileSync(path.join(ROOT, "supabase", "functions", "_shared", "stock.ts"), "utf8"), job = fs.readFileSync(path.join(ROOT, "jobs", "move_causes.ts"), "utf8");
   const queued = /queue\.push\(\{([^}]*)\}\)/.exec(page)[1].split(",").map((x) => x.trim().split(":")[0].trim());
   const read = /from\("move_causes"\)\.select\("([^"]+)"\)\.eq\("symbol"/.exec(page)[1].split(",");
-  const stored = /\.update\(\{ status: a\.found[^}]*\}\)/.exec(job)[0].match(/(\w+):/g).map((x) => x.slice(0, -1)), taken = /from\("move_causes"\)\.select\("([^"]+)"\)\.in\(/.exec(job)[1].split(",");
+  const stored = /\.update\(\{ status: a\.found[^}]*\}\)/.exec(job)[0].match(/(\w+):/g).map((x) => x.slice(0, -1)), taken = /from\("move_causes"\)\.select\("([^"]+)"\)/.exec(job)[1].split(",");
   const missing = [...queued, ...read, ...stored, ...taken].filter((c) => !cols.includes(c));
   ck(`the page (queues ${queued.join(", ")}; reads ${read.join(", ")}) and the job (takes ${taken.join(", ")}; stores ${stored.join(", ")}) use only columns the table has`, missing.length === 0 && queued.length === 6 && stored.length >= 6, missing);
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`));
