@@ -266,14 +266,29 @@ The reason for each move is found outside the database:
    the same dates.
 3. A reason is stored only when the reply names reports that the search itself returned (`readCause` in
    `_shared/movecause.ts` drops any other address). Otherwise the move is stored as `not_found` and the page says
-   "No reliable report of the reason was found". A look-up that fails is tried three times.
+   "No reliable report of the reason was found". A look-up that fails is tried three times; one whose searches
+   returned no page at all counts as failed, not as "not found".
 
-It costs model tokens and searches. Every run prints the cost of each look-up and the total. Measured on the
-first runs (18 Nov 2026, the defaults below): USD 0.08 a look-up with four searches, about fourteen seconds each,
-so a company opened for the first time (at most 15 moves queued) is about USD 1.20 and a full run of 60 about
-USD 5. The knobs:
-repository **variables** `MOVE_CAUSE_MODEL` (default `claude-opus-5-5`) and `MOVE_CAUSE_EFFORT` (default
-`medium`), and the run's `max` input (default 60 moves a run). It needs the `ANTHROPIC_API_KEY`, `SUPABASE_URL`
+The model asks each search itself and reads its results (the basic search tool, `ask` in `jobs/lib/llm.ts`).
+With the newer tool, which lets the model run its searches from a program of its own, the first real run
+(18 Nov 2026) stored 12 of 15 moves as `not_found`: the program failed after its searches had run, the model
+had seen none of the 36 pages returned, and it answered that there was no report. Looked up again with direct
+searches, 11 of those 12 moves were found, with dated reports.
+
+It costs model tokens and searches. Every run prints, for each look-up, its cost, the number of pages its
+searches returned, any search that failed and, when no reason is stored, which way that came about; and the
+total. Measured on 18 Nov 2026 with the defaults below, on 27 look-ups (two companies): USD 6.01 in all, USD 0.22
+a look-up on average; 21 found, 6 not found. The cost follows the number of searches a look-up needs, about
+USD 0.09 each, because the model reads every result: one search 0.09 to 0.10 (10 look-ups), two 0.18 to 0.20 (6), three
+0.24 to 0.31 (4), four 0.37 to 0.43 (7). The 16 look-ups that needed one or two searches all found a reason; of
+the 11 that needed three or four, 5 did. By company: USD 1.99 for 12 moves and USD 4.02 for
+15 (a page queues at most 15 each time it is opened); a run of 30, the default, is about USD 7. (The earlier figure in this file,
+USD 0.08 a look-up, was measured with the newer search tool, which is cheaper and gave the wrong answers above.)
+The knobs: repository **variables** `MOVE_CAUSE_MODEL` (default `claude-opus-5-5`), `MOVE_CAUSE_EFFORT` (default
+`medium`) and `MOVE_CAUSE_SEARCHES` (searches allowed a look-up, default 4; 2 caps a look-up at about USD 0.20,
+and would have left 5 of the 21 reasons above unfound), and the run's inputs: `max` (default 30 moves a run),
+`dry` (ask and print, store nothing), `again` (also look again at moves stored as `not_found`, up to three tries
+in all) and `trace` (print each look-up's searches, the pages returned and the reply). It needs the `ANTHROPIC_API_KEY`, `SUPABASE_URL`
 and `SUPABASE_SERVICE_ROLE_KEY` secrets the Morning Note already uses. To see what is waiting or stored:
 `select status, count(*) from move_causes group by 1;`
 

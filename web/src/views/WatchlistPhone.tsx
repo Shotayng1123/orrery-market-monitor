@@ -30,7 +30,7 @@ export function WatchlistPhone({ tick }: { tick: number }) {
   return (
     <Screen title="Watchlist" sub={list.data ? `${rows.length} name${rows.length === 1 ? "" : "s"}` : list.error ? <span className="warn">{list.error}</span> : "loading…"} right={<Pick label="Change" value={k} options={KEYS} onChange={setK} />}>
       <form className="mp-add" onSubmit={(e) => { e.preventDefault(); void box.submit(); }}>
-        <input className="mp-find" id="wl-add" type="text" aria-label="Add a name to the watchlist" placeholder="Add a name or symbol: toyota, NVDA, 7203" value={box.text} autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck={false} onChange={(e) => box.setText(e.target.value)} />
+        <input className="mp-find" id="wl-add" type="text" aria-label="Add a name to the watchlist" placeholder="Add: toyota, NVDA, 7203" value={box.text} autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck={false} onChange={(e) => box.setText(e.target.value)} />
         <button type="submit" className="mp-act">Add</button>
       </form>
       {box.msg && <p id="wl-msg" className={`mp-note${box.msg.kind === "err" ? " warn" : ""}`}>{box.msg.text}</p>}
@@ -53,7 +53,7 @@ export function WatchlistPhone({ tick }: { tick: number }) {
             <span className="mp-px">{fmtNum(r.last, r.last != null && r.last >= 1000 ? 0 : r.isYield ? 3 : 2)}</span>
             <Move v={r[k]}>{fmtPct(r[k], 1)}</Move>
           </div>
-        )) : <Empty title={w.ready && list.data ? "Your watchlist is empty" : "Loading your watchlist"}>{list.error ?? (w.ready && list.data ? "Press the star beside a name on its page, in the screener or in the earnings calendar, or type a symbol above." : "")}</Empty>}
+        )) : <Empty title={w.ready && list.data ? "Your watchlist is empty" : "Loading your watchlist"}>{list.error ?? (w.ready && list.data ? "Press the star beside a name on its page, in the screener or in the earnings calendar, or type part of a name or of a symbol above and choose from the list." : "")}</Empty>}
       </Section>
       <Section title="Earnings ahead" aux="times in SGT">
         {ahead.length ? ahead.map((r, i, arr) => (

@@ -173,13 +173,21 @@ jobs:
       # Docker, which a GitHub runner has) `daily` came to 33 MB, the spreadsheet and PDF libraries inside it, and
       # the upload was refused ("413 request entity too large", 18 Nov 2026). One function at a time, the site's own
       # (`api`) first, so that one refusal does not keep the others back; the step still fails if any did not go.
+      # Each is tried up to three times, twenty seconds apart: on 18 Nov 2026 `daily` was refused once with
+      # Supabase's own "500: Function deploy failed due to an internal error" and went through unchanged on the
+      # re-run six minutes later, while the site had the new `api` beside the old `daily` in between.
       - name: Functions
         if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy'
         run: |
           failed=""
           for f in api tick daily; do
             echo "== $f"
-            supabase functions deploy "$f" --project-ref "$REF" --use-api --yes || failed="$failed $f"
+            ok=""
+            for try in 1 2 3; do
+              if supabase functions deploy "$f" --project-ref "$REF" --use-api --yes; then ok=1; break; fi
+              if [ "$try" -lt 3 ]; then echo "$f was not deployed (try $try of 3); trying again in 20 s"; sleep 20; fi
+            done
+            if [ -z "$ok" ]; then failed="$failed $f"; fi
           done
           if [ -n "$failed" ]; then echo "::error title=Functions not deployed::$failed"; exit 1; fi
 

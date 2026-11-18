@@ -277,7 +277,7 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
   );
   const standIn = ix.statsNote ? <span className="badge proxy" title={ix.statsNote}>STAND-IN</span> : null;
   const statsAux = s ? (s.live
-    ? <><span className="badge live" id="eq-live" title={`The market is open: the 1D figures (movers, breadth, sectors, heat map) are today's moves so far, from quotes pulled every ten to twenty minutes. Changes over longer periods are measured to the close of ${s.asOf}.`}>INTRADAY</span>{s.idx} constituents · 1D at {fmtStamp(s.live.asOf)} · longer periods at the close of {s.asOf}{standIn}</>
+    ? <><span className="badge live" id="eq-live" title={`The market is open: the 1D figures (movers, breadth, sectors, heat map) are today's moves so far, from quotes pulled every ten to twenty minutes. Changes over longer periods are measured to the close of ${s.asOf}.`}>INTRADAY</span><span className="nb">{s.idx} constituents</span> · <span className="nb">1D at {fmtStamp(s.live.asOf)}</span> · <span className="nb">longer periods at the close of {s.asOf}</span>{standIn}</>
     : <>{s.idx} constituents · closes of {s.asOf}{standIn}</>) : "";
   const noStats = <Empty title="Statistics not computed yet">{st.error ?? "The daily statistics job runs after each close."}</Empty>;
   const hasMcap = !!s?.rows.some((r) => r.mcap != null);

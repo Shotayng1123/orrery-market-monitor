@@ -25,6 +25,19 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
     ["Heat map", "Each tile is a company: size is market capitalisation, colour the 1D move."],
     ["Short interest", "Japan: short-selling share of TSE turnover and reported short positions of 0.5% and more (JPX). United States: short-sale volume share (FINRA)."],
     ["STAND-IN", "A narrower index whose members stand in for a broader one, for example the Nasdaq-100 for the Nasdaq Composite."],
+    ["INTRADAY", "Shown while the index's market is open: the 1D figures (movers, breadth, sectors, heat map) are then today's moves so far, from quotes pulled every ten to twenty minutes. Without the badge they are the last booked closes. Longer periods are always measured to the last booked close."],
+  ] },
+  { title: "Single-name page", rows: [
+    ["Performance", "Price change against the benchmark over each window, dividends not included. A Tokyo name is set against both the Nikkei 225 and TOPIX."],
+    ["Big moves", "For companies of 1tn yen and above, or 10bn US dollars and above: 5% in a day, 10% in five sessions, or 20% from a high to a low (or a low to a high) within a month. Each is a circle on the 3M, 12M and 36M charts; tap or click it for the move and its reason."],
+    ["The reason", "Looked up by web search for moves of the last twelve months, and shown only with the reports it rests on, which are linked. Otherwise the page says that no reliable report was found, or that the look-up is still under way."],
+    ["Financials", "Tokyo-listed companies: EDINET DB (有価証券報告書 and 決算短信). Other companies: Yahoo Finance fundamentals; a line the source has no figure for in any period (R&D or buybacks, for example) is left out. The source and the date fetched are at the top of the panel."],
+    ["Short interest", "Tokyo: JPX short-position reports. United States: exchange-reported short interest, and FINRA's short-volume share of a day's trading, which is not short interest."],
+    ["Next earnings (est.)", "A date estimated by Yahoo Finance, not confirmed by the company."],
+  ] },
+  { title: "Watchlist", rows: [
+    ["Adding a name", "Type part of a company's name or of its ticker and choose from the candidates; or use the star beside a name on its page."],
+    ["What it adds", "Its earnings dates, its headlines, the research that mentions it, and alerts on it read from one-minute prices."],
   ] },
   { title: "Alerts", rows: [
     ["Moves", "A single stock beyond its line at any point in the session, or an index beyond ±3%, against the previous close. The line is ±5% for a large company (1tn yen and above in Tokyo, 10bn US dollars and above elsewhere) and ±7% for the rest. For a stock the figure is the largest move of the session, also after it has come back; the official close is measured too."],
@@ -66,12 +79,14 @@ export function Help() {
           <div className="helpbox" onClick={(e) => e.stopPropagation()}>
             <div className="helphead"><b>HOW TO READ THE MONITOR</b><span className="chip-sm" onClick={() => setOpen(false)}>CLOSE</span></div>
             <div className="helpbody">
-              {SECTIONS.map((s) => (
-                <div key={s.title} className="helpsec">
-                  <h4>{s.title}</h4>
-                  <dl>{s.rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
-                </div>
-              ))}
+              <div className="helpcols">
+                {SECTIONS.map((s) => (
+                  <div key={s.title} className="helpsec">
+                    <h4>{s.title}</h4>
+                    <dl>{s.rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

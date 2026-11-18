@@ -150,7 +150,7 @@ export function EquitiesPhone({ sub, onSub, tick }: { sub: string; onSub: (s: st
   // the movers were still the day before's)
   const of = s ? (s.live ? <><span className="badge live" id="eq-live" title={`Today's moves so far. Longer periods are measured to the close of ${s.asOf ?? "–"}.`}>INTRADAY</span>{s.idx} names · 1D at {fmtStamp(s.live.asOf)}</> : `${s.idx} names · closes of ${s.asOf ?? "–"}`) : "";
   return (
-    <Screen title="Equities" sub={<>{of || "loading…"}{ix.statsNote && <span className="badge proxy" title={ix.statsNote}>STAND-IN</span>}</>}
+    <Screen title="Equities" subBelow sub={<>{of || "loading…"}{ix.statsNote && <span className="badge proxy" title={ix.statsNote}>STAND-IN</span>}</>}
       right={<Pick label="Index" value={ix.id} options={INDICES.map((i) => ({ value: i.id, label: i.label }))} onChange={(v) => { setOpen(null); onSub(v); }} />}>
       <div className="mp-picks top">
         <Pick label="Period" value={period} options={CHART_PERIODS} onChange={setPeriod} />

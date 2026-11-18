@@ -17,6 +17,7 @@ Rules:
 2. If the stock only moved with its market (compare the benchmark's change given below), say so and name the market's reported trigger, if a report gives one.
 3. Never infer a reason from the price alone, from what usually moves this stock, or from memory. If you find no report that explains this move, the answer is that none was found. That answer is useful; a guess is harmful.
 4. Figures in the reason (earnings numbers, deal sizes) must be the ones in the report.
+5. Rest the reason on the most authoritative report you found, and name those first: the company's own release or filing, an exchange or a regulator, a news agency, an established newspaper or broadcaster (Reuters, Bloomberg, Nikkei, the Financial Times, The Wall Street Journal, CNBC and their like). A site that rewrites other outlets' reports, a stock-commentary blog, a price-alert page or a crypto news site is named only when nothing better reports the same thing.
 
 End your reply with one JSON object and nothing after it:
 {"found": true or false, "cause": "one sentence of at most 220 characters, plain text, starting with what happened" or null, "sources": ["the URL of each report you relied on, at most 3"]}

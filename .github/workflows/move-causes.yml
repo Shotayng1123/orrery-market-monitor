@@ -3,7 +3,8 @@ name: move-causes
 # The reasons for big moves on the stock pages (Shota, 18 Nov 2026). A page of a large company puts each big move
 # without a reason on a queue; this job looks each one up with web search and stores the reported reason with
 # its sources, or "not found" (jobs/move_causes.ts). Each look-up costs model tokens and searches; the run prints
-# the cost of each and the total.
+# the cost of each and the total. Measured on 18 Nov 2026: USD 0.22 a look-up on average (0.09 to 0.43, by the
+# number of searches it needed), so a run of 30, the default, is about USD 7.
 #   - Normally started by the database the moment a page queues a move (move_causes_kick, at most once in ten
 #     minutes; it needs the GitHub token stored for the Morning Note, supabase/README.md).
 #   - Once a day by GitHub's own schedule, as the fallback when that token is not stored.
@@ -16,7 +17,7 @@ on:
       max:
         description: "How many moves to look up at most in this run"
         required: false
-        default: "60"
+        default: "30"
       dry:
         description: "Dry run (ask and print, store nothing)"
         required: false
@@ -60,7 +61,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           MOVE_CAUSE_MODEL: ${{ vars.MOVE_CAUSE_MODEL }}
           MOVE_CAUSE_EFFORT: ${{ vars.MOVE_CAUSE_EFFORT }}
-          MAX: ${{ github.event.inputs.max || '60' }}
+          MOVE_CAUSE_SEARCHES: ${{ vars.MOVE_CAUSE_SEARCHES }}
+          MAX: ${{ github.event.inputs.max || '30' }}
           DRY: ${{ github.event.inputs.dry || 'false' }}
           AGAIN: ${{ github.event.inputs.again || 'false' }}
           TRACE: ${{ github.event.inputs.trace || 'false' }}

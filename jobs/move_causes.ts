@@ -4,14 +4,14 @@
 // A reason is stored only with the reports behind it (pages the search returned); otherwise the move is stored
 // as "not found". Nothing is guessed (the rules are in _shared/movecause.ts).
 //
-//   npx tsx move_causes.ts                 up to 60 moves
+//   npx tsx move_causes.ts                 up to 30 moves
 //   npx tsx move_causes.ts --max 10        fewer
 //   npx tsx move_causes.ts --dry           ask and print, store nothing
 //   npx tsx move_causes.ts --again         also look again at moves stored as "not found" (fewer than three tries)
 //   npx tsx move_causes.ts --parallel 1    look-ups at a time (default 3)
 //   npx tsx move_causes.ts --trace         print what each look-up did: its searches, the pages returned, its reply
 // Needs ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY. Optional: MOVE_CAUSE_MODEL (default
-// claude-opus-5-5), MOVE_CAUSE_EFFORT (default medium). Each look-up prints what it cost, how many pages its
+// claude-opus-5-5), MOVE_CAUSE_EFFORT (default medium), MOVE_CAUSE_SEARCHES (searches allowed a look-up, default 4). Each look-up prints what it cost, how many pages its
 // searches returned, any search that failed, and, when nothing is stored as the reason, which way it came to that.
 import { db } from "./lib/db.js";
 import { ask, newClient } from "./lib/llm.js";
@@ -19,10 +19,12 @@ import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabas
 
 const arg = (k: string, d = ""): string => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] ?? d : d; };
 const DRY = process.argv.includes("--dry"), AGAIN = process.argv.includes("--again"), TRACE = process.argv.includes("--trace");
-const MAX = Math.max(1, Math.min(300, Number(arg("max", "60")) || 60));
+const MAX = Math.max(1, Math.min(300, Number(arg("max", "30")) || 30));
 const PARALLEL = Math.max(1, Math.min(6, Number(arg("parallel", "3")) || 3));
 const MODEL = process.env.MOVE_CAUSE_MODEL || "claude-opus-5-5", EFFORT = process.env.MOVE_CAUSE_EFFORT || "medium";
-const SEARCHES = 4, MAX_TRIES = 3, EMPTY_WAIT_MS = 30_000;
+// Each search costs about USD 0.09 (its results are read by the model), so the number allowed sets what a look-up
+// can cost: measured on 27 look-ups (18 Nov 2026), one search 0.09 to 0.10, two 0.18 to 0.20, three 0.24 to 0.31, four 0.37 to 0.43.
+const SEARCHES = Math.max(1, Math.min(8, Number(process.env.MOVE_CAUSE_SEARCHES) || 4)), MAX_TRIES = 3, EMPTY_WAIT_MS = 30_000;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const WHY: Record<string, string> = { "none reported": "the model found no report", "no sentence": "the model gave no usable sentence", "no returned page cited": "the model gave a reason but cited no page its searches returned" };
 

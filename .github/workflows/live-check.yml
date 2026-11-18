@@ -1,0 +1,31 @@
+name: live-check
+
+# A read-only look at the live database (jobs/live_check.ts): what the jobs last did, whether EQUITIES has today's
+# quotes, the alerts of the last two days, the reasons for big moves and their cost, the EDINET DB allowance.
+# It changes nothing and prints market data and counts only. By hand: Actions > live-check > Run workflow.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  look:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: jobs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: jobs/package-lock.json
+      - run: npm ci
+      - name: Look at the live database
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npx tsx live_check.ts
