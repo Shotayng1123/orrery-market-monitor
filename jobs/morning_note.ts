@@ -14,6 +14,9 @@ import { newClient, review, write } from "./lib/llm.js";
 
 const arg = (k: string, d = ""): string => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] ?? d : d; };
 const DRY = process.argv.includes("--dry"), IF_MISSING = process.argv.includes("--if-missing");
+// --pack-only: build the numbers pack from the live data, say what is in it, and stop: no model is asked and
+// nothing is stored. For checking the pack (and its warnings) without the cost of a note.
+const PACK_ONLY = process.argv.includes("--pack-only");
 
 const TAG_RULE = `Name tags: the first time a paragraph mentions an index, a stock, a currency pair, a yield or a commodity that has a symbol, write it as [[SYMBOL|Name as it reads in the sentence]], for example [[AMD|AMD]], [[^SOX|the SOX]], [[8035.T|Tokyo Electron]], [[USDJPY=X|USD/JPY]]. Use the symbol exactly as it appears in the pack; for a company that is not in the pack use its exchange ticker (US ticker, or the four-character Tokyo code followed by .T) only when you are certain of it, otherwise write the name without a tag. The page turns each tag into a link to that instrument's page.`;
 
@@ -33,6 +36,7 @@ Hard rules:
 6. Dates and times: the pack is as of the generatedAt timestamp; today is dateSgt (Singapore). Refer to sessions by their date.
 7. If dateSgt is a Saturday there is no Tokyo session today or tomorrow: write the Japan section as the read-across for Monday's open, and say so. If dateSgt is a Monday, cover weekend news that matters for the open, with citations.
 8. ${TAG_RULE}
+9. If the pack has "warnings", prices for that market stopped arriving before its close, and the pack's figures for it are not closing levels. Say so in one plain sentence at the start of "In brief". Write that market's part from the reports you find, with citations, and never describe a figure from the pack as where that market closed.
 
 Length and style: 500 to 750 words in all. Short sentences, one cause and one effect each. Bullets ("- ") rather than long paragraphs. No sentence that only restates a move.
 
@@ -113,6 +117,11 @@ async function main() {
   const pack: Pack | WeeklyPack = kind === "weekly" ? await buildWeeklyPack(sb) : await buildPack(sb);
   if (pack.kind === "weekly") console.log(`weekly pack: ${pack.table.length} table rows, US ${pack.us.breadth?.n ?? 0} names, JP ${pack.jp.breadth?.n ?? 0} names, ${pack.actuals.length} actuals, ${pack.weekAhead.length} ahead, ${pack.headlines.length} headlines${pack.notes.length ? "; notes: " + pack.notes.join("; ") : ""}`);
   else console.log(`pack: ${pack.table.length} table rows, US ${pack.us.breadth?.n ?? 0} names, JP ${pack.jp.breadth?.n ?? 0} names, ${pack.calendar.length} events, ${pack.headlines.length} headlines${pack.notes.length ? "; notes: " + pack.notes.join("; ") : ""}`);
+  if (PACK_ONLY) {
+    if (pack.kind !== "weekly") { const g = pack.table.find((r) => r.symbol === "^GSPC"), n = pack.table.find((r) => r.symbol === "^N225"); console.log(`last prints: S&P 500 ${g?.lastAt ?? "–"}, Nikkei 225 ${n?.lastAt ?? "–"}; warnings: ${(pack.warnings ?? []).join(" | ") || "none"}`); }
+    console.log("pack only: no model was asked and nothing was stored.");
+    return;
+  }
 
   // --- 1. draft with web search ---
   const packJson = JSON.stringify({ ...pack, headlines: pack.headlines.slice(0, pack.kind === "weekly" ? 80 : 30) });

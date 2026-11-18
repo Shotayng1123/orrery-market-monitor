@@ -81,7 +81,7 @@ function NameRow({ r, value, tag, star = false }: { r: StatRow; value: number | 
   return (
     <div className={`mp-row tap${star ? " starred" : ""}`} role="button" tabIndex={0} title={`${r.name} (${r.symbol})`} onClick={() => openAsset(r.symbol)}>
       {star && <Star symbol={r.symbol} name={r.name} />}
-      <span className="mp-nm"><span className="n">{shortName(r.name)}</span><span className="mp-st">{r.symbol} · {r.sector ?? "–"}</span></span>
+      <span className="mp-nm"><span className="n">{shortName(r.name)}</span><span className="mp-st one">{r.symbol} · {r.sector ?? "–"}</span></span>
       <span className="mp-px">{fmtNum(r.close, r.close >= 1000 ? 0 : 2)}</span>
       <Move v={value}>{tag}</Move>
     </div>
@@ -168,7 +168,7 @@ export function EquitiesPhone({ sub, onSub, tick }: { sub: string; onSub: (s: st
       <Section title={`Sector performance · ${sLabel}`} aux="cap-weighted" card={false}>
         {s ? <div className="mp-card">{[...s.sectors].sort((a, b) => ((b[sk] as number | null) ?? -Infinity) - ((a[sk] as number | null) ?? -Infinity)).map((x) => (
           <div className="mp-row plain" key={x.sector}>
-            <span className="mp-nm"><span className="n">{x.sector}</span><span className="mp-st">{x.n} names · {x.n ? `${Math.round((x.above200 / x.n) * 100)}%` : "–"} above their 200-day</span></span>
+            <span className="mp-nm"><span className="n">{x.sector}</span><span className="mp-st one">{x.n} names · {x.n ? `${Math.round((x.above200 / x.n) * 100)}%` : "–"} above their 200-day</span></span>
             <span />
             <Move v={x[sk] as number | null}>{fmtPct(x[sk] as number | null, 1)}</Move>
           </div>

@@ -47,4 +47,4 @@ async function routes(p) {
     if (a === "asset") return r.fulfill({ status: 404, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ error: "no stand-in data for a stock page" }) });
     r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(body) }); });
 }
-module.exports = { open, routes };
+module.exports = { open, routes, note };

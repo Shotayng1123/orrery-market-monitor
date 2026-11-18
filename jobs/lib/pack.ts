@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { nikkei225, sp500, type ConstituentList } from "./constituents.js";
 import { lastTwo, spark } from "./yahoo.js";
 import { selectAll, SGT, ymdIn } from "./db.js";
+import { stoppedBeforeClose } from "../../supabase/functions/_shared/feedhealth.js";
 
 export interface Move { symbol: string; name: string; last: number; prev: number; pct: number; sector?: string; weight?: number | null }
 export interface SectorMove { sector: string; pct: number; n: number; weighted: boolean }
@@ -17,6 +18,9 @@ export interface Pack {
   calendar: Array<{ atSgt: string; country: string; title: string; impact: string; forecast: string | null; previous: string | null }>;
   headlines: Array<{ publishedAt: string; source: string; title: string; url: string; category: string }>;
   notes: string[];
+  /** Said to the reader, on the page and by the writer: a market whose prices stopped arriving before its close,
+   *  so that its figures here are not closing levels (19 Nov 2026; absent from older packs). */
+  warnings?: string[];
 }
 
 const SECTOR_ETFS: Array<[string, string]> = [["XLK", "Technology"], ["XLF", "Financials"], ["XLV", "Health Care"], ["XLE", "Energy"], ["XLY", "Consumer Discretionary"], ["XLP", "Consumer Staples"], ["XLI", "Industrials"], ["XLU", "Utilities"], ["XLRE", "Real Estate"], ["XLB", "Materials"], ["XLC", "Communication Services"]];
@@ -59,6 +63,37 @@ export async function buildPack(sb: SupabaseClient, log: (s: string) => void = c
   if (!rows.length) notes.push("market table snapshot missing: the backend has not run yet");
   const table: Pack["table"] = rows.map((r) => ({ symbol: r.symbol, name: r.name, cls: r.cls, last: r.last, lastAt: r.lastAt, d1Pct: r.pct?.d1 ?? null, d1Chg: r.chg?.d1 ?? null, w1Pct: r.pct?.w1 ?? null, m1Pct: r.pct?.m1 ?? null, unit: r.group === "rates" ? "bp" : "pct" }));
   const byRow = new Map(rows.map((r) => [r.symbol, r]));
+  // 1b. Did the prices stop before a market closed? On 18 Nov 2026 every price stopped at 10:52 New York time
+  // and the feed went on answering with it: read at 22:15 UTC those are not closing levels, and a note that
+  // presented them as such would be wrong in every table (supabase/functions/_shared/feedhealth.ts).
+  const warnings: string[] = [];
+  // a fault in this reading must not cost the morning its note: it is logged, and the note is written without it
+  try {
+    const { data: shut } = await sb.from("sessions_cal").select("market,d").gte("d", new Date(now.getTime() - 20 * 86400e3).toISOString().slice(0, 10));
+    const holidays: Record<string, Set<string>> = {};
+    for (const r of (shut ?? []) as Array<{ market: string; d: string }>) (holidays[r.market] ??= new Set()).add(r.d);
+    const clock = (iso: string, tz: string) => new Intl.DateTimeFormat("en-GB", { timeZone: tz, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso)).replace(",", "");
+    // The table gives each row its last value's time: a quote's own print time, or, once the day's close is
+    // booked, that day's date alone (table.ts). Only a quote can have stopped short of the close; a booked close
+    // is a closing level. (The first version of this check read the date-only stamp as a print at midnight UTC,
+    // and its first run on live data, 18 Nov, wrongly reported Tokyo as stopped at 09:00.)
+    const dated = (at: string) => /T00:00:00(?:\.000)?Z$/.test(at);
+    const { data: lastQ } = await sb.from("quotes_latest").select("symbol,market_time").in("symbol", ["^GSPC", "^N225"]);
+    const printOf = new Map(((lastQ ?? []) as Array<{ symbol: string; market_time: string }>).map((r) => [r.symbol, r.market_time]));
+    for (const [symbol, market, tz, place, whose] of [["^GSPC", "NYSE", "America/New_York", "New York", "US"], ["^N225", "TSE", "Asia/Tokyo", "Tokyo", "Japanese"]] as const) {
+      const at = byRow.get(symbol)?.lastAt ?? null;
+      if (at && !dated(at)) {
+        const st = stoppedBeforeClose(market, at, now.getTime(), holidays);
+        if (st) warnings.push(`Prices from ${place} stopped arriving at ${clock(st.last, tz)} ${place} time, before the close at ${clock(st.close, tz)}. The ${whose} figures in these tables are as of then, not closing levels.`);
+      } else {
+        // the close is booked, but the minute feed of that session stopped short of it: the writer is told where
+        // the booked levels come from (not a warning: the daily history may well be right)
+        const st = stoppedBeforeClose(market, printOf.get(symbol) ?? null, now.getTime(), holidays);
+        if (st) notes.push(`the minute feed from ${place} stopped at ${clock(st.last, tz)} ${place} time, before the close at ${clock(st.close, tz)}; the ${whose} closing levels here were booked afterwards from the daily history`);
+      }
+    }
+  } catch (e) { log(`the check for prices that stopped before a close could not be made: ${e instanceof Error ? e.message : String(e)}`); }
+  if (warnings.length) log(`WARNING: ${warnings.join(" ")}`);
   const idx = (symbol: string, name: string): Move | null => { const r = byRow.get(symbol); if (!r || r.last == null || r.pct?.d1 == null) return null; const prev = r.last / (1 + r.pct.d1 / 100); return { symbol, name, last: r.last, prev, pct: r2(r.pct.d1) }; };
 
   // 2. US constituents and sector ETFs
@@ -108,7 +143,7 @@ export async function buildPack(sb: SupabaseClient, log: (s: string) => void = c
 
   const us = { session: usSession, indices: usIdx, sectorsEtf: sortDesc(sectorsEtf), sectorsConstituents: sectorAgg(usMoves, false), top: sortDesc(usMoves).slice(0, 10), bottom: sortDesc(usMoves).slice(-10).reverse(), big: usMoves.filter((m) => Math.abs(m.pct) >= 5), breadth: breadth(usMoves), source: `${sp.source} (${sp.asOf}); prices Yahoo Finance daily closes` };
   const jp = { session: null, indices: jpIdx, sectors: sectorAgg(jpMoves, true), top: sortDesc(jpMoves).slice(0, 10), bottom: sortDesc(jpMoves).slice(-10).reverse(), big: jpMoves.filter((m) => Math.abs(m.pct) >= 5), breadth: breadth(jpMoves), impliedOpenPct, impliedNote: "CME Nikkei future (USD) vs the Nikkei 225 cash close; an approximation of the opening gap (E)", source: `${nk.source} (${nk.asOf}); prices Yahoo Finance daily closes` };
-  return { kind: "daily", generatedAt: now.toISOString(), dateSgt, table, us, jp, technicals, calendar, headlines, notes };
+  return { kind: "daily", generatedAt: now.toISOString(), dateSgt, table, us, jp, technicals, calendar, headlines, notes, ...(warnings.length ? { warnings } : {}) };
 }
 
 // ---------- the Sunday weekly wrap-up ----------

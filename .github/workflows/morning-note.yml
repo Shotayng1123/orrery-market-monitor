@@ -30,6 +30,10 @@ on:
         description: "Dry run (print only)"
         required: false
         default: "false"
+      pack_only:
+        description: "Build the numbers pack and print what is in it; no model is asked, nothing is stored (true/false)"
+        required: false
+        default: "false"
       if_missing:
         description: "Write only if the note is not stored yet (the database's 22:15 UTC request sets this)"
         required: false
@@ -74,6 +78,7 @@ jobs:
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.if_missing }}" = "true" ]; then ARGS="--if-missing"; fi
           if [ -n "${{ github.event.inputs.date }}" ]; then ARGS="$ARGS --date ${{ github.event.inputs.date }}"; fi
           if [ "${{ github.event.inputs.dry }}" = "true" ]; then ARGS="$ARGS --dry"; fi
+          if [ "${{ github.event.inputs.pack_only }}" = "true" ]; then ARGS="$ARGS --pack-only"; fi
           for attempt in 1 2 3; do
             if npx tsx morning_note.ts $ARGS; then exit 0; fi
             echo "attempt $attempt failed"; if [ "$attempt" -lt 3 ]; then sleep 120; fi

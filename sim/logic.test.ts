@@ -19,7 +19,7 @@ import { bigMoves, isLargeCap, moveText, settledBars } from "../supabase/functio
 import { liveRows } from "../supabase/functions/_shared/intraday.ts";
 import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabase/functions/_shared/movecause.ts";
 import { ALERTS, COMPANY, FIRST, PHILOSOPHY, PHONE, TABS, WELCOME_SUBJECT, welcomeMail } from "../supabase/functions/_shared/welcome.ts";
-import { FEED_LATE_MIN, feedState, type Print } from "../supabase/functions/_shared/feedhealth.ts";
+import { FEED_LATE_MIN, feedState, stoppedBeforeClose, type Print } from "../supabase/functions/_shared/feedhealth.ts";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
 let pass = 0, fail = 0;
@@ -726,6 +726,23 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck("a market on holiday is not expected to print; an unknown market and an unreadable time are passed over", !feedState([P("^N225", "TSE", "2026-11-19T02:30:00Z")], at("2026-11-19T05:00:00Z"), { TSE: new Set(["2026-11-19"]) }).expected && !feedState([P("X", "MARS", "2026-11-18T17:29:00Z"), P("Y", "FX", "not a time")], at("2026-11-18T17:30:00Z")).expected && !feedState([], at("2026-11-18T17:30:00Z")).expected);
   }
 
+  console.log("\n[after the close: did the prices stop before it?]");
+  {
+    const at = (iso: string) => Date.parse(iso), sb = stoppedBeforeClose;
+    // 18 Nov 2026: New York closes at 21:00 UTC; the Morning Note is written at 22:15 UTC
+    const stop = sb("NYSE", "2026-11-18T15:52:00Z", at("2026-11-18T22:15:00Z"));
+    ck("a last print at 10:52 New York time, read after the 16:00 close, is not a closing level: the close it fell short of is named", !!stop && stop.close === "2026-11-18T21:00:00.000Z" && stop.last === "2026-11-18T15:52:00.000Z", stop);
+    ck("a last print in the final minute of the session, or half an hour short at most, is the close", sb("NYSE", "2026-11-18T20:59:00Z", at("2026-11-18T22:15:00Z")) === null && sb("NYSE", "2026-11-18T20:30:00Z", at("2026-11-18T22:15:00Z")) === null && sb("NYSE", "2026-11-18T20:29:00Z", at("2026-11-18T22:15:00Z")) !== null);
+    ck("while the session is still on, the same print is measured against yesterday's close and passes (the live reading above covers the session itself)", sb("NYSE", "2026-11-18T15:52:00Z", at("2026-11-18T17:30:00Z")) === null && sb("NYSE", "2026-11-18T15:52:00Z", at("2026-11-18T21:10:00Z")) === null);
+    ck("in summer New York closes an hour earlier in UTC, and the close is found there", sb("NYSE", "2026-07-15T19:59:00Z", at("2026-07-15T22:15:00Z")) === null && sb("NYSE", "2026-07-15T17:30:00Z", at("2026-07-15T22:15:00Z"))?.close === "2026-07-15T20:00:00.000Z");
+    ck("over a weekend the last close is Friday's", sb("NYSE", "2026-11-20T20:59:00Z", at("2026-11-23T00:30:00Z")) === null && sb("NYSE", "2026-11-20T16:00:00Z", at("2026-11-22T22:15:00Z"))?.close === "2026-11-20T21:00:00.000Z");
+    const tg = { NYSE: new Set(["2026-11-26"]) };
+    ck("a holiday in the calendar is not a session: the close before it is the one that counts; without it the day would be misread", sb("NYSE", "2026-11-25T20:59:00Z", at("2026-11-27T03:00:00Z"), tg) === null && sb("NYSE", "2026-11-25T20:59:00Z", at("2026-11-27T03:00:00Z")) !== null);
+    ck("New York's half days end at 13:00 (the Friday after Thanksgiving, 24 December, 3 July): a last print then is that day's close; on any other day a feed that stops at 13:00 has stopped", sb("NYSE", "2026-11-27T18:00:00Z", at("2026-11-28T00:00:00Z"), tg) === null && sb("NYSE", "2026-11-27T17:30:00Z", at("2026-11-28T00:00:00Z"), tg) !== null && sb("NYSE", "2026-12-24T18:00:00Z", at("2026-12-24T23:00:00Z")) === null && sb("NYSE", "2026-07-15T17:00:00Z", at("2026-07-15T22:15:00Z")) !== null && sb("NYSE", "2026-11-18T18:00:00Z", at("2026-11-18T22:15:00Z")) !== null);
+    ck("Tokyo closes at 15:30 (06:30 UTC): a print in its last minute is the close, one from the morning session is not", sb("TSE", "2026-11-19T06:29:00Z", at("2026-11-19T22:15:00Z")) === null && sb("TSE", "2026-11-19T02:10:00Z", at("2026-11-19T22:15:00Z"))?.close === "2026-11-19T06:30:00.000Z");
+    ck("currencies and futures have no close to fall short of; an unknown market or no print gives no reading", sb("FX", "2026-11-18T15:52:00Z", at("2026-11-18T22:15:00Z")) === null && sb("CME", "2026-11-18T15:42:00Z", at("2026-11-18T22:15:00Z")) === null && sb("MARS", "2026-11-18T15:52:00Z", at("2026-11-18T22:15:00Z")) === null && sb("NYSE", null, at("2026-11-18T22:15:00Z")) === null);
+  }
+
   console.log("\n[the welcome email]");
   {
     const site = "https://example.github.io/orrery-market-monitor/", m = welcomeMail(site);
@@ -740,6 +757,10 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const quote = [...m.html.matchAll(/<p class="om-quote" style="([^"]+)">([^<]+)<\/p>/g)];
     ck("the opening is set in italic Times New Roman, and is the first text of the page after the name", quote.length === 3 && quote.every((q) => /font-family:'Times New Roman',Times,Georgia,serif/.test(q[1]) && /font-style:italic/.test(q[1])) && m.html.indexOf('class="om-quote"') < m.html.indexOf("Welcome.") && m.html.indexOf("Orrery Monitor</td>") < m.html.indexOf('class="om-quote"'), quote.map((q) => q[1].slice(0, 60)));
     ck("an email's own rules: tables and styles on the elements, no script, no web font, no style sheet from elsewhere; text that could be read as markup is escaped", !/<script|<link|@import|@font-face|url\(/i.test(m.html) && /<table role="presentation"/.test(m.html) && m.html.includes("RATES &amp; CURRENCY") && !m.html.includes("RATES & CURRENCY") && m.html.includes("today&#39;s") === false && !/undefined|\[object/.test(m.html + m.text) && m.html.length < 20000, m.html.length);
+    // as it goes on the wire through the Monitor's own sender (smtp.ts): both versions, no line too long for a mail server
+    const wire = buildMessage({ from: { name: "Orrery Monitor", email: "desk@example.com" }, to: "new.reader@example.com", ...m }, new Date("2026-11-19T01:00:00Z"), "abc123");
+    const wl = wire.split("\r\n"), parts = wire.split(/--=_orrery_abc123(?:--)?\r\n/), back = (part: string) => Buffer.from(part.split("\r\n\r\n")[1].replace(/\r\n/g, ""), "base64").toString("utf8");
+    ck("sent by the Monitor's own sender it is one message with the plain text and the page side by side, each arriving whole, and no line longer than 78 characters", /^Subject: Welcome to Orrery Monitor$/m.test(wire) && /multipart\/alternative/.test(wire) && parts.length === 4 && back(parts[1]) === m.text.replace(/\n/g, "\r\n") && back(parts[2]) === m.html.replace(/\n/g, "\r\n") && wl.every((l) => l.length <= 78), { parts: parts.length, longest: Math.max(...wl.map((l) => l.length)) });
     const other = welcomeMail("https://monitor.example.com/");
     ck("another site address is used throughout", !other.html.includes("example.github.io") && other.html.includes('href="https://monitor.example.com/#watch"') && other.text.includes("\nhttps://monitor.example.com/\n"));
   }
