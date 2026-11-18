@@ -197,6 +197,9 @@ checked in `sim/logic.test.ts` (sections L to P).
   stand in for EDINET DB. The next results date known from the quote is stored with them; from 18 hours after
   that date until six days after it they are asked for again daily, so new results do not wait for the weekly
   refresh. The hover card reads the same store and otherwise Yahoo; it never asks EDINET DB.
+- **EDINET DB is not read by the page yet.** `_shared/edinet.ts` asks, stores and rations as described next, but
+  the reading of its answers (`edinetFin` in `_shared/finsrc.ts`) is the next change; until it is merged a Tokyo
+  name gets Yahoo's statements like any other.
 - **EDINET DB allows a hundred requests a day** on its free plan (the day is Japan's; `EDINETDB_DAILY_BUDGET`,
   default 90, is this server's share). A Tokyo name takes one request to find its EDINET code (kept a year) and
   three for its statements, each stored on its own (`_shared/edinet.ts`): the 決算短信 for a week, and daily once

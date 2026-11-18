@@ -87,11 +87,14 @@ TOPIX has no Yahoo ticker: the `1306.T` ETF stands in for the live level (badge 
 | 52-week range, volatility, beta, largest fall, average daily volume and value | Worked out from the same bars |
 | Market cap, shares outstanding, float, next earnings date | Yahoo Finance quote and key statistics |
 | Short interest | Tokyo: the positions of 0.5% and above reported to JPX (already stored for the EQUITIES tab). Elsewhere: the exchange-reported short interest Yahoo republishes, with FINRA's daily short-volume share beside it |
-| Statements (income statement, balance sheet, cash flow), ratios, guidance | Tokyo: EDINET DB (有価証券報告書 and 決算短信), ten fiscal years, the company's guidance and twelve single quarters. Elsewhere: Yahoo Finance fundamentals (about four years and five quarters; no guidance, no dividend per share) |
+| Statements (income statement, balance sheet, cash flow), ratios, guidance | Tokyo: EDINET DB (有価証券報告書 and 決算短信), ten fiscal years, the company's guidance and twelve single quarters. **Not yet:** the reading of EDINET DB's answers is the next change; until it is merged a Tokyo name is read from Yahoo like any other. Elsewhere: Yahoo Finance fundamentals (about four years and five quarters; no guidance), with the lines of a company reporting under US GAAP or IFRS; a line the company does not report is left out |
 | Big moves and why (companies of 1tn yen / 10bn US dollars and above) | The moves from the bars (`_shared/bigmoves.ts`); each reason from a web search by the `move-causes` job, kept only with the reports behind it |
 
 A figure a source does not give is shown as a dash. Nothing on the page is estimated; the two sums made on the
-page itself (net cash, free cash flow) say so where they stand. One unit (m, bn or tn) is chosen per company from
+page itself (net cash, free cash flow) say so where they stand. A Japanese company's table keeps the lines of
+Japanese statements (ordinary profit, extraordinary items); a company elsewhere gets R&D, net interest and other
+income, pretax income, income tax, buybacks, dividends paid and stock-based compensation instead (`LAYOUT_JP` and
+`LAYOUT_FOREIGN` in `_shared/fin.ts`). One unit (m, bn or tn) is chosen per company from
 its revenue and written once, in the statements table's header.
 
 ## Morning Notes
