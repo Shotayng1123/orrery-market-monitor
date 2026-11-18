@@ -1157,3 +1157,22 @@ table.mp-t.kv td:last-child{font-weight:600}
 .mp-xs .minih{position:sticky;left:0}
 .mp-note.in{margin:12px 2px 2px}
 @media (max-width:350px){.mp-head h1{font-size:27px}}   /* the narrowest phones: the longest title ("Rates & FX") stays on one line beside its drop-down */
+
+/* the sign-in and account windows at phone size (18 Nov 2026, when the phone layout became the default on a phone and
+   the sign-in became the first screen of the app on a home screen): 16px fields (an iPhone zooms the page on a
+   smaller one), buttons a finger can hit */
+body.pv2 .modal{width:min(430px,calc(100vw - 24px));padding:18px 16px;border-radius:14px}
+body.pv2 .modal h3{font-size:14px;margin-bottom:6px}
+body.pv2 .modal h3 .mark{width:19px;height:19px}
+body.pv2 .modal .sub2{font-size:13px;line-height:1.5;margin-bottom:14px}
+body.pv2 .modal .row{margin-bottom:12px}
+body.pv2 .modal label.k{font-size:11.5px;margin-bottom:5px}
+body.pv2 .modal label.chk{font-size:13.5px;min-height:44px;gap:10px}
+body.pv2 .modal label.chk input{width:20px;height:20px;flex:none}
+body.pv2 .modal input[type=email],body.pv2 .modal input[type=password],body.pv2 .modal input[type=text]{font-size:16px;padding:11px 12px;border-radius:10px}
+body.pv2 .modal .err{font-size:13px;line-height:1.4;min-height:18px}
+body.pv2 .modal .foot{font-size:12px}
+body.pv2 .modal button.go{display:block;width:100%;min-height:46px;font-size:15px;border-radius:11px}
+body.pv2 .gtabs{border-radius:10px;margin-bottom:14px}
+body.pv2 .gtabs span{padding:13px 4px;font-size:12.5px}
+body.pv2 .modal.acct h3 .x{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;margin:-12px -10px -12px 0;font-size:20px}

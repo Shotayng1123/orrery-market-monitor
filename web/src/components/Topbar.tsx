@@ -30,8 +30,8 @@ export interface TopbarProps {
   prefs: Prefs;
   onPrefs: (p: Prefs) => void;
   onFull: (f: boolean) => void;
-  pv2?: boolean;                  // the phone preview is on: slim header, the rest opens as a menu, tabs move to the bottom bar
-  canPreview?: boolean;           // show the switch into the phone preview (a manager on a phone)
+  pv2?: boolean;                  // the phone layout is on: slim header, the rest opens as a menu, tabs move to the bottom bar
+  canPreview?: boolean;           // show the switch to the phone layout (a phone that was put back on the classic layout)
 }
 
 export function Topbar(p: TopbarProps) {
@@ -72,8 +72,8 @@ export function Topbar(p: TopbarProps) {
         </span>
         <span id="hlth" className={`chip-sm hl hl-${p.health}`} title={p.healthTitle}>DATA {p.health === "ok" ? "OK" : p.health === "warn" ? "!" : p.health === "bad" ? "✕" : "?"}</span>
         <Help />
-        {p.canPreview && !p.pv2 && <span id="pv2-on" className="chip-sm" title="Preview of a layout made for phones. Only this browser changes; switch back from its menu" onClick={() => setPhoneV2(true)}>NEW LAYOUT</span>}
-        {p.pv2 && <span id="pv2-off" className="chip-sm" title="Back to the layout used before the phone preview" onClick={() => setPhoneV2(false)}>CLASSIC LAYOUT</span>}
+        {p.canPreview && !p.pv2 && <span id="pv2-on" className="chip-sm" title="The layout made for phones. Only this browser changes; switch back from its menu" onClick={() => setPhoneV2(true)}>NEW LAYOUT</span>}
+        {p.pv2 && <span id="pv2-off" className="chip-sm" title="Back to the earlier layout, on this browser only; NEW LAYOUT in its header returns" onClick={() => setPhoneV2(false)}>CLASSIC LAYOUT</span>}
         <Pick<SizeKey> id="sz-ctl" label="Text size" value={p.prefs.size} options={SIZES.map((s) => s.k)} onChange={(k) => p.onPrefs({ ...p.prefs, size: k })} title="Text size. AUTO scales the text and layout to this window; S, M, L and XL fix the size" />
         <span id="cmp-ctl" className={`chip-sm${p.prefs.compact ? " on" : ""}`} title="Terminal layout: one screen per tab, sized to the window" onClick={() => p.onPrefs({ ...p.prefs, compact: !p.prefs.compact })}>COMPACT</span>
         <span id="fs-ctl" className="chip-sm" title="Full screen: no browser tabs or address bar, header hidden (Esc or the corner strip to leave; keys 1 to 6 switch tabs)" onClick={() => p.onFull(true)}>&#9974; FULL</span>
