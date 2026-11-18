@@ -910,6 +910,8 @@ table.fin th i{font-style:normal;font-size:8.5px;margin-left:2px;vertical-align:
 table.fin td{padding:4px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--bord)}
 table.fin th.l,table.fin td.l{position:sticky;left:0;z-index:2;min-width:170px;text-align:left}
 table.fin th.l{position:sticky;z-index:3;color:var(--amber);letter-spacing:.06em}
+table.fin th.l .u{font-size:11.5px;font-weight:700}
+table.fin th.l small{margin-left:8px;font-size:9.5px;font-weight:400;letter-spacing:.02em;color:var(--mut)}
 table.fin td.l{color:var(--txt2);background:var(--panel)}
 table.fin th.l,table.fin td.l{box-shadow:1px 0 0 var(--bord2)}   /* a hairline where the periods slide under the names */
 table.fin tr.band td{padding:10px 10px 4px;font-size:9.5px;letter-spacing:.06em;color:var(--mut);background:var(--panel);border-bottom:1px solid var(--bord2)}
@@ -1243,6 +1245,8 @@ body.pv2 table.fin td{padding:8px 9px}
 body.pv2 table.fin th.l,body.pv2 table.fin td.l{min-width:128px;max-width:142px;white-space:normal;line-height:1.25;padding-left:10px}
 body.pv2 table.fin td.l{font-family:var(--sans);font-size:13px}
 body.pv2 table.fin tr.band td{padding:14px 9px 6px;font-size:11px}
+body.pv2 table.fin th.l .u{font-size:13px}
+body.pv2 table.fin th.l small{display:block;margin:2px 0 0;font-size:10.5px}
 body.pv2 .finguide{font-size:13px;line-height:1.5;margin:2px 2px 0}
 table.mp-t.perf th,table.mp-t.perf td{padding:9px 4px}
 table.mp-t.perf td:first-child{font-weight:600;color:var(--txt2)}

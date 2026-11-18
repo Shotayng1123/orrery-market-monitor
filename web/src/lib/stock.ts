@@ -48,6 +48,8 @@ export const fmtUnit = (v: number | null | undefined, u: FinUnit): string => (v 
 export const fmtPs = (v: number | null | undefined): string => (v == null || !Number.isFinite(v) ? "–" : neg(fmtNum(v, Math.abs(v) >= 1000 ? 1 : 2)));
 /** A ratio in per cent with one decimal; `sign` puts a plus on a rise. */
 export const fmtPc = (v: number | null | undefined, sign = false, dp = 1): string => (v == null || !Number.isFinite(v) ? "–" : `${sign && v > 0 ? "+" : ""}${neg(v.toFixed(dp))}%`);
+/** A ratio as a bare number for a table whose header already says per cent: 27.9, +7.9, −0.2. */
+export const fmtRatio = (v: number | null | undefined, sign = false): string => (v == null || !Number.isFinite(v) ? "–" : `${sign && v > 0 ? "+" : ""}${neg(v.toFixed(1))}`);
 /** A multiple: 15.2x. */
 export const fmtX = (v: number | null | undefined, dp = 1): string => (v == null || !Number.isFinite(v) ? "–" : `${v.toFixed(dp)}x`);
 /** A count of shares: 1.23bn, 456.7m, 89.1k. */
@@ -88,7 +90,7 @@ export function finSections(f: Fin, view: "annual" | "quarterly"): { periods: Fi
   const R = (id: RatioId): Array<number | null> => rat[id] ?? Array.from({ length: n }, () => null);
   return { periods: set.periods, sections: [
     { id: "is", title: "Income statement", rows: (["revenue", "cogs", "gross", "sga", "op", "nonOpInc", "nonOpExp", "ordinary", "extraInc", "extraLoss", "pretax", "ni", "eps", "dps"] as FinLine[]).map(line) },
-    { id: "ratios", title: "Ratios", rows: [row("salesYoy", R("salesYoy"), "growth"), row("gpm", R("gpm"), "pct"), row("opm", R("opm"), "pct"), row("npm", R("npm"), "pct"), row("payout", R("payout"), "pct"), ...(view === "annual" ? [row("roe", R("roe"), "pct")] : []), row("equityRatio", R("equityRatio"), "pct")] },
+    { id: "ratios", title: "Ratios, %", rows: [row("salesYoy", R("salesYoy"), "growth"), row("gpm", R("gpm"), "pct"), row("opm", R("opm"), "pct"), row("npm", R("npm"), "pct"), row("payout", R("payout"), "pct"), ...(view === "annual" ? [row("roe", R("roe"), "pct")] : []), row("equityRatio", R("equityRatio"), "pct")] },
     { id: "bs", title: "Balance sheet", rows: [line("cash"), line("stDebt"), line("ltDebt"), row("netCash", netCash), line("assets"), line("liabilities"), line("equity")] },
     { id: "cf", title: "Cash flow", rows: [line("ocf"), line("icf"), line("fincf"), line("capex"), row("fcf", fcf)] },
   ] };
