@@ -38,12 +38,18 @@ function Status({ r }: { r: TableRow }) {
   );
 }
 
-function Detail({ r, period, tick, sigmaWindow }: { r: TableRow; period: ChartPeriod; tick: number; sigmaWindow?: SigmaWindow }) {
+/** The height of a chart that heads a tab (the index on EQUITIES), in px: about a third of the screen, between
+ *  240 and 340. Shota, 19 Nov 2026: at the 150px of a line opened in a list it was too small to read. Measured once,
+ *  when the page loads: a phone's browser changes the window's height as its bars slide away, and a chart that
+ *  followed it would be rebuilt in the middle of a scroll. */
+const HEAD_CHART = Math.round(Math.min(340, Math.max(240, (typeof window === "undefined" ? 700 : window.innerHeight) * 0.34)));
+
+function Detail({ r, period, tick, sigmaWindow, head = false }: { r: TableRow; period: ChartPeriod; tick: number; sigmaWindow?: SigmaWindow; head?: boolean }) {
   const rate = isYield(r);
   return (
     <div className="mp-det">
       <div className="mp-full">{r.name} · {r.symbol} · last print {fmtStampSafe(r.lastAt)}</div>
-      <ChartPanel row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} axes />
+      <ChartPanel row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} axes chartHeight={head ? HEAD_CHART : undefined} />
       <div className="mp-grid">
         {PERIODS.map((p) => { const v = move(r, p.key); return <div key={p.key} className={p.label === period ? "cur" : undefined}><span className="k">{p.label}</span><span className={`v ${signCls(v)}`}>{fmtMove(r, v)}</span></div>; })}
       </div>
@@ -66,7 +72,7 @@ export function InstrumentRow({ r, period, tick, open, onToggle, fixed = false, 
   return (
     <div className={`mp-item${open || fixed ? " open" : ""}`}>
       {fixed ? <div className="mp-row fixed">{line}</div> : <button type="button" className="mp-row" aria-expanded={open} onClick={onToggle}>{line}</button>}
-      {(open || fixed) && <Detail r={r} period={period} tick={tick} sigmaWindow={sigmaWindow} />}
+      {(open || fixed) && <Detail r={r} period={period} tick={tick} sigmaWindow={sigmaWindow} head={fixed} />}
     </div>
   );
 }

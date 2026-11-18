@@ -5,14 +5,16 @@
 // Which stocks (18 Nov 2026; until then only the first line, so Rakuten Bank's limit-down raised nothing):
 //   - Nikkei 225 and S&P 500 members and every stock on anyone's watchlist: one-minute bars, scanned every five
 //     minutes by the tick job (scanStockAlerts). The alert's time is the minute the threshold was passed.
+//     In the minutes after a close the official closing price is measured too: a closing auction prints after
+//     the last bar (19 Nov 2026; Intuit had finished -7.2% two days before with no bar beyond the line).
 //   - every other company in the lists the Monitor follows (TOPIX, Nasdaq-100, KOSPI 200, Hang Seng, SSE 180) worth
 //     USD 5bn or more, the floor of the headline alerts: from the day range of the quotes the flow job already
 //     pulls every 10 to 20 minutes (scanQuoteAlerts). The alert's time is when the move was seen.
 import { db, selectAll } from "./db.ts";
-import { localDate, marketById, type Holidays, type MarketId } from "./sessions.ts";
-import { quoteMove, scanDue, sessionMove, stockMarket } from "./moves.ts";
+import { localDate, marketById, recentlyClosed, type Holidays, type MarketId } from "./sessions.ts";
+import { AFTER_CLOSE_MIN, closeMove, quoteMove, scanDue, sessionMove, stockMarket } from "./moves.ts";
 import { CCY, MIN_MCAP_USD } from "./newsalerts.ts";
-import { spark, type QuoteRow } from "./yahoo.ts";
+import { quotes, spark, type QuoteRow } from "./yahoo.ts";
 import type { TableRow } from "./table.ts";
 
 export const STOCK_PCT = 7, INDEX_PCT = 3;
@@ -101,6 +103,25 @@ export async function scanStockAlerts(now: Date, holidays: Holidays): Promise<{ 
     // one-minute bars. (The scan runs every five minutes for all names at once; stamping alerts with the scan
     // time gave every stock that crossed in the same window an identical time.)
     cand.push({ d: localDate(marketById(c.market)!.tz, mv.lastT), at: new Date(mv.crossT * 1000).toISOString(), symbol: c.symbol, name: c.name, kind: "stock", pct: mv.pct, price: mv.price, market: c.market, msg: alertMsg(c.name, mv.pct, true), upd: now.toISOString() });
+  }
+  // The official close as well, for a market that has just closed (moves.ts: closeMove). The closing auction
+  // prints after the last one-minute bar, so the bars alone can end just short of the line while the stock
+  // finishes beyond it. Asked only in the minutes after a close: one quote request per hundred names.
+  const late = [...list.values()].filter((c) => { const m = marketById(c.market)!; return recentlyClosed(m, now, m.delayMin + AFTER_CLOSE_MIN, holidays); });
+  if (late.length) {
+    let q: Record<string, QuoteRow> = {};
+    try { q = await quotes(late.map((c) => c.symbol)); } catch (e) { console.log("alerts: closing quotes:", e instanceof Error ? e.message : String(e)); }
+    const at = new Map(cand.map((c, i) => [c.symbol, i])), oldest = now.getTime() / 1000 - 3 * 3600;
+    for (const c of late) {
+      const x = q[c.symbol];
+      if (!x || x.time == null || x.time < oldest) continue;     // no print today: nothing to say about this session
+      const mv = closeMove(x.prevClose, x.price, STOCK_PCT);
+      if (!mv) continue;
+      const i = at.get(c.symbol);
+      // already raised from its bars: the larger of the two figures stands
+      if (i != null) { if (Math.abs(mv.pct) > Math.abs(cand[i].pct)) Object.assign(cand[i], { pct: mv.pct, price: mv.price, msg: alertMsg(c.name, mv.pct, true) }); continue; }
+      cand.push({ d: localDate(marketById(c.market)!.tz, x.time), at: new Date(x.time * 1000).toISOString(), symbol: c.symbol, name: c.name, kind: "stock", pct: mv.pct, price: mv.price, market: c.market, msg: alertMsg(c.name, mv.pct, false), upd: now.toISOString() });
+    }
   }
   const { fresh, moved } = await changedOnly(cand);
   return { scanned: list.size, alerts: await upsertAlerts([...fresh, ...moved]) };

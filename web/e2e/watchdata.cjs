@@ -10,6 +10,15 @@ const ALL = [
   row("^TNX", "UST 10Y yield", "Rate", null, "USD", 4.859, 0.4, { mcap: null, isYield: true }),
   row("AAPL", "Apple Inc.", "Equity", "Information Technology", "USD", 251.3, 0.77, { earningsAt: iso(200) }),
 ];
+// names that are only found by searching (never in the list at the start)
+const MORE = [
+  row("6201.T", "Toyota Industries Corp", "Equity", "Machinery", "JPY", 15230, 0.6),
+  row("8015.T", "Toyota Tsusho Corp", "Equity", "Wholesale Trade", "JPY", 3355, -0.3),
+  row("TM", "Toyota Motor Corporation ADR", "Equity", null, "USD", 201.4, 1.1),
+];
+// what the server's search answers: a part of a symbol or of a name, whatever its case
+const NOTES = { "7203.T": "NK225 · Transportation", "6201.T": "NK225 · Machinery", "8015.T": "NK225 · Wholesale Trade", TM: "NYSE", NVDA: "SP500 · Information Technology", AAPL: "SP500 · Information Technology", "6758.T": "NK225 · Technology", "^N225": "Monitor instrument", "USDJPY=X": "Monitor instrument", "^TNX": "Monitor instrument" };
+const search = (q) => { const t = String(q || "").trim().toLowerCase(); return t ? [...ALL, ...MORE].filter((x) => x.symbol.toLowerCase().includes(t) || x.name.toLowerCase().includes(t)).map((x) => ({ symbol: x.symbol, name: x.name, kind: x.kind, note: NOTES[x.symbol] || "" })) : []; };
 const state = { syms: ALL.map((r) => r.symbol).filter((s) => s !== "AAPL") };
 const feed = () => ({
   alerts: [{ id: 1, at: iso(-2), symbol: "NVDA", name: "NVIDIA Corporation", kind: "move", pct: -7.4, msg: "NVIDIA Corporation fell 7.4% on the day, beyond the 7% line (stand-in)", url: null }, { id: 2, at: iso(-20), symbol: "7203.T", name: "Toyota Motor Corp", kind: "buyback", pct: null, msg: "Toyota Motor Corp announced a share buyback of up to ¥1.2tn (stand-in)", url: "https://example.com/buyback" }],
@@ -22,10 +31,11 @@ async function watchRoutes(p, { empty = false } = {}) {
     const ok = (body, status = 200) => r.fulfill({ status, contentType: "application/json", headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "*" }, body: JSON.stringify(body) });
     if (r.request().method() === "OPTIONS") return r.fulfill({ status: 204, headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "GET,POST,OPTIONS" } });
     if (a === "watch_syms") return ok({ symbols: state.syms });
-    if (a === "watch_list") return ok({ rows: ALL.filter((x) => state.syms.includes(x.symbol)) });
+    if (a === "watch_list") return ok({ rows: [...ALL, ...MORE].filter((x) => state.syms.includes(x.symbol)) });
+    if (a === "search") { (p.__searches = p.__searches || []).push(q.get("q")); return ok({ rows: search(q.get("q")) }); }
     if (a === "watch_feed") return ok(state.syms.length ? feed() : { alerts: [], news: [], research: [] });
     if (a === "watch_set") { const b = JSON.parse(r.request().postData() || "{}"); (p.__sets = p.__sets || []).push(b);
-      if (!ALL.some((x) => x.symbol === b.symbol)) return ok({ error: `Unknown symbol ${b.symbol}` }, 400);
+      if (![...ALL, ...MORE].some((x) => x.symbol === b.symbol)) return ok({ error: `Unknown symbol ${b.symbol}` }, 400);
       state.syms = b.on ? [...new Set([...state.syms, b.symbol])] : state.syms.filter((s) => s !== b.symbol); return ok({ symbols: state.syms }); }
     return r.fallback(); });
 }

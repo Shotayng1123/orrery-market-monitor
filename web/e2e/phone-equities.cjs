@@ -13,6 +13,8 @@ const sec = (p, startsWith) => p.locator(".mp-sec", { has: p.locator(`h2 > span:
     const s0 = await secs(p); ck("nine sections, the index first", s0.length === 9 && s0[0] === "NIKKEI 225" && s0[8] === "Screener", s0);
     const hero = await p.evaluate(() => { const it = document.querySelector(".mp-sec .mp-item.open"); return { fixed: !!it.querySelector(".mp-row.fixed"), chart: it.querySelectorAll("canvas").length, cur: it.querySelector(".mp-grid .cur .k")?.textContent, cells: it.querySelectorAll(".mp-grid > div").length }; });
     ck("index card: level, 12M change, its chart, six periods and three statistics", hero.fixed && hero.chart >= 1 && hero.cur === "12M" && hero.cells === 9, hero);
+    { const hts = await p.evaluate(() => ({ head: Math.round(document.querySelector(".mp-sec .mp-item.open .chartbox").getBoundingClientRect().height), vh: innerHeight }));
+      ck(`the index's chart is tall enough to read: ${hts.head}px, about a third of the ${hts.vh}px screen (it was 150px)`, hts.head >= 240 && hts.head <= 340 && hts.head >= Math.min(340, Math.round(hts.vh * 0.34)) - 2, hts); }
     await pick(p, "Period").locator("select").selectOption("1M"); await p.waitForTimeout(700);
     const t1 = await secs(p); ck("Period -> 1M: the index card and the sector performance follow", (await p.evaluate(() => document.querySelector(".mp-item.open .mp-grid .cur .k")?.textContent)) === "1M" && t1.includes("Sector performance · 1M"), t1);
     const drive = sec(p, "What drives it"); const n = await drive.locator(".mp-row").count(); await drive.locator(".mp-row").nth(1).tap(); await p.waitForTimeout(900);

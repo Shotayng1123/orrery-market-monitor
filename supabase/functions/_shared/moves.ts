@@ -50,6 +50,16 @@ export function quoteMove(prev: number | null | undefined, low: number | null | 
   return Math.abs(pick.pct) < threshold - 1e-9 ? null : pick;
 }
 
+/** The move at the official close: the closing price against the previous close, when it is beyond ±`threshold` %.
+ *  A closing auction prints after the session's last one-minute bar, so a stock can finish beyond the line without
+ *  any of its bars having been there. The one-minute scan alone missed Intuit on 17 Nov 2026: -7.2% at the close,
+ *  about -6.5% during the day, no alert. */
+export function closeMove(prev: number | null | undefined, close: number | null | undefined, threshold: number): { pct: number; price: number } | null {
+  if (prev == null || !(prev > 0) || close == null || !(close > 0)) return null;
+  const pct = (close / prev - 1) * 100;
+  return Math.abs(pct) < threshold - 1e-9 ? null : { pct, price: close };
+}
+
 const SUFFIX: Record<string, MarketId> = { T: "TSE", HK: "HKEX", KS: "KRX", KQ: "KRX", SS: "SSE", SZ: "SSE", TW: "TWSE", TWO: "TWSE", NS: "NSE", BO: "NSE", SI: "SGX", AX: "ASX", DE: "XETRA", F: "XETRA", SW: "SIX", L: "LSE", SA: "B3", MX: "BMV" };
 /** The exchange a single stock trades on, read from its Yahoo symbol: the suffix (7203.T, 0700.HK), or none for a
  *  US ticker (NVDA, BRK-B). Null for what is not a stock (indices ^N225, currencies and futures USDJPY=X, GC=F,

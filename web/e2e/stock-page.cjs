@@ -147,6 +147,14 @@ const IS = "revenue,cogs,gross,sga,op,nonOpInc,nonOpExp,ordinary,extraInc,extraL
     ck("the source's limits are said under the table; no errors on the page", /four years and five quarters/.test(note) && errs.length === 0, { note, errs });
     await p.screenshot({ path: "stock-desktop-sparse.png", fullPage: true }); await ctx.close(); }
 
+  console.log("\n[desktop: an index's own page is its page on EQUITIES, wherever the link is]");
+  { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+    const at = async (hash) => { await p.goto(MOCK + hash, { waitUntil: "networkidle" }); await p.waitForTimeout(900); return p.evaluate(() => ({ hash: location.hash, index: [...document.querySelectorAll(".pick select")].map((x) => x.value), fin: document.querySelectorAll("table.fin").length, key: document.querySelectorAll("#st-key").length })); };
+    const nk = await at("#asset/%5EN225"), topix = await at("#asset/1306.T"), sox = await at("#asset/%5ESOX"), stock = await at("#asset/7203.T");
+    ck("the Nikkei 225 and TOPIX (read from the 1306.T fund) open on EQUITIES with that index chosen", nk.hash === "#equities/nk225" && nk.index.includes("nk225") && nk.key === 0 && topix.hash === "#equities/topix" && topix.index.includes("topix"), { nk, topix });
+    ck("an index EQUITIES has no page for, and a stock, keep the single-name page; no errors", sox.hash === "#asset/%5ESOX" && sox.key === 1 && stock.hash === "#asset/7203.T" && stock.fin === 1 && errs.length === 0, { sox, stock, errs });
+    await ctx.close(); }
+
   console.log("\n[desktop, a company below 1tn yen: no big-move marks]");
   { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
     await p.goto(MOCK + "#asset/9999.T", { waitUntil: "networkidle" }); await p.waitForSelector("table.fin"); await p.waitForSelector(".bigwrap canvas"); await p.waitForTimeout(900); await hideBar(p);
@@ -159,6 +167,8 @@ const IS = "revenue,cogs,gross,sga,op,nonOpInc,nonOpExp,ordinary,extraInc,extraL
     const top = await p.evaluate(() => ({ secs: [...document.querySelectorAll(".mp-sec > h2 > span:first-child")].map((e) => e.textContent), hint: document.querySelector(".mp-hero .rdout").textContent, stats: [...document.querySelectorAll("#st-key .mp-grid .k")].map((e) => e.textContent), kv: [...document.querySelectorAll("#st-key table.kv tr")].map((tr) => tr.cells[0].childNodes[0].textContent) }));
     ck("the same page as cards: Key data, Performance, Big moves, Short interest, Financials; the chart with volume", top.secs.join("|") === "Key data|Performance|Big moves|Short interest|Financials" && /volume/.test(top.hint), top);
     ck("key data: six figures at a glance, then the list (shares, diluted shares, average volume and value, short interest, …)", top.stats.join() === "Day,Market cap,P/E, guidance,52-week low,52-week high,From the high" && ["Shares outstanding", "Diluted shares", "Average daily volume, 60 sessions", "Average daily value traded, 60 sessions", "Short interest (reported)", "Next earnings"].every((k) => top.kv.includes(k)), top);
+    { const hh = await p.evaluate(() => ({ tile: Math.round(document.querySelector(".mp-hero .mtile.cp").getBoundingClientRect().height), chart: Math.round(document.querySelector(".mp-hero .chartbox").getBoundingClientRect().height), vh: innerHeight }));
+      ck(`the chart has room on a phone: ${hh.chart}px of a ${hh.tile}px tile on a ${hh.vh}px screen (the tile was 350px)`, hh.tile >= 410 && hh.tile <= 540 && hh.chart >= 290, hh); }
     // big moves on a phone: tap a circle for the reason, tap elsewhere to put it away; the list with links below
     const pd = await discs(p, ".mp-hero");
     const pcard = () => p.evaluate(() => { const e = document.querySelector(".mp-hero .mvtip"); if (!e || getComputedStyle(e).display === "none") return null; const r = e.getBoundingClientRect(); return { text: e.innerText, left: r.left, right: r.right, vw: innerWidth, px: parseFloat(getComputedStyle(e.querySelector(".w")).fontSize) }; });
@@ -166,6 +176,18 @@ const IS = "revenue,cogs,gross,sga,op,nonOpInc,nonOpExp,ordinary,extraInc,extraL
     await p.touchscreen.tap(tgt.x + 6, tgt.y - 7); await p.waitForTimeout(250); let pc = await pcard();
     ck(`a tap on a circle (here 9px off its centre) opens its card: the move and the reason, inside the screen, ${pc ? pc.px : "?"}px type`, pd.up.length === 2 && pd.dn.length === 3 && pc && /\+6\.4% on the day\nMock: second-quarter/.test(pc.text) && pc.left >= 0 && pc.right <= pc.vw && pc.px >= 13, { pd, pc });
     await p.waitForTimeout(600); ck("the card stays until the next tap", (await pcard()) !== null);
+    // The live page renders once a second (its refresh countdown), which the mock does not. Any render of the page
+    // must leave an open card alone (Shota, 19 Nov 2026: on the phone the card was gone again at once).
+    { const before = (await pcard())?.text ?? null, canvas0 = await p.evaluate(() => { const c = document.querySelector(".mp-hero canvas"); c.__same = true; return !!c; });
+      const pickOf = (value) => p.evaluateHandle((v) => [...document.querySelectorAll("select")].find((x) => [...x.options].some((o) => o.value === v)), value);
+      const viewSel = await pickOf("quarterly"); await viewSel.asElement().selectOption("quarterly"); await p.waitForTimeout(500); await viewSel.asElement().selectOption("annual"); await p.waitForTimeout(500);
+      const kept = await pcard(), sameChart = await p.evaluate(() => document.querySelector(".mp-hero canvas")?.__same === true);
+      ck("the page rendering again (as it does every second on the live site) neither rebuilds the chart nor closes the open card", canvas0 && before !== null && kept !== null && kept.text === before && sameChart, { before, kept, sameChart });
+      const sig = await pickOf("m36"); await sig.asElement().selectOption("m36"); await p.waitForTimeout(900);
+      const after = await pcard(), rebuilt = await p.evaluate(() => document.querySelector(".mp-hero canvas")?.__same !== true);
+      ck("when the chart really is rebuilt (here: another σ window; on the live site, fresh prices), the card that was open opens again on the new chart", rebuilt && after !== null && after.text === before, { after, rebuilt });
+      await sig.asElement().selectOption("m12"); await p.waitForTimeout(900);
+      ck("and it is still there after the next rebuild", (await pcard())?.text === before); }
     const ov = await p.locator(".mp-hero .u-over").boundingBox();
     await p.touchscreen.tap(ov.x + 20, ov.y + 12); await p.waitForTimeout(250);
     ck("a tap elsewhere on the chart puts it away", (await pcard()) === null);
