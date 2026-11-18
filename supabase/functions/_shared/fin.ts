@@ -66,6 +66,9 @@ export interface Fin {
   asOf: string | null;
   notes: string[];
   layout?: FinLayout;    // the table's rows; statements stored before this field existed have none (then the Japanese layout)
+  /** Share counts newer than the last fiscal year's, where the source has them (Japan: as of the latest 決算短信).
+   *  `outstanding` includes treasury shares. */
+  sharesNow?: { outstanding: number; treasury: number | null; asOf: string | null };
 }
 
 const two = (n: number): string => String(n % 100).padStart(2, "0");
@@ -134,24 +137,6 @@ export function singleQuarters<T extends { fy: string; q: number; v: number | nu
     const before = at.get(`${r.fy}|${r.q - 1}`);
     return { ...r, v: r.v == null || before == null ? null : r.v - before };
   });
-}
-
-/** Earnings per share of a single quarter where the company reports only year-to-date figures (a 決算短信).
- *  The first quarter is the reported figure. A later quarter is the quarter's net income (year-to-date less the
- *  year-to-date before it) over the share count that the later year-to-date EPS implies (net income over EPS).
- *  It is left empty unless that can be trusted:
- *    - both year-to-date rows carry net income of at least 100m and EPS of at least 1 in absolute size, so the
- *      rounding of the reported figures moves the implied share count by under 1%;
- *    - the share counts the two rows imply agree within 5% (a split or a large issue in between would make the
- *      quarter's figure rest on a different share basis from its neighbours). */
-export function quarterEps(q: number, cur: { ni: number | null; eps: number | null }, prev: { ni: number | null; eps: number | null } | null): number | null {
-  if (q === 1) return cur.eps;
-  if (!prev || cur.ni == null || cur.eps == null || prev.ni == null || prev.eps == null) return null;
-  const sure = (ni: number, eps: number): boolean => Math.abs(ni) >= 1e8 && Math.abs(eps) >= 1;
-  if (!sure(cur.ni, cur.eps) || !sure(prev.ni, prev.eps)) return null;
-  const sCur = cur.ni / cur.eps, sPrev = prev.ni / prev.eps;
-  if (!(sCur > 0) || !(sPrev > 0) || Math.abs(sCur / sPrev - 1) > 0.05) return null;
-  return (cur.ni - prev.ni) / sCur;
 }
 
 /** How far the year-to-date figure has come against the full-year guidance, in per cent (the 進捗率 of a

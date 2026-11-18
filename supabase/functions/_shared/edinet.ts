@@ -14,7 +14,7 @@
 // A request that fails falls back on the stored answer, however old: past statements do not change.
 import { db } from "./db.ts";
 import { fetchText } from "./http.ts";
-import { edinetFin, edinetWaiting } from "./finsrc.ts";
+import { edinetCodeOf, edinetFin, edinetWaiting } from "./finsrc.ts";
 import type { Fin } from "./fin.ts";
 
 const EDB = "https://edinetdb.jp/v1";
@@ -59,7 +59,7 @@ async function codeFor(sec: string, apiKey: string): Promise<string> {
   const { json } = await piece(`edb:id:${sec}`, (v) => (typeof v === "string" && v ? 365 * DAY : 30 * DAY), async () => {
     const cj = (await ask(`/companies?sec_code=${encodeURIComponent(sec)}&per_page=5`, apiKey)) as { data?: unknown; companies?: unknown } | unknown[];
     const list = (Array.isArray(cj) ? cj : Array.isArray(cj?.data) ? cj.data : Array.isArray(cj?.companies) ? cj.companies : []) as Array<Record<string, unknown>>;
-    return String(list[0]?.edinet_code ?? list[0]?.edinetCode ?? "");
+    return edinetCodeOf(list, sec);
   });
   return typeof json === "string" ? json : "";
 }

@@ -207,9 +207,24 @@ checked in `sim/logic.test.ts` (sections L to P).
   stand in for EDINET DB. The next results date known from the quote is stored with them; from 18 hours after
   that date until six days after it they are asked for again daily, so new results do not wait for the weekly
   refresh. The hover card reads the same store and otherwise Yahoo; it never asks EDINET DB.
-- **EDINET DB is not read by the page yet.** `_shared/edinet.ts` asks, stores and rations as described next, but
-  the reading of its answers (`edinetFin` in `_shared/finsrc.ts`) is the next change; until it is merged a Tokyo
-  name gets Yahoo's statements like any other.
+- **What is read from EDINET DB** (`edinetFin` in `_shared/finsrc.ts`, checked in `sim/logic.test.ts` section Q with
+  made-up answers in the provider's shape; the shapes were taken from its own answers on 19 Nov 2026 JST):
+  - by year, from the 有価証券報告書: the lines of the three statements in yen. EPS, DPS and book value per share
+    are the provider's split-adjusted figures; a year with a later split and no adjusted figure is left empty.
+  - debt without leases: loans and bonds under Japanese accounting, the interest-bearing debt lines under IFRS.
+    The sum is checked against the provider's own total (enterprise value less market value plus cash); a year
+    whose detail does not add up to it shows no debt figure, and a company whose total is nil shows nil.
+  - capex: the cash paid for property, plant, equipment and intangibles in the cash flow statement, not the
+    capex figure of the report's facilities section.
+  - guidance: the newest 決算短信's forecast (the year in progress; next year's after a full-year release), with
+    later revision notices where the provider has read them. A line a notice turned into a range or withdrew is
+    empty. A per-share forecast made before a pending split uses the provider's adjusted figure, and is not
+    shown when the provider could not tell which share count it is on.
+  - a fiscal year the 決算短信 has reported and the 有価証券報告書 has not: shown from the release and marked so.
+  - quarters: the provider's single-quarter figures as they are. It derives the later quarters by difference
+    and leaves empty what it could not check against the filings; nothing is derived again here.
+  - the company is found by its exact securities code: the provider's search also returns codes that merely
+    contain the one asked for.
 - **EDINET DB allows a hundred requests a day** on its free plan (the day is Japan's; `EDINETDB_DAILY_BUDGET`,
   default 90, is this server's share). A Tokyo name takes one request to find its EDINET code (kept a year) and
   three for its statements, each stored on its own (`_shared/edinet.ts`): the 決算短信 for a week, and daily once
