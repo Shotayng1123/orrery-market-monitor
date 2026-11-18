@@ -1,4 +1,6 @@
 // Monitor API client. One Edge Function, one query parameter `action`, bearer token on every call.
+import { keepClear } from "./keep";
+import { netFail, netOk } from "./net";
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
 export const apiConfigured = BASE.length > 0;
 
@@ -14,6 +16,7 @@ export function setToken(token: string, remember: boolean): void {
 }
 export function clearToken(): void {
   try { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); } catch { /* ignore */ }
+  void keepClear();   // the data kept for opening without a connection belongs to the account that signed out
 }
 /** The ID inside the token (the payload is readable; the signature is what the server checks). */
 export function tokenId(token: string | null): string | null {
@@ -36,7 +39,10 @@ export async function api<T>(action: string, params?: Params, init?: RequestInit
   const headers = new Headers(init?.headers);
   headers.set("accept", "application/json");
   if (token) headers.set("authorization", `Bearer ${token}`);
-  const r = await fetch(url(action, params), { ...init, headers });
+  let r: Response;
+  try { r = await fetch(url(action, params), { ...init, headers }); }
+  catch { netFail(); throw new ApiError(0, "No connection to the Monitor's server"); }
+  netOk();
   if (r.status === 401) { clearToken(); window.dispatchEvent(new Event("om:unauth")); throw new ApiError(401, "Signed out"); }
   const text = await r.text();
   let body: unknown = null;
