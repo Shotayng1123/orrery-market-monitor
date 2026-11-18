@@ -34,9 +34,18 @@ async function main(): Promise<void> {
 
   await part("sources whose last attempt failed", async () => {
     const rows = must(await sb.from("source_status").select("name,last_ok,last_error,last_error_at")) as Array<{ name: string; last_ok: string | null; last_error: string | null; last_error_at: string | null }>;
-    const bad = rows.filter((r) => r.last_error_at && (!r.last_ok || Date.parse(r.last_error_at) > Date.parse(r.last_ok)));
+    const failed = rows.filter((r) => r.last_error_at && (!r.last_ok || Date.parse(r.last_error_at) > Date.parse(r.last_ok)));
+    // as the Monitor's own health reading has it: a source with nothing for a week is one that is no longer asked
+    const week = now - 7 * 86400e3, bad = failed.filter((r) => Date.parse(r.last_error_at!) > week), dropped = failed.filter((r) => Date.parse(r.last_error_at!) <= week);
     console.log(`  ${rows.length} sources on record, ${bad.length} failing now`);
     for (const r of bad) console.log(`  ${r.name}: failed ${age(r.last_error_at)}, last ok ${age(r.last_ok)}: ${(r.last_error ?? "").slice(0, 160)}`);
+    if (dropped.length) console.log(`  no longer asked (their last attempt, a failure, is more than a week old): ${dropped.map((r) => r.name).join(", ")}`);
+  });
+
+  await part("the market table's own quotes (pulled every minute): when each last printed", async () => {
+    const rows = must(await sb.from("quotes_latest").select("symbol,price,market_time,fetched_at").in("symbol", ["^GSPC", "^IXIC", "^N225", "^VIX", "ES=F", "NKD=F", "USDJPY=X", "EURUSD=X", "^TNX", "CL=F", "GC=F"])) as Array<{ symbol: string; price: number; market_time: string; fetched_at: string }>;
+    for (const r of rows.sort((a, b) => a.symbol.localeCompare(b.symbol))) console.log(`  ${r.symbol.padEnd(9)} ${String(r.price).padEnd(11)} printed ${utc(r.market_time)} (${age(r.market_time)}), pulled ${age(r.fetched_at)}`);
+    if (!rows.length) console.log("  none of the instruments asked for is in the table");
   });
 
   await part("EQUITIES: the lists, their booked closes and today's quotes", async () => {
