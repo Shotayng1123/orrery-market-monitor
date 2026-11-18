@@ -1,14 +1,14 @@
 name: logic-tests
 
-# The checks that need no browser and no database (sim/logic.test.ts): exchange sessions, rolling bands, alert
-# measures, the push-notification encryption. Run when the code they cover changes; the server functions are
-# deployed by hand, so this does not gate a deploy, it says whether one would be safe.
+# The checks that need no browser and no live database: sim/logic.test.ts (exchange sessions, rolling bands, alert
+# measures, the push-notification encryption, accounts by email) and sim/sql (database functions, run on an
+# in-memory Postgres). Run when the code they cover changes.
 on:
   push:
     branches: [main]
-    paths: ["supabase/functions/**", "sim/**", "web/src/lib/**", ".github/workflows/logic-tests.yml"]
+    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/lib/**", ".github/workflows/logic-tests.yml"]
   pull_request:
-    paths: ["supabase/functions/**", "sim/**", "web/src/lib/**", ".github/workflows/logic-tests.yml"]
+    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/lib/**", ".github/workflows/logic-tests.yml"]
   workflow_dispatch:
 
 permissions:
@@ -30,3 +30,20 @@ jobs:
           cache-dependency-path: jobs/package-lock.json
       - run: npm ci
       - run: npx tsx ../sim/logic.test.ts
+
+  # the rules that live in the database (sim/sql/*.test.cjs), on PGlite: Postgres compiled to run inside Node
+  sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: sim/sql
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: sim/sql/package-lock.json
+      - run: npm ci
+      - run: npm test

@@ -6,6 +6,8 @@ name: deploy-server
 #   SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD   needed; without them this workflow says so and does nothing
 #   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY       already there for the jobs
 #   NOTE_DISPATCH_TOKEN                           optional: the GitHub token that lets the database start the Morning Note
+#   SMTP_USER + SMTP_PASS, or RESEND_API_KEY + MAIL_FROM   optional: the email sender for new accounts' codes
+#                                                 (also SMTP_HOST, SMTP_PORT; supabase/README.md, "Accounts by email")
 # A push to main that touches the server deploys it. Run by hand it only shows what a deploy would do ("check"),
 # unless "deploy" is chosen.
 on:
@@ -38,6 +40,12 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       NOTE_DISPATCH_TOKEN: ${{ secrets.NOTE_DISPATCH_TOKEN }}
+      MAIL_FROM: ${{ secrets.MAIL_FROM }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASS: ${{ secrets.SMTP_PASS }}
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_PORT: ${{ secrets.SMTP_PORT }}
       MODE: ${{ github.event_name == 'push' && 'deploy' || inputs.mode }}
     steps:
       - name: Are the keys in place?
@@ -126,6 +134,23 @@ jobs:
             supabase secrets set --env-file jobs/.env.vapid --project-ref "$REF" > /dev/null
             rm -f jobs/.env.vapid
             echo "a notification key was made and stored on the server"
+          fi
+
+      # optional: what the Monitor emails a new account's code with. Whichever of these repository secrets are set
+      # are stored on the server under the same names; nothing already there is removed, and no value is printed.
+      - name: Email sender
+        if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy'
+        run: |
+          args=(); names=""
+          for n in MAIL_FROM RESEND_API_KEY SMTP_USER SMTP_PASS SMTP_HOST SMTP_PORT; do
+            v="${!n}"
+            if [ -n "$v" ]; then args+=("$n=$v"); names="$names $n"; fi
+          done
+          if [ "${#args[@]}" -eq 0 ]; then
+            echo "no email-sender secrets in the repository: nothing stored (a new account waits for the manager unless the server already has a sender)"
+          else
+            supabase secrets set "${args[@]}" --project-ref "$REF" > /dev/null
+            echo "stored on the server:$names"
           fi
 
       - name: Functions
