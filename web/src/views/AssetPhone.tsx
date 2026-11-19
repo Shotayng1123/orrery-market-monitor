@@ -10,7 +10,7 @@ import { JumpPick, Section, Stat } from "../components/PhoneKit";
 import { useApi } from "../lib/useApi";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtStamp } from "../lib/time";
-import { chartMarks, finSections, fmtCount, fmtPc, fmtX, siteOf, whyText, type StockPage } from "../lib/stock";
+import { chartMarks, finSections, fmtCount, fmtPc, fmtX, moveRule, siteOf, whyText, type StockPage } from "../lib/stock";
 import { chartRow, GuidanceLine, shortLine } from "./Asset";
 import { AssetPhoneLegacy } from "./AssetPhoneLegacy";
 
@@ -116,7 +116,7 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
                 </li>
               ))}</ul>
             ) : <Empty title="No big moves">None in the last three years by these measures.</Empty>}
-            <p className="mp-note in">{d.moves.rows.length > 3 ? `${d.moves.rows.length} moves in three years, newest first: scroll inside the box for earlier ones. ` : ""}A day of 5% or more, five sessions of 10% or more, or 20% from a high to a low (or a low to a high) within a month.</p>
+            <p className="mp-note in">{d.moves.rows.length > 3 ? `${d.moves.rows.length} moves in three years, newest first: scroll inside the box for earlier ones. ` : ""}{moveRule(d.moves.rule).note}</p>
           </div>
         </Section>
       )}

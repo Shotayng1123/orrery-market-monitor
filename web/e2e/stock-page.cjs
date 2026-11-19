@@ -149,6 +149,25 @@ const IS = "revenue,cogs,gross,sga,op,nonOpInc,nonOpExp,ordinary,extraInc,extraL
     ck("the source's limits are said under the table; no errors on the page", /four years and five quarters/.test(note) && errs.length === 0, { note, errs });
     await p.screenshot({ path: "stock-desktop-sparse.png", fullPage: true }); await ctx.close(); }
 
+  console.log("\n[the rule on trial: a day of 10%, and the peaks and bottoms of the closes (Nvidia), look-ups for other stocks on hold]");
+  { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+    const moves = async (sym) => { await p.goto(MOCK + "#asset/" + sym, { waitUntil: "networkidle" }); await p.waitForSelector("#st-moves tbody tr"); await p.waitForSelector(".bigwrap canvas"); await p.waitForTimeout(900); await hideBar(p);
+      return p.evaluate(() => ({ aux: document.querySelector('.panel[data-no="05"] .aux').textContent, tag: document.querySelector("#st-rule")?.textContent ?? null, rows: [...document.querySelectorAll("#st-moves tbody tr")].map((tr) => ({ kind: tr.dataset.kind, status: tr.dataset.status, d: tr.cells[0].textContent, move: tr.cells[1].textContent, cls: tr.cells[1].className, why: tr.cells[2].childNodes[0].textContent })) })); };
+    const nv = await moves("NVDA");
+    ck("Nvidia's panel says its rule is on trial and what it is; the usual rule's words are gone", nv.tag === "RULE ON TRIAL" && /10% in a day · peaks and bottoms: turns of 15% or more · a peak only when a 12-month high · marked on the 3M, 12M and 36M charts/.test(nv.aux) && !/five sessions/.test(nv.aux) && /^4 in three years, newest first/.test(nv.aux), nv.aux);
+    ck("its marks are a day of 10% or more, new highs and bottoms, newest first, each in words and in its colour", nv.rows.map((r) => r.kind).join() === "bt,d1,pk,bt" && /^Bottom: \u221228\.1% from the high of \d+ \w+$/.test(nv.rows[0].move) && nv.rows[0].cls.includes("dn") && /^\u221212\.3% on the day$/.test(nv.rows[1].move) && /^New high: \+62\.4% from the low of \d+ \w+$/.test(nv.rows[2].move) && nv.rows[2].cls.includes("up") && nv.rows.every((r, i) => i === 0 || r.d <= nv.rows[i - 1].d), nv.rows);
+    ck("each has its answer: being looked up, a reason, a reason, none found", nv.rows.map((r) => r.status).join() === "queued,found,found,not_found" && /^Mock: the rise ended/.test(nv.rows[2].why) && /being looked up/.test(nv.rows[0].why), nv.rows.map((r) => [r.status, r.why]));
+    { const ds = await discs(p, ".bigwrap"); ck("the 12M chart carries their circles: green at the new high, red at the bottoms and at the day's fall", ds.up.length === 1 && ds.dn.length >= 2, { up: ds.up.length, dn: ds.dn.length }); }
+    const ms = await moves("MSFT");
+    ck("another stock keeps the usual rule and its reasons; a move not yet looked up is said to be on hold, not being looked up", ms.tag === null && /5% in a day · 10% in five sessions/.test(ms.aux) && ms.rows.map((r) => r.status).join() === "found,found,not_found,found,paused,old" && /on hold while a new rule/.test(ms.rows[4].why) && !ms.rows.some((r) => /being looked up/.test(r.why)), ms.rows.map((r) => [r.status, r.why]));
+    ck("no errors", errs.length === 0, errs);
+    await ctx.close(); }
+  { const ctx = await b.newContext({ ...devices["iPhone 13"] }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+    await p.goto(MOCK + "#asset/NVDA", { waitUntil: "networkidle" }); await p.waitForSelector("#st-moves .mp-moves li"); await p.waitForTimeout(700); await hideBar(p);
+    const ph = await p.evaluate(() => ({ kinds: [...document.querySelectorAll("#st-moves .mp-moves li")].map((li) => li.dataset.kind), heads: [...document.querySelectorAll("#st-moves .mp-moves li .h b")].map((e) => e.textContent), note: document.querySelector("#st-moves .mp-note.in").textContent }));
+    ck("on the phone the same four, and the note under them says the rule on trial in one sentence", ph.kinds.join() === "bt,d1,pk,bt" && /^New high: /.test(ph.heads[2]) && /On trial for this stock: a day of 10% or more, and the peaks and bottoms of its closes\. A peak or a bottom is marked once the price has turned 15% from it; a peak only when it was a 12-month high\./.test(ph.note) && errs.length === 0, { ph, errs });
+    await ctx.close(); }
+
   console.log("\n[desktop: an index's own page is its page on EQUITIES, wherever the link is]");
   { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
     const at = async (hash) => { await p.goto(MOCK + hash, { waitUntil: "networkidle" }); await p.waitForTimeout(900); return p.evaluate(() => ({ hash: location.hash, index: [...document.querySelectorAll(".pick select")].map((x) => x.value), fin: document.querySelectorAll("table.fin").length, key: document.querySelectorAll("#st-key").length })); };

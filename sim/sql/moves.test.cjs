@@ -45,6 +45,13 @@ const ck = (name, cond, detail) => { if (cond) { pass++; console.log("  ✓ " + 
   let refused = 0;
   for (const bad of ["insert into move_causes (symbol, kind, d, from_d, pct, ctx) values ('X', 'y1', '2026-01-02', '2026-01-01', 1, '{}')", "insert into move_causes (symbol, kind, d, from_d, pct, ctx, status) values ('X', 'd1', '2026-01-02', '2026-01-01', 1, '{}', 'guessed')", "insert into move_causes (symbol, kind, d, from_d, pct) values ('X', 'd1', '2026-01-02', '2026-01-01', 1)"]) { try { await db.exec(bad); } catch { refused++; } }
   ck("an unknown kind of move, an unknown state, or a move without what the job needs is refused", refused === 3);
+  // the rule on trial (19 Nov 2026): two more kinds, a new peak and a bottom
+  let early = false; try { await put("NVDA", "pk", "2026-10-21"); } catch { early = true; }
+  const kinds = fs.readFileSync(path.join(MIG, "20261119000003_move_kinds.sql"), "utf8");
+  await db.exec(kinds); await db.exec(kinds);
+  await put("NVDA", "pk", "2026-10-21"); await put("NVDA", "bt", "2026-11-17");
+  let still = false; try { await db.exec("insert into move_causes (symbol, kind, d, from_d, pct, ctx) values ('X', 'y1', '2026-01-03', '2026-01-01', 1, '{}')"); } catch { still = true; }
+  ck("before the change of 19 Nov a peak cannot be queued; after it (applied twice) a peak and a bottom can, the earlier kinds still can, and an unknown kind is still refused", early && still && Number((await one("select count(*) as n from move_causes where symbol = 'NVDA' and kind in ('pk','bt')")).n) === 2 && Number((await one("select count(*) as n from move_causes where kind in ('d1','w1','m1')")).n) >= 3);
   await db.exec("update move_causes set status = 'found' where status = 'queued'");
   ck("once nothing waits, nothing is asked", (await kick()) === "nothing queued");
 

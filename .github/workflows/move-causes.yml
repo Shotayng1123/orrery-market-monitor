@@ -77,7 +77,9 @@ jobs:
           SYMBOL: ${{ github.event.inputs.symbol || '' }}
           REDO: ${{ github.event.inputs.redo || 'false' }}
         run: |
-          ARGS="--max $MAX"
+          # --seed: while a rule for big moves is on trial (_shared/bigmoves.ts, SWING_TRIAL) the job first puts the
+          # moves of the trial's stocks on the queue itself, and looks up those stocks only
+          ARGS="--max $MAX --seed"
           if [ "$DRY" = "true" ]; then ARGS="$ARGS --dry"; fi
           if [ "$AGAIN" = "true" ]; then ARGS="$ARGS --again"; fi
           if [ "$TRACE" = "true" ]; then ARGS="$ARGS --trace"; fi

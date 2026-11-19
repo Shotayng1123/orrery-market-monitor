@@ -10,10 +10,9 @@ import { avgTurnover, betaCorr, maxDrawdown, perfRows, range52w, realisedVol, ty
 import { justReported, resultsDateToWatch, valuation, type Fin, type FinLine } from "./fin.ts";
 import { yahooFin, yahooFinTypes } from "./finsrc.ts";
 import { edinetStatements } from "./edinet.ts";
-import { bigMoves, isLargeCap, moveText, settledBars, type BigMove } from "./bigmoves.ts";
+import { SWING_TRIAL, bigMoves, isLargeCap, moveCtx, moveText, ruleFor, settledBars, type BigMove, type MoveRule } from "./bigmoves.ts";
 import { stockMarket } from "./moves.ts";
 import { localDate, marketById, marketState } from "./sessions.ts";
-import { barOnOrBefore } from "./stockstats.ts";
 import type { MoveCtx } from "./movecause.ts";
 
 const today = (): string => new Date().toISOString().slice(0, 10);
@@ -81,27 +80,31 @@ const MOVES_SHOWN_MONTHS = 37;    // the chart's longest view is 36 months
 const CAUSES_FOR_DAYS = 366;      // reasons are looked up for moves of the last twelve months
 const QUEUE_PER_VIEW = 15;        // at most this many new look-ups are queued by one opening of a page
 const CAUSE_TRIES = 3;            // the job gives a look-up that fails this many tries, then leaves it (jobs/move_causes.ts)
-type MoveOut = BigMove & { text: string; status: "found" | "not_found" | "queued" | "failed" | "old" | "off"; cause: string | null; sources: Array<{ title: string; url: string }> };
+type MoveOut = BigMove & { text: string; status: "found" | "not_found" | "queued" | "failed" | "old" | "off" | "paused"; cause: string | null; sources: Array<{ title: string; url: string }> };
 /** The big moves of a large company with the reason stored for each. A move of the last twelve months with no
  *  reason yet is put on the queue for the job that finds them (jobs/move_causes.ts) and shown as being looked up.
  *  Where the store is not there (a database from before this change) the moves are shown without reasons. */
-async function movesFor(symbol: string, q: { name: string | null; exchange: string | null; currency: string | null; marketCap: number | null }, sector: string | null, own: Bar[], bench: { name: string; bars: Bar[] } | null): Promise<{ eligible: boolean; rows: MoveOut[] }> {
-  if (!isLargeCap(q.marketCap, q.currency, q.currency === "JPY" ? 1 : await perUsd(q.currency))) return { eligible: false, rows: [] };
+async function movesFor(symbol: string, q: { name: string | null; exchange: string | null; currency: string | null; marketCap: number | null }, sector: string | null, own: Bar[], bench: { name: string; bars: Bar[] } | null): Promise<{ eligible: boolean; rule: MoveRule; rows: MoveOut[] }> {
+  // A second rule is on trial for the stocks in SWING_TRIAL (bigmoves.ts). While it is, reasons are looked up for
+  // those stocks only: every other stock keeps its marks and the reasons already found, and a move without one
+  // is shown as on hold, not as being looked up.
+  const rule = ruleFor(symbol), paused = SWING_TRIAL.size > 0 && rule === "classic";
+  if (!isLargeCap(q.marketCap, q.currency, q.currency === "JPY" ? 1 : await perUsd(q.currency))) return { eligible: false, rule, rows: [] };
   const now = Date.now() / 1000;
   // a session still in progress is not yet a day's move
   const market = marketById(stockMarket(symbol) ?? ""), state = market ? marketState(market, new Date()) : "CLOSED";
-  const found = bigMoves(settledBars(own, state === "OPEN" || state === "BREAK", market ? localDate(market.tz, now) : ""), now - MOVES_SHOWN_MONTHS * 30.5 * 86400);
+  const found = bigMoves(settledBars(own, state === "OPEN" || state === "BREAK", market ? localDate(market.tz, now) : ""), now - MOVES_SHOWN_MONTHS * 30.5 * 86400, rule);
   const { data, error } = await db.from("move_causes").select("kind,d,status,cause,sources,tries").eq("symbol", symbol);
   const stored = new Map(((data ?? []) as Array<{ kind: string; d: string; status: string; cause: string | null; sources: Array<{ title: string; url: string }> | null; tries: number }>).map((r) => [`${r.kind}|${r.d}`, r]));
   const queue: Array<Record<string, unknown>> = [];
   const rows = found.map((m): MoveOut => {
     const text = moveText(m), hit = stored.get(`${m.kind}|${m.to}`);
     if (error) return { ...m, text, status: "off", cause: null, sources: [] };
-    if (hit) return { ...m, text, status: hit.status === "found" ? "found" : hit.status === "not_found" ? "not_found" : hit.status === "error" && hit.tries >= CAUSE_TRIES ? "failed" : "queued", cause: hit.status === "found" ? hit.cause : null, sources: hit.status === "found" ? hit.sources ?? [] : [] };
+    if (hit && (hit.status === "found" || hit.status === "not_found" || !paused)) return { ...m, text, status: hit.status === "found" ? "found" : hit.status === "not_found" ? "not_found" : hit.status === "error" && hit.tries >= CAUSE_TRIES ? "failed" : "queued", cause: hit.status === "found" ? hit.cause : null, sources: hit.status === "found" ? hit.sources ?? [] : [] };
     if (now - m.t > CAUSES_FOR_DAYS * 86400) return { ...m, text, status: "old", cause: null, sources: [] };
+    if (paused) return { ...m, text, status: "paused", cause: null, sources: [] };
     if (queue.length < QUEUE_PER_VIEW) {
-      const a = bench ? barOnOrBefore(bench.bars, Date.parse(m.from + "T00:00:00Z") / 1000) : null, z = bench ? barOnOrBefore(bench.bars, m.t) : null;
-      const ctx: MoveCtx = { symbol, name: q.name ?? symbol, exchange: q.exchange, sector, currency: q.currency, kind: m.kind, from: m.from, to: m.to, pct: m.pct, fromPx: m.fromPx, toPx: m.toPx, text, bench: bench?.name ?? null, benchPct: a && z && a.c > 0 ? (z.c / a.c - 1) * 100 : null };
+      const ctx: MoveCtx = moveCtx(m, { symbol, name: q.name ?? symbol, exchange: q.exchange, sector, currency: q.currency }, bench);
       queue.push({ symbol, kind: m.kind, d: m.to, from_d: m.from, pct: m.pct, ctx });
     }
     return { ...m, text, status: "queued", cause: null, sources: [] };
@@ -110,7 +113,7 @@ async function movesFor(symbol: string, q: { name: string | null; exchange: stri
     const { error: e } = await db.from("move_causes").upsert(queue, { onConflict: "symbol,kind,d", ignoreDuplicates: true });
     if (e) console.log("stock: queueing moves:", e.message); else await db.rpc("move_causes_kick");
   }
-  return { eligible: true, rows };
+  return { eligible: true, rule, rows };
 }
 
 export async function stockPage(symbol: string) {
@@ -126,7 +129,7 @@ export async function stockPage(symbol: string) {
   ]);
   const member = (con ?? []).find((c) => c.sector) ?? (con ?? [])[0] ?? null;
   const d20 = avgTurnover(own, 20), d60 = avgTurnover(own, 60);
-  const moves = equity ? await soft(movesFor(symbol, q, member?.sector ?? null, own, benchmarks.length ? { name: benchmarks[0].name, bars: benches[0] } : null), { eligible: false, rows: [] as MoveOut[] }, "big moves") : { eligible: false, rows: [] as MoveOut[] };
+  const moves = equity ? await soft(movesFor(symbol, q, member?.sector ?? null, own, benchmarks.length ? { name: benchmarks[0].name, bars: benches[0] } : null), { eligible: false, rule: "classic" as MoveRule, rows: [] as MoveOut[] }, "big moves") : { eligible: false, rule: "classic" as MoveRule, rows: [] as MoveOut[] };
 
   // short interest: Japan = the positions of 0.5% and above reported to the exchange; elsewhere the exchange-reported
   // short interest Yahoo republishes, with FINRA's daily short-volume share beside it where there is one
