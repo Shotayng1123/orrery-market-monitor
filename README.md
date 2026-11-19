@@ -85,6 +85,10 @@ when the server's functions or migrations change.
 
 TOPIX has no Yahoo ticker: the `1306.T` ETF stands in for the live level (badge PROXY) and the official JPX close is used for daily figures.
 
+A new source is tried from GitHub's machines before a job is built on it: a read-only script in `jobs/probes/`
+(the pattern is `jobs/probes/example.ts`), run by the `source-probe` workflow on the branch that holds it
+(Actions › source-probe › Run workflow). It is given no secrets and writes nothing.
+
 ### The stock page (`#asset/SYMBOL`, since 2026-11-18)
 
 | On the page | Where it comes from |
