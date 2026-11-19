@@ -327,16 +327,21 @@ export function renderOpening(ctx: CanvasRenderingContext2D, W: number, H: numbe
   if (dark > 0.003) { ctx.fillStyle = rgba(SPACE, dark); ctx.fillRect(0, 0, W, H); }
 }
 
-// ---- when it plays: once a day on each device ----
+// ---- when it plays ----
 export const OPENING_KEY = "om.opening.day";
+/** Set for one page load by the new-version bar (lib/update.ts): the reload it makes is not an opening of the app. */
+export const OPENING_SKIP_KEY = "om.opening.skip";
 /** The device's own calendar day, as 2026-11-19. */
 export const dayOf = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-/** Whether the opening plays now. Once a day on each device: the day it last played is kept on the device
- *  (`stored`). Not for a reader who has asked their device for less motion, and not in a browser driven by a
- *  program (the browser checks open a fresh one for every suite). `forced` (the address ends ?opening=1) plays
- *  it whatever the day, for looking at it again. */
-export function openingDue(today: string, stored: string | null, o: { reducedMotion: boolean; automated: boolean; forced: boolean }): boolean {
+/** Whether the opening plays now.
+ *  - In the app on a phone's home screen (`everyOpen`): every time it is opened (Shota, 19 Nov 2026).
+ *  - Anywhere else (a browser tab on a phone, a computer): once a day on each device; the day it last played is
+ *    kept on the device (`stored`).
+ *  - Never for a reader who has asked their device for less motion, nor in a browser driven by a program (the
+ *    browser checks open a fresh one for every suite).
+ *  - `forced` (the address ends ?opening=1) plays it whatever else, for looking at it again. */
+export function openingDue(today: string, stored: string | null, o: { reducedMotion: boolean; automated: boolean; forced: boolean; everyOpen?: boolean }): boolean {
   if (o.forced) return true;
   if (o.reducedMotion || o.automated) return false;
-  return stored !== today;
+  return o.everyOpen === true || stored !== today;
 }

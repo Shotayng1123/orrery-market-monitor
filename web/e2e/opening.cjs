@@ -13,6 +13,9 @@ const watchFrames = (ctx) => ctx.addInitScript(() => { window.__gaps = []; let l
 const gaps = (p) => p.evaluate(() => { const g = [...window.__gaps].sort((a, b) => a - b), q = (x) => +(g[Math.min(g.length - 1, Math.floor(g.length * x))] ?? 0).toFixed(1); return { n: g.length, median: q(0.5), p95: q(0.95), max: q(1), over34: g.filter((x) => x > 34).length }; });
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d)}`); };
 const person = (ctx) => ctx.addInitScript(() => { Object.defineProperty(Navigator.prototype, "webdriver", { get: () => false }); });
+// opened from the home screen, as an iPhone reports it
+const homeScreen = (ctx) => ctx.addInitScript(() => { Object.defineProperty(Navigator.prototype, "standalone", { get: () => true, configurable: true }); });
+const plays = (p) => p.waitForSelector("#opening canvas", { timeout: 2500 }).then(() => true, () => false);
 const today = (p) => p.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; });
 // what the layer shows: its box, and what is painted in the canvas (share of pixels that are not the ground,
 // the warmest pixel, and how far the paint reaches towards the left and right edges on the middle band)
@@ -73,6 +76,30 @@ const gone = (p, ms = 3000) => p.waitForFunction(() => !document.querySelector("
     await p.touchscreen.tap(195, 400);
     ck(`a tap anywhere ends it; SKIP is large enough for a finger (${sk.w}×${sk.h}px) and inside the screen`, (await gone(p, 2000)) && sk.w >= 44 && sk.h >= 44 && sk.right >= 0 && sk.bottom >= 0, sk);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+
+  console.log("\n[how often: every time in the app on a phone's home screen, once a day elsewhere]");
+  { const ctx = await b.newContext({ ...devices["iPhone 13"] }); await person(ctx); await homeScreen(ctx); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+    await p.goto(MOCK + "#market", { waitUntil: "domcontentloaded" }); const first = await plays(p); await p.touchscreen.tap(195, 400); await gone(p, 2000);
+    const day = await p.evaluate(() => localStorage.getItem("om.opening.day"));
+    await p.reload({ waitUntil: "domcontentloaded" }); const second = await plays(p); await p.touchscreen.tap(195, 400); await gone(p, 2000);
+    await p.goto(MOCK + "#news", { waitUntil: "domcontentloaded" }); await p.reload({ waitUntil: "domcontentloaded" }); const third = await plays(p); await p.touchscreen.tap(195, 400); await gone(p, 2000);
+    ck("in the app on a phone's home screen it plays every time the app is opened: a first, a second and a third time on the same day", first && second && third && day === (await today(p)), { first, second, third, day });
+    // the new-version bar loads the new version by itself: that page is the same visit going on
+    await p.evaluate(() => sessionStorage.setItem("om.opening.skip", "1")); await p.reload({ waitUntil: "domcontentloaded" }); await p.waitForSelector("#root > *"); await p.waitForTimeout(700);
+    const afterUpdate = (await look(p)) === null, flag = await p.evaluate(() => sessionStorage.getItem("om.opening.skip"));
+    await p.reload({ waitUntil: "domcontentloaded" }); const next = await plays(p);
+    ck("but not on the page the new-version bar loads; the opening after that plays as usual", afterUpdate && flag === null && next, { afterUpdate, flag, next });
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+  { const ctx = await b.newContext({ ...devices["iPhone 13"] }); await person(ctx); const p = await ctx.newPage();
+    await p.goto(MOCK + "#market", { waitUntil: "domcontentloaded" }); const first = await plays(p); await p.touchscreen.tap(195, 400); await gone(p, 2000);
+    await p.reload({ waitUntil: "domcontentloaded" }); await p.waitForSelector("#root > *"); await p.waitForTimeout(700);
+    ck("in a browser tab on the same phone it is once a day", first && (await look(p)) === null);
+    await ctx.close(); }
+  { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); await person(ctx); await homeScreen(ctx); const p = await ctx.newPage();
+    await p.goto(MOCK + "#market", { waitUntil: "domcontentloaded" }); const first = await plays(p); await p.mouse.click(700, 450); await gone(p, 2000);
+    await p.reload({ waitUntil: "domcontentloaded" }); await p.waitForSelector("#topbar"); await p.waitForTimeout(700);
+    ck("installed as an app on a computer it is once a day too: every time is for the phone", first && (await look(p)) === null);
+    await ctx.close(); }
 
   console.log("\n[kept smooth: the eye never stops, the picture is coarse only while it moves, the Monitor waits]");
   { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 }); await person(ctx); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
