@@ -14,20 +14,25 @@
 //   pk   a new peak: the highest close of a rise, marked once the close has since fallen 15% from it, and only if
 //        it was the highest close of the twelve months before it
 //   bt   a bottom: the lowest close of a fall, marked once the close has since risen 15% from it
-// Peaks and bottoms are the turning points of the closes when only moves of 15% count (the same reading whichever
-// day it is made on: a turning point, once marked, does not move). A high that was not a twelve-month high is
-// still a turning point (the next bottom is measured from it) but is not marked.
+//   p2   a smaller peak, b2 a smaller bottom: the same with turns of SWING_PCT_2 per cent, for the detail between
+//        the large ones (added the same day: the large turns alone were "a bit too rough"); a large peak that
+//        was not a twelve-month high is among them
+// Peaks and bottoms are the turning points of the closes when only moves of that size count (the same reading
+// whichever day it is made on: a turning point, once marked, does not move). On the page a peak is red and a
+// bottom green: the colour is the turn the stock took there, which is what its reason tells.
 import { barOnOrBefore, type Bar } from "./stockstats.ts";
 import type { MoveCtx } from "./movecause.ts";
 
 export const BIG_D1 = 5, BIG_W1 = 10, BIG_M1 = 20, WEEK = 5, MONTH = 21;
-export const SWING_D1 = 10, SWING_PCT = 15, SWING_HIGH_DAYS = 252;
+// The smaller turn was chosen on Nvidia's closes of 19 Nov 2026, where the large turns alone gave 4 marks in
+// twelve months: turns of 12% add 2, of 10% add 6, of 8% add 10, of 7% add 12, of 6% add 18.
+export const SWING_D1 = 10, SWING_PCT = 15, SWING_PCT_2 = 10, SWING_HIGH_DAYS = 252;
 /** The stocks whose page uses the rule on trial. While this is not empty, reasons are looked up for these stocks
  *  only (stock.ts, jobs/move_causes.ts): the look-ups for every other stock wait for the rule to be settled. */
 export const SWING_TRIAL: ReadonlySet<string> = new Set(["NVDA"]);
 export type MoveRule = "classic" | "swings";
 export const ruleFor = (symbol: string): MoveRule => (SWING_TRIAL.has(symbol) ? "swings" : "classic");
-export interface BigMove { kind: "d1" | "w1" | "m1" | "pk" | "bt"; dir: 1 | -1; pct: number; from: string; to: string; fromPx: number; toPx: number; t: number }
+export interface BigMove { kind: "d1" | "w1" | "m1" | "pk" | "bt" | "p2" | "b2"; dir: 1 | -1; pct: number; from: string; to: string; fromPx: number; toPx: number; t: number }
 const iso = (t: number): string => new Date(t * 1000).toISOString().slice(0, 10);
 const mv = (kind: BigMove["kind"], a: Bar, b: Bar): BigMove => { const pct = (b.c / a.c - 1) * 100; return { kind, dir: pct >= 0 ? 1 : -1, pct, from: iso(a.t), to: iso(b.t), fromPx: a.c, toPx: b.c, t: b.t }; };
 const EPS = 1e-9;   // 930/1000 is -6.999999999999995%: a move that is exactly on the line counts
@@ -43,12 +48,11 @@ function largestApart(c: Array<{ i: number; j: number; m: BigMove }>): BigMove[]
   return kept.map((k) => k.m);
 }
 
-/** The peaks and bottoms of the bars (time order), oldest first: the turning points of the closes when only moves
- *  of `pct` per cent count. A peak is given from the bottom before it, a bottom from the peak before it (the
- *  first one from the lowest or highest close before it); a peak is given only when it was the highest close of
- *  the `highDays` sessions before it. The stretch still running at the end has no turning point yet. */
-export function turningPoints(bars: Bar[], pct = SWING_PCT, highDays = SWING_HIGH_DAYS): BigMove[] {
-  const b = bars.filter((x) => x.c > 0), out: BigMove[] = [];
+/** The turning points of the closes when only moves of `pct` per cent count, oldest first, as indices into `b`:
+ *  each with the turning point before it (the first one with the lowest or highest close before it). The stretch
+ *  still running at the end has no turning point yet. */
+function pivots(b: Bar[], pct: number): Array<{ i: number; from: number; peak: boolean }> {
+  const out: Array<{ i: number; from: number; peak: boolean }> = [];
   const up = 1 + pct / 100, down = 1 - pct / 100;
   // dir: +1 after a bottom (looking for the peak), -1 after a peak (looking for the bottom), 0 before the first
   let dir = 0, hi = 0, lo = 0, last = -1;
@@ -58,17 +62,37 @@ export function turningPoints(bars: Bar[], pct = SWING_PCT, highDays = SWING_HIG
     if (dir <= 0 && b[j].c < b[lo].c) lo = j;
     if (dir >= 0 && b[j].c <= b[hi].c * down * (1 + EPS)) {
       const from = last >= 0 ? last : extreme(hi, -1);
-      let top = true;
-      for (let i = Math.max(0, hi - highDays); i < hi; i++) if (b[i].c > b[hi].c) { top = false; break; }
-      if (top && from !== hi) out.push(mv("pk", b[from], b[hi]));
+      if (from !== hi) out.push({ i: hi, from, peak: true });
       last = hi; dir = -1; lo = j;
     } else if (dir <= 0 && b[j].c >= b[lo].c * up * (1 - EPS)) {
       const from = last >= 0 ? last : extreme(lo, 1);
-      if (from !== lo) out.push(mv("bt", b[from], b[lo]));
+      if (from !== lo) out.push({ i: lo, from, peak: false });
       last = lo; dir = 1; hi = j;
     }
   }
   return out;
+}
+
+/** The peaks and bottoms of the bars (time order), oldest first, on two levels.
+ *  The large ones are the turning points when only moves of `pct` per cent count: a bottom (bt), and a peak that
+ *  was the highest close of the `highDays` sessions before it (pk). The smaller ones (p2, b2) are the further
+ *  turning points when moves of `pct2` per cent count, and with them a large peak that was not a twelve-month
+ *  high. Each is given from the turning point of its own level before it. A peak points down and a bottom up
+ *  (`dir`): that is the turn the stock took there, and what its reason is about; `pct` is the move into it.
+ *  `pct2` of 0 gives the large ones alone. */
+export function turningPoints(bars: Bar[], pct = SWING_PCT, highDays = SWING_HIGH_DAYS, pct2 = SWING_PCT_2): BigMove[] {
+  const b = bars.filter((x) => x.c > 0), out: BigMove[] = [];
+  const turn = (kind: BigMove["kind"], p: { i: number; from: number; peak: boolean }): BigMove => ({ ...mv(kind, b[p.from], b[p.i]), dir: p.peak ? -1 : 1 });
+  const large = pivots(b, pct), small = pct2 > 0 && pct2 < pct ? pivots(b, pct2) : [];
+  const smallAt = new Map(small.map((p) => [p.i, p])), marked = new Set<number>();
+  for (const p of large) {
+    let top = p.peak;
+    if (top) for (let i = Math.max(0, p.i - highDays); i < p.i; i++) if (b[i].c > b[p.i].c) { top = false; break; }
+    if (!p.peak) out.push(turn("bt", p)); else if (top) out.push(turn("pk", p)); else if (small.length) out.push(turn("p2", smallAt.get(p.i) ?? p)); else continue;
+    marked.add(p.i);
+  }
+  for (const p of small) if (!marked.has(p.i)) out.push(turn(p.peak ? "p2" : "b2", p));
+  return out.sort((x, y) => x.t - y.t);
 }
 
 /** Every big move in the bars (time order, one per trading day) that ends on or after `sinceT`, newest first,
@@ -121,6 +145,8 @@ export function moveText(m: Pick<BigMove, "kind" | "pct" | "from" | "to">): stri
   if (m.kind === "d1") return `${p} on the day`;
   if (m.kind === "pk") return `New high: ${p} from the low of ${day(m.from)}`;
   if (m.kind === "bt") return `Bottom: ${p} from the high of ${day(m.from)}`;
+  if (m.kind === "p2") return `Smaller peak: ${p} from the low of ${day(m.from)}`;
+  if (m.kind === "b2") return `Smaller bottom: ${p} from the high of ${day(m.from)}`;
   if (m.kind === "w1") return `${p} in five sessions (from ${day(m.from)})`;
   return m.pct < 0 ? `${p} from the high of ${day(m.from)} to the low of ${day(m.to)}` : `${p} from the low of ${day(m.from)} to the high of ${day(m.to)}`;
 }
@@ -130,5 +156,11 @@ export function moveText(m: Pick<BigMove, "kind" | "pct" | "from" | "to">): stri
  *  moves itself (jobs/move_causes.ts --seed). */
 export function moveCtx(m: BigMove, who: { symbol: string; name: string; exchange: string | null; sector: string | null; currency: string | null }, bench: { name: string; bars: Bar[] } | null): MoveCtx {
   const a = bench ? barOnOrBefore(bench.bars, Date.parse(m.from + "T00:00:00Z") / 1000) : null, z = bench ? barOnOrBefore(bench.bars, m.t) : null;
-  return { ...who, kind: m.kind, from: m.from, to: m.to, pct: m.pct, fromPx: m.fromPx, toPx: m.toPx, text: moveText(m), bench: bench?.name ?? null, benchPct: a && z && a.c > 0 ? (z.c / a.c - 1) * 100 : null };
+  const turn = m.kind === "pk" || m.kind === "bt" ? SWING_PCT : m.kind === "p2" || m.kind === "b2" ? SWING_PCT_2 : undefined;
+  return { ...who, kind: m.kind, from: m.from, to: m.to, pct: m.pct, fromPx: m.fromPx, toPx: m.toPx, text: moveText(m), bench: bench?.name ?? null, benchPct: a && z && a.c > 0 ? (z.c / a.c - 1) * 100 : null, ...(turn ? { turn } : {}) };
 }
+
+/** The other level of the same turning point: a smaller peak that the stock has since fallen further from becomes
+ *  a large one (p2 to pk, b2 to bt) on the same day, and its reason is the same reason. The page and the job
+ *  use the answer stored under either. */
+export const siblingKind = (k: BigMove["kind"]): BigMove["kind"] | null => (k === "pk" ? "p2" : k === "p2" ? "pk" : k === "bt" ? "b2" : k === "b2" ? "bt" : null);

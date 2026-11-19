@@ -317,12 +317,18 @@ on trial for the stocks named in `SWING_TRIAL` (`_shared/bigmoves.ts`; Nvidia al
 - a day that closed 10% or more from the previous close;
 - a **bottom**: the lowest close of a fall, marked once the close has since risen 15% from it;
 - a **new peak**: the highest close of a rise, marked once the close has since fallen 15% from it, and only if
-  it was the highest close of the twelve months before it.
+  it was the highest close of the twelve months before it;
+- a second level, added the same day because the large turns alone were "a bit too rough": the **smaller peaks
+  and bottoms**, the same with turns of 10%, and with them a large peak that was not a twelve-month high.
 
-Peaks and bottoms are the turning points of the closes when only moves of 15% count (`turningPoints`), so a point,
-once marked, does not move; the stretch still running has none yet. On Nvidia's closes of 19 Nov 2026 the rule
-gives 20 marks in three years and 4 in the last twelve months (the usual rule had queued 15 and had more to
-queue). The two numbers are `SWING_PCT` and `SWING_HIGH_DAYS`; the day's line is `SWING_D1`.
+Peaks and bottoms are the turning points of the closes when only moves of that size count (`turningPoints`), so a
+point, once marked, does not move; the stretch still running has none yet. A smaller point becomes a large one on
+the same day when the turn after it grows to 15%, and keeps its reason (`siblingKind`). On the page a peak is red
+and a bottom green, whatever the move into it: the colour is the turn the stock took there, which is what the
+reason tells (a day keeps the colour of its move); the smaller ones are smaller circles and smaller dots. On
+Nvidia's closes of 19 Nov 2026 the large level gives 4 marks in the last twelve months (the usual rule had queued
+15 and had more to queue); smaller turns of 12% add 2, of 10% add 6, of 8% add 10, of 7% add 12, of 6% add 18.
+The numbers are `SWING_D1`, `SWING_PCT`, `SWING_PCT_2` and `SWING_HIGH_DAYS`; the page is told them with the rows.
 
 While `SWING_TRIAL` is not empty: the page of a stock on trial says RULE ON TRIAL and the rule; every other
 stock keeps the usual marks and the reasons already found, and a move of theirs without an answer reads as on
