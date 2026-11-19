@@ -22,12 +22,16 @@ const hover = async (p, x, y) => { await p.mouse.move(x, y, { steps: 3 }); await
     const box = await p.locator(".bigwrap .u-over").boundingBox(); let worst = 0, z = 1; const at = [];
     for (const [fx, fy] of [[0.08, 0.2], [0.5, 0.5], [0.93, 0.85]]) { const mx = box.x + box.width * fx, my = box.y + box.height * fy; await hover(p, mx, my); const c = await cross(p, ".bigwrap"); z = c.z; worst = Math.max(worst, Math.abs(c.x - mx), Math.abs(c.y - my)); at.push([Math.round(mx), Math.round(c.x), Math.round(my), Math.round(c.y)]); }
     ck(`${name} (the page drawn at ${z}): at the left, the middle and the right of the chart the crosshair is within ${worst.toFixed(1)} px of the pointer`, worst <= 1.5 && errs.length === 0, { at, errs });
-    // the chart moves on the page while the pointer is inside it (something above or beside it changes size): no scroll, no resize
+    // the chart moves on the page while the pointer rests inside it (something above or beside it changes size): no
+    // scroll, no resize. Moved here by a set share of its own size and without a new layout, so that the pointer is
+    // still inside it whatever the fonts and the wrapping of the machine the check runs on (on GitHub's the first
+    // version of this check, which gave the grid a margin, moved the chart 138 px down and from under the pointer).
     const mx = box.x + box.width * 0.7, my = box.y + box.height * 0.5; await hover(p, mx, my);
-    await p.evaluate(() => { const g = document.querySelector("#grid"); g.style.marginLeft = "90px"; g.style.marginTop = "70px"; }); await p.waitForTimeout(150);
+    await p.evaluate(([dx, dy]) => { const g = document.querySelector("#grid"); g.style.position = "relative"; g.style.left = dx + "px"; g.style.top = dy + "px"; }, [box.width * 0.15 / z, box.height * 0.25 / z]); await p.waitForTimeout(150);
     const moved = await p.locator(".bigwrap .u-over").boundingBox();
+    const inside = mx + 6 > moved.x + 20 && mx + 6 < moved.x + moved.width - 20 && my + 4 > moved.y + 20 && my + 4 < moved.y + moved.height - 20;
     await hover(p, mx + 6, my + 4); const c2 = await cross(p, ".bigwrap"), off = Math.max(Math.abs(c2.x - (mx + 6)), Math.abs(c2.y - (my + 4)));
-    ck(`after the chart has moved ${Math.round(moved.x - box.x)} px across and ${Math.round(moved.y - box.y)} px down under a pointer that stayed inside it, the crosshair is still within ${off.toFixed(1)} px of the pointer`, moved.x - box.x > 40 && moved.y - box.y > 30 && off <= 1.5, { box, moved, c2, want: [mx + 6, my + 4] });
+    ck(`after the chart has moved ${Math.round(moved.x - box.x)} px across and ${Math.round(moved.y - box.y)} px down under a pointer that stayed inside it, the crosshair is still within ${off.toFixed(1)} px of the pointer`, moved.x - box.x > 40 && moved.y - box.y > 30 && Math.abs(moved.width - box.width) < 1 && inside && off <= 1.5, { box, moved, inside, c2, want: [mx + 6, my + 4] });
     await ctx.close();
   }
 
