@@ -51,6 +51,15 @@ async function main(): Promise<void> {
     for (const r of runs.filter((x) => x.job !== "relay").slice(0, 6)) console.log(`    ${utc(r.at)} ${r.job} ${r.ok ? "ok" : "FAILED"}: ${(r.detail ?? "").slice(0, 160)}`);
     const stood = must(await sb.from("job_runs").select("job,at,detail").or("detail.like.standing down%,detail.like.stood down%").order("at", { ascending: false }).limit(5)) as Array<{ job: string; at: string; detail: string | null }>;
     console.log(stood.length ? `  the server last stood down ${age(stood[0].at)}: ${stood[0].job}: ${(stood[0].detail ?? "").slice(0, 220)}` : "  the server has never stood down for a relay");
+    // how long a currency pair goes without a minute bar in ordinary hours: the relay is asked for at ten minutes
+    // behind, so an ordinary pause of that length (the daily roll at 17:00 New York) would start it for nothing
+    for (const sym of ["USDJPY=X", "EURUSD=X", "BTC-USD"]) {
+      const bars: string[] = [];
+      for (let from = 0; from < 4000; from += 1000) { const page = must(await sb.from("bars_intraday").select("t").eq("symbol", sym).gte("t", new Date(now - 36 * 3600e3).toISOString()).order("t").range(from, from + 999)) as Array<{ t: string }>; bars.push(...page.map((r) => r.t)); if (page.length < 1000) break; }
+      const gaps: Array<{ from: string; min: number }> = [];
+      for (let k = 1; k < bars.length; k++) { const min = Math.round((Date.parse(bars[k]) - Date.parse(bars[k - 1])) / 60000); if (min >= 5) gaps.push({ from: bars[k - 1], min }); }
+      console.log(`  ${sym}: ${bars.length} minute bars in 36 h; pauses of 5 min or more: ${gaps.length ? gaps.map((g) => `${g.min} min from ${utc(g.from)}`).join("; ") : "none"}`);
+    }
     // what the database asked GitHub for, and what GitHub answered (kept a few hours only)
     const asked = await sb.rpc("monitor_dispatch_status");
     if (asked.error) console.log(`  requests to GitHub: could not be read (${asked.error.message})`);
