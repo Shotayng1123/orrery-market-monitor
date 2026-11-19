@@ -1,6 +1,7 @@
 // Monitor API client. One Edge Function, one query parameter `action`, bearer token on every call.
 import { keepClear } from "./keep";
 import { netFail, netOk } from "./net";
+import { held } from "./hold";
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
 export const apiConfigured = BASE.length > 0;
 
@@ -39,12 +40,16 @@ export async function api<T>(action: string, params?: Params, init?: RequestInit
   const headers = new Headers(init?.headers);
   headers.set("accept", "application/json");
   if (token) headers.set("authorization", `Bearer ${token}`);
+  // While the opening plays, whatever comes back (an answer, a refusal, no connection) is kept in hand and
+  // acted on once it is over: nothing is drawn underneath meanwhile (lib/hold.ts).
+  const later = async (): Promise<void> => { const wait = held(); if (wait) await wait; };
   let r: Response;
   try { r = await fetch(url(action, params), { ...init, headers }); }
-  catch { netFail(); throw new ApiError(0, "No connection to the Monitor's server"); }
+  catch { await later(); netFail(); throw new ApiError(0, "No connection to the Monitor's server"); }
+  const text = r.status === 401 ? "" : await r.text();
+  await later();
   netOk();
   if (r.status === 401) { clearToken(); window.dispatchEvent(new Event("om:unauth")); throw new ApiError(401, "Signed out"); }
-  const text = await r.text();
   let body: unknown = null;
   try { body = text ? JSON.parse(text) : null; } catch { throw new ApiError(r.status, `Bad response (${r.status})`); }
   if (!r.ok) throw new ApiError(r.status, (body as { error?: string } | null)?.error ?? `HTTP ${r.status}`);

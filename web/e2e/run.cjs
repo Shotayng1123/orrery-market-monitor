@@ -38,7 +38,7 @@ const SUITES = [
   { name: "tab-guard", needs: ["mock"] },
   { name: "welcome-mail", needs: ["mock"] },
   { name: "stale-feed", needs: ["standin"] },
-  { name: "opening", needs: ["mock"] },
+  { name: "opening", needs: ["mock", "standin"] },
   { name: "update-bar", needs: ["mock", "built"] },
   { name: "offline", needs: ["mock", "built"] },
   { name: "notifications", needs: ["mock", "built"] },
