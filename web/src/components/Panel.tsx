@@ -1,8 +1,10 @@
 import { useRef, type ReactNode } from "react";
 
-/** The largest table of a panel as CSV text (what is on screen: headers, section rows, figures). */
+/** The largest table of a panel as CSV text (what is on screen: headers, section rows, figures). A control inside a
+ *  cell (`.nocsv`, the statements' "‹ earlier years") is not part of the data. */
 function tableCsv(table: HTMLTableElement): string {
-  const cell = (c: Element) => { const t = (c.textContent ?? "").replace(/\s+/g, " ").trim().replace(/−/g, "-"); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const text = (c: Element) => { const x = c.cloneNode(true) as Element; x.querySelectorAll(".nocsv").forEach((n) => n.remove()); return x.textContent ?? ""; };
+  const cell = (c: Element) => { const t = text(c).replace(/\s+/g, " ").trim().replace(/−/g, "-"); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
   const lines: string[] = [];
   for (const tr of table.querySelectorAll("tr")) {
     const cells: string[] = [];

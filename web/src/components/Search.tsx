@@ -6,7 +6,10 @@ import { openAsset } from "./CompanyCard";
 
 interface Hit { symbol: string; name: string; kind: string; note: string }
 
-/** Top-right search: Monitor instruments, index constituents, then Yahoo Finance; Enter or click opens the asset page. */
+/** Top-right search: Monitor instruments, index constituents, then Yahoo Finance; Enter or click opens the asset page.
+ *  On a computer "/" jumps to the box (a key cap at its right says so). On a phone the results are rows a finger can
+ *  hit, under the field: the whole name first, then the symbol and what it is (the designer's D-10 and D-37,
+ *  19 Nov 2026: 27-px rows of 9-px type lay over the field, and the placeholder ended in a cut "("). */
 export function Search() {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
@@ -38,8 +41,9 @@ export function Search() {
   const go = (h: Hit | undefined) => { if (!h) return; setOpen(false); setQ(""); openAsset(h.symbol); };
   return (
     <div id="search" ref={box}>
-      <input type="text" value={q} placeholder="search stocks, bonds, currencies  (/)" aria-label="search" onChange={(e) => setQ(e.target.value)} onFocus={() => hits.length && setOpen(true)}
+      <input type="text" value={q} placeholder="Search stocks, bonds, currencies" aria-label="search" onChange={(e) => setQ(e.target.value)} onFocus={() => hits.length && setOpen(true)}
         onKeyDown={(e) => { if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => Math.min(hits.length - 1, s + 1)); } else if (e.key === "ArrowUp") { e.preventDefault(); setSel((s) => Math.max(0, s - 1)); } else if (e.key === "Enter") { e.preventDefault(); go(hits[sel] ?? (q.trim() ? { symbol: q.trim().toUpperCase(), name: q.trim(), kind: "", note: "" } : undefined)); } else if (e.key === "Escape") setOpen(false); }} />
+      {!q && <kbd className="skey" aria-hidden="true" title="Press / to search">/</kbd>}
       {open && (hits.length > 0 || busy) && (
         <div className="sres">
           {busy && !hits.length && <div className="sitem mut">searching …</div>}

@@ -163,8 +163,8 @@ export function EquitiesPhone({ sub, onSub, tick }: { sub: string; onSub: (s: st
       <Section title={ix.label} aux={ix.symbol}>
         {main ? <InstrumentRow r={main} period={period} tick={tick} open fixed sigmaWindow={sigmaWindow} /> : <Empty title="Awaiting the data feed">{table.error ?? "The index chart loads with the market table."}</Empty>}
       </Section>
-      <Section title="What drives it" aux={`${support.length} of 4`}>
-        {support.length ? support.map((r) => <InstrumentRow key={r.symbol} r={r} period={period} tick={tick} sigmaWindow={sigmaWindow} open={open === r.symbol} onToggle={() => setOpen(open === r.symbol ? null : r.symbol)} />) : <Empty title="Supporting instruments">Futures, FX, rates and volatility that drive this index.</Empty>}
+      <Section title="Drivers" aux={`${support.length} of 4`}>
+        {support.length ? support.map((r) => <InstrumentRow key={r.symbol} r={r} period={period} tick={tick} sigmaWindow={sigmaWindow} open={open === r.symbol} onToggle={() => setOpen(open === r.symbol ? null : r.symbol)} />) : <Empty title="Drivers">Futures, FX, rates and volatility that drive this index.</Empty>}
       </Section>
       <Section title="Market breadth" card={false}>{s ? <div className="mp-card pad">{s.breadth ? <Breadth s={s} hist={bh.data?.rows ?? []} /> : <Empty title="No breadth yet" />}</div> : noStats}</Section>
       <Section title="Flow by sector · 1D" aux={s ? ccy : ""} card={false}>{s ? <div className="mp-card"><Flow s={s} /></div> : noStats}</Section>

@@ -16,7 +16,8 @@ import { AssetPhoneLegacy } from "./AssetPhoneLegacy";
 
 /** A stock's own page for a phone (Shota, 18 Nov 2026): the same content as the desktop page (views/Asset.tsx),
  *  laid out as cards. The performance table is turned on its side (a row per horizon) so its four figures fit the
- *  width; the statements scroll sideways under line names that stay put, opening at the latest periods. */
+ *  width; the statements scroll sideways under line names that stay put, opening at the latest periods and landing
+ *  on whole columns ("‹ earlier years" in the names' header goes back a screen; components/FinTable.tsx). */
 const WINDOWS: PickOption<SigmaWindow>[] = [{ value: "m1", label: "1M" }, { value: "m12", label: "12M" }, { value: "m36", label: "36M" }];
 const VIEWS: PickOption<"annual" | "quarterly">[] = [{ value: "annual", label: "Annual" }, { value: "quarterly", label: "Quarterly" }];
 const back = () => { if (history.length > 1) history.back(); else location.hash = "market"; };
@@ -152,7 +153,7 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
               {view === "annual" ? <GuidanceLine f={f} /> : <div className="finguide">Single quarters (three months each), not year to date.</div>}
               {fs.periods.length ? <FinTable periods={fs.periods} sections={fs.sections} unit={f.unit} currency={f.currency} /> : <Empty title={view === "annual" ? "No annual statements" : "No quarterly statements"}>{d.finNote ?? "The source has none for this name."}</Empty>}
             </div>
-            <p className="mp-note">The latest periods are in view; swipe the table sideways for the earlier ones.{f.asOf ? ` Fetched ${f.asOf}.` : ""}</p>
+            {f.asOf && <p className="mp-note">Fetched {f.asOf}.</p>}
             {f.notes.map((n) => <p key={n} className="mp-note">{n}</p>)}
           </>
         ) : <div className="mp-card pad"><Empty title="No statements">{d.finNote ?? "Statements are available for equities only."}</Empty></div>}

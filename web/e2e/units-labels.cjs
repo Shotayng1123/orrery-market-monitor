@@ -95,7 +95,7 @@ async function tnxBoth(p) {
     ck(`RATES & FX: Change -> 3M, all ${ps.length} pills say "3M"`, ps.length >= 6 && ps.every((x) => x.w === "3M" && !x.cut), ps.filter((x) => x.w !== "3M").slice(0, 3));
 
     await p.evaluate(() => { location.hash = "equities"; }); await p.waitForSelector(".mp-row.starred"); await p.waitForTimeout(500);
-    const eq = async () => ({ index: await pills(sec(p, "NIKKEI 225").locator(".mp-chg")), drivers: await pills(sec(p, "What drives it").locator(".mp-chg")), sectors: await pills(sec(p, "Sector performance").locator(".mp-chg")), movers: await pills(sec(p, "Movers").locator(".mp-chg")), screener: await pills(sec(p, "Screener").locator(".mp-chg")) });
+    const eq = async () => ({ index: await pills(sec(p, "NIKKEI 225").locator(".mp-chg")), drivers: await pills(sec(p, "Drivers").locator(".mp-chg")), sectors: await pills(sec(p, "Sector performance").locator(".mp-chg")), movers: await pills(sec(p, "Movers").locator(".mp-chg")), screener: await pills(sec(p, "Screener").locator(".mp-chg")) });
     let e = await eq(); const all = Object.values(e).flat();
     ck(`EQUITIES: ${all.length} pills, every one with its window: the index, its drivers and the sectors 12M (the Period), the movers 1D, the screener's 1D`, e.index.length === 1 && e.drivers.length === 4 && [...e.index, ...e.drivers, ...e.sectors].every((x) => x.w === "12M") && e.movers.length === 20 && e.movers.every((x) => x.w === "1D") && e.screener.length === 30 && e.screener.every((x) => x.w === "1D") && all.every((x) => !x.cut && x.px >= 11), Object.fromEntries(Object.entries(e).map(([k, v]) => [k, [...new Set(v.map((x) => x.w))]])));
     await pick(p, "Period").locator("select").selectOption("1M"); await p.waitForTimeout(500); e = await eq();

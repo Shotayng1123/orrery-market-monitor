@@ -59,7 +59,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, about 960 checks in 22 suites): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, about 1,130 checks in 24 suites): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), the
@@ -67,13 +67,25 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   account by verification email, the manager's accounts list, the
   home-screen hint, the new-version bar, opening without a connection, notifications, a tab that fails
   while it is drawn (it says so in its own space; the header and the other tabs stay), the welcome email as its
-  reader sees it, a price feed that has stopped (the bar and the DATA chip say so), and the opening. `cd web && npm run e2e` starts the test servers it needs and runs them all (about three
-  minutes); `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
+  reader sees it, a price feed that has stopped (the bar and the DATA chip say so), and the opening.
+  The **layout guard** (`layout-guard`) opens all eight screens at five computer sizes (1280×720 to 2560×1440, and
+  1440×900 with small text) and on two phones, and fails a publish if a figure is cut (past the edge of a box that
+  hides its overflow, behind an ellipsis, or half outside it at the top or foot), a chart's axis label runs off its
+  canvas, anything scrolls sideways (a phone's statements and wide phone tables do so by design), or a phone tap
+  target is under 44 × 44 px, measured on what takes the tap (a drop-down's transparent select, a toggle's reach);
+  the few targets the designer listed as still small are printed with the change that fixes them. It also cuts
+  figures on purpose with throwaway styles, to show that it fails when one is cut. XL text and the one-screen
+  layout join it once they are fixed. `nothing-cut` checks the designer's findings behind it one by one (whole
+  columns in a phone's statements, short interest at its natural height, chart titles, long headlines, phone
+  search, the watchlist's two columns, curve labels, the header's alert line).
+  `cd web && npm run e2e` starts the test servers it needs and runs them all (about seven minutes, three suites at
+  a time); `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
   Needs Playwright's browser once: `npx playwright install chromium`.
 - **Logic checks** (`sim/logic.test.ts`): exchange sessions, rolling bands, alert measures, the push encryption,
   the verification email for a new account, and every figure of the stock page (performance, ratios, statements
   as read from each source, big moves, the reading of a move's reason), and the second path for prices (when the
-  relay takes over and hands back, its timetable against the database's own). `cd jobs && npx tsx ../sim/logic.test.ts`.
+  relay takes over and hands back, its timetable against the database's own), and where a statements table wider
+  than the screen comes to rest. `cd jobs && npx tsx ../sim/logic.test.ts`.
 - **Database checks** (`sim/sql`): the rules that live in database functions (the limits on verification emails;
   the queue for the reasons of big moves; the request for the second path),
   run with the migration file itself on PGlite, a Postgres inside Node. `cd sim/sql && npm ci && npm test`.

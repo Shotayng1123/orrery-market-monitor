@@ -1,0 +1,190 @@
+// Nothing cut, nothing hidden (19 Nov 2026): the designer's findings of increment I-2, each checked where it was seen.
+//   D-03  the phone's statements land on whole columns: no fragment of a number beside the line names
+//   D-07  SHORT INTEREST at its natural height in three columns, headed, a sector column of 9 em (with D-45: English
+//         source names first; D-46: the sector drawer's short column says which short figure it is)
+//   D-08  chart tile titles whole, their badges and stamp on the price line; EQUITIES in the designer's order
+//   D-09  a headline of 120 characters naming three companies shows all its words (with D-47: SGT once, in the head)
+//   D-10  phone search: rows a finger can hit, under the field, whole names (with D-37: the placeholder)
+//   D-25  WATCHLIST: alert and research texts whole, on the two-column page (the designer's §3.4)
+//   D-28  every curve's lowest yield label whole; the phone curve's source line wraps
+// and the header's alert line, whose time was cut on every screen (the layout guard's first finding).
+// The general rules (no figure cut, nothing sideways, 44-px taps) on every screen are e2e/layout-guard.cjs.
+// Run from web/:  node e2e/run.cjs nothing-cut   (the runner starts the servers this needs; see e2e/run.cjs)
+const { chromium, devices } = require("playwright");
+const { S } = require("./standin.cjs");
+const MOCK = "http://localhost:5179/orrery-market-monitor/";
+let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d).slice(0, 1500)}`); };
+const H120 = S.news[0].title;
+const DESK = { C1: { viewport: { width: 1440, height: 900 } }, C2: { viewport: { width: 1280, height: 720 } }, C6: { viewport: { width: 1920, height: 1080 } }, C7: { viewport: { width: 2560, height: 1440 } } };
+const AUTO = { size: "AUTO", compact: false, v: 2 }, XL = { size: "XL", compact: false, v: 2 }, COMPACT = { size: "AUTO", compact: true, v: 2 };
+async function page(b, opts, prefs) {
+  const ctx = await b.newContext(opts);
+  await ctx.addInitScript((pr) => { try { if (pr) localStorage.setItem("om_prefs", JSON.stringify(pr)); } catch {} try { window.IntersectionObserver = undefined; } catch {} }, prefs || null);
+  const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message)); return { ctx, p, errs };
+}
+const go = async (p, hash, sel) => { await p.goto(MOCK + hash, { waitUntil: "networkidle" }); if (sel) await p.waitForSelector(sel); await p.evaluate(() => document.fonts.ready); await p.waitForTimeout(500); };
+// a panel by its title, inside the page
+const PANEL = (title) => [...document.querySelectorAll("#grid .panel")].find((x) => x.querySelector(".phead .t")?.textContent === title);
+// the statements box at rest after a scroll (a snap or a smooth scroll takes a moment; waited for, not timed)
+const rest = (p) => p.waitForFunction(() => new Promise((res) => { const bx = document.querySelector(".finbox"), a = bx.scrollLeft; setTimeout(() => res(bx.scrollLeft === a), 160); }), null, { timeout: 5000, polling: 50 }).catch(() => undefined);
+// the statements table on a phone: where each period's text sits against the line names' right edge
+const finState = (p) => p.evaluate(() => {
+  const box = document.querySelector(".finbox"), names = box.querySelector("thead th.l"), edge = names.getBoundingClientRect().right, b = box.getBoundingClientRect();
+  const textRect = (el) => { const rg = document.createRange(); rg.selectNodeContents(el); return rg.getBoundingClientRect(); };
+  const heads = [...box.querySelectorAll("thead th:not(.l)")], revenue = [...box.querySelectorAll('tr[data-line="revenue"] td:not(.l)')];
+  const partial = [...heads, ...revenue].filter((c) => { const r = textRect(c); return r.width > 0 && r.left < edge - 0.5 && r.right > edge + 0.5; }).map((c) => c.textContent);
+  const shown = heads.filter((c) => textRect(c).left >= edge - 0.5 && textRect(c).right <= b.right + 0.5).map((c) => c.textContent);
+  const btn = box.querySelector(".finprev"), br = btn?.getBoundingClientRect(), bs = btn && getComputedStyle(btn, "::before");
+  return { left: Math.round(box.scrollLeft), over: box.scrollWidth > box.clientWidth + 1, partial, shown, last: heads[heads.length - 1].textContent, lastWhole: textRect(heads[heads.length - 1]).right <= b.right + 0.5,
+    btn: btn ? { vis: getComputedStyle(btn).visibility, text: btn.textContent, h: Math.round(br.height - parseFloat(bs.top) - parseFloat(bs.bottom)), w: Math.round(br.width - parseFloat(bs.left) - parseFloat(bs.right)), x: br.left + br.width / 2, y: br.top + br.height / 2 } : null,
+    notes: [...document.querySelectorAll(".mp-note")].map((n) => n.textContent).filter((t) => /swipe|Fetched/.test(t)) };
+});
+
+(async () => { const b = await chromium.launch();
+  console.log("\n[D-09 · NEWS: a 120-character headline naming three companies, at 1440x900, 1280x720 and 1440x900 with text XL]");
+  for (const [name, opts, prefs] of [["1440x900", DESK.C1, AUTO], ["1280x720", DESK.C2, AUTO], ["1440x900 XL", DESK.C1, XL]]) {
+    const { ctx, p, errs } = await page(b, opts, prefs);
+    await go(p, "#news", ".nwrow");
+    const h = await p.evaluate(([H, PS]) => { const panel = eval(PS)("HEADLINES"), row = [...panel.querySelectorAll(".nwrow")].find((r) => r.querySelector(".nwh a")?.textContent === H); if (!row) return null;
+      const nwh = row.querySelector(".nwh"), m = row.querySelector(".nwm"), lh = parseFloat(getComputedStyle(nwh).lineHeight), hr = nwh.getBoundingClientRect(), mr = m.getBoundingClientRect(), z = hr.height / nwh.offsetHeight;
+      return { whole: nwh.scrollHeight <= nwh.clientHeight + 1 && nwh.scrollWidth <= nwh.clientWidth + 1, lines: Math.round(nwh.clientHeight / lh), second: m.textContent, below: mr.top >= hr.bottom - 1, chips: [...m.querySelectorAll(".tk")].map((x) => x.textContent), time: row.querySelector(".nwt").textContent, tip: nwh.title === H,
+        times: [...panel.querySelectorAll(".nwrow .nwt")].map((x) => x.textContent), sgtRows: [...panel.querySelectorAll(".nwrow")].filter((r) => /SGT/.test(r.textContent)).length, head: panel.querySelector(".phead").textContent, days: [...panel.querySelectorAll(".nwday")].map((x) => x.textContent), z }; }, [H120, PANEL.toString()]);
+    ck(`${name}: the headline shows all its words on ${h?.lines} line(s) (at most three), its publisher and its three companies on a muted line under it ("${h?.second}")`, !!h && h.whole && h.lines <= 3 && h.below && h.chips.join() === "NVIDIA,Advantest,Tokyo Electron" && /^FT Markets/.test(h.second) && h.tip, h);
+    ck(`${name}: each row gives its time alone ("${h?.time}"), the panel says once that times are SGT, and the rows sit under day bars ("${h?.days?.[0]}" …)`, !!h && h.times.every((t) => /^\d\d:\d\d$/.test(t)) && h.sgtRows === 0 && /HEADLINES/.test(h.head) && /times in SGT/.test(h.head) && h.days.length >= 2 && h.days.every((d) => /^[A-Z][a-z]+day \d{1,2} [A-Z][a-z]{2}$/.test(d)), h && { times: h.times.slice(0, 3), sgtRows: h.sgtRows, head: h.head, days: h.days });
+    ck("no page errors", errs.length === 0, errs); await ctx.close();
+  }
+
+  console.log("\n[D-25 · WATCHLIST on the two-column page, 1440x900; one column in reading order at text XL (1,067 CSS px)]");
+  { const { ctx, p, errs } = await page(b, DESK.C1, AUTO);
+    await go(p, "#watch", '.panel[data-k="wl-alerts"] tbody tr');
+    const w = await p.evaluate(() => { const box = (k) => document.querySelector(`.panel[data-k="${k}"]`).getBoundingClientRect(); const pn = (k) => document.querySelector(`.panel[data-k="${k}"]`);
+      const cut = (k) => [...pn(k).querySelectorAll(".pbody *")].filter((e) => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflowX !== "visible").length + (pn(k).querySelector(".pbody").scrollWidth > pn(k).querySelector(".pbody").clientWidth + 1 ? 1 : 0);
+      const texts = (k, sel) => [...pn(k).querySelectorAll(sel)].map((e) => { const r = e.getBoundingClientRect(), b = pn(k).querySelector(".pbody").getBoundingClientRect(); return r.right <= b.right + 1 && r.left >= b.left - 1; });
+      const [wl, al, ea, nw, rs] = ["wl", "wl-alerts", "wl-earn", "wl-news", "wl-research"].map(box);
+      return { cutA: cut("wl-alerts"), cutR: cut("wl-research"), alertsIn: texts("wl-alerts", "td.wrap a, td.wrap .lnk"), researchIn: texts("wl-research", "td.wrap .lnk"), left: { al: Math.round(al.left), ea: Math.round(ea.left) }, right: { nw: Math.round(nw.left), rs: Math.round(rs.left) },
+        gapL: Math.round(ea.top - al.bottom), gapR: Math.round(rs.top - nw.bottom), wl: Math.round(wl.width), w4: Math.round(al.width), w8: Math.round(nw.width), top: { al: Math.round(al.top), nw: Math.round(nw.top) } }; });
+    ck(`every alert and research title is whole: ${w.alertsIn.length} alerts and ${w.researchIn.length} pieces wrap inside their panels, nothing cut or scrolling sideways`, w.cutA === 0 && w.cutR === 0 && w.alertsIn.length === S.watch.feed.alerts.length && w.alertsIn.every(Boolean) && w.researchIn.every(Boolean), w);
+    ck(`two columns: ALERTS with EARNINGS AHEAD right under it (${w.gapL}px) on the left, ${w.w4}px wide; HEADLINES with IN RESEARCH under it (${w.gapR}px) on the right, ${w.w8}px; no hole under ALERTS`, w.left.al === w.left.ea && w.right.nw === w.right.rs && w.right.nw > w.left.al + w.w4 && w.gapL >= 0 && w.gapL <= 12 && w.gapR >= 0 && w.gapR <= 12 && w.top.al === w.top.nw && Math.abs(w.w4 / w.wl - 4 / 12) < 0.03 && Math.abs(w.w8 / w.wl - 8 / 12) < 0.03, w);
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+  { const { ctx, p, errs } = await page(b, DESK.C1, XL);
+    await go(p, "#watch", '.panel[data-k="wl-alerts"] tbody tr');
+    const o = await p.evaluate(() => [...document.querySelectorAll("#grid .panel")].map((x) => ({ no: x.dataset.no, top: Math.round(x.getBoundingClientRect().top), left: Math.round(x.getBoundingClientRect().left), w: Math.round(x.getBoundingClientRect().width) })).sort((a, c) => a.top - c.top));
+    ck(`one column, in reading order (${o.map((x) => x.no).join(", ")}), each across the page`, o.map((x) => x.no).join() === "01,02,03,04,05" && o.every((x) => x.left === o[0].left && Math.abs(x.w - o[0].w) <= 1), o);
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+
+  console.log("\n[D-07 · EQUITIES, SHORT INTEREST at 1440x900: natural height, three columns, headed (D-45, D-46)]");
+  { const { ctx, p, errs } = await page(b, DESK.C1, AUTO);
+    await go(p, "#equities/nk225", "#eq-short table.shpos tbody tr");
+    const s = await p.evaluate((PS) => { const panel = eval(PS)("SHORT INTEREST"), r = panel.getBoundingClientRect(), cols = [...panel.querySelectorAll(".msg3 > div")].map((d) => { const x = d.getBoundingClientRect(); return { top: Math.round(x.top), left: Math.round(x.left) }; });
+      const hidden = [...panel.querySelectorAll("*")].filter((e) => e.scrollHeight > e.clientHeight + 1 && getComputedStyle(e).overflowY !== "visible").map((e) => e.className);
+      const pos = panel.querySelector("table.shpos"), sec = pos.querySelector("th.sec"), em = parseFloat(getComputedStyle(sec).fontSize), secW = sec.offsetWidth / em;
+      const narrow = [...panel.querySelectorAll("td, th")].filter((c) => { if (!c.textContent.trim() || !c.checkVisibility()) return false; const tn = [...c.childNodes].map((n) => (n.nodeType === 3 ? n : n.firstChild)).find((n) => n && n.nodeType === 3 && n.data.trim()); if (!tn) return false; const i = tn.data.search(/\S/), rg = document.createRange(); rg.setStart(tn, i); rg.setEnd(tn, i + 1); return c.getBoundingClientRect().width < rg.getBoundingClientRect().width; }).map((c) => c.textContent);
+      const ys = [...panel.querySelectorAll(".barsy span")].map((e) => e.textContent), ax = [...panel.querySelectorAll(".barsax span")].map((e) => e.textContent);
+      return { h: Math.round(r.height), hidden, cols, heads: [...pos.querySelectorAll("thead th")].map((t) => t.textContent), secEm: Math.round(secW * 10) / 10, narrow, aux: panel.querySelector(".phead .aux").textContent, ys, ax, sectors: [...pos.querySelectorAll("td.sec")].map((t) => t.textContent) };
+    }, PANEL.toString());
+    ck(`the panel is ${s.h}px tall (at most 420) and nothing in it hides behind its own scrolling (${s.hidden.length} boxes)`, s.h <= 420 && s.hidden.length === 0, { h: s.h, hidden: s.hidden });
+    ck(`three columns side by side: the market's share with its chart, the largest positions, the share by sector with the margin balances`, s.cols.length === 3 && s.cols.every((c) => c.top === s.cols[0].top) && s.cols[0].left < s.cols[1].left && s.cols[1].left < s.cols[2].left, s.cols);
+    ck(`the positions are headed ${s.heads.join(" · ")}; the sector column is ${s.secEm} em wide (9 or more), names in English cut at a word ("${s.sectors.find((x) => /…$/.test(x)) ?? s.sectors[0]}"); no cell narrower than its first character`, s.heads.join("|") === "Name|Sector|Holders|% of shares|Date" && s.secEm >= 9 && s.narrow.length === 0 && s.sectors.every((x) => /^[A-Za-z]/.test(x)) && s.sectors.every((x) => !/…$/.test(x) || !/\s…$/.test(x)), { heads: s.heads, secEm: s.secEm, narrow: s.narrow, sectors: s.sectors });
+    ck(`the sources in English first, Japanese in brackets ("${s.aux}")`, /^JPX short-selling ratio \(空売り集計\) · short-position reports \(空売り残高報告\) · margin balances \(信用取引現在高\)$/.test(s.aux), s.aux);
+    ck(`the bar chart has its scale (${s.ys.join(" to ")}) and its first and last dates (${s.ax.join(" … ")})`, s.ys.length === 2 && s.ys.every((x) => /^\d+\.\d%$/.test(x)) && parseFloat(s.ys[0]) > parseFloat(s.ys[1]) && /^\d{4}-\d\d-\d\d$/.test(s.ax[0]) && /on \d{4}-\d\d-\d\d$/.test(s.ax[1]), { ys: s.ys, ax: s.ax });
+    // D-46: the sector drawer's short column, Tokyo and US
+    await p.locator(".panel[data-k='eq-sectors'] .lnk").first().click(); await p.waitForSelector(".drawer thead"); const jpHead = await p.evaluate(() => [...document.querySelectorAll(".drawer thead th")].pop().textContent); await p.keyboard.press("Escape");
+    await go(p, "#equities/spx", ".panel[data-k='eq-sectors'] .lnk"); await p.locator(".panel[data-k='eq-sectors'] .lnk").first().click(); await p.waitForSelector(".drawer thead");
+    const usHead = await p.evaluate(() => [...document.querySelectorAll(".drawer thead th")].pop().textContent); await p.keyboard.press("Escape");
+    const us = await p.evaluate((PS) => { const panel = eval(PS)("SHORT INTEREST"); return { cols: panel.querySelectorAll(".msg3 > div").length, aux: panel.querySelector(".phead .aux").textContent, h: Math.round(panel.getBoundingClientRect().height) }; }, PANEL.toString());
+    ck(`the sector drawer's short column says which figure it is: "${jpHead}" for Tokyo (reported positions), "${usHead}" for the S&P 500 (FINRA short volume); the US panel in two columns (${us.h}px)`, /^Short pos %/.test(jpHead) && /^Short vol %/.test(usHead) && us.cols === 2 && /^FINRA/.test(us.aux), { jpHead, usHead, us });
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+
+  console.log("\n[D-08 · EQUITIES in the designer's order; every chart title whole, its badges and stamp on the price line]");
+  { const { ctx, p, errs } = await page(b, DESK.C1, AUTO);
+    await go(p, "#equities/nk225", ".panel[data-k='eq-breadth'] .uplot");
+    const e = await p.evaluate(() => { const ps = [...document.querySelectorAll("#grid .panel")]; const r = (k) => document.querySelector(`.panel[data-k="${k}"]`).getBoundingClientRect(); const br = document.querySelector(".brwrap"), t = br.querySelector("table").getBoundingClientRect(), c = br.querySelector(".brchart").getBoundingClientRect();
+      return { order: ps.map((x) => `${x.dataset.no} ${x.querySelector(".phead .t").textContent}`), wide: ["eq-movers", "eq-breadth", "eq-short"].map((k) => Math.round(r(k).width)), chartBeside: c.left > t.right && Math.abs(c.top - t.top) < 60 }; });
+    ck(`the panels: ${e.order.join(" · ")}`, e.order.join("|") === "01 NIKKEI 225|02 DRIVERS|03 SECTOR PERFORMANCE|04 FLOW BY SECTOR · 1D|05 MOVERS|06 MARKET BREADTH|07 SHORT INTEREST|08 HEAT MAP|09 SCREENER", e.order);
+    ck(`MARKET BREADTH and SHORT INTEREST span the page like MOVERS (${e.wide.join(", ")}px); breadth has its three-year chart beside the table`, e.wide.every((x) => Math.abs(x - e.wide[0]) <= 1) && e.chartBeside, e);
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+  // an instrument's chart tile (a curve tile keeps its dates on its title line)
+  const tilesState = (p) => p.evaluate(() => [...document.querySelectorAll(".mtile.cp")].filter((t) => t.querySelector(":scope > .lb > .lbtxt") && t.querySelector(":scope > .vl > .px") && t.checkVisibility()).map((t) => { const x = t.querySelector(".lbtxt"), lh = parseFloat(getComputedStyle(x).lineHeight); return { name: x.textContent, whole: x.scrollWidth <= x.clientWidth + 1 && x.scrollHeight <= x.clientHeight + 1, lines: Math.round(x.clientHeight / lh), onlyTitle: t.querySelector(":scope > .lb").children.length === 1, stamp: !!t.querySelector(":scope > .vl > .tags > .asof") }; }));
+  for (const [name, opts, prefs] of [["1280x720", DESK.C2, AUTO], ["1440x900", DESK.C1, AUTO], ["1920x1080", DESK.C6, AUTO], ["2560x1440", DESK.C7, AUTO], ["1440x900 compact", DESK.C1, COMPACT]]) {
+    const { ctx, p, errs } = await page(b, opts, prefs); const seen = [];
+    for (const h of ["#market", "#equities/nk225", "#equities/topix", "#rates"]) { await go(p, h, ".mtile.cp .lbtxt"); for (const t of await tilesState(p)) seen.push({ h, ...t }); }
+    const bad = seen.filter((t) => !t.whole || t.lines > 2 || !t.onlyTitle || !t.stamp);
+    ck(`${name}: every one of ${seen.length} chart titles on MARKETS, EQUITIES (two indices) and RATES & FX whole, on at most two lines, alone on its line, with the stamp on the price line ("${seen.find((t) => /CME/.test(t.name))?.name}")`, seen.length >= 20 && bad.length === 0, bad.slice(0, 6));
+    ck("no page errors", errs.length === 0, errs); await ctx.close();
+  }
+
+  console.log("\n[D-10, D-37 · search: on a phone rows a finger can hit, under the field; on a computer the placeholder and the / key]");
+  for (const dev of ["iPhone SE (3rd gen)", "iPhone 13"]) {
+    const { ctx, p, errs } = await page(b, { ...devices[dev] });
+    await go(p, "#market", ".mp-row");
+    await p.locator('#pv2-btns button[aria-label^="Search"]').tap(); await p.waitForTimeout(200);
+    const ph = await p.locator("#search input").getAttribute("placeholder");
+    await p.locator("#search input").fill("toy"); await p.waitForSelector(".sres .sitem b"); await p.waitForTimeout(300);
+    const r = await p.evaluate(() => { const inp = document.querySelector("#search input").getBoundingClientRect(), box = document.querySelector(".sres").getBoundingClientRect();
+      return { under: box.top >= inp.bottom - 0.5, rows: [...document.querySelectorAll(".sres .sitem")].map((e) => { const x = e.getBoundingClientRect(), nm = e.querySelector(".nm"); return { h: Math.round(x.height), name: nm.textContent, whole: nm.scrollWidth <= nm.clientWidth + 1 && nm.getBoundingClientRect().right <= x.right + 0.5, px: parseFloat(getComputedStyle(nm).fontSize), first: nm.getBoundingClientRect().top < e.querySelector("b").getBoundingClientRect().top, second: `${e.querySelector("b").textContent} ${e.querySelector(".mut").textContent}` }; }) }; });
+    ck(`${dev}: "toy" gives ${r.rows.length} rows of ${Math.min(...r.rows.map((x) => x.h))}px or more under the field, never over it; each name whole at ${r.rows[0]?.px}px on the first line ("${r.rows[0]?.name}"), "${r.rows[0]?.second}" under it`, r.rows.length >= 3 && r.under && r.rows.every((x) => x.h >= 52 && x.whole && x.px >= 15 && x.first) && r.rows.some((x) => x.name === "Toyota Motor Corp"), r);
+    ck(`${dev}: the placeholder is "${ph}"`, ph === "Search stocks, bonds, currencies");
+    ck("no page errors", errs.length === 0, errs); await ctx.close();
+  }
+  { const { ctx, p, errs } = await page(b, DESK.C1, AUTO);
+    await go(p, "#market", "#search input");
+    const s = await p.evaluate(() => { const i = document.querySelector("#search input"), k = document.querySelector("#search .skey"), ir = i.getBoundingClientRect(), kr = k?.getBoundingClientRect(); return { ph: i.placeholder, key: k?.textContent, inside: !!kr && kr.right <= ir.right && kr.left >= ir.left + ir.width / 2 && kr.top >= ir.top && kr.bottom <= ir.bottom }; });
+    await p.keyboard.press("/"); const focused = await p.evaluate(() => document.activeElement === document.querySelector("#search input"));
+    ck(`computer: the placeholder "${s.ph}", a "${s.key}" key cap inside the box at its right, and the key itself jumps to the box`, s.ph === "Search stocks, bonds, currencies" && s.key === "/" && s.inside && focused, s);
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+
+  console.log("\n[D-03 · a stock's statements on a phone: whole columns beside the line names, at the latest periods, and back]");
+  for (const dev of ["iPhone SE (3rd gen)", "iPhone 13"]) for (const sym of ["7203.T", "NVDA"]) {
+    const { ctx, p, errs } = await page(b, { ...devices[dev] });
+    await go(p, "#asset/" + sym, "table.fin");
+    await p.evaluate(() => { const t = document.querySelector("table.fin thead").getBoundingClientRect(); window.scrollTo(0, scrollY + t.top - innerHeight / 2); }); await p.waitForTimeout(200);
+    for (const view of ["annual", "quarterly"]) {
+      if (view === "quarterly") { await p.locator("#st-view").selectOption("quarterly"); await p.waitForTimeout(500); }
+      const o = await finState(p);
+      ck(`${dev} · ${sym} · ${view}: opens at the latest periods (${o.shown.join(", ")}, the last ending inside the box) with no part of a figure beside the line names`, o.over && o.lastWhole && o.shown.includes(o.last) && o.partial.length === 0, o);
+      await p.evaluate(() => { const bx = document.querySelector(".finbox"); bx.scrollLeft = Math.max(0, bx.scrollLeft - 50); }); await rest(p);
+      const s = await finState(p);
+      ck(`${dev} · ${sym} · ${view}: moved 50 px, part of a column, it comes to rest on a column's edge (${s.shown[0]} against the names), no fragment beside them`, s.partial.length === 0 && s.left < o.left, { o: o.left, s });
+      if (o.btn && s.left > 0) {
+        await p.evaluate(() => { const bx = document.querySelector(".finbox"); bx.scrollTo({ left: bx.scrollWidth }); }); await rest(p);
+        const a = await finState(p), steps = [];
+        for (let i = 0; i < 8; i++) { const v = await finState(p); if (!v.btn || v.btn.vis === "hidden") break; await p.touchscreen.tap(v.btn.x, v.btn.y); await p.waitForTimeout(100); await rest(p); const w = await finState(p); steps.push(`${w.shown[0]}${w.partial.length ? " (partial!)" : ""}`); if (w.partial.length) break; }
+        const z = await finState(p);
+        ck(`${dev} · ${sym} · ${view}: "${a.btn.text}" (${a.btn.w}x${a.btn.h}px to a finger) goes back a screen at a time (${steps.join(" → ")}), never leaving a fragment, and hides at the start`, a.btn.vis === "visible" && a.btn.h >= 44 && a.btn.w >= 44 && steps.length >= 1 && !steps.some((x) => /partial/.test(x)) && z.left === 0 && z.btn.vis === "hidden" && z.partial.length === 0, { a: a.btn, steps, z: { left: z.left, btn: z.btn } });
+      }
+    }
+    const notes = await p.evaluate(() => [...document.querySelectorAll(".mp-note")].map((n) => n.textContent).filter((t) => /swipe|Fetched/.test(t)));
+    ck(`${dev} · ${sym}: the note "swipe the table sideways" has gone; the fetch date stays (${notes.join(" | ")})`, notes.length === 1 && /^Fetched /.test(notes[0]), notes);
+    ck("no page errors", errs.length === 0, errs); await ctx.close();
+  }
+  { const { ctx, p, errs } = await page(b, DESK.C1, AUTO);
+    for (const sym of ["7203.T", "NVDA"]) { await go(p, "#asset/" + sym, "table.fin"); const o = await p.evaluate(() => { const bx = document.querySelector(".finbox"); return { over: bx.scrollWidth > bx.clientWidth + 1, btn: !!bx.querySelector(".finprev") }; }); ck(`computer 1440x900 · ${sym}: the statements fit their panel, with no "earlier years" control`, !o.over && !o.btn, o); }
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+
+  console.log("\n[D-28 · curves: room under the lowest yield label; the phone curve's source line wraps]");
+  const curves = (p) => p.evaluate(() => [...document.querySelectorAll(".chartwrap")].filter((w) => w.querySelector(".curvex") && w.querySelector(".uplot") && w.checkVisibility()).map((w) => { const wrap = w.querySelector(".u-wrap").getBoundingClientRect(), over = w.querySelector(".u-over").getBoundingClientRect(), z = wrap.height / w.querySelector(".u-wrap").offsetHeight; return Math.round((wrap.bottom - over.bottom) / z); }));
+  { const { ctx, p, errs } = await page(b, DESK.C1, AUTO);
+    await go(p, "#market", ".curvex"); const m = await curves(p); await go(p, "#rates", ".curvex"); const r = await curves(p);
+    ck(`1440x900: under every curve's plot (${m.length} on MARKETS, ${r.length} on RATES & FX) there are ${Math.min(...m, ...r)} px or more for half of the lowest label (6 px or more needed)`, m.length === 2 && r.length >= 6 && [...m, ...r].every((x) => x >= 7), { m, r });
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+  { const { ctx, p, errs } = await page(b, { ...devices["iPhone 13"] });
+    await go(p, "#market", ".mp-row"); const m = await curves(p);
+    const line = await p.evaluate(() => { const x = [...document.querySelectorAll(".rdout.crv")].find((e) => e.checkVisibility()); if (!x) return null; const r = x.getBoundingClientRect(), t = x.closest(".mtile").getBoundingClientRect(); return { text: x.textContent, whole: x.scrollWidth <= x.clientWidth + 1 && r.right <= t.right + 0.5 && getComputedStyle(x).whiteSpace !== "nowrap" }; });
+    await go(p, "#rates", ".mp-row"); const r = await curves(p);
+    ck(`iPhone 13: under each curve (MARKETS ${m.length}, RATES & FX ${r.length}) ${Math.min(...m, ...r)} px or more; the source line under MARKETS' curve wraps whole ("…${line?.text.slice(-24)}")`, m.length >= 1 && r.length >= 1 && [...m, ...r].every((x) => x >= 7) && !!line && line.whole, { m, r, line });
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+
+  console.log("\n[the header's alert line: label, name, figure and time, and only the name is ever cut]");
+  for (const [name, opts] of [["1440x900", DESK.C1], ["1280x720", DESK.C2]]) {
+    const { ctx, p, errs } = await page(b, opts, AUTO);
+    await go(p, "#watch", "#alerts .alrt .one");
+    const a = await p.evaluate(() => { const al = document.querySelector("#alerts .alrt"), ar = al.getBoundingClientRect(); const part = (s) => { const e = al.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return { t: e.textContent, whole: e.scrollWidth <= e.clientWidth + 1 && r.right <= ar.right + 0.5 && r.width > 0 }; }; return { k: part(".k"), nm: part(".one .nm"), fig: part(".one .fig"), t: part(".t"), msgShown: al.querySelector(".msg").checkVisibility(), tip: al.title.split("\n")[0] }; });
+    ck(`${name}: "${a.k?.t} · ${a.nm?.t} · ${a.fig?.t} · ${a.t?.t}": the figure and the time whole; the whole message on hover ("${a.tip}")`, a.k?.whole && a.fig?.whole && a.t?.whole && /^\d\d\/\d\d \d\d:\d\d$/.test(a.t.t) && /^[+−-]?\d+\.\d%$/.test(a.fig.t) && !a.msgShown && /down 11\.2% intraday/.test(a.tip), a);
+    ck("no page errors", errs.length === 0, errs); await ctx.close();
+  }
+  { const { ctx, p, errs } = await page(b, { ...devices["iPhone 13"] });
+    await go(p, "#market", "#alerts .alrt .msg"); const m = await p.evaluate(() => ({ msg: document.querySelector("#alerts .alrt .msg").checkVisibility() ? document.querySelector("#alerts .alrt .msg").textContent : null, one: document.querySelector("#alerts .alrt .one").checkVisibility() }));
+    ck(`iPhone 13: the header still shows the whole message under the label ("${m.msg}")`, /down 11\.2% intraday$/.test(m.msg ?? "") && !m.one, m);
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+
+  await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0); })();

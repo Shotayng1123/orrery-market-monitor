@@ -126,7 +126,7 @@ export function CurvePanel({ period, tick }: { period: ChartPeriod; tick: number
       {d?.current ? (
         <>
           <CurveChart current={d.current} ghost={d.ghost} />
-          <div className="rdout mut">
+          <div className="rdout mut crv">
             2s10s {fmtChg(spread(d.current, 2, 10), 0)}bp · 10s30s {fmtChg(spread(d.current, 10, 30), 0)}bp
             {d.ghost && <> · vs {ago} ago: 2s10s {fmtChg((spread(d.current, 2, 10) ?? 0) - (spread(d.ghost, 2, 10) ?? 0), 0)}bp</>} · {d.current.source}
           </div>

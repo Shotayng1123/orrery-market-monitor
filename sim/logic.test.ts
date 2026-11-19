@@ -23,6 +23,8 @@ import { FEED_LATE_MIN, OWN_SHORT_MIN, barDayEnd, barSettled, feedState, fxTradi
 import { OWN_FRESH_MIN, RELAY_BEAT_MAX_S, RELAY_CRON, RELAY_JOBS, RELAY_LATE_MIN, RELAY_OK_RUN, RELAY_WAIT_MIN, beatFresh, cronDue, current, newerOnly, reading, relayAct, relayJobsDue, usable, type RelayView } from "../supabase/functions/_shared/relay.ts";
 import { closeDay, isYieldRow, sourceName, watchRowFromTable } from "../supabase/functions/_shared/watchrow.ts";
 import { asOfCell, asOfLine, asOfOf, asOfTitle } from "../web/src/lib/time.ts";
+import { finBack, finRest } from "../web/src/lib/finscroll.ts";
+import { sectorShort } from "../web/src/lib/sectors.ts";
 import { readFileSync as readText, readdirSync as listDir } from "node:fs";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
@@ -922,6 +924,25 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck("today is Singapore's day: a print at 23:59 SGT read two minutes after midnight SGT carries its date", asOfCell(asOfOf("2026-11-19T15:59:00Z", "print", at("2026-11-19T16:01:00Z"))) === "19 Nov 23:59" && asOfCell(asOfOf("2026-11-19T16:00:00Z", "print", at("2026-11-19T16:01:00Z"))) === "00:00");
     ck("an older server sends no kind: a date, or a stamp at midnight UTC, is a close; any other time a print", asOfOf("2026-11-18T00:00:00Z", undefined, now)?.kind === "close" && asOfCell(asOfOf("2026-11-18T00:00:00Z", undefined, now)) === "18 Nov" && asOfOf("2026-11-19", null, now)?.kind === "close" && asOfOf("2026-11-19T15:18:00Z", undefined, now)?.kind === "print");
     ck("no as-of gives a dash, never a guessed date; the tooltip names the source", asOfCell(asOfOf(null, "close", now)) === "–" && asOfCell(asOfOf("not a time", "print", now)) === "–" && asOfTitle(close, "Yahoo Finance") === "Yahoo Finance · close of 19 Nov 2026" && asOfTitle(pub, "Japan MOF") === "Japan MOF · published for 18 Nov 2026" && asOfTitle(today, "Yahoo Finance") === "Yahoo Finance · last print 19 Nov 2026 23:18 SGT");
+  }
+
+  console.log("\n[a statements table wider than its box: where it rests, one screen back, and short-interest sector names (the designer's D-03, D-07)]");
+  {
+    // an iPhone SE: line names 128 px wide in a 357-px box, eleven periods of 72 px (the table 920 px)
+    const starts = Array.from({ length: 11 }, (_, i) => 128 + i * 72), tableW = 128 + 11 * 72;
+    const r = finRest(128, 357, starts, tableW);
+    ck("it rests with the latest periods whole and the first of them against the names: as many as fit (three of 72 px in 229), and a spacer gives the 13 px left after the last", r.k === 8 && r.left === starts[8] - 128 && r.pad === 13, r);
+    ck("at that place the scroll reaches exactly (the spacer makes the table end there) and nothing of the period before shows beside the names", tableW + r.pad - 357 === r.left && starts[7] + 72 - r.left === 128, { r, end: tableW + r.pad - 357 });
+    const uneven = [128, 200, 290, 362, 450], q = finRest(128, 357, uneven, 530);
+    ck("periods of different widths: the first from which the rest fit (362 to 530 in 229 px), 61 px of spacer", q.k === 3 && q.left === 234 && q.pad === 61, q);
+    ck("a table that fits rests at its start", finRest(128, 1200, starts, tableW).left === 0 && finRest(128, 1200, starts, tableW).k === 0);
+    ck("a single period wider than the room for periods rests at the start, with no spacer", JSON.stringify(finRest(128, 357, [128], 500)) === JSON.stringify({ k: 0, left: 0, pad: 0 }) && JSON.stringify(finRest(128, 357, [], 128)) === JSON.stringify({ k: 0, left: 0, pad: 0 }));
+    const steps = [r.left]; for (let i = 0; i < 6 && steps[steps.length - 1] > 0; i++) steps.push(finBack(128, 357, starts, steps[steps.length - 1]));
+    ck(`"earlier years" goes back a screen at a time, each time to a period's edge, the one before the screen's first period ending against the names: ${steps.join(" → ")}`, steps.join() === "576,360,144,0" && steps.every((x) => (x + 128 - 128) % 72 === 0), steps);
+    ck("from a place between two edges it goes back to an edge; at the start it stays", finBack(128, 357, starts, 600) === 432 && finBack(128, 357, starts, 0) === 0 && finBack(128, 357, [128], 0) === 0);
+    const tr = sectorShort("輸送用機器", 25), ws = sectorShort("倉庫・運輸関連業", 25), gics = sectorShort("Consumer Discretionary", 25), none = sectorShort(null);
+    ck(`a JPX sector is named in English, whole up to 25 characters ("${tr.text}"), cut at a word beyond ("${ws.text}"), with the English and the Japanese on hover ("${ws.full}")`, tr.text === "Transportation Equipment" && ws.text === "Warehousing & Harbor…" && ws.full === "Warehousing & Harbor Transportation Services (倉庫・運輸関連業)" && tr.full === "Transportation Equipment (輸送用機器)", { tr, ws });
+    ck("a sector the map does not know (the server's GICS names) is kept as it is; none gives an empty cell; without a limit nothing is cut", gics.text === "Consumer Discretionary" && gics.full === "Consumer Discretionary" && none.text === "" && sectorShort("倉庫・運輸関連業").text === "Warehousing & Harbor Transportation Services");
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

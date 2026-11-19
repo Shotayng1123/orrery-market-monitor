@@ -20,7 +20,7 @@ export function BreadthChart({ rows, height = 170 }: { rows: BreadthRow[]; heigh
       width: box.clientWidth || 300, height: boxHeight(box, height, 60),
       tzDate: (t) => uPlot.tzDate(new Date(t * 1e3), "UTC"),
       scales: { x: { time: true }, y: { range: [0, 100] } },
-      axes: [{ ...AXIS, space: 70 }, { ...AXIS, size: 34, values: (_u, vals) => vals.map((v) => `${v}%`) }],
+      axes: [{ ...AXIS, space: 70 }, { ...AXIS, size: 48, values: (_u, vals) => vals.map((v) => `${v}%`) }],   // room for "100%" (34 px cut it to "00%")
       series: [
         { value: (_u, v) => (v == null ? "" : new Date(v * 1000).toISOString().slice(0, 10)) },
         { label: "> 200d", stroke: "#1fd1c1", width: 1.2, points: { show: false } },

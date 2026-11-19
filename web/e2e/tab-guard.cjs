@@ -42,7 +42,8 @@ const see = (p) => p.evaluate(() => { const c = document.querySelector("#tab-cra
   { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); await ctx.addInitScript(() => { try { localStorage.setItem("om_mock_bare", "watch_feed"); } catch {} }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
     await p.goto(MOCK + "#watch", { waitUntil: "networkidle" }); await p.waitForSelector('.panel[data-k="wl"]'); await p.waitForTimeout(500);
     const v = await p.evaluate(() => ({ crash: !!document.querySelector("#tab-crash"), panels: [...document.querySelectorAll("#grid .panel")].map((x) => x.dataset.k), empty: [...document.querySelectorAll('#grid .panel[data-k="wl-alerts"] .empty, #grid .panel[data-k="wl-news"] .empty, #grid .panel[data-k="wl-research"] .empty')].map((e) => e.textContent.slice(0, 14)) }));
-    // in reading order since 19 Nov 2026: MY NAMES across, then alerts, headlines, earnings ahead, research
-    ck("all five panels are drawn, the three without data saying so", !v.crash && v.panels.join() === "wl,wl-alerts,wl-news,wl-earn,wl-research" && v.empty.length === 3 && errs.length === 0, { v, errs });
+    // MY NAMES across, then the two-column page (19 Nov 2026): its left column (alerts, earnings ahead) comes before
+    // its right (headlines, research) in the document; which panels are drawn is what matters here
+    ck("all five panels are drawn, the three without data saying so", !v.crash && [...v.panels].sort().join() === "wl,wl-alerts,wl-earn,wl-news,wl-research" && v.empty.length === 3 && errs.length === 0, { v, errs });
     await ctx.close(); }
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0); })();
