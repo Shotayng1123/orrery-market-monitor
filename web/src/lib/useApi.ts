@@ -3,6 +3,7 @@ import { api, apiConfigured, getToken, tokenId } from "./api";
 import { keepGet, keepKey, keepSet } from "./keep";
 import { BACK_EVENT, keptShown } from "./net";
 import { mockAction } from "./mock";
+import { held } from "./hold";
 
 /** `keptAt`: set when `data` is not a fresh answer but what this screen last received (lib/keep.ts), with the
  *  time it was received. */
@@ -28,7 +29,12 @@ export function useApi<T>(action: string | null, params: Record<string, string |
   useEffect(() => { const f = () => { if (waiting.current) setAgain((n) => n + 1); }; window.addEventListener(BACK_EVENT, f); return () => window.removeEventListener(BACK_EVENT, f); }, []);
   useEffect(() => {
     if (!action) return;
-    if (DEV_MOCK) { set({ data: mockAction(action, params) as T, error: null, loading: false, keptAt: null }); return; }
+    if (DEV_MOCK) {
+      // as with real answers: nothing is put on screen while the opening plays
+      let on = true; const put = () => { if (on) set({ data: mockAction(action, params) as T, error: null, loading: false, keptAt: null }); }, w = held();
+      if (w) void w.then(put); else put();
+      return () => { on = false; };
+    }
     if (!apiConfigured) { set({ data: null, error: "API not configured (VITE_API_URL)", loading: false, keptAt: null }); return; }
     let alive = true, answered = false;
     const kk = NOT_KEPT.has(action) ? null : keepKey(tokenId(getToken()), action, params);
@@ -37,7 +43,10 @@ export function useApi<T>(action: string | null, params: Record<string, string |
       if (!alive || (loading && answered)) return;   // the answer arrived while the store was being read
       set((s) => (s.data != null ? { ...s, error: error ?? s.error, loading } : kept ? { data: kept.data, error, loading, keptAt: kept.at } : { ...s, error: error ?? s.error, loading }));
     };
-    const slow = setTimeout(() => { if (!answered) void fill(null, true); }, SLOW_MS);
+    // "no answer yet" is counted from the end of the opening: while it plays the answers are held on purpose
+    let slow: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => { if (alive && !answered) slow = setTimeout(() => { if (!answered) void fill(null, true); }, SLOW_MS); }, w = held();
+    if (w) void w.then(arm); else arm();
     set((s) => ({ ...s, loading: true }));
     api<T>(action, params)
       .then((d) => { answered = true; clearTimeout(slow); if (alive) set({ data: d, error: null, loading: false, keptAt: null }); if (kk) keepSet(kk, d); })

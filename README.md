@@ -19,8 +19,9 @@ Real-time market numbers, flow and trending data for professional investors. Inf
 web/        Vite + React + TypeScript. src/styles/tokens.css is the design system (ported from Analytics v9.30).
             src/lib: time (SGT), sessions (exchange hours), api (bearer client), stats (rolling σ), prefs.
             src/views: Market, News, Research, Equities (index toggle), RatesFx (Forex / Curve / TBD).
-            src/lib/opening.ts + components/Opening.tsx: the opening (eight seconds, from the sun out to the
-            solar system and into the mark), once a day on each device; `?opening=1` plays it again.
+            src/lib/opening.ts + components/Opening.tsx: the opening (five seconds, from the sun out to the
+            solar system and into the mark), once a day on each device; `?opening=1` plays it again. While it
+            plays the Monitor's answers are held (lib/hold.ts), so nothing else is drawn and it stays smooth.
 supabase/   migrations/ and functions/ (tick, daily, api), cron.sql.
 jobs/       TypeScript scripts for GitHub Actions.
 ```
