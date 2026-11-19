@@ -4,16 +4,17 @@ import { useEffect, useState } from "react";
  *  place and readable on a phone (the same explanations otherwise sit in hover tooltips, which a phone lacks). */
 const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
   { title: "Market table", rows: [
-    ["1D to 36M", "Change from the close at the start of that window to the last print. Per cent for prices, basis points for yields."],
-    ["σ 1M", "How far the last print sits from its 21-session average, in standard deviations. Beyond ±2 is an unusual level for the past month."],
-    ["52W", "Where the last print sits in its 52-week range: 0 is the low, 100 the high."],
-    ["vs 200d", "Distance from the 200-day average. Per cent for prices, percentage points for yields."],
+    ["1D to 36M", "Change from the close at the start of that window to the last print. Per cent for prices, basis points (bp) for yields."],
+    ["σ vs 1M avg", "How far the last print sits from its 21-session average, in standard deviations of those 21 closes (the 1M corridor on the charts). Beyond ±2 is an unusual level for the past month."],
+    ["52W range", "Where the last print sits in its 52-week range: 0% is the low, 100% the high."],
+    ["vs 200d", "Distance from the 200-day average. Per cent for prices, bp for yields."],
+    ["On a phone", "Every coloured change says what it covers on a line under the figure: its window (1D, 1W … 12M), or the measure a list is sorted by (MKT CAP, 52W RANGE …)."],
     ["Shaded cells", "Green for a rise, red for a fall; the stronger the colour, the larger the move. Shaded cells are lettered in white."],
     ["PROXY", "An instrument that stands in for another, for example the 1306.T ETF for TOPIX during the session."],
     ["LIVE / CLOSED / ~15m", "Whether the instrument's market is open, and how delayed its feed is."],
   ] },
   { title: "Charts", rows: [
-    ["Lines", "Grey is the rolling mean, blue the ±1σ band, amber the ±2σ band, over the Σ WINDOW chosen at the top."],
+    ["Lines", "Grey is the rolling mean, blue the ±1σ band, amber the ±2σ band, over the σ window chosen at the top."],
     ["PERIOD", "1D uses one-minute bars, 1W fifteen-minute bars, 1M hourly bars, 3M and longer daily closes."],
     ["Moving back", "Drag a chart to the right to move back in time (the chart follows your hand), to the left to come forward again; double-click to return to the latest."],
   ] },
@@ -23,6 +24,7 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
     ["Net flow 1D", "Today's turnover signed by the move from the previous close and scaled by the day's range, capped at the full turnover. One session only: it does not follow PERIOD."],
     ["Sector performance", "GICS sectors, weighted by index weight where published, otherwise by market capitalisation."],
     ["Heat map", "Each tile is a company: size is market capitalisation, colour the 1D move."],
+    ["Movers", "The fifteen largest rises and falls of the day (1D) among the index's members, each with its change over the last week (1W) beside it."],
     ["Short interest", "Japan: short-selling share of TSE turnover and reported short positions of 0.5% and more (JPX). United States: short-sale volume share (FINRA)."],
     ["STAND-IN", "A narrower index whose members stand in for a broader one, for example the Nasdaq-100 for the Nasdaq Composite."],
     ["INTRADAY", "Shown while the index's market is open: the 1D figures (movers, breadth, sectors, heat map) are then today's moves so far, from quotes pulled every ten to twenty minutes. Without the badge they are the last booked closes. Longer periods are always measured to the last booked close."],
@@ -39,6 +41,8 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
   { title: "Watchlist", rows: [
     ["Adding a name", "Type part of a company's name or of its ticker and choose from the candidates; or use the star beside a name on its page."],
     ["What it adds", "Its earnings dates, its headlines, the research that mentions it, and alerts on it read from one-minute prices."],
+    ["As of", "What each line's figures are as of, in SGT: a stock at its last close (the date), a market instrument at its last print (the time today, otherwise the date and time), an official yield at the date it was published for. The sources are named at the top of the list."],
+    ["Yields", "A yield's changes are in basis points (bp), the same figures as on MARKETS; its level ends in %."],
   ] },
   { title: "Alerts", rows: [
     ["Moves", "A single stock beyond its line at any point in the session, or an index beyond ±3%, against the previous close. The line is ±5% for a large company (1tn yen and above in Tokyo, 10bn US dollars and above elsewhere) and ±7% for the rest. For a stock the figure is the largest move of the session, also after it has come back; the official close is measured too."],

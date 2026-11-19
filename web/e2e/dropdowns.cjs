@@ -4,7 +4,8 @@ const { chromium, devices } = require("playwright");
 const { routes } = require("./harness.cjs");
 const MOCK = "http://localhost:5179/orrery-market-monitor/", LIVE = "http://localhost:5181/orrery-market-monitor/";
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d)}`); };
-const pick = (p, label) => p.locator(".pick", { has: p.locator(`.lbl:text-is("${label}")`) });
+// by its list's accessible name, which is the label as written (the σ of "σ window" sits in a span of its own, D-11)
+const pick = (p, label) => p.locator(".pick", { has: p.locator(`select[aria-label="${label}"]`) });
 const val = async (p, label) => (await pick(p, label).locator(".val").textContent())?.trim();
 const choose = async (p, label, value) => { await pick(p, label).locator("select").selectOption(value); await p.waitForTimeout(350); };
 (async () => {

@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { Sig } from "./Sig";
 
 /** A pick-one selection as one button that opens a list (Shota, 16 Nov), like a data-validation cell in a
  *  spreadsheet: the label, the current choice and an arrow; a click or tap opens the choices. Replaces the rows
@@ -18,7 +19,7 @@ export function Pick<T extends string>({ label, value, options, onChange, title,
   const byPointer = useRef(false);
   return (
     <label className="pick" id={id} title={title}>
-      <span className="lbl">{label}</span>
+      <span className="lbl"><Sig>{label}</Sig></span>
       <span className="val" aria-hidden="true">{current?.label ?? value}</span>
       <select aria-label={label} value={value} onPointerDown={() => { byPointer.current = true; }} onKeyDown={() => { byPointer.current = false; }} onBlur={() => { byPointer.current = false; }}
         onChange={(e) => { onChange(e.target.value as T); if (byPointer.current) e.currentTarget.blur(); }}>

@@ -10,7 +10,8 @@
 //   om_mock_stale = "1", om_mock_live = "1"   a stopped price feed; EQUITIES while its market is open (below)
 import { mockStock } from "./mockStock";
 import standin from "./standin.json";
-import type { TableRow, Health, Curve, Series, Alert, EconEvent, NewsItem, Note, Report } from "./types";
+import { isYield } from "./fmt";
+import type { TableRow, Health, Curve, Series, Alert, EconEvent, NewsItem, Note, Report, PeriodKey } from "./types";
 import type { Feed, WatchRow } from "../views/Watchlist";
 import type { EarningsRow } from "../components/Earnings";
 import type { PolicyRow } from "../views/RatesFx";
@@ -189,22 +190,36 @@ export function mockWatchSet(symbol: string, on: boolean, name?: string): { symb
   watchPut(list);
   return { symbols: list.map((w) => w.symbol) };
 }
-/** watch_list: a stand-in row where there is one; a market instrument from the mock table, as the server reads its
- *  table; a name the page offered (it came with a name) gets made-up figures; a symbol typed in that the mock
- *  does not know comes back as the server's row without a quote (dashes). */
+// the mock table's two yields that the server reads from official curves, and their publishers
+const OFFICIAL: Record<string, string> = { UST2Y: "US Treasury", JGB10Y: "Japan MOF" };
+/** A market instrument's watchlist row from the mock table, mapped as the server maps its own table
+ *  (supabase/functions/_shared/watchrow.ts): a yield's changes in level, never in per cent of it; the as-of and the
+ *  source. So the local copy's watchlist shows the same figures as its MARKETS. */
+function tableWatchRow(t: TableRow): WatchRow {
+  const y = isYield(t), pub = OFFICIAL[t.symbol];
+  const lvl = (k: PeriodKey) => { const c = t.closes[k]; return c != null && t.last != null ? t.last - c : null; };
+  const pc = (k: PeriodKey) => (y ? null : t.pct[k] ?? null);
+  return { symbol: t.symbol, name: t.name, kind: t.cls, sector: null, ccy: t.currency, last: t.last,
+    asOf: pub ? (t.lastAt ?? "").slice(0, 10) || null : t.lastAt, asOfKind: pub ? "published" : "print", source: pub ?? "Yahoo Finance",
+    pct1d: pc("d1"), pct1w: pc("w1"), pct1m: pc("m1"), pct3m: pc("m3"), pct12m: pc("m12"),
+    chg1d: lvl("d1"), chg1w: lvl("w1"), chg1m: lvl("m1"), chg3m: lvl("m3"), chg12m: lvl("m12"),
+    vs50: null, vs200: y ? null : t.vs200 ?? null, vs200chg: y ? t.vs200 ?? null : null, pos52: t.pos52 ?? null, mcap: null, earningsAt: null, earningsEst: null, isYield: y };
+}
+/** watch_list: a market instrument from the mock table, as the server reads its table; a stand-in row where there
+ *  is one; a name the page offered (it came with a name) gets made-up figures; a symbol typed in that the mock does
+ *  not know comes back as the server's row without a quote (dashes). */
 function watchList(): { rows: WatchRow[] } {
   const S = SI(), list = watchGet();
   const known = new Map(S.watch.rows.map((r) => [r.symbol, r as unknown as WatchRow]));
-  const table = list.some((w) => !known.has(w.symbol) && MASTER.some((m) => m.symbol === w.symbol)) ? new Map(mockTable().rows.map((t) => [t.symbol, t])) : new Map<string, TableRow>();
+  const table = list.some((w) => MASTER.some((m) => m.symbol === w.symbol)) ? new Map(mockTable().rows.map((t) => [t.symbol, t])) : new Map<string, TableRow>();
   const day = new Date(Date.now() - 12 * HOUR + 8 * HOUR).toISOString().slice(0, 10);
   return { rows: list.map((w): WatchRow => {
+    const t = table.get(w.symbol); if (t) return tableWatchRow(t);
     const k = known.get(w.symbol); if (k) return k;
-    const t = table.get(w.symbol);
-    if (t) return { symbol: w.symbol, name: t.name, kind: t.cls, sector: null, ccy: t.currency, last: t.last, asOf: t.lastAt, pct1d: t.pct.d1 ?? null, pct1w: t.pct.w1 ?? null, pct1m: t.pct.m1 ?? null, pct3m: t.pct.m3 ?? null, pct12m: t.pct.m12 ?? null, vs50: null, vs200: t.group === "rates" ? null : t.vs200 ?? null, pos52: t.pos52 ?? null, mcap: null, earningsAt: null, earningsEst: null, isYield: t.group === "rates" && !w.symbol.endsWith("=F") };
-    const none = { sector: null, vs50: null, vs200: null, pos52: null, mcap: null, earningsAt: null, earningsEst: null, isYield: false };
-    if (!w.name) return { ...none, symbol: w.symbol, name: w.symbol, kind: "–", ccy: null, last: null, asOf: null, pct1d: null, pct1w: null, pct1m: null, pct3m: null, pct12m: null };
+    const none = { sector: null, vs50: null, vs200: null, pos52: null, mcap: null, earningsAt: null, earningsEst: null, isYield: false, chg1d: null, chg1w: null, chg1m: null, chg3m: null, chg12m: null, vs200chg: null };
+    if (!w.name) return { ...none, symbol: w.symbol, name: w.symbol, kind: "–", ccy: null, last: null, asOf: null, asOfKind: null, source: null, pct1d: null, pct1w: null, pct1m: null, pct3m: null, pct12m: null };
     const r = rng(seedOf(w.symbol)), jp = /\.T$/.test(w.symbol), p = Math.round((r() - 0.5) * 600) / 100;
-    return { ...none, symbol: w.symbol, name: w.name, kind: "Stock", ccy: jp ? "JPY" : "USD", last: Math.round((jp ? 800 + r() * 6000 : 20 + r() * 400) * 100) / 100, asOf: day, pct1d: p, pct1w: p * 1.7, pct1m: p * -2.3, pct3m: p * 4.1, pct12m: p * 9.6, vs50: p * 1.2, vs200: p * 3, pos52: 50 + p * 10 };
+    return { ...none, symbol: w.symbol, name: w.name, kind: "Stock", ccy: jp ? "JPY" : "USD", last: Math.round((jp ? 800 + r() * 6000 : 20 + r() * 400) * 100) / 100, asOf: day, asOfKind: "close", source: "Yahoo Finance", pct1d: p, pct1w: p * 1.7, pct1m: p * -2.3, pct3m: p * 4.1, pct12m: p * 9.6, vs50: p * 1.2, vs200: p * 3, pos52: 50 + p * 10 };
   }) };
 }
 /** watch_feed: the alerts on the listed symbols, the headlines that name one, the pieces that mention one. */

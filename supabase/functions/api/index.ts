@@ -13,6 +13,7 @@ import { quotes } from "../_shared/yahoo.ts";
 import { pushState, pushSubscribe, pushTest, pushUnsubscribe } from "../_shared/push.ts";
 import { stockPage } from "../_shared/stock.ts";
 import { liveRows } from "../_shared/intraday.ts";
+import { watchRowFromTable, type TableLike } from "../_shared/watchrow.ts";
 import { localDate, type Holidays } from "../_shared/sessions.ts";
 import { feedState } from "../_shared/feedhealth.ts";
 import { beatFresh, type Reading, type RelayNote } from "../_shared/relay.ts";
@@ -445,8 +446,10 @@ async function watchSymbols(userId: string): Promise<Array<{ symbol: string; nam
   const { data } = await db.from("watchlists").select("symbol,name,added_at").eq("user_id", userId).order("added_at");
   return (data ?? []).map((r) => ({ symbol: r.symbol as string, name: (r.name as string | null) ?? null }));
 }
-/** The user's names with the figures the Monitor holds for them: the market table for its instruments, the
- *  constituent statistics for index members, a plain quote for anything else. */
+/** The user's names with the figures the Monitor holds for them: the market table for its instruments (as MARKETS
+ *  shows them: a yield's changes in level, never in per cent of it; `_shared/watchrow.ts`), the constituent
+ *  statistics for index members, a plain quote for anything else. Each row says what its figures are as of
+ *  (`asOfKind`: a close, a print or an official publisher's daily figure) and whose they are (`source`). */
 async function watchList(userId: string) {
   const wl = await watchSymbols(userId);
   if (!wl.length) return { rows: [] };
@@ -455,18 +458,18 @@ async function watchList(userId: string) {
     db.from("snapshots").select("payload").eq("key", "table").maybeSingle(),
     selectAll<WatchStat>(() => db.from("constituent_stats").select("idx,symbol,name,sector,d,close,pct1d,pct1w,pct1m,pct3m,pct12m,dma50,dma200,hi52,lo52,mcap,earnings_at,earnings_est").in("symbol", syms).order("symbol")),
   ]);
-  type Trow = { symbol: string; name: string; cls: string; group: string; last: number | null; lastAt: string | null; currency: string; pct: Record<string, number | null>; pos52?: number | null; vs200?: number | null };
-  const tBy = new Map((((snap?.payload as { rows?: Trow[] } | null)?.rows) ?? []).map((r) => [r.symbol, r]));
+  const tBy = new Map((((snap?.payload as { rows?: TableLike[] } | null)?.rows) ?? []).map((r) => [r.symbol, r]));
   const sBy = new Map<string, WatchStat>();
   for (const s of stats) if (!sBy.has(s.symbol)) sBy.set(s.symbol, s);
   const missing = syms.filter((s) => !tBy.has(s) && !sBy.has(s));
   const qBy = missing.length ? await quotes(missing).catch(() => ({} as Awaited<ReturnType<typeof quotes>>)) : {};
   const pctOf = (a: number | null, b: number | null) => (a != null && b ? (a / b - 1) * 100 : null);
+  const noLevel = { chg1d: null, chg1w: null, chg1m: null, chg3m: null, chg12m: null, vs200chg: null };   // a stock's changes are in per cent only
   const rows = wl.map((w) => {
     const t = tBy.get(w.symbol), s = sBy.get(w.symbol), q = qBy[w.symbol];
-    if (t) return { symbol: w.symbol, name: t.name, kind: t.cls, sector: null, ccy: t.currency, last: t.last, asOf: t.lastAt, pct1d: t.pct.d1 ?? null, pct1w: t.pct.w1 ?? null, pct1m: t.pct.m1 ?? null, pct3m: t.pct.m3 ?? null, pct12m: t.pct.m12 ?? null, vs50: null, vs200: t.group === "rates" ? null : t.vs200 ?? null, pos52: t.pos52 ?? null, mcap: null, earningsAt: null, earningsEst: null, isYield: t.group === "rates" && !w.symbol.endsWith("=F") };
-    if (s) return { symbol: w.symbol, name: s.name, kind: "Stock", sector: s.sector, ccy: CCY[s.idx] ?? null, last: s.close, asOf: s.d, pct1d: s.pct1d, pct1w: s.pct1w, pct1m: s.pct1m, pct3m: s.pct3m, pct12m: s.pct12m, vs50: pctOf(s.close, s.dma50), vs200: pctOf(s.close, s.dma200), pos52: s.hi52 != null && s.lo52 != null && s.hi52 > s.lo52 ? ((s.close - s.lo52) / (s.hi52 - s.lo52)) * 100 : null, mcap: s.mcap, earningsAt: s.earnings_at, earningsEst: s.earnings_est, isYield: false };
-    return { symbol: w.symbol, name: q?.name ?? w.name ?? w.symbol, kind: q?.quoteType ?? "–", sector: null, ccy: q?.currency ?? null, last: q?.price ?? null, asOf: q?.time ? new Date(q.time * 1000).toISOString() : null, pct1d: pctOf(q?.price ?? null, q?.prevClose ?? null), pct1w: null, pct1m: null, pct3m: null, pct12m: null, vs50: null, vs200: null, pos52: null, mcap: q?.marketCap ?? null, earningsAt: q?.earningsAt ? new Date(q.earningsAt * 1000).toISOString() : null, earningsEst: q?.earningsEst ?? null, isYield: false };
+    if (t) return { ...watchRowFromTable(t), symbol: w.symbol };
+    if (s) return { symbol: w.symbol, name: s.name, kind: "Stock", sector: s.sector, ccy: CCY[s.idx] ?? null, last: s.close, asOf: s.d, asOfKind: "close", source: "Yahoo Finance", pct1d: s.pct1d, pct1w: s.pct1w, pct1m: s.pct1m, pct3m: s.pct3m, pct12m: s.pct12m, ...noLevel, vs50: pctOf(s.close, s.dma50), vs200: pctOf(s.close, s.dma200), pos52: s.hi52 != null && s.lo52 != null && s.hi52 > s.lo52 ? ((s.close - s.lo52) / (s.hi52 - s.lo52)) * 100 : null, mcap: s.mcap, earningsAt: s.earnings_at, earningsEst: s.earnings_est, isYield: false };
+    return { symbol: w.symbol, name: q?.name ?? w.name ?? w.symbol, kind: q?.quoteType ?? "–", sector: null, ccy: q?.currency ?? null, last: q?.price ?? null, asOf: q?.time ? new Date(q.time * 1000).toISOString() : null, asOfKind: q?.time ? "print" : null, source: q ? "Yahoo Finance" : null, pct1d: pctOf(q?.price ?? null, q?.prevClose ?? null), pct1w: null, pct1m: null, pct3m: null, pct12m: null, ...noLevel, vs50: null, vs200: null, pos52: null, mcap: q?.marketCap ?? null, earningsAt: q?.earningsAt ? new Date(q.earningsAt * 1000).toISOString() : null, earningsEst: q?.earningsEst ?? null, isYield: false };
   });
   return { rows };
 }

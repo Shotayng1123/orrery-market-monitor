@@ -12,6 +12,13 @@ import { PERIODS, type Curve, type TableRow } from "../lib/types";
 import { marketById } from "../lib/sessions";
 import { filterCurve } from "../lib/curveTenors";
 import { shortName } from "../lib/short";
+import { Sig } from "../components/Sig";
+
+/** The words of the table's statistics, the same on every screen that shows them (the designer's D-11, 19 Nov 2026):
+ *  "σ vs 1M avg" (upper-cased, a σ would read as the sum sign Σ, so the glyph keeps its case) and "52W range" in %. */
+export const SIGMA_1M = "σ vs 1M avg", RANGE_52W = "52W range";
+export const SIGMA_1M_TIP = "Distance of the last print from its 21-session average, in standard deviations of those 21 closes (the 1M corridor on the charts)";
+export const RANGE_52W_TIP = "Where the last print sits in its 52-week range: 0% is the low, 100% the high";
 
 function Badges({ r }: { r: TableRow }) {
   const m = marketById(r.market);
@@ -32,8 +39,8 @@ export const lvlDec = (v: number | null | undefined, d: number) => (v == null ? 
 export const cellPct = (v: number | null | undefined) => (v != null && Math.abs(v) >= 100 ? fmtPct(v, 1) : fmtPct(v));
 export const cellBp = (v: number | null | undefined) => (v != null && Math.abs(v) >= 1 ? `${v > 0 ? "+" : ""}${Math.round(v * 100)}bp` : fmtChg(v, 3, true));
 
-/** One table (Shota): the level only as of now, every window as a % change, then σ 1M, 52-week position and
- *  distance to the 200-day average. The asset class is the section bar, not a column. */
+/** One table (Shota): the level only as of now, every window as a % change (bp for a yield), then σ vs 1M avg, the
+ *  52W range in % and the distance to the 200-day average. The asset class is the section bar, not a column. */
 function MarketsTable({ rows }: { rows: TableRow[] }) {
   return <OneTable rows={[...rows].sort((a, b) => a.order - b.order)} />;
 }
@@ -47,7 +54,7 @@ function OneTable({ rows }: { rows: TableRow[] }) {
         <tr>
           <th className="l">Name</th><th>Last</th>
           {PERIODS.map((p) => <th key={p.key} className={p.key === "d1" ? "grp" : ""} title={`Change from the close at the start of the ${p.label} window to the last print (bp for yields)`}>{p.label}</th>)}
-          <th className="grp" title="Last print against the 21-session mean, in standard deviations">σ 1M</th><th title="Where the last print sits in the 52-week range (0 = low, 100 = high)">52w</th><th title="Last print against the 200-day average (% for prices, percentage points for yields)">vs 200d</th>
+          <th className="grp wrap" title={SIGMA_1M_TIP}><Sig>{SIGMA_1M}</Sig></th><th className="wrap" title={RANGE_52W_TIP}>{RANGE_52W}</th><th title="Last print against the 200-day average (% for prices, bp for yields)">vs 200d</th>
         </tr>
       </thead>
       <tbody>{[...groups.entries()].map(([cls, rs]) => <GroupRows key={cls} cls={cls} rs={rs} />)}</tbody>
@@ -65,7 +72,9 @@ function levelShade(v: number | null | undefined, lo: number, hi: number): strin
   const a = Math.abs(x - 0.5) * 2 * 0.32;               // transparent in the middle, tinted at the ends
   return `rgba(${x >= 0.5 ? UP_RGB : DN_RGB},${a.toFixed(3)})`;
 }
-function changeShade(v: number | null | undefined, full: number): string | undefined {
+/** A change cell's tint: full at ±`full` (±10% for a price, ±0.5 points = ±50bp for a yield). WATCHLIST shades a
+ *  yield's cells with it too, so the two read alike. */
+export function changeShade(v: number | null | undefined, full: number): string | undefined {
   if (v == null || v === 0) return undefined;
   const a = Math.min(1, Math.abs(v) / full) * 0.38;
   return `rgba(${v > 0 ? UP_RGB : DN_RGB},${a.toFixed(3)})`;
@@ -87,8 +96,8 @@ function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
               return <td key={p.key} className={`num ${signCls(v)}${p.key === "d1" ? " grp" : ""}`} style={{ background: changeShade(v, isRate ? 0.5 : 10) }} title={c != null ? `from ${fmtNum(c, lvlDec(c, r.decimals))} on ${r.closeDates[p.key] ?? ""}` : ""}>{isRate ? cellBp(v) : cellPct(v)}</td>;
             })}
             <td className={`num grp ${signCls(r.z1m)}`} style={{ background: changeShade(r.z1m ?? null, 3) }}>{r.z1m == null ? "–" : `${r.z1m > 0 ? "+" : ""}${r.z1m.toFixed(1)}σ`}</td>
-            <td className="num" style={{ background: r.pos52 == null ? undefined : levelShade(r.pos52, 0, 100) }}>{r.pos52 == null ? "–" : `${Math.round(r.pos52)}`}</td>
-            <td className={`num ${signCls(r.vs200)}`} style={{ background: changeShade(r.vs200 ?? null, isRate ? 0.75 : 15) }}>{r.vs200 == null ? "–" : isRate ? fmtChg(r.vs200, 3, true) : fmtPct(r.vs200, 1)}</td>
+            <td className="num" style={{ background: r.pos52 == null ? undefined : levelShade(r.pos52, 0, 100) }}>{r.pos52 == null ? "–" : `${Math.round(r.pos52)}%`}</td>
+            <td className={`num ${signCls(r.vs200)}`} style={{ background: changeShade(r.vs200 ?? null, isRate ? 0.75 : 15) }}>{r.vs200 == null ? "–" : isRate ? cellBp(r.vs200) : fmtPct(r.vs200, 1)}</td>
           </tr>
         );
       })}

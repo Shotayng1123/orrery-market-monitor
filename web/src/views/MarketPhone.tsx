@@ -5,13 +5,13 @@ import type { SigmaWindow } from "../components/SigmaChart";
 import { Pick } from "../components/Pick";
 import { Flash } from "../components/Flash";
 import { openAsset } from "../components/CompanyCard";
-import { Screen } from "../components/PhoneKit";
+import { Move, Screen } from "../components/PhoneKit";
 import { useApi, DEV_MOCK } from "../lib/useApi";
-import { fmtNum, fmtPct, fmtChg, fmtStampSafe, isYield, signCls } from "./shared";
+import { fmtNum, fmtPct, fmtStampSafe, isYield, signCls } from "./shared";
 import { PERIODS, type PeriodKey, type TableRow } from "../lib/types";
 import { marketById } from "../lib/sessions";
 import { shortName } from "../lib/short";
-import { cellBp, cellPct, CurvePanel, lvlDec } from "./Market";
+import { cellBp, cellPct, CurvePanel, lvlDec, RANGE_52W, RANGE_52W_TIP, SIGMA_1M, SIGMA_1M_TIP } from "./Market";
 
 /** MARKET for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026). The same rows and figures as the desktop table,
  *  laid out for a phone instead of shrunk to fit one: a list by asset class with the name, the last level and one
@@ -54,9 +54,9 @@ function Detail({ r, period, tick, sigmaWindow, head = false }: { r: TableRow; p
         {PERIODS.map((p) => { const v = move(r, p.key); return <div key={p.key} className={p.label === period ? "cur" : undefined}><span className="k">{p.label}</span><span className={`v ${signCls(v)}`}>{fmtMove(r, v)}</span></div>; })}
       </div>
       <div className="mp-grid">
-        <div title="Last print against the 21-session mean, in standard deviations"><span className="k">σ 1M</span><span className={`v ${signCls(r.z1m)}`}>{r.z1m == null ? "–" : `${r.z1m > 0 ? "+" : ""}${r.z1m.toFixed(1)}σ`}</span></div>
-        <div title="Where the last print sits in the 52-week range (0 = low, 100 = high)"><span className="k">52-week range</span><span className="v">{r.pos52 == null ? "–" : Math.round(r.pos52)}</span>{r.pos52 != null && <span className="bar"><i style={{ left: `${Math.max(0, Math.min(100, r.pos52))}%` }} /></span>}</div>
-        <div title="Last print against the 200-day average"><span className="k">vs 200-day</span><span className={`v ${signCls(r.vs200)}`}>{r.vs200 == null ? "–" : rate ? fmtChg(r.vs200, 3, true) : fmtPct(r.vs200, 1)}</span></div>
+        <div title={SIGMA_1M_TIP}><span className="k">{SIGMA_1M}</span><span className={`v ${signCls(r.z1m)}`}>{r.z1m == null ? "–" : `${r.z1m > 0 ? "+" : ""}${r.z1m.toFixed(1)}σ`}</span></div>
+        <div title={RANGE_52W_TIP}><span className="k">{RANGE_52W}</span><span className="v">{r.pos52 == null ? "–" : `${Math.round(r.pos52)}%`}</span>{r.pos52 != null && <span className="bar"><i style={{ left: `${Math.max(0, Math.min(100, r.pos52))}%` }} /></span>}</div>
+        <div title="Last print against the 200-day average (% for prices, bp for yields)"><span className="k">vs 200-day</span><span className={`v ${signCls(r.vs200)}`}>{r.vs200 == null ? "–" : rate ? cellBp(r.vs200) : fmtPct(r.vs200, 1)}</span></div>
       </div>
       <button type="button" className="mp-more" onClick={() => openAsset(r.symbol)}>Open {shortName(r.symbol, r.name)}'s page &#8250;</button>
     </div>
@@ -68,7 +68,7 @@ function Detail({ r, period, tick, sigmaWindow, head = false }: { r: TableRow; p
  *  index at the top of EQUITIES). Shared by every phone tab that lists instruments from the market table. */
 export function InstrumentRow({ r, period, tick, open, onToggle, fixed = false, sigmaWindow }: { r: TableRow; period: ChartPeriod; tick: number; open: boolean; onToggle?: () => void; fixed?: boolean; sigmaWindow?: SigmaWindow }) {
   const v = move(r, KEY[period]);
-  const line = <><span className="mp-nm"><span className="n">{shortName(r.symbol, r.name)}</span><Status r={r} /></span><span className="mp-px"><Flash value={r.last}>{level(r)}</Flash></span><span className={`mp-chg ${signCls(v)}`}>{fmtMove(r, v)}</span></>;
+  const line = <><span className="mp-nm"><span className="n">{shortName(r.symbol, r.name)}</span><Status r={r} /></span><span className="mp-px"><Flash value={r.last}>{level(r)}</Flash></span><Move v={v} w={period}>{fmtMove(r, v)}</Move></>;
   return (
     <div className={`mp-item${open || fixed ? " open" : ""}`}>
       {fixed ? <div className="mp-row fixed">{line}</div> : <button type="button" className="mp-row" aria-expanded={open} onClick={onToggle}>{line}</button>}

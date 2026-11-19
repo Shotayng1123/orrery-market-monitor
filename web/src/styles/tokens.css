@@ -380,6 +380,14 @@ table.secT tr.sep td{border-top:1px solid var(--bord2)}
 table.stm th{font-size:8.5px}
 table.mvT{table-layout:fixed;width:100%}
 table.mvT td.nm{max-width:none;overflow:hidden;text-overflow:ellipsis}
+/* EQUITIES MOVERS, headed (the designer's D-04, 19 Nov 2026). The header cells set the widths; when a list is
+   narrower than 560 CSS px (XL text, compact) its SECTOR column goes first. */
+.mvwrap{container-type:inline-size}
+table.mvT.eqmv th.c-nm{width:40%} table.mvT.eqmv th.c-sec{width:26%} table.mvT.eqmv th.c-px{width:13%} table.mvT.eqmv th.c-ch{width:10.5%}
+@container (max-width:560px){table.mvT.eqmv .c-sec{display:none}}
+/* a σ keeps its case where the rest is upper-cased: as a capital it is Σ, the sum sign (D-11) */
+.sig{text-transform:none}
+table.mkt th.wrap{white-space:normal}   /* "σ VS 1M AVG", "52W RANGE": a header may wrap; a figure never does */
 .barsbox{width:100%}
 .barsbox svg{display:block}
 .barsax{display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;color:var(--mut);font-size:10.5px;margin-top:3px;font-variant-numeric:tabular-nums}
@@ -825,11 +833,16 @@ body.pv2 .helpsec dl>div{grid-template-columns:104px minmax(0,1fr);gap:10px;padd
 table.ernT col.tm{width:6.4em} table.ernT col.st{width:1.6em} table.ernT col.ix{width:24%} table.ernT col.mc{width:6.5em}
 table.wlT td.nm{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 table.wlT th,table.wlT td{white-space:nowrap}
-body.term #grid[data-view="watch"]{grid-template-rows:minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr)}
-body.term #grid[data-view="watch"] .panel[data-k="wl"]{grid-column:span 8;grid-row:span 2}
-body.term #grid[data-view="watch"] .panel[data-k="wl-earn"],body.term #grid[data-view="watch"] .panel[data-k="wl-alerts"]{grid-column:span 4;grid-row:span 1}
-body.term #grid[data-view="watch"] .panel[data-k="wl-news"]{grid-column:span 8}
-body.term #grid[data-view="watch"] .panel[data-k="wl-research"]{grid-column:span 4}
+/* WATCHLIST in one screen (the designer's plan review §4.5, 19 Nov 2026): MY NAMES across, then alerts, headlines,
+   and results ahead over research. MY NAMES spans the width since it gained the AS OF column. */
+body.term #grid[data-view="watch"]{grid-template-rows:minmax(0,.7fr) minmax(0,.7fr) minmax(0,.5fr) minmax(0,.5fr)}
+body.term #grid[data-view="watch"] .panel[data-k="wl"]{grid-column:1 / -1;grid-row:1 / span 2}
+body.term #grid[data-view="watch"] .panel[data-k="wl-alerts"]{grid-column:1 / span 4;grid-row:3 / span 2}
+body.term #grid[data-view="watch"] .panel[data-k="wl-news"]{grid-column:5 / span 5;grid-row:3 / span 2}
+body.term #grid[data-view="watch"] .panel[data-k="wl-earn"]{grid-column:10 / span 3;grid-row:3}
+body.term #grid[data-view="watch"] .panel[data-k="wl-research"]{grid-column:10 / span 3;grid-row:4}
+table.wlT td.asof{white-space:nowrap}
+table.wlT th.asof,table.wlT td.asof{padding-left:12px}   /* apart from LAST, so "3,121" and "19 Nov" do not read as one */
 body.term .nwtk .tk{font-size:8.5px;padding:0 4px}
 @media (max-width:720px){.nwtk{display:none}}
 table.wlT td.nm{max-width:210px}
@@ -1083,10 +1096,12 @@ body.pv2 .pick select{font-size:17px;top:-5px;bottom:auto;height:calc(100% + 10p
 .mp-st .live::before,.mp-st .delay::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;vertical-align:1px;background:var(--up)}
 .mp-st .delay::before{background:var(--warn)}
 .mp-px{font-family:var(--mono);font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
-.mp-chg{font-family:var(--mono);font-size:14.5px;font-weight:600;font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap;padding:5px 4px;border-radius:7px;background:rgba(179,175,164,.12);color:var(--txt2)}
+.mp-chg{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:38px;font-family:var(--mono);font-size:14.5px;font-weight:600;line-height:1.15;font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap;padding:4px 4px;border-radius:7px;background:rgba(179,175,164,.12);color:var(--txt2)}
 .mp-chg.up{background:rgba(63,208,126,.16);color:var(--up)}
 .mp-chg.dn{background:rgba(255,77,66,.17);color:var(--dn)}
-.mp-chg.sm{font-size:13px;padding:4px 6px;min-width:64px;display:inline-block}
+.mp-chg.sm{font-size:13px;padding:4px 6px;min-width:64px;display:inline-flex}
+/* every pill says what it covers (the designer's D-02, 19 Nov 2026): the window, or the measure a list is sorted by */
+.mp-chg>.w{font-size:11px;font-weight:500;letter-spacing:.06em;line-height:1.1;margin-top:1px;opacity:.8}
 /* an opened row */
 .mp-det{padding:2px 12px 14px 15px;background:var(--panel2)}
 .mp-full{margin:0 0 8px;color:var(--mut);font-family:var(--mono);font-size:12px;line-height:1.4}
@@ -1216,6 +1231,7 @@ table.mp-t.left td:first-child{font-family:var(--sans);font-size:14.5px;white-sp
 .fl-row .b{display:flex;flex-direction:column;align-items:flex-end;gap:3px;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 .fl-row .b .v{font-size:14.5px;font-weight:600}
 .fl-row .b .p{font-size:12.5px}
+.fl-row .b small{font-family:var(--sans);font-size:11px;font-weight:400;letter-spacing:.02em;color:var(--mut)}   /* what each figure is (D-30) */
 /* on/off filters */
 .mp-tog{position:relative;min-height:36px;padding:0 11px;border:1px solid var(--bord2);border-radius:8px;background:transparent;color:var(--txt2);font-family:var(--sans);font-size:13px;cursor:pointer}
 .mp-tog::before,.mp-legacy .chips .chip-sm::before{content:"";position:absolute;inset:-5px -1px}   /* as the drop-downs: 36px to the eye, 44px to the finger */
@@ -1233,7 +1249,8 @@ table.mp-t.left td:first-child{font-family:var(--sans);font-size:14.5px;white-sp
 .mp-legacy table.secT td{padding:7px 5px;white-space:normal}
 .mp-legacy table.secT td.num{white-space:nowrap}
 .mp-legacy table.secT td:first-child{position:static;box-shadow:none;background:transparent;padding-left:2px}
-.mp-legacy table.secT td.mut.nm{display:none}   /* the sector beside a name: no room for it on a phone */
+.mp-legacy table.secT td.mut.nm,.mp-legacy table.secT th.sec{display:none}   /* the sector beside a name: no room for it on a phone */
+.mp-legacy table.secT th{position:static;padding:6px 5px;font-size:11px;letter-spacing:.02em;text-transform:none;background:transparent;border-bottom:1px solid var(--bord2)}   /* headed like the phone's own tables (D-30) */
 .mp-legacy .barsax{font-size:11px}
 .mp-legacy .mut{font-size:12px}
 

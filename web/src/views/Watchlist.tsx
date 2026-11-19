@@ -1,15 +1,37 @@
 import { zoomNow } from "../lib/prefs";
 import { useAddBox } from "../lib/candidates";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Empty, Panel } from "../components/Panel";
 import { Star } from "../components/Star";
 import { hideCard, money, openAsset, showCard } from "../components/CompanyCard";
 import { useApi } from "../lib/useApi";
 import { useWatch } from "../lib/watch";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
-import { fmtClock, fmtStamp, SGT } from "../lib/time";
+import { asOfCell, asOfOf, asOfTitle, fmtClock, fmtStamp, SGT, type AsOfKind } from "../lib/time";
+import { cellBp, changeShade, RANGE_52W, RANGE_52W_TIP } from "./Market";
 
-export interface WatchRow { symbol: string; name: string; kind: string; sector: string | null; ccy: string | null; last: number | null; asOf: string | null; pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct12m: number | null; vs50: number | null; vs200: number | null; pos52: number | null; mcap: number | null; earningsAt: string | null; earningsEst: boolean | null; isYield: boolean }
+/** A row of the watch_list route. Since 19 Nov 2026 a market instrument's row also carries the change of its level
+ *  over each window (`chg1d` …, points for a yield: the page prints them in bp, as MARKETS does) and a yield's
+ *  distance from its 200-day average (`vs200chg`); a yield's per-cent fields are null. Every row says what it is as
+ *  of (`asOfKind`) and whose figures they are (`source`). An older server sends none of these: a yield then shows
+ *  dashes, never a per cent of its level, and the as-of is read from the form of `asOf` (lib/time.ts `asOfOf`). */
+export interface WatchRow {
+  symbol: string; name: string; kind: string; sector: string | null; ccy: string | null; last: number | null; asOf: string | null;
+  pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct12m: number | null;
+  vs50: number | null; vs200: number | null; pos52: number | null; mcap: number | null; earningsAt: string | null; earningsEst: boolean | null; isYield: boolean;
+  chg1d?: number | null; chg1w?: number | null; chg1m?: number | null; chg3m?: number | null; chg12m?: number | null; vs200chg?: number | null;
+  asOfKind?: AsOfKind | null; source?: string | null;
+}
+/** The windows of a watchlist row: its per-cent field for a price, its level field for a yield, its label. */
+export const WINDOWS = [["pct1d", "chg1d", "1D"], ["pct1w", "chg1w", "1W"], ["pct1m", "chg1m", "1M"], ["pct3m", "chg3m", "3M"], ["pct12m", "chg12m", "12M"]] as const;
+/** A yield's level as MARKETS prints it, "4.859%". */
+export const lastOf = (r: WatchRow) => `${fmtNum(r.last, r.last != null && r.last >= 1000 ? 0 : r.isYield ? 3 : 2)}${r.isYield && r.last != null ? "%" : ""}`;
+/** The sources of the rows on screen, for the panel's head: "Yahoo Finance; yields: US Treasury, Japan MOF". */
+export function sourcesOf(rows: WatchRow[]): string {
+  const all = [...new Set(rows.map((r) => r.source).filter((s): s is string => !!s))];
+  const market = all.filter((s) => s === "Yahoo Finance"), official = all.filter((s) => s !== "Yahoo Finance");
+  return [...market, ...(official.length ? [`yields: ${official.join(", ")}`] : [])].join("; ");
+}
 export interface Feed {
   alerts: Array<{ id: number; at: string; symbol: string; name: string; kind: string; pct: number | null; msg: string; url: string | null }>;
   news: Array<{ id: number; publishedAt: string; source: string; title: string; url: string; tickers: Array<{ s: string; n: string }> }>;
@@ -44,13 +66,16 @@ export function WatchlistView({ tick }: { tick: number }) {
   const rows = list.data?.rows ?? [];
   // an answer without one of its lists (an older server, a stand-in feed) shows that panel empty: it must not blank the page
   const alerts = feed.data?.alerts ?? [], news = feed.data?.news ?? [], research = feed.data?.research ?? [];
-  const cell = (v: number | null, full: number, bp = false) => <td className={`num ${signCls(v)}`} style={{ background: shade(v, full) }}>{bp ? (v == null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1)}`) : fmtPct(v, 1)}</td>;
+  const cell = (v: number | null | undefined, full: number) => <td className={`num ${signCls(v)}`} style={{ background: shade(v ?? null, full) }}>{fmtPct(v, 1)}</td>;
+  // a yield's changes in bp with MARKETS' own figures and tints (full at 50bp; 75bp from the 200-day average)
+  const bp = (v: number | null | undefined, full: number) => <td className={`num ${signCls(v)}`} style={{ background: changeShade(v ?? null, full) }}>{cellBp(v)}</td>;
   const ahead = rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3).sort((a, b) => a.earningsAt!.localeCompare(b.earningsAt!));
   const name = (s: string) => rows.find((r) => r.symbol === s)?.name ?? s;
   const how = "Press the star beside a name on its own page, in the screener or in the earnings calendar, or type part of a name or of a symbol above (toyota, nvid, 7203, ^N225) and choose from the list.";
+  const sources = sourcesOf(rows);
   return (
     <>
-      <Panel no="01" title="MY NAMES" span={8} k="wl" aux={<>{rows.length} name{rows.length === 1 ? "" : "s"} · stocks at the last close, market instruments at the last print</>}>
+      <Panel no="01" title="MY NAMES" span={12} k="wl" aux={<>{rows.length} name{rows.length === 1 ? "" : "s"}{sources ? ` · ${sources}` : ""} · times in SGT</>}>
         <div className="searchrow">
           <span className="addbox">
             <input type="text" id="wl-add" ref={inp} aria-label="add a name to the watchlist" placeholder="add a name or a symbol: toyota, NVDA, 7203" value={box.text} autoComplete="off" style={{ width: 330 }}
@@ -77,33 +102,36 @@ export function WatchlistView({ tick }: { tick: number }) {
         </div>
         {rows.length ? (
           <table className="secT wlT">
-            <thead><tr><th /><th className="l">Name</th><th className="l">Sector / kind</th><th>Last</th><th>1D</th><th>1W</th><th>1M</th><th>3M</th><th>12M</th><th>vs 50d</th><th>vs 200d</th><th>52w</th><th>Mkt cap</th><th className="l">Earnings</th></tr></thead>
-            <tbody>{rows.map((r) => (
-              <tr key={r.symbol}>
-                <td className="l"><Star symbol={r.symbol} name={r.name} /></td>
-                <td className="l nm" title={`${r.name} (${r.symbol})`}><span className="lnk" onMouseEnter={(e) => showCard(r.symbol, e)} onMouseLeave={hideCard} onClick={() => openAsset(r.symbol)}>{r.name}</span> <span className="mut">{r.symbol}</span></td>
-                <td className="l mut">{r.sector ?? r.kind}</td>
-                <td className="num" title={r.asOf ? `as of ${r.asOf.length > 10 ? fmtStamp(r.asOf) : r.asOf}` : ""}><b>{fmtNum(r.last, r.last != null && r.last >= 1000 ? 0 : r.isYield ? 3 : 2)}</b></td>
-                {cell(r.pct1d, 4)}{cell(r.pct1w, 8)}{cell(r.pct1m, 12)}{cell(r.pct3m, 20)}{cell(r.pct12m, 50)}{cell(r.vs50, 10)}{cell(r.vs200, 20)}
-                <td className="num mut">{r.pos52 == null ? "–" : Math.round(r.pos52)}</td>
-                <td className="num mut">{r.mcap == null ? "–" : money(r.mcap, r.ccy)}</td>
-                <td className="l mut">{r.earningsAt ? `${day(r.earningsAt)}${r.earningsEst ? " est." : ""}` : "–"}</td>
-              </tr>
-            ))}</tbody>
+            <thead><tr><th /><th className="l">Name</th><th className="l">Sector / kind</th><th>Last</th><th className="l asof" title="What the row's figures are as of, in SGT: the date of a close or of an official yield's publication, the time of today's last print">As of</th><th>1D</th><th>1W</th><th>1M</th><th>3M</th><th>12M</th><th title="% for prices, bp for yields">vs 50d</th><th title="% for prices, bp for yields">vs 200d</th><th title={RANGE_52W_TIP}>{RANGE_52W}</th><th>Mkt cap</th><th className="l">Earnings</th></tr></thead>
+            <tbody>{rows.map((r) => {
+              const a = asOfOf(r.asOf, r.asOfKind);
+              return (
+                <tr key={r.symbol}>
+                  <td className="l"><Star symbol={r.symbol} name={r.name} /></td>
+                  <td className="l nm" title={`${r.name} (${r.symbol})`}><span className="lnk" onMouseEnter={(e) => showCard(r.symbol, e)} onMouseLeave={hideCard} onClick={() => openAsset(r.symbol)}>{r.name}</span> <span className="mut">{r.symbol}</span></td>
+                  <td className="l mut">{r.sector ?? r.kind}</td>
+                  <td className="num"><b>{lastOf(r)}</b></td>
+                  <td className="l mut asof" title={asOfTitle(a, r.source)}>{asOfCell(a)}</td>
+                  {r.isYield
+                    ? <>{WINDOWS.map(([, c]) => <Fragment key={c}>{bp(r[c], 0.5)}</Fragment>)}{bp(null, 0.5)}{bp(r.vs200chg, 0.75)}</>
+                    : <>{cell(r.pct1d, 4)}{cell(r.pct1w, 8)}{cell(r.pct1m, 12)}{cell(r.pct3m, 20)}{cell(r.pct12m, 50)}{cell(r.vs50, 10)}{cell(r.vs200, 20)}</>}
+                  <td className="num mut">{r.pos52 == null ? "–" : `${Math.round(r.pos52)}%`}</td>
+                  <td className="num mut">{r.mcap == null ? "–" : money(r.mcap, r.ccy)}</td>
+                  <td className="l mut">{r.earningsAt ? `${day(r.earningsAt)}${r.earningsEst ? " est." : ""}` : "–"}</td>
+                </tr>
+              );
+            })}</tbody>
           </table>
         ) : <Empty title={w.ready && list.data ? "Your watchlist is empty" : "Loading your watchlist"}>{list.error ?? (w.ready && list.data ? how : "")}</Empty>}
       </Panel>
-      <Panel no="02" title="EARNINGS AHEAD" span={4} k="wl-earn" aux="my names · SGT">
-        {ahead.length ? (
-          <table className="secT"><tbody>{ahead.map((r) => <tr key={r.symbol}><td className="l mut num">{day(r.earningsAt!)} {fmtClock(new Date(r.earningsAt!), SGT)}</td><td className="l"><span className="lnk" onClick={() => openAsset(r.symbol)}>{r.name}</span></td><td className="l mut">{r.earningsEst ? "est." : "confirmed"}</td></tr>)}</tbody></table>
-        ) : <Empty title="No dates ahead">{rows.length ? "None of your names has an earnings date in the feed." : "Add names to see their earnings dates."}</Empty>}
-      </Panel>
-      <Panel no="03" title="ALERTS ON MY NAMES" span={4} k="wl-alerts" aux={feed.data ? `${alerts.length} recent` : ""}>
+      {/* MY NAMES takes the full width (it gained the AS OF column); below it, in reading order, the designer's two
+          columns: alerts over results ahead on the left, headlines over research on the right (D's plan review §4.5) */}
+      <Panel no="02" title="ALERTS ON MY NAMES" span={4} k="wl-alerts" aux={feed.data ? `${alerts.length} recent` : ""}>
         {alerts.length ? (
           <table className="secT"><tbody>{alerts.map((a) => <tr key={a.id}><td className="l mut num">{fmtStamp(a.at).replace(" SGT", "")}</td><td className="l">{a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.msg}</a> : <span className="lnk" onClick={() => openAsset(a.symbol)}>{a.msg}</span>}</td><td className={`num ${signCls(a.pct)}`}>{a.pct == null ? "" : fmtPct(a.pct, 1)}</td></tr>)}</tbody></table>
         ) : <Empty title="No alerts">{feed.error ?? "Moves beyond ±5% (large companies) or ±7%, buybacks, guidance changes and large deals on your names appear here."}</Empty>}
       </Panel>
-      <Panel no="04" title="HEADLINES ON MY NAMES" span={8} k="wl-news" aux={feed.data ? `${news.length} in the feed` : ""}>
+      <Panel no="03" title="HEADLINES ON MY NAMES" span={8} k="wl-news" aux={feed.data ? `${news.length} in the feed` : ""}>
         {news.length ? <div className="nwlist">{news.map((it) => (
           <div className="nwrow" key={it.id}>
             <span className="nwt">{fmtStamp(it.publishedAt).replace(" SGT", "")}</span>
@@ -113,7 +141,12 @@ export function WatchlistView({ tick }: { tick: number }) {
           </div>
         ))}</div> : <Empty title="No headlines">{feed.error ?? "Headlines that name one of your companies appear here."}</Empty>}
       </Panel>
-      <Panel no="05" title="IN RESEARCH" span={4} k="wl-research" aux="pieces that mention my names">
+      <Panel no="04" title="EARNINGS AHEAD" span={4} k="wl-earn" aux="my names · SGT">
+        {ahead.length ? (
+          <table className="secT"><tbody>{ahead.map((r) => <tr key={r.symbol}><td className="l mut num">{day(r.earningsAt!)} {fmtClock(new Date(r.earningsAt!), SGT)}</td><td className="l"><span className="lnk" onClick={() => openAsset(r.symbol)}>{r.name}</span></td><td className="l mut">{r.earningsEst ? "est." : "confirmed"}</td></tr>)}</tbody></table>
+        ) : <Empty title="No dates ahead">{rows.length ? "None of your names has an earnings date in the feed." : "Add names to see their earnings dates."}</Empty>}
+      </Panel>
+      <Panel no="05" title="IN RESEARCH" span={8} k="wl-research" aux="pieces that mention my names">
         {research.length ? (
           <table className="secT"><tbody>{research.map((r) => <tr key={r.key}><td className="l mut num">{day(r.d)}</td><td className="l"><span className="lnk" onClick={() => { location.hash = `research/${encodeURIComponent(r.key)}`; }}>{r.title}</span><div className="mut" style={{ fontSize: 10 }}>{r.symbols.map(name).join(" · ")}</div></td></tr>)}</tbody></table>
         ) : <Empty title="No mentions">{feed.error ?? "Daily notes and weekly reports that mention your names appear here."}</Empty>}

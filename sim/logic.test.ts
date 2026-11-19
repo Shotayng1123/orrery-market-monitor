@@ -21,6 +21,8 @@ import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabas
 import { ALERTS, COMPANY, FIRST, PHILOSOPHY, PHONE, TABS, WELCOME_SUBJECT, welcomeMail } from "../supabase/functions/_shared/welcome.ts";
 import { FEED_LATE_MIN, OWN_SHORT_MIN, barDayEnd, barSettled, feedState, fxTrading, silence, stoppedBeforeClose, type Print } from "../supabase/functions/_shared/feedhealth.ts";
 import { OWN_FRESH_MIN, RELAY_BEAT_MAX_S, RELAY_CRON, RELAY_JOBS, RELAY_LATE_MIN, RELAY_OK_RUN, RELAY_WAIT_MIN, beatFresh, cronDue, current, newerOnly, reading, relayAct, relayJobsDue, usable, type RelayView } from "../supabase/functions/_shared/relay.ts";
+import { closeDay, isYieldRow, sourceName, watchRowFromTable } from "../supabase/functions/_shared/watchrow.ts";
+import { asOfCell, asOfLine, asOfOf, asOfTitle } from "../web/src/lib/time.ts";
 import { readFileSync as readText, readdirSync as listDir } from "node:fs";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
@@ -890,6 +892,36 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const missing = wanted.filter((l) => !RELAY_CRON.some((r) => key(r) === key(l))).map(key), extra = RELAY_CRON.filter((r) => !wanted.some((l) => key(l) === key(r))).map(key);
     ck(`the relay's timetable is the database's own (${newest}): every flow, statistics and history line, the same minutes, none more (${wanted.length} lines)`, lines.length > 40 && wanted.length === 24 && missing.length === 0 && extra.length === 0, { missing, extra });
     ck("the server's `daily` function stands down for exactly the jobs the relay runs, and the tick asks for the relay through the database, also when its pull fails outright (asked first, the failure reported after)", /RELAY_JOBS\.includes\(job as RelayJob\)/.test(readText(new URL("../supabase/functions/daily/index.ts", import.meta.url), "utf8")) && RELAY_JOBS.join() === "flow,mflow,stats,history" && /db\.rpc\("feed_relay_kick"\)/.test(readText(new URL("../supabase/functions/tick/index.ts", import.meta.url), "utf8")) && /pullErr = e;[\s\S]*feed_relay_kick[\s\S]*if \(pullErr\) throw/.test(readText(new URL("../supabase/functions/tick/index.ts", import.meta.url), "utf8")) && /YAHOO_RETRIES/.test(readText(new URL("../.github/workflows/feed-relay.yml", import.meta.url), "utf8")));
+  }
+
+  console.log("\n[the watchlist: a yield's changes in bp as on MARKETS, and what each row is as of, and from whom]");
+  {
+    // made-up market-table rows in computeTable's shape (table.ts): a print carries the database's "+00:00" time,
+    // a booked close is stamped "<date>T00:00:00Z"
+    const tnx = { symbol: "^TNX", name: "UST 10Y yield", cls: "Fixed income", group: "rates", currency: "USD", source: "yahoo", last: 4.859, lastAt: "2026-11-19T15:18:00+00:00",
+      pct: { d1: -0.98, w1: 0.43, m1: -1.88, m3: 3.45, m12: 8.33, m36: 52 }, chg: { d1: -0.048, w1: 0.021, m1: -0.093, m3: 0.162, m12: 0.374, m36: 1.66 }, pos52: 54, vs200: 0.112 };
+    const y = watchRowFromTable(tnx);
+    ck("a yield on the watchlist carries the market table's change of its level for each window, exactly as MARKETS has it (which prints it in bp), and no per cent of its level", y.isYield && y.chg1d === -0.048 && y.chg1w === 0.021 && y.chg1m === -0.093 && y.chg3m === 0.162 && y.chg12m === 0.374 && [y.pct1d, y.pct1w, y.pct1m, y.pct3m, y.pct12m].every((v) => v === null), y);
+    ck("its distance from the 200-day average goes out in points (vs200chg), never in the per-cent field an older page prints with a %", y.vs200 === null && y.vs200chg === 0.112 && y.vs50 === null && y.pos52 === 54, y);
+    ck("a print is as of its own time; the source is named", y.asOfKind === "print" && y.asOf === "2026-11-19T15:18:00+00:00" && y.source === "Yahoo Finance", y);
+    const fx = watchRowFromTable({ ...tnx, symbol: "USDJPY=X", name: "USD/JPY", cls: "Currency", group: "fx", currency: "JPY", last: 158.42, lastAt: "2026-11-18T00:00:00Z", pct: { d1: 0.26 }, chg: { d1: 0.41 }, vs200: 2.3 });
+    ck("a price keeps its per-cent changes and its % from the 200-day average; a booked close is as of its session's date", !fx.isYield && fx.pct1d === 0.26 && fx.chg1d === 0.41 && fx.vs200 === 2.3 && fx.vs200chg === null && fx.asOfKind === "close" && fx.asOf === "2026-11-18", fx);
+    const zn = watchRowFromTable({ ...tnx, symbol: "ZN=F", name: "10Y T-Note future", vs200: -0.8 });
+    ck("a bond future sits in the rates group but is a price: per cent, as the table measures it", !zn.isYield && zn.pct1d === -0.98 && zn.vs200 === -0.8 && zn.vs200chg === null, zn);
+    const cv = (symbol: string, source: string) => watchRowFromTable({ ...tnx, symbol, source, lastAt: "2026-11-18T00:00:00Z" });
+    const official = [cv("UST2Y", "treasury"), cv("JGB10Y", "mof"), cv("UST3M", "curve"), cv("JGB2Y", "curve"), cv("DE10Y", "curve"), cv("GB10Y", "curve"), cv("EA10Y", "curve"), cv("CA10Y", "curve")];
+    ck("a yield read from an official curve is that publisher's figure for its date, and the publisher is named", official.every((r) => r.asOfKind === "published" && r.asOf === "2026-11-18" && r.isYield) && official.map((r) => r.source).join("|") === "US Treasury|Japan MOF|US Treasury|Japan MOF|Bundesbank|Bank of England|ECB|Bank of Canada", official.map((r) => [r.symbol, r.source, r.asOfKind, r.asOf]));
+    ck("a booked close's stamp is told from a print's time, also a print at midnight", closeDay("2026-11-18T00:00:00Z") === "2026-11-18" && closeDay("2026-11-18T00:00:00+00:00") === null && closeDay("2026-11-18T14:30:00Z") === null && closeDay(null) === null && sourceName("yahoo", "^TNX") === "Yahoo Finance" && isYieldRow({ group: "rates", symbol: "^TNX" }) && !isYieldRow({ group: "rates", symbol: "ZN=F" }));
+    ck("the route builds a market instrument's row with this mapping", /if \(t\) return \{ \.\.\.watchRowFromTable\(t\), symbol: w\.symbol \}/.test(readText(new URL("../supabase/functions/api/index.ts", import.meta.url), "utf8")));
+
+    // the page's reading of it (web/src/lib/time.ts), in Singapore time
+    const now = at("2026-11-19T15:30:00Z");   // 23:30 SGT on 19 Nov
+    const close = asOfOf("2026-11-19", "close", now), pub = asOfOf("2026-11-18", "published", now), today = asOfOf("2026-11-19T15:18:00+00:00", "print", now), earlier = asOfOf("2026-11-18T09:05:00Z", "print", now);
+    ck("a close by its date (\"close 19 Nov\" on a phone), a published yield by its date, today's print by its time, an earlier print by date and time", asOfCell(close) === "19 Nov" && asOfLine(close) === "close 19 Nov" && asOfCell(pub) === "18 Nov" && asOfLine(pub) === "18 Nov" && asOfCell(today) === "23:18" && asOfLine(today) === "23:18" && asOfCell(earlier) === "18 Nov 17:05", [close, pub, today, earlier].map(asOfCell));
+    ck("a session's date is its own: a US close of 18 Nov stays 18 Nov in Singapore", asOfCell(asOfOf("2026-11-18", "close", at("2026-11-19T05:00:00Z"))) === "18 Nov");
+    ck("today is Singapore's day: a print at 23:59 SGT read two minutes after midnight SGT carries its date", asOfCell(asOfOf("2026-11-19T15:59:00Z", "print", at("2026-11-19T16:01:00Z"))) === "19 Nov 23:59" && asOfCell(asOfOf("2026-11-19T16:00:00Z", "print", at("2026-11-19T16:01:00Z"))) === "00:00");
+    ck("an older server sends no kind: a date, or a stamp at midnight UTC, is a close; any other time a print", asOfOf("2026-11-18T00:00:00Z", undefined, now)?.kind === "close" && asOfCell(asOfOf("2026-11-18T00:00:00Z", undefined, now)) === "18 Nov" && asOfOf("2026-11-19", null, now)?.kind === "close" && asOfOf("2026-11-19T15:18:00Z", undefined, now)?.kind === "print");
+    ck("no as-of gives a dash, never a guessed date; the tooltip names the source", asOfCell(asOfOf(null, "close", now)) === "–" && asOfCell(asOfOf("not a time", "print", now)) === "–" && asOfTitle(close, "Yahoo Finance") === "Yahoo Finance · close of 19 Nov 2026" && asOfTitle(pub, "Japan MOF") === "Japan MOF · published for 18 Nov 2026" && asOfTitle(today, "Yahoo Finance") === "Yahoo Finance · last print 19 Nov 2026 23:18 SGT");
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

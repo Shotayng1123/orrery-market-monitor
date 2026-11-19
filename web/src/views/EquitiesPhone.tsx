@@ -14,6 +14,7 @@ import { mergeClasses } from "../lib/classes";
 import { fmtStamp } from "../lib/time";
 import { InstrumentRow } from "./MarketPhone";
 import { CCY, HeatMap, INDICES, JpShortPanel, PERIODS, pos52, shortName, signed, vs, type BreadthRow, type IndexStats, type SectorRow, type StatRow } from "./Equities";
+import { RANGE_52W } from "./Market";
 
 /** EQUITIES for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026). The same index statistics as the desktop tab,
  *  laid out as cards down one column: the index with its chart, the instruments that drive it, breadth, the day's
@@ -69,27 +70,29 @@ function Flow({ s }: { s: IndexStats }) {
       {rows.map((r) => (
         <div className="fl-row" key={r.sector}>
           <span className="a"><span className="n">{r.sector}</span><span className="s">{money(r.turnover)} · {r.share.toFixed(1)}% of turnover{r.avgShare != null ? ` (avg ${r.avgShare.toFixed(1)}%)` : ""}{r.flow != null ? ` · ${r.flow.toFixed(2)}× avg` : ""}</span><span className="bar"><i style={{ width: `${(r.share / maxShare) * 100}%` }} /></span></span>
-          <span className="b">{hasMf && <span className={`v ${signCls(r.mfNet)}`} title="Net money flow: the day's turnover signed by the move from the previous close and scaled by the day's range">{signed(r.mfNet)}</span>}<span className={`p ${signCls(r.pct1d)}`}>{fmtPct(r.pct1d, 1)}</span></span>
+          <span className="b">{hasMf && <span className={`v ${signCls(r.mfNet)}`} title="Net money flow: the day's turnover signed by the move from the previous close and scaled by the day's range"><small>net flow</small> {signed(r.mfNet)}</span>}<span className={`p ${signCls(r.pct1d)}`}><small>1D</small> {fmtPct(r.pct1d, 1)}</span></span>
         </div>
       ))}
-      <div className="fl-row tot"><span className="a"><span className="n">Index</span><span className="s">{money(total)}{totalAvg ? ` · ${(total / totalAvg).toFixed(2)}× the three-month average` : ""}</span></span><span className="b">{hasMf && <span className={`v ${signCls(totMf)}`}>{signed(totMf)}</span>}</span></div>
+      <div className="fl-row tot"><span className="a"><span className="n">Index</span><span className="s">{money(total)}{totalAvg ? ` · ${(total / totalAvg).toFixed(2)}× the three-month average` : ""}</span></span><span className="b">{hasMf && <span className={`v ${signCls(totMf)}`}><small>net flow</small> {signed(totMf)}</span>}</span></div>
     </>
   );
 }
 
-function NameRow({ r, value, tag, star = false }: { r: StatRow; value: number | null; tag: string; star?: boolean }) {
+function NameRow({ r, value, tag, w, star = false }: { r: StatRow; value: number | null; tag: string; w: string; star?: boolean }) {
   return (
     <div className={`mp-row tap${star ? " starred" : ""}`} role="button" tabIndex={0} title={`${r.name} (${r.symbol})`} onClick={() => openAsset(r.symbol)}>
       {star && <Star symbol={r.symbol} name={r.name} />}
       <span className="mp-nm"><span className="n">{shortName(r.name)}</span><span className="mp-st one">{r.symbol} · {r.sector ?? "–"}</span></span>
       <span className="mp-px">{fmtNum(r.close, r.close >= 1000 ? 0 : 2)}</span>
-      <Move v={value}>{tag}</Move>
+      <Move v={value} w={w}>{tag}</Move>
     </div>
   );
 }
 
 type SortKey = "pct1d" | "pct1w" | "pct1m" | "pct3m" | "pct12m" | "vs200" | "pos52" | "mcap" | "turnover" | "mf_net";
-const SORTS: PickOption<SortKey>[] = [{ value: "pct1d", label: "1D %" }, { value: "pct1w", label: "1W %" }, { value: "pct1m", label: "1M %" }, { value: "pct3m", label: "3M %" }, { value: "pct12m", label: "12M %" }, { value: "vs200", label: "vs 200-day" }, { value: "pos52", label: "52w position" }, { value: "mcap", label: "Market cap" }, { value: "turnover", label: "Turnover" }, { value: "mf_net", label: "Net flow" }];
+const SORTS: PickOption<SortKey>[] = [{ value: "pct1d", label: "1D %" }, { value: "pct1w", label: "1W %" }, { value: "pct1m", label: "1M %" }, { value: "pct3m", label: "3M %" }, { value: "pct12m", label: "12M %" }, { value: "vs200", label: "vs 200-day" }, { value: "pos52", label: RANGE_52W }, { value: "mcap", label: "Market cap" }, { value: "turnover", label: "Turnover" }, { value: "mf_net", label: "Net flow" }];
+/** What the figure on a screener line is: its window for a change, else the measure the list is sorted by. */
+const SORT_W: Record<SortKey, string> = { pct1d: "1D", pct1w: "1W", pct1m: "1M", pct3m: "3M", pct12m: "12M", vs200: "VS 200D", pos52: "52W RANGE", mcap: "MKT CAP", turnover: "TURNOVER", mf_net: "NET FLOW" };
 function Screener({ s }: { s: IndexStats }) {
   const [q, setQ] = useState("");
   const [sector, setSector] = useState("All");
@@ -107,7 +110,7 @@ function Screener({ s }: { s: IndexStats }) {
       .sort((a, b) => { const x = val(a), y = val(b); if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1; return (x - y) * (desc ? -1 : 1); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.rows, q, sector, above200, nearHi, nearLo, sort, desc]);
-  const tag = (r: StatRow) => { const v = val(r); return v == null ? "–" : sort === "mcap" || sort === "turnover" ? money(v) : sort === "mf_net" ? signed(v) : sort === "pos52" ? `${Math.round(v)} / 100` : fmtPct(v, 1); };
+  const tag = (r: StatRow) => { const v = val(r); return v == null ? "–" : sort === "mcap" || sort === "turnover" ? money(v) : sort === "mf_net" ? signed(v) : sort === "pos52" ? `${Math.round(v)}%` : fmtPct(v, 1); };
   const tone = (r: StatRow) => (sort === "mcap" || sort === "turnover" || sort === "pos52" ? null : val(r));
   const tog = (on: boolean, set: (b: boolean) => void, label: string) => <button type="button" className={`mp-tog${on ? " on" : ""}`} aria-pressed={on} onClick={() => { set(!on); setShown(PAGE); }}>{label}</button>;
   return (
@@ -121,7 +124,7 @@ function Screener({ s }: { s: IndexStats }) {
       <div className="mp-picks">{tog(above200, setAbove200, "Above 200-day")}{tog(nearHi, setNearHi, "Near 52w high")}{tog(nearLo, setNearLo, "Near 52w low")}</div>
       <p className="mp-note first">{rows.length} of {s.rows.length} names</p>
       <div className="mp-card">
-        {rows.length ? rows.slice(0, shown).map((r) => <NameRow key={r.symbol} r={r} value={tone(r)} tag={tag(r)} star />) : <Empty title="No names match">Loosen the filters.</Empty>}
+        {rows.length ? rows.slice(0, shown).map((r) => <NameRow key={r.symbol} r={r} value={tone(r)} tag={tag(r)} w={SORT_W[sort]} star />) : <Empty title="No names match">Loosen the filters.</Empty>}
       </div>
       {rows.length > shown && <button type="button" className="mp-more" onClick={() => setShown((n) => n + PAGE)}>Show {Math.min(PAGE, rows.length - shown)} more of {rows.length}</button>}
     </>
@@ -170,7 +173,7 @@ export function EquitiesPhone({ sub, onSub, tick }: { sub: string; onSub: (s: st
           <div className="mp-row plain" key={x.sector}>
             <span className="mp-nm"><span className="n">{x.sector}</span><span className="mp-st one">{x.n} names · {x.n ? `${Math.round((x.above200 / x.n) * 100)}%` : "–"} above their 200-day</span></span>
             <span />
-            <Move v={x[sk] as number | null}>{fmtPct(x[sk] as number | null, 1)}</Move>
+            <Move v={x[sk] as number | null} w={sLabel}>{fmtPct(x[sk] as number | null, 1)}</Move>
           </div>
         ))}</div> : noStats}
       </Section>
@@ -182,15 +185,15 @@ export function EquitiesPhone({ sub, onSub, tick }: { sub: string; onSub: (s: st
               <div className="mp-sub">Average short-volume share, daily · 12 months</div>
               <Bars data={(s.shorts.history ?? []).map((h) => ({ d: h.d, v: h.v == null ? null : h.v * 100 }))} fmt={(v) => `${v.toFixed(1)}%`} height={120} />
               <div className="mp-sub">Highest short-volume share</div>
-              <table className="mp-t left"><tbody>{s.shorts.top.slice(0, 10).map((x) => <tr key={x.symbol} onClick={() => openAsset(x.symbol)}><td>{x.name}</td><td>{(x.ratio * 100).toFixed(0)}%</td></tr>)}</tbody></table>
+              <table className="mp-t left"><thead><tr><th>Name</th><th>Short vol %</th></tr></thead><tbody>{s.shorts.top.slice(0, 10).map((x) => <tr key={x.symbol} onClick={() => openAsset(x.symbol)}><td>{x.name}</td><td>{(x.ratio * 100).toFixed(0)}%</td></tr>)}</tbody></table>
             </>
           ) : <Empty title={us ? "No short-volume data" : "No short data for this market"}>{us ? "The FINRA job runs after the US close." : "Public per-name short data is not available for this exchange."}</Empty>}
         </div>
       </Section>
       <Section title="Movers · 1D" card={false}>
         {s ? <>
-          <div className="mp-card"><div className="mp-cap">Top 10</div>{movers.top.map((r) => <NameRow key={r.symbol} r={r} value={r.pct1d} tag={fmtPct(r.pct1d, 1)} />)}</div>
-          <div className="mp-card gap"><div className="mp-cap">Bottom 10</div>{movers.bottom.map((r) => <NameRow key={r.symbol} r={r} value={r.pct1d} tag={fmtPct(r.pct1d, 1)} />)}</div>
+          <div className="mp-card"><div className="mp-cap">Top 10</div>{movers.top.map((r) => <NameRow key={r.symbol} r={r} value={r.pct1d} tag={fmtPct(r.pct1d, 1)} w="1D" />)}</div>
+          <div className="mp-card gap"><div className="mp-cap">Bottom 10</div>{movers.bottom.map((r) => <NameRow key={r.symbol} r={r} value={r.pct1d} tag={fmtPct(r.pct1d, 1)} w="1D" />)}</div>
         </> : noStats}
       </Section>
       <Section title="Heat map" aux="colour = 1D %" card={false}>{s ? <div className="mp-card hmap"><HeatMap s={s} rows={merged} height={470} /></div> : noStats}</Section>

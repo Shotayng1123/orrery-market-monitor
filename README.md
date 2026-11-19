@@ -59,8 +59,10 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, about 900 checks in 21 suites): every tab on a desktop and in the phone layout, the
-  local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site), the
+- **Browser checks** (`web/e2e`, about 960 checks in 22 suites): every tab on a desktop and in the phone layout, the
+  local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
+  units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
+  window under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), the
   stock page (chart marks, performance, statements), the classic phone layout, the sign-in screen, creating an
   account by verification email, the manager's accounts list, the
   home-screen hint, the new-version bar, opening without a connection, notifications, a tab that fails

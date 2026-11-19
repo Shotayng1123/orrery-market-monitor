@@ -40,6 +40,7 @@ const SUITES = [
   { name: "stale-feed", needs: ["standin"] },
   { name: "opening", needs: ["mock", "standin"] },
   { name: "chart-pointer", needs: ["mock"] },
+  { name: "units-labels", needs: ["mock", "standin"] },
   { name: "update-bar", needs: ["mock", "built"] },
   { name: "offline", needs: ["mock", "built"] },
   { name: "notifications", needs: ["mock", "built"] },

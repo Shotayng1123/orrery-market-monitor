@@ -16,6 +16,7 @@ import type { TableRow } from "../lib/types";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtStamp } from "../lib/time";
 import { mergeClasses } from "../lib/classes";
+import { RANGE_52W } from "./Market";
 
 export { INDICES, type IndexId } from "../lib/indices";
 
@@ -142,12 +143,23 @@ function Sectors({ s, onSector }: { s: IndexStats; onSector: (sector: string) =>
   );
 }
 
-function Movers({ rows, title }: { rows: StatRow[]; title: string }) {
+/** One list of MOVERS, headed NAME · SECTOR · LAST · 1D · 1W (the designer's D-04, 19 Nov 2026: the fifth column was
+ *  the 1W change and nothing said so). The sector goes first when the list is narrow (tokens.css, `.mvwrap`). */
+function Movers({ rows, title, s }: { rows: StatRow[]; title: string; s: IndexStats }) {
+  const live = s.live ? `today's quotes of ${fmtStamp(s.live.asOf)}` : null;
   return (
-    <>
+    <div className="mvwrap">
       <div className="minih">{title}</div>
-      <table className="secT mvT"><colgroup><col style={{ width: "40%" }} /><col style={{ width: "26%" }} /><col style={{ width: "13%" }} /><col style={{ width: "10.5%" }} /><col style={{ width: "10.5%" }} /></colgroup><tbody>{rows.map((r) => <tr key={r.symbol}><td className="l nm" title={`${r.name} (${r.symbol})`}><Name r={r} /></td><td className="l mut nm" title={r.sector ?? ""}>{r.sector ?? ""}</td><td className="num">{fmtNum(r.close, r.close >= 1000 ? 0 : 2)}</td><td className={`num ${signCls(r.pct1d)}`}>{fmtPct(r.pct1d, 1)}</td><td className={`num ${signCls(r.pct1w)}`}>{fmtPct(r.pct1w, 1)}</td></tr>)}</tbody></table>
-    </>
+      <table className="secT mvT eqmv">
+        <thead><tr>
+          <th className="l c-nm">Name</th><th className="l c-sec">Sector</th>
+          <th className="c-px" title={live ? `Price: ${live}` : `Close of ${s.asOf ?? "–"}`}>Last</th>
+          <th className="c-ch" title={live ? `INTRADAY: today's move so far, from ${live}` : `Change from the previous close to the close of ${s.asOf ?? "–"}`}>1D</th>
+          <th className="c-ch" title={`Change over one week, to the close of ${s.asOf ?? "–"}`}>1W</th>
+        </tr></thead>
+        <tbody>{rows.map((r) => <tr key={r.symbol}><td className="l nm c-nm" title={`${r.name} (${r.symbol})`}><Name r={r} /></td><td className="l mut nm c-sec" title={r.sector ?? ""}>{r.sector ?? ""}</td><td className="num c-px">{fmtNum(r.close, r.close >= 1000 ? 0 : 2)}</td><td className={`num c-ch ${signCls(r.pct1d)}`}>{fmtPct(r.pct1d, 1)}</td><td className={`num c-ch ${signCls(r.pct1w)}`}>{fmtPct(r.pct1w, 1)}</td></tr>)}</tbody>
+      </table>
+    </div>
   );
 }
 
@@ -186,23 +198,23 @@ export function JpShortPanel({ idx }: { idx: string }) {
   return (
     <>
       <div className="krow">
-        <span><span className="k">Short selling share · {last?.d ?? "–"}</span><span className="v">{last?.ratio == null ? "–" : `${last.ratio.toFixed(1)}%`}</span></span>
+        <span><span className="k">Short selling share · <span className="nb">{last?.d ?? "–"}</span></span><span className="v">{last?.ratio == null ? "–" : `${last.ratio.toFixed(1)}%`}</span></span>
         <span><span className="k">5-day / 20-day avg</span><span className="v" style={{ fontSize: 13 }}>{avg(5)?.toFixed(1) ?? "–"}% / {avg(20)?.toFixed(1) ?? "–"}%</span></span>
-        <span><span className="k">Reported positions ≥0.5% · {d.positions.asOf ?? "–"}</span><span className="v" style={{ fontSize: 13 }}>{d.positions.names} of {d.positions.covered} names</span></span>
+        <span><span className="k">Reported positions ≥0.5% · <span className="nb">{d.positions.asOf ?? "–"}</span></span><span className="v" style={{ fontSize: 13 }}>{d.positions.names} of {d.positions.covered} names</span></span>
       </div>
       <div className="minih">Short-selling share of TSE turnover, daily · 12 months</div>
       <Bars data={d.market.map((m) => ({ d: m.d, v: m.ratio }))} fmt={(v) => `${v.toFixed(1)}%`} baseline={avg(20)} height={120} />
       <div className="msg2">
         <div>
           <div className="minih">Largest reported short positions (sum of holders ≥0.5%)</div>
-          <table className="secT"><tbody>{d.positions.top.slice(0, 12).map((p) => <tr key={p.symbol}><td className="l nm"><Name r={p} /></td><td className="l mut nm">{p.sector ?? ""}</td><td className="num mut">{p.holders}</td><td className="num">{(p.ratio * 100).toFixed(2)}%</td></tr>)}</tbody></table>
+          <table className="secT"><thead><tr><th className="l">Name</th><th className="l sec">Sector</th><th title="Holders reporting a short position of 0.5% or more">Holders</th><th title="Their short positions together, as a share of the shares outstanding">% of shares</th></tr></thead><tbody>{d.positions.top.slice(0, 12).map((p) => <tr key={p.symbol}><td className="l nm"><Name r={p} /></td><td className="l mut nm">{p.sector ?? ""}</td><td className="num mut">{p.holders}</td><td className="num">{(p.ratio * 100).toFixed(2)}%</td></tr>)}</tbody></table>
         </div>
         <div>
-          <div className="minih">Short selling share by sector · {d.sectorsAsOf ?? "–"}</div>
-          <table className="secT"><tbody>{[...d.sectors.slice(0, 6), ...d.sectors.slice(-4)].map((x, i) => <tr key={x.sector + i}><td className="l" title={x.sector}>{TSE33[x.sector] ?? x.sector}</td><td className="num mut">{money(x.total == null ? null : x.total * 1e6)}</td><td className="num" style={{ background: shade((x.ratio ?? 0) - (last?.ratio ?? 0), 15) }}>{x.ratio == null ? "–" : `${x.ratio.toFixed(1)}%`}</td></tr>)}</tbody></table>
+          <div className="minih">Short selling share by sector · <span className="nb">{d.sectorsAsOf ?? "–"}</span></div>
+          <table className="secT"><thead><tr><th className="l">Sector</th><th title="The sector's TSE turnover that day, JPY">Turnover</th><th title="Short selling's share of that turnover">Short %</th></tr></thead><tbody>{[...d.sectors.slice(0, 6), ...d.sectors.slice(-4)].map((x, i) => <tr key={x.sector + i}><td className="l" title={x.sector}>{TSE33[x.sector] ?? x.sector}</td><td className="num mut">{money(x.total == null ? null : x.total * 1e6)}</td><td className="num" style={{ background: shade((x.ratio ?? 0) - (last?.ratio ?? 0), 15) }}>{x.ratio == null ? "–" : `${x.ratio.toFixed(1)}%`}</td></tr>)}</tbody></table>
           {mg0 && (
             <>
-              <div className="minih" style={{ marginTop: 8 }}>Margin balances, market total · week to {mg0.d}</div>
+              <div className="minih" style={{ marginTop: 8 }}>Margin balances, market total · week to <span className="nb">{mg0.d}</span></div>
               <table className="secT"><tbody>
                 <tr><td className="l">Shares sold short (売残)</td><td className="num">{money((mg0.sellValue ?? 0) * 1e6)} JPY</td><td className={`num ${signCls(mg0.sellValue != null && mg1?.sellValue ? mg0.sellValue - mg1.sellValue : null)}`}>{wow(mg0.sellValue, mg1?.sellValue)}</td></tr>
                 <tr><td className="l">Bought on margin (買残)</td><td className="num">{money((mg0.buyValue ?? 0) * 1e6)} JPY</td><td className={`num ${signCls(mg0.buyValue != null && mg1?.buyValue ? mg0.buyValue - mg1.buyValue : null)}`}>{wow(mg0.buyValue, mg1?.buyValue)}</td></tr>
@@ -248,7 +260,7 @@ function Screener({ s }: { s: IndexStats }) {
       </div>
       <div style={{ maxHeight: 520, overflow: "auto" }}>
         <table className="secT">
-          <thead><tr>{th("symbol", "Symbol", true)}{th("name", "Name", true)}{th("sector", "Sector", true)}{th("close", "Last")}{th("pct1d", "1D")}{th("pct1w", "1W")}{th("pct1m", "1M")}{th("pct3m", "3M")}{th("pct12m", "12M")}{th("vs50", "vs 50d")}{th("vs200", "vs 200d")}{th("pos52", "52w pos")}{hasM && th("mcap", "Mcap")}{hasT && th("turnover", "Turnover")}{hasT && th("volRel", "Vol / 3M avg")}{hasF && th("mf_net", "Net flow 1D")}{hasShort && th("shortRatio", jp ? "Short pos %" : "Short vol %")}</tr></thead>
+          <thead><tr>{th("symbol", "Symbol", true)}{th("name", "Name", true)}{th("sector", "Sector", true)}{th("close", "Last")}{th("pct1d", "1D")}{th("pct1w", "1W")}{th("pct1m", "1M")}{th("pct3m", "3M")}{th("pct12m", "12M")}{th("vs50", "vs 50d")}{th("vs200", "vs 200d")}{th("pos52", RANGE_52W)}{hasM && th("mcap", "Mcap")}{hasT && th("turnover", "Turnover")}{hasT && th("volRel", "Vol / 3M avg")}{hasF && th("mf_net", "Net flow 1D")}{hasShort && th("shortRatio", jp ? "Short pos %" : "Short vol %")}</tr></thead>
           <tbody>{rows.map((r) => <tr key={r.symbol}><td className="l"><Star symbol={r.symbol} name={r.name} /> <b className="lnk" onMouseEnter={(e) => showCard(r.symbol, e)} onMouseLeave={hideCard} onClick={() => openAsset(r.symbol)}>{r.symbol}</b></td><td className="l nm"><Name r={r} /></td><td className="l mut" title={r.industry ?? ""}>{r.sector ?? ""}{r.industry ? <span className="mut"> · {r.industry}</span> : null}</td><td className="num">{fmtNum(r.close, r.close >= 1000 ? 0 : 2)}</td>{cell(r.pct1d, 4)}{cell(r.pct1w, 8)}{cell(r.pct1m, 12)}{cell(r.pct3m, 20)}{cell(r.pct12m, 50)}{cell(vs(r.close, r.dma50), 10)}{cell(vs(r.close, r.dma200), 20)}<td className="num mut">{pos52(r) == null ? "–" : `${Math.round(pos52(r)!)}%`}</td>{hasM && <td className="num mut">{money(r.mcap)}</td>}{hasT && <td className="num mut">{money(r.turnover)}</td>}{hasT && <td className="num" style={{ background: flowShade(volRel(r) == null ? null : (volRel(r)! - 100) / 50, 3) }}>{volRel(r) == null ? "–" : `${Math.round(volRel(r)!)}%`}</td>}{hasF && <td className={`num ${signCls(r.mf_net)}`}>{signed(r.mf_net)}</td>}{hasShort && <td className="num mut">{r.shortRatio == null ? "–" : `${(r.shortRatio * 100).toFixed(jp ? 2 : 0)}%`}</td>}</tr>)}</tbody>
         </table>
       </div>
@@ -303,12 +315,12 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
             <div className="minih">Average short-volume share, daily · 12 months</div>
             <Bars data={(s.shorts.history ?? []).map((h) => ({ d: h.d, v: h.v == null ? null : h.v * 100 }))} fmt={(v) => `${v.toFixed(1)}%`} height={120} />
             <div className="minih" style={{ marginTop: 8 }}>Highest short-volume share</div>
-            <table className="secT"><tbody>{s.shorts.top.slice(0, 10).map((x) => <tr key={x.symbol}><td className="l"><Name r={x} /></td><td className="num">{(x.ratio * 100).toFixed(0)}%</td></tr>)}</tbody></table>
+            <table className="secT"><thead><tr><th className="l">Name</th><th title="Short-sale volume as a share of the day's volume (FINRA)">Short vol %</th></tr></thead><tbody>{s.shorts.top.slice(0, 10).map((x) => <tr key={x.symbol}><td className="l"><Name r={x} /></td><td className="num">{(x.ratio * 100).toFixed(0)}%</td></tr>)}</tbody></table>
           </>
         ) : <Empty title={us ? "No short-volume data" : "No short data for this market"}>{us ? "The FINRA job runs after the US close." : "Public per-name short data is not available for this exchange."}</Empty>}
       </Panel>
       <Panel no="07" title="HEAT MAP" span={12} aux={s ? <>{statsAux} · GICS sectors · colour = 1D % · size = {hasMcap ? "market cap" : s.rows.some((r) => r.weight != null) ? "index weight" : "equal"}</> : ""}>{s ? <HeatMap s={s} rows={merged} /> : noStats}</Panel>
-      <Panel no="08" title="MOVERS" span={12} aux={statsAux}>{s ? <div className="msg2"><div><Movers rows={movers.top} title="Top 15 · 1D" /></div><div><Movers rows={movers.bottom} title="Bottom 15 · 1D" /></div></div> : noStats}</Panel>
+      <Panel no="08" title="MOVERS" span={12} aux={statsAux}>{s ? <div className="msg2"><Movers rows={movers.top} title="Top 15 by 1D" s={s} /><Movers rows={movers.bottom} title="Bottom 15 by 1D" s={s} /></div> : noStats}</Panel>
       <Panel no="09" title="SCREENER" span={12} aux={statsAux}>{s ? <Screener s={s} /> : noStats}</Panel>
       {drawer && s && <SectorDrawer title={ix.label} sector={drawer} rows={drawerRows} ccy={ccy} onClose={() => setDrawer(null)} />}
     </>
