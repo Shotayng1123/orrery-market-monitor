@@ -1,6 +1,7 @@
 // A tab that cannot be drawn must not take the page with it (components/TabGuard.tsx), on a desktop and in the
 // phone layout; and the desktop watchlist draws when its feed comes without its lists, which is how the fault was
-// found (the stand-in feed answers `{ rows: [] }` to what it does not know, and the page went blank).
+// found (the stand-in feed answered `{ rows: [] }` to what it did not know, and the page went blank; since the
+// mock knows the feed, `om_mock_bare` = "watch_feed" makes it answer that way again).
 // The fault is made with the development-only switch: `om_crash` = a tab's id in the browser's storage.
 // Run from web/:  node e2e/run.cjs tab-guard   (the runner starts the server this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
@@ -38,7 +39,7 @@ const see = (p) => p.evaluate(() => { const c = document.querySelector("#tab-cra
     await ctx.close();
   }
   console.log("\n[desktop: the watchlist when its feed comes without its lists]");
-  { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+  { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); await ctx.addInitScript(() => { try { localStorage.setItem("om_mock_bare", "watch_feed"); } catch {} }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
     await p.goto(MOCK + "#watch", { waitUntil: "networkidle" }); await p.waitForSelector('.panel[data-k="wl"]'); await p.waitForTimeout(500);
     const v = await p.evaluate(() => ({ crash: !!document.querySelector("#tab-crash"), panels: [...document.querySelectorAll("#grid .panel")].map((x) => x.dataset.k), empty: [...document.querySelectorAll('#grid .panel[data-k="wl-alerts"] .empty, #grid .panel[data-k="wl-news"] .empty, #grid .panel[data-k="wl-research"] .empty')].map((e) => e.textContent.slice(0, 14)) }));
     ck("all five panels are drawn, the three without data saying so", !v.crash && v.panels.join() === "wl,wl-earn,wl-alerts,wl-news,wl-research" && v.empty.length === 3 && errs.length === 0, { v, errs });

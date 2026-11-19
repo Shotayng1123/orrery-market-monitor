@@ -1,8 +1,21 @@
 // Dev-only mock feed: `VITE_DEV_MOCK=1 npm run dev` serves synthetic data so the panels can be laid out and
 // checked before the backend exists. Deterministic random walks with realistic volatility scaling, labelled
 // MOCK in the UI. Never active in production builds (gated on import.meta.env.DEV in useApi).
+// The calendar, headlines, research, earnings dates, alerts, the watchlist and the policy rates are the stand-in
+// rows of ./standin.json, the same rows the browser checks answer with (web/e2e/standin.cjs), in the shape each
+// server route sends them. Switches, all in the dev server only:
+//   ?mock=empty in the address        every tab with no rows (the server's answers when its tables are empty)
+//   om_mock_watch in the storage      the stand-in watchlist of this browser (the star, the add box and removal work)
+//   om_mock_bare = "a,b"              those actions answered as one the mock does not know ({ rows: [] })
+//   om_mock_stale = "1", om_mock_live = "1"   a stopped price feed; EQUITIES while its market is open (below)
 import { mockStock } from "./mockStock";
-import type { TableRow, Health, Curve, Series } from "./types";
+import standin from "./standin.json";
+import type { TableRow, Health, Curve, Series, Alert, EconEvent, NewsItem, Note, Report } from "./types";
+import type { Feed, WatchRow } from "../views/Watchlist";
+import type { EarningsRow } from "../components/Earnings";
+import type { PolicyRow } from "../views/RatesFx";
+import type { PolicyStep } from "../components/PolicyChart";
+import type { Hit } from "./candidates";
 
 const MASTER: Array<Pick<TableRow, "symbol" | "name" | "cls" | "group" | "market" | "currency" | "decimals" | "order"> & { base: number; vol: number; proxyFor?: string }> = [
   { symbol: "^N225", name: "Nikkei 225", cls: "Equities", group: "equity", market: "TSE", currency: "JPY", decimals: 2, order: 1, base: 57000, vol: 0.013 },
@@ -115,24 +128,116 @@ export function mockCurve(country: string, ago: string | null): { country: strin
   return { country, current: mk(0, new Date().toISOString().slice(0, 10)), ghost: ago ? mk(ago === "36M" ? -0.9 : ago === "12M" ? -0.35 : 0.12, "earlier") : null };
 }
 
-function mockNote() {
-  const mv = (symbol: string, name: string, pct: number, last: number, sector?: string) => ({ symbol, name, last, prev: last / (1 + pct / 100), pct, sector });
-  const sec = (sector: string, pct: number, n: number) => ({ sector, pct, n, weighted: true });
-  return {
-    id: 1, d: new Date().toISOString().slice(0, 10), title: "Chip rout meets Toyota surge; Nikkei futures point lower (MOCK)", generatedAt: new Date().toISOString(), model: "mock",
-    sections: [
-      { heading: "Overnight: US", md: "S&P 500 **-1.84%**, NASDAQ -2.40%, SOX -4.11%; VIX 25.6. Breadth 92 up / 408 down of 500. Broad sell-off, centred on Tech [1]." },
-      { heading: "Big movers and why", md: "- **MU -9.8%**: guided below consensus on HBM pricing [2].\n- **LLY +6.1%**: reason not found." },
-      { heading: "Japan outlook and daily strategy", md: "Nikkei 225 closed -1.1% yesterday; the CME future implies a -2.3% open (E). Index sits 1.2σ below its 1M mean and 2.1% under the 200-day average. Expect the semis-led weakness to carry into Tokyo but fade by the afternoon (E). Hedge: buy Nikkei VI exposure into the open (E)." },
-      { heading: "Other macro", md: "UST 10Y 4.86% (+2bp), USD/JPY 158.4, WTI 90.8. Calendar: 21:30 SGT US payrolls." },
-    ],
-    sources: [{ n: 1, title: "Stocks slide as chip names tumble (mock)", url: "https://example.com/1" }, { n: 2, title: "Micron guidance (mock)", url: "https://example.com/2" }],
-    pack: {
-      us: { indices: [mv("^GSPC", "S&P 500", -1.84, 7376.86), mv("^IXIC", "NASDAQ Composite", -2.4, 24579.42), mv("^SOX", "SOX", -4.11, 9390.25), mv("^VIX", "VIX", 12.3, 25.64)], sectorsEtf: [mv("XLU", "Utilities", 0.6, 80), mv("XLP", "Consumer Staples", 0.2, 82), mv("XLF", "Financials", -0.9, 57), mv("XLK", "Technology", -3.4, 164)], sectorsConstituents: [], top: [mv("LLY", "Eli Lilly", 6.1, 1417.99), mv("KO", "Coca-Cola", 1.2, 95.8)], bottom: [mv("MU", "Micron", -9.8, 795.23), mv("AMD", "AMD", -6.2, 488.78)], big: [], breadth: { n: 500, up: 92, down: 408, over2: 14, under2: 171, over5: 3, under5: 22 }, source: "Wikipedia list (mock); Yahoo closes" },
-      jp: { indices: [mv("^N225", "Nikkei 225", -1.1, 57434.77), mv("1306.T", "TOPIX (1306.T proxy)", -0.7, 388.6)], sectors: [sec("Technology", -2.9, 40), sec("Financials", 0.4, 22), sec("Consumer Goods", -0.6, 35)], top: [mv("7203.T", "Toyota Motor", 16.7, 3533), mv("8306.T", "MUFG", 2.0, 2040)], bottom: [mv("6857.T", "Advantest", -8.1, 11000), mv("8035.T", "Tokyo Electron", -6.4, 32000)], big: [], breadth: { n: 225, up: 60, down: 160, over2: 9, under2: 70, over5: 2, under5: 11 }, impliedOpenPct: -2.3, impliedNote: "CME Nikkei future vs cash close (E)", source: "Nikkei CSV (mock); Yahoo closes" },
-      table: [{ symbol: "^TNX", name: "UST 10Y yield", cls: "Fixed income", last: 4.859, d1Pct: null, d1Chg: 0.02, unit: "bp" }, { symbol: "USDJPY=X", name: "USD/JPY", cls: "Currency", last: 158.425, d1Pct: -0.2, d1Chg: null, unit: "pct" }, { symbol: "CL=F", name: "WTI crude", cls: "Commodities", last: 90.83, d1Pct: 0.9, d1Chg: null, unit: "pct" }],
-    },
-  };
+// ---- the stand-in rows (./standin.json, shared with web/e2e/standin.cjs) ----
+const HOUR = 3600e3;
+/** The rows with their times made real: "{h:N}" becomes the time N hours from `now` (ISO), "{h:N|day}" that time's
+ *  date in Singapore. The same rule as web/e2e/standin.cjs, so the local copy and the checks show the same rows. */
+function live<T>(x: T, now: number): T {
+  const at = (n: string, day?: string) => { const t = now + Number(n) * HOUR; return day ? new Date(t + 8 * HOUR).toISOString().slice(0, 10) : new Date(t).toISOString(); };
+  const walk = (v: unknown): unknown => (typeof v === "string" ? v.replace(/\{h:(-?\d+(?:\.\d+)?)(\|day)?\}/g, (_m, n: string, d?: string) => at(n, d))
+    : Array.isArray(v) ? v.map(walk) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, w]) => [k, walk(w)])) : v);
+  return walk(x) as T;
+}
+// read once per page, counted from its first question (the checks count from when they start), so the rows do not
+// drift while the page is open
+let si: typeof standin | null = null;
+const SI = () => (si ??= live(standin, Date.now()));
+const num = (v: unknown, d: number, lo: number, hi: number) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.min(hi, Math.max(lo, n)) : d; };
+
+/** A note for its date, as the server's `note` sends it (the list row, the stand-in body); a date not in the list
+ *  still gets one, as in the checks. */
+function noteOf(d: string | null): Note {
+  const S = SI(), row = (d ? S.notes.find((n) => n.d === d) : S.notes[0]) ?? null, day = d ?? S.notes[0].d;
+  return { ...S.noteBody, id: row?.id ?? 1, d: day, title: row?.title ?? S.notes[0].title, generatedAt: row?.generatedAt ?? `${day}T23:05:00Z`, kind: "daily" } as unknown as Note;
+}
+const reportOf = (id: number): Report => { const S = SI(); return { ...(S.reports.find((r) => r.id === id) ?? S.reports[0]), ...S.reportBody } as unknown as Report; };
+
+/** `?mock=empty`: every tab as the server answers when its tables are empty. */
+const emptyMode = (): boolean => { try { return new URLSearchParams(location.search).get("mock") === "empty"; } catch { return false; } };
+const bare = (action: string): boolean => { try { return (localStorage.getItem("om_mock_bare") ?? "").split(",").map((s) => s.trim()).includes(action); } catch { return false; } };
+
+// ---- the watchlist: kept in this browser (om_mock_watch); empty and kept in memory only with ?mock=empty ----
+const WATCH_KEY = "om_mock_watch";
+type WatchEntry = { symbol: string; name: string | null };
+let watchMem: WatchEntry[] | null = null;
+function watchGet(): WatchEntry[] {
+  if (emptyMode()) return (watchMem ??= []);
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(WATCH_KEY) ?? "null");
+    if (Array.isArray(v)) return v.filter((w): w is WatchEntry => !!w && typeof (w as WatchEntry).symbol === "string").map((w) => ({ symbol: w.symbol, name: typeof w.name === "string" ? w.name : null }));
+  } catch { /* nothing kept, or storage blocked: the list in memory, else the stand-in list */ }
+  return watchMem ?? SI().watch.start.map((symbol) => ({ symbol, name: null }));
+}
+function watchPut(list: WatchEntry[]): void {
+  watchMem = list;
+  if (emptyMode()) return;
+  try { localStorage.setItem(WATCH_KEY, JSON.stringify(list)); } catch { /* kept in memory for this page */ }
+}
+/** The watched symbols, as the server's `watch_syms` sends them. */
+export const mockWatchSyms = (): { symbols: string[] } => ({ symbols: watchGet().map((w) => w.symbol) });
+/** Adds or removes a symbol as the server's `watch_set` does: any well-formed symbol, at most 200 names; a refusal
+ *  is thrown with the server's words. */
+export function mockWatchSet(symbol: string, on: boolean, name?: string): { symbols: string[] } {
+  const s = symbol.trim().slice(0, 24);
+  if (!/^[A-Za-z0-9^.=&-]{1,24}$/.test(s)) throw new Error("bad symbol");
+  let list = watchGet();
+  if (!on) list = list.filter((w) => w.symbol !== s);
+  else if (!list.some((w) => w.symbol === s)) {
+    if (list.length >= 200) throw new Error("A watchlist holds up to 200 names");
+    list = [...list, { symbol: s, name: name ? name.slice(0, 120) : null }];
+  }
+  watchPut(list);
+  return { symbols: list.map((w) => w.symbol) };
+}
+/** watch_list: a stand-in row where there is one; a market instrument from the mock table, as the server reads its
+ *  table; a name the page offered (it came with a name) gets made-up figures; a symbol typed in that the mock
+ *  does not know comes back as the server's row without a quote (dashes). */
+function watchList(): { rows: WatchRow[] } {
+  const S = SI(), list = watchGet();
+  const known = new Map(S.watch.rows.map((r) => [r.symbol, r as unknown as WatchRow]));
+  const table = list.some((w) => !known.has(w.symbol) && MASTER.some((m) => m.symbol === w.symbol)) ? new Map(mockTable().rows.map((t) => [t.symbol, t])) : new Map<string, TableRow>();
+  const day = new Date(Date.now() - 12 * HOUR + 8 * HOUR).toISOString().slice(0, 10);
+  return { rows: list.map((w): WatchRow => {
+    const k = known.get(w.symbol); if (k) return k;
+    const t = table.get(w.symbol);
+    if (t) return { symbol: w.symbol, name: t.name, kind: t.cls, sector: null, ccy: t.currency, last: t.last, asOf: t.lastAt, pct1d: t.pct.d1 ?? null, pct1w: t.pct.w1 ?? null, pct1m: t.pct.m1 ?? null, pct3m: t.pct.m3 ?? null, pct12m: t.pct.m12 ?? null, vs50: null, vs200: t.group === "rates" ? null : t.vs200 ?? null, pos52: t.pos52 ?? null, mcap: null, earningsAt: null, earningsEst: null, isYield: t.group === "rates" && !w.symbol.endsWith("=F") };
+    const none = { sector: null, vs50: null, vs200: null, pos52: null, mcap: null, earningsAt: null, earningsEst: null, isYield: false };
+    if (!w.name) return { ...none, symbol: w.symbol, name: w.symbol, kind: "–", ccy: null, last: null, asOf: null, pct1d: null, pct1w: null, pct1m: null, pct3m: null, pct12m: null };
+    const r = rng(seedOf(w.symbol)), jp = /\.T$/.test(w.symbol), p = Math.round((r() - 0.5) * 600) / 100;
+    return { ...none, symbol: w.symbol, name: w.name, kind: "Stock", ccy: jp ? "JPY" : "USD", last: Math.round((jp ? 800 + r() * 6000 : 20 + r() * 400) * 100) / 100, asOf: day, pct1d: p, pct1w: p * 1.7, pct1m: p * -2.3, pct3m: p * 4.1, pct12m: p * 9.6, vs50: p * 1.2, vs200: p * 3, pos52: 50 + p * 10 };
+  }) };
+}
+/** watch_feed: the alerts on the listed symbols, the headlines that name one, the pieces that mention one. */
+function watchFeed(): Feed {
+  const f = SI().watch.feed, syms = new Set(watchGet().map((w) => w.symbol));
+  if (!syms.size) return { alerts: [], news: [], research: [] };
+  return { alerts: f.alerts.filter((a) => syms.has(a.symbol)), news: f.news.filter((n) => n.tickers.some((t) => syms.has(t.s))),
+    research: f.research.map((r) => ({ ...r, symbols: r.symbols.filter((s) => syms.has(s)) })).filter((r) => r.symbols.length > 0) } as unknown as Feed;
+}
+
+/** `?mock=empty`: what the server sends for each action when its tables hold nothing. */
+function emptyAnswer(action: string, params: Record<string, string | number | boolean | undefined> | undefined): unknown {
+  const idx = String(params?.idx ?? "SP500");
+  switch (action) {
+    case "health": return mockHealth();
+    case "table": return { rows: [], asOf: new Date().toISOString() };
+    case "series": {   // the server's own bars are for its instruments; any other symbol's come from Yahoo, tables or not
+      const symbol = String(params?.symbol ?? "");
+      return MASTER.some((m) => m.symbol === symbol) ? { symbol, res: "1d", points: [], asOf: null } : mockSeries(symbol, String(params?.range ?? "12M"));
+    }
+    case "curve": return { country: String(params?.country ?? "US"), current: null, ghost: null };
+    case "note": return { note: null };
+    case "report": return { report: null };
+    case "index_stats": return { idx, asOf: null, live: null, rows: [], breadth: null, sectors: [], movers: { top: [], bottom: [] }, shorts: null };
+    case "breadth_history": return { idx, rows: [] };
+    case "jp_shorts": return { idx: String(params?.idx ?? "NK225"), market: [], sectorsAsOf: null, sectors: [], positions: { asOf: null, names: 0, covered: 0, top: [], avgRatio: null, history: [], namesHistory: [] }, margin: [] };
+    case "policy_history": return { rows: [], sources: {} };
+    case "earnings": return { rows: [], source: SI().earningsSource };
+    case "watch_syms": return mockWatchSyms();
+    case "watch_list": return watchList();
+    case "watch_feed": return watchFeed();
+    default: return { rows: [] };
+  }
 }
 
 // `om_mock_stale` = "1" in the browser's storage: the answer of a server whose price feed stopped 99 minutes ago
@@ -140,20 +245,26 @@ const mockFeed = (): Health["feed"] => { let stale = false; try { stale = localS
 export const mockHealth = (): Health => ({ ok: true, at: new Date().toISOString(), tick: { lastAt: new Date().toISOString(), ageMin: 1, ok: true, note: "mock" }, daily: { lastAt: new Date().toISOString(), ok: true, note: "mock" }, feed: mockFeed(), sources: [{ name: "mock", lastOk: new Date().toISOString(), lastError: null }], holidays: {}, holidaysVerified: false });
 
 export function mockAction(action: string, params: Record<string, string | number | boolean | undefined> | undefined): unknown {
+  if (bare(action)) return { rows: [] };
+  if (emptyMode() && action !== "stock" && action !== "asset") return emptyAnswer(action, params);   // a stock's page is not a tab: as usual
+  const S = SI();
   switch (action) {
     case "table": return mockTable();
     case "series": return mockSeries(String(params?.symbol ?? "^N225"), String(params?.range ?? "12M"));
     case "curve": return mockCurve(String(params?.country ?? "US"), params?.ago ? String(params.ago) : null);
     case "health": return mockHealth();
-    case "note": return { note: mockNote() };
-    case "calendar": return { rows: [] };
-    case "news": return { rows: [] };
-    case "reports": return { rows: [] };
-    case "alerts": {
-      const now = Date.now();
-      const mk = (id: number, minAgo: number, symbol: string, name: string, kind: "stock" | "index", pct: number, price: number, market: string) => ({ id, at: new Date(now - minAgo * 60e3).toISOString(), d: new Date(now - minAgo * 60e3).toISOString().slice(0, 10), symbol, name, kind, pct, price, market, msg: `${name} ${pct >= 0 ? "up" : "down"} ${Math.abs(pct) >= 10 ? Math.round(Math.abs(pct)) : Math.round(Math.abs(pct) * 10) / 10}%${kind === "stock" ? " intraday" : ""}` });
-      return { rows: [mk(5, 3, "285A.T", "KIOXIA HOLDINGS CORP.", "stock", -11.2, 2840, "TSE"), mk(4, 41, "^SOX", "PHLX Semiconductor (SOX)", "index", -4.11, 9390.25, "NYSE"), mk(3, 95, "MU", "Micron Technology", "stock", -9.8, 795.23, "NYSE"), mk(2, 310, "7203.T", "TOYOTA MOTOR CORP.", "stock", 16.7, 3533, "TSE"), mk(1, 1500, "^N225", "Nikkei 225", "index", -3.4, 57434.77, "TSE")] };
-    }
+    // the lists as the server's routes send them (supabase/functions/api/index.ts): newest first, `n` at most
+    case "calendar": return { rows: S.calendar as unknown as EconEvent[] };
+    case "news": { const cat = params?.category ? String(params.category) : null; return { rows: (S.news as unknown as NewsItem[]).filter((x) => !cat || x.category === cat).slice(0, num(params?.n, 120, 1, 300)) }; }
+    case "notes": return { rows: S.notes.slice(0, num(params?.n, 30, 1, 1000)) };
+    case "note": return { note: noteOf(params?.d ? String(params.d) : null) };
+    case "reports": return { rows: S.reports.slice(0, num(params?.n, 100, 1, 1000)) };
+    case "report": return { report: reportOf(Number(params?.id)) };
+    case "earnings": return { rows: S.earnings as unknown as EarningsRow[], source: S.earningsSource };
+    case "alerts": return { rows: (S.alerts as unknown as Alert[]).slice(0, num(params?.n, 20, 1, 50)) };
+    case "watch_syms": return mockWatchSyms();
+    case "watch_list": return watchList();
+    case "watch_feed": return watchFeed();
     case "curves": return { rows: ["US", "JP", "DE", "EA", "EB", "GB", "CA"].map((c) => ({ country: c, label: c, latest: new Date().toISOString().slice(0, 10), tenors: 10 })) };
     case "index_stats": {
       const idx = String(params?.idx ?? "SP500"); const r = rng(seedOf(idx));
@@ -171,10 +282,9 @@ export function mockAction(action: string, params: Record<string, string | numbe
         sectors: [...by.entries()].map(([sector, xs]) => ({ sector, n: xs.length, weight: idx === "NK225" ? xs.reduce((a, x) => a + (x.weight ?? 0), 0) : null, pct1d: avg(xs, "pct1d"), pct1w: avg(xs, "pct1w"), pct1m: avg(xs, "pct1m"), pct3m: avg(xs, "pct3m"), pct12m: avg(xs, "pct12m"), above200: xs.filter((x) => x.close > x.dma200).length, mcapShare: (sum(xs, "mcap") / totM) * 100, turnover: sum(xs, "turnover"), turnoverShare: (sum(xs, "turnover") / totT) * 100, flow: sum(xs, "turnover") / sum(xs, "adv_turnover"), mfNet: sum(xs, "mf_net"), mfUp: sum(xs, "mf_up"), mfDown: sum(xs, "mf_down") })).sort((a, b) => b.pct1d - a.pct1d),
         movers: { top: sorted.slice(0, 15), bottom: sorted.slice(-15).reverse() }, shorts: idx === "NK225" ? null : { d: new Date().toISOString().slice(0, 10), avgRatio: 0.47, history: Array.from({ length: 240 }, (_, i) => ({ d: new Date(Date.now() - (240 - i) * 86400e3).toISOString().slice(0, 10), v: 0.42 + r() * 0.1 })), top: [...rows].sort((a, b) => (b.shortRatio ?? 0) - (a.shortRatio ?? 0)).slice(0, 15).map((x) => ({ symbol: x.symbol, name: x.name, ratio: x.shortRatio ?? 0 })) } };
     }
-    case "search": {
-      const term = String(params?.q ?? "").toLowerCase();
-      const all = [{ symbol: "7203.T", name: "Toyota Motor Corp", kind: "Equity", note: "NK225 · Transportation" }, { symbol: "285A.T", name: "Kioxia Holdings", kind: "Equity", note: "NK225 · Technology" }, { symbol: "AAPL", name: "Apple Inc.", kind: "Equity", note: "SP500 · Information Technology" }, { symbol: "USDJPY=X", name: "USD/JPY", kind: "Currency", note: "Monitor instrument" }, { symbol: "^TNX", name: "US 10Y yield", kind: "Fixed income", note: "Monitor instrument" }];
-      return { rows: all.filter((x) => x.symbol.toLowerCase().includes(term) || x.name.toLowerCase().includes(term)) };
+    case "search": {   // a part of a symbol or of a name, whatever its case; nothing for nothing typed (as the server)
+      const term = String(params?.q ?? "").trim().toLowerCase();
+      return { rows: term ? (S.watch.search as Hit[]).filter((x) => x.symbol.toLowerCase().includes(term) || x.name.toLowerCase().includes(term)) : [] };
     }
     case "stock": { const sym = String(params?.symbol ?? "7203.T"), pts = dailySeries(sym, 300); return mockStock(sym, pts[pts.length - 1].v, pts); }   // the price the mock chart ends at, and its days for the marks
     case "asset": {
@@ -202,20 +312,9 @@ export function mockAction(action: string, params: Record<string, string | numbe
       for (let i = 1100; i >= 0; i--) { const d = new Date(Date.now() - i * 86400e3); if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue; a200 = Math.min(0.95, Math.max(0.1, a200 + (r() - 0.5) * 0.04)); a50 = Math.min(0.95, Math.max(0.05, a50 + (r() - 0.5) * 0.1)); const adv = Math.round(n * (0.2 + r() * 0.6)); rows.push({ d: d.toISOString().slice(0, 10), n, adv, dec: n - adv - Math.round(r() * 8), above50: Math.round(n * a50), above200: Math.round(n * a200), new_hi: Math.round(r() * 25), new_lo: Math.round(r() * 20) }); }
       return { idx, rows };
     }
-    case "policy_history": {
-      const mk = (bank: string, pts: Array<[string, number]>) => pts.map(([d, rate]) => ({ bank, d, rate }));
-      return { sources: { FED: "FRED DFEDTAR + DFEDTARU (mock)", ECB: "ECB DFR (mock)", BOE: "BoE IUDBEDR (mock)", BOJ: "OECD via FRED, monthly (mock)" }, rows: [
-        ...mk("FED", [["1996-01-31", 5.5], ["1998-11-17", 4.75], ["2000-05-16", 6.5], ["2001-12-11", 1.75], ["2003-06-25", 1], ["2006-06-29", 5.25], ["2008-12-16", 0.25], ["2015-12-17", 0.5], ["2018-12-20", 2.5], ["2020-03-16", 0.25], ["2022-03-17", 0.5], ["2023-07-27", 5.5], ["2024-12-19", 4.5], ["2025-12-11", 3.75], ["2026-10-29", 4.0]]),
-        ...mk("ECB", [["1999-01-01", 2], ["2000-10-06", 3.75], ["2003-06-06", 1], ["2008-07-09", 3.25], ["2009-05-13", 0.25], ["2014-06-11", -0.1], ["2019-09-18", -0.5], ["2022-07-27", 0], ["2023-09-20", 4], ["2025-06-11", 2], ["2026-09-16", 2.5]]),
-        ...mk("BOE", [["1997-06-06", 6.5], ["2001-11-08", 4], ["2007-07-05", 5.75], ["2009-03-05", 0.5], ["2020-03-19", 0.1], ["2023-08-03", 5.25], ["2025-08-07", 4], ["2026-02-05", 3.75], ["2026-11-05", 4]]),
-        ...mk("BOJ", [["1996-01-31", 0.5], ["1999-02-28", 0.03], ["2006-07-31", 0.25], ["2008-12-31", 0.1], ["2016-02-29", -0.05], ["2024-03-31", 0.08], ["2024-07-31", 0.25], ["2025-01-31", 0.48]]),
-      ] };
-    }
-    case "policy": return { rows: [
-      { bank: "FED", name: "Federal Reserve", rateLabel: "Fed funds target range, upper bound", rate: 4.0, asOf: "2026-11-06", lastChange: "2026-10-29", nextMeeting: null, sourceUrl: "https://www.federalreserve.gov/monetarypolicy/openmarket.htm", sourceNote: "FRED DFEDTARU (mock)" },
-      { bank: "BOJ", name: "Bank of Japan", rateLabel: "Uncollateralised overnight call rate", rate: null, asOf: null, lastChange: null, nextMeeting: null, sourceUrl: "https://www.boj.or.jp/en/mopo/mpmdeci/index.htm", sourceNote: null },
-      { bank: "ECB", name: "European Central Bank", rateLabel: "Deposit facility rate", rate: null, asOf: null, lastChange: null, nextMeeting: null, sourceUrl: "https://www.ecb.europa.eu/stats/policy_and_exchange_rates/key_ecb_interest_rates/html/index.en.html", sourceNote: null },
-    ] };
+    // every bank the server keeps (its policy_rates rows), the Fed first as the views have it
+    case "policy_history": return { rows: S.policy.history as PolicyStep[], sources: S.policy.sources };
+    case "policy": return { rows: S.policy.rows as PolicyRow[] };
     default: return { rows: [] };
   }
 }

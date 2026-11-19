@@ -35,8 +35,16 @@ npm ci
 VITE_API_URL=https://<project-ref>.supabase.co/functions/v1/api npm run dev
 # layout preview without a backend (dev server only):
 VITE_DEV_BYPASS=1 npm run dev
+# the same with a stand-in feed on every tab (dev server only; MOCK on every screen):
+VITE_DEV_MOCK=1 VITE_DEV_BYPASS=1 npm run dev
 npm run build          # typecheck + production build into web/dist
 ```
+
+The stand-in feed (`web/src/lib/mock.ts`) fills every tab: generated prices and charts, and the stand-in rows of
+`web/src/lib/standin.json` (calendar, headlines, research, earnings dates, alerts, a watchlist, policy rates), which
+the browser checks answer with too. Its times are counted from when the page opens. The watchlist is kept in the
+browser (`om_mock_watch`), so stars and the add box work; `?mock=empty` in the address shows every tab with no rows.
+None of it is in a production build.
 
 ## Deploy
 
@@ -51,7 +59,8 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, about 800 checks in 19 suites): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, about 900 checks in 21 suites): every tab on a desktop and in the phone layout, the
+  local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site), the
   stock page (chart marks, performance, statements), the classic phone layout, the sign-in screen, creating an
   account by verification email, the manager's accounts list, the
   home-screen hint, the new-version bar, opening without a connection, notifications, a tab that fails
