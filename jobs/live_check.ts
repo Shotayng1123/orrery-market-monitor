@@ -195,5 +195,28 @@ async function main(): Promise<void> {
     else { const rows = (acc.data ?? []) as Array<{ status: string; welcomed_at: string | null; welcome_tries: number | null }>, open = rows.filter((r) => r.status === "active"), had = open.filter((r) => r.welcomed_at), gaveUp = open.filter((r) => !r.welcomed_at && (r.welcome_tries ?? 0) >= 3), last = had.map((r) => r.welcomed_at as string).sort().pop();
       console.log(`  welcome email: ${had.length} of ${open.length} open accounts have had it${last ? ` (the last one ${age(last)})` : ""}; ${open.length - had.length - gaveUp.length} get it at their next sign-in; ${gaveUp.length} given up after three failed sendings`); }
   });
+
+  // The one part that is not read-only, and it runs only when asked for by name ("token"), never with the others:
+  // the database asks GitHub to start a run of this same check (its counts part: read-only, no model, no cost) and
+  // GitHub's answer is printed. 204 = the stored token works; the run it started appears under Actions > live-check.
+  if (ONLY.includes("token")) {
+    head("the GitHub token: the database asks GitHub to start a workflow");
+    try {
+      const r = await sb.rpc("monitor_dispatch", { p_workflow: "live-check.yml", p_inputs: { only: "counts" } });
+      if (r.error) console.log(`  could not ask: ${r.error.message}`);
+      else if (r.data == null) console.log("  no GitHub token is stored in the database: nothing was asked (the repository secret NOTE_DISPATCH_TOKEN, then a run of deploy-server)");
+      else {
+        const asked = Date.now(); let said = false;
+        for (let k = 0; k < 8 && !said; k++) {
+          await new Promise((res) => setTimeout(res, 5000));
+          const st = await sb.rpc("monitor_dispatch_status");
+          const row = ((st.data ?? []) as Array<{ at: string; workflow: string; status: number | null; answer: string | null }>).find((x) => x.workflow === "live-check.yml" && Date.parse(x.at) >= asked - 60000);
+          if (st.error) { console.log(`  asked, but the answer could not be read: ${st.error.message}`); said = true; }
+          else if (row && row.status != null) { console.log(`  GitHub answered ${row.status} after ${Math.round((Date.now() - asked) / 1000)} s: ${row.status === 204 ? "accepted. The token stored in the database starts this repository's workflows" : row.status === 401 ? "the token is wrong or has expired" : row.status === 403 || row.status === 404 ? "the token may not start workflows of this repository (it needs Actions: Read and write on this repository)" : (row.answer ?? "").slice(0, 160)}`); said = true; }
+        }
+        if (!said) console.log("  asked, but GitHub's answer had not arrived after 40 s");
+      }
+    } catch (e) { console.log(`  could not be done: ${e instanceof Error ? e.message : String(e)}`); }
+  }
 }
 main().catch((e) => { console.error(e); process.exit(1); });
