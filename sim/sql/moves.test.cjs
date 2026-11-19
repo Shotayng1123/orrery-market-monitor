@@ -56,6 +56,15 @@ const ck = (name, cond, detail) => { if (cond) { pass++; console.log("  ✓ " + 
   await db.exec(small); await db.exec(small);
   await put("NVDA", "p2", "2026-01-29"); await put("NVDA", "b2", "2026-02-05");
   ck("the second level's kinds (a smaller peak, a smaller bottom) can be queued once its change is applied, not before", early2 && Number((await one("select count(*) as n from move_causes where symbol = 'NVDA' and kind in ('p2','b2')")).n) === 2);
+  // every large company follows the second rule: the first rule's moves that were still waiting leave the queue
+  await db.exec(`insert into move_causes (symbol, kind, d, from_d, pct, ctx, status, tries) values
+    ('OLD', 'w1', '2026-09-01', '2026-08-25', -11.0, '{}', 'queued', 0), ('OLD', 'm1', '2026-09-02', '2026-08-10', 22.0, '{}', 'error', 1),
+    ('OLD', 'd1', '2026-09-03', '2026-09-02', -6.0, '{}', 'queued', 0), ('OLD', 'd1', '2026-09-04', '2026-09-03', 12.0, '{}', 'queued', 0),
+    ('OLD', 'd1', '2026-09-05', '2026-09-04', -5.5, '{}', 'found', 1), ('OLD', 'w1', '2026-09-06', '2026-09-01', 10.5, '{}', 'not_found', 1)`);
+  const rule = fs.readFileSync(path.join(MIG, "20261119000005_move_queue_rule.sql"), "utf8");
+  await db.exec(rule); await db.exec(rule);
+  const left = (await db.query("select kind, d::text as d, status from move_causes where symbol = 'OLD' order by d")).rows.map((r) => `${r.kind} ${r.d.slice(5)} ${r.status}`);
+  ck("the first rule's waiting moves are taken off the queue (a week, a month, a day under 10%, waiting or failed); a waiting day of 10% stays, and so does every answer already stored", left.join() === "d1 09-04 queued,d1 09-05 found,w1 09-06 not_found" && Number((await one("select count(*) as n from move_causes where symbol = 'NVDA' and kind in ('pk','bt','p2','b2')")).n) === 4, left);
   ck("before the change of 19 Nov a peak cannot be queued; after it (applied twice) a peak and a bottom can, the earlier kinds still can, and an unknown kind is still refused", early && still && Number((await one("select count(*) as n from move_causes where symbol = 'NVDA' and kind in ('pk','bt')")).n) === 2 && Number((await one("select count(*) as n from move_causes where kind in ('d1','w1','m1')")).n) >= 3);
   await db.exec("update move_causes set status = 'found' where status = 'queued'");
   ck("once nothing waits, nothing is asked", (await kick()) === "nothing queued");

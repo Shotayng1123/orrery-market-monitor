@@ -8,18 +8,21 @@
 // only the largest is kept. Each move is dated by the day it ends on, which is where its mark sits on the chart.
 // Shown for large companies only: 1tn yen and above, or 10bn US dollars and above.
 //
-// A second rule is on trial (Shota, 19 Nov 2026), for the stocks named in SWING_TRIAL: fewer marks, each one a
-// place a reader would ask about on a twelve-month chart.
+// Since 19 Nov 2026 the page follows a second rule (MOVE_RULE = "swings"): fewer marks, each one a place a reader
+// would ask about on a twelve-month chart. One volatile company had 54 marks in twelve months by the first rule,
+// each a look-up of about USD 0.22. It was tried on Nvidia that morning, tuned, and then made the rule for every
+// large company the same day.
 //   d1   a day that closed 10% or more away from the previous close
 //   pk   a new peak: the highest close of a rise, marked once the close has since fallen 15% from it, and only if
 //        it was the highest close of the twelve months before it
 //   bt   a bottom: the lowest close of a fall, marked once the close has since risen 15% from it
 //   p2   a smaller peak, b2 a smaller bottom: the same with turns of SWING_PCT_2 per cent, for the detail between
-//        the large ones (added the same day: the large turns alone were "a bit too rough"); a large peak that
-//        was not a twelve-month high is among them
+//        the large ones (the large turns alone were "a bit too rough"); a large peak that was not a twelve-month
+//        high is among them
 // Peaks and bottoms are the turning points of the closes when only moves of that size count (the same reading
 // whichever day it is made on: a turning point, once marked, does not move). On the page a peak is red and a
 // bottom green: the colour is the turn the stock took there, which is what its reason tells.
+// The first rule (d1 from 5%, w1, m1) is kept below and is what bigMoves gives when asked for "classic".
 import { barOnOrBefore, type Bar } from "./stockstats.ts";
 import type { MoveCtx } from "./movecause.ts";
 
@@ -27,11 +30,9 @@ export const BIG_D1 = 5, BIG_W1 = 10, BIG_M1 = 20, WEEK = 5, MONTH = 21;
 // The smaller turn was chosen on Nvidia's closes of 19 Nov 2026, where the large turns alone gave 4 marks in
 // twelve months: turns of 12% add 2, of 10% add 6, of 8% add 10, of 7% add 12, of 6% add 18.
 export const SWING_D1 = 10, SWING_PCT = 15, SWING_PCT_2 = 10, SWING_HIGH_DAYS = 252;
-/** The stocks whose page uses the rule on trial. While this is not empty, reasons are looked up for these stocks
- *  only (stock.ts, jobs/move_causes.ts): the look-ups for every other stock wait for the rule to be settled. */
-export const SWING_TRIAL: ReadonlySet<string> = new Set(["NVDA"]);
 export type MoveRule = "classic" | "swings";
-export const ruleFor = (symbol: string): MoveRule => (SWING_TRIAL.has(symbol) ? "swings" : "classic");
+/** The rule the page and the look-up job follow. */
+export const MOVE_RULE: MoveRule = "swings";
 export interface BigMove { kind: "d1" | "w1" | "m1" | "pk" | "bt" | "p2" | "b2"; dir: 1 | -1; pct: number; from: string; to: string; fromPx: number; toPx: number; t: number }
 const iso = (t: number): string => new Date(t * 1000).toISOString().slice(0, 10);
 const mv = (kind: BigMove["kind"], a: Bar, b: Bar): BigMove => { const pct = (b.c / a.c - 1) * 100; return { kind, dir: pct >= 0 ? 1 : -1, pct, from: iso(a.t), to: iso(b.t), fromPx: a.c, toPx: b.c, t: b.t }; };
@@ -96,7 +97,7 @@ export function turningPoints(bars: Bar[], pct = SWING_PCT, highDays = SWING_HIG
 }
 
 /** Every big move in the bars (time order, one per trading day) that ends on or after `sinceT`, newest first,
- *  by the usual rule or by the one on trial. */
+ *  by the first rule ("classic") or by the one the page follows since 19 Nov 2026 ("swings"). */
 export function bigMoves(bars: Bar[], sinceT = 0, rule: MoveRule = "classic"): BigMove[] {
   const b = bars.filter((x) => x.c > 0);
   if (rule === "swings") {

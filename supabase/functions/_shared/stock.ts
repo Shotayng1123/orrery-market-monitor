@@ -10,7 +10,7 @@ import { avgTurnover, betaCorr, maxDrawdown, perfRows, range52w, realisedVol, ty
 import { justReported, resultsDateToWatch, valuation, type Fin, type FinLine } from "./fin.ts";
 import { yahooFin, yahooFinTypes } from "./finsrc.ts";
 import { edinetStatements } from "./edinet.ts";
-import { SWING_D1, SWING_PCT, SWING_PCT_2, SWING_TRIAL, bigMoves, isLargeCap, moveCtx, moveText, ruleFor, settledBars, siblingKind, type BigMove, type MoveRule } from "./bigmoves.ts";
+import { MOVE_RULE, SWING_D1, SWING_PCT, SWING_PCT_2, bigMoves, isLargeCap, moveCtx, moveText, settledBars, siblingKind, type BigMove, type MoveRule } from "./bigmoves.ts";
 import { stockMarket } from "./moves.ts";
 import { localDate, marketById, marketState } from "./sessions.ts";
 import type { MoveCtx } from "./movecause.ts";
@@ -80,15 +80,12 @@ const MOVES_SHOWN_MONTHS = 37;    // the chart's longest view is 36 months
 const CAUSES_FOR_DAYS = 366;      // reasons are looked up for moves of the last twelve months
 const QUEUE_PER_VIEW = 15;        // at most this many new look-ups are queued by one opening of a page
 const CAUSE_TRIES = 3;            // the job gives a look-up that fails this many tries, then leaves it (jobs/move_causes.ts)
-type MoveOut = BigMove & { text: string; status: "found" | "not_found" | "queued" | "failed" | "old" | "off" | "paused"; cause: string | null; sources: Array<{ title: string; url: string }> };
+type MoveOut = BigMove & { text: string; status: "found" | "not_found" | "queued" | "failed" | "old" | "off"; cause: string | null; sources: Array<{ title: string; url: string }> };
 /** The big moves of a large company with the reason stored for each. A move of the last twelve months with no
  *  reason yet is put on the queue for the job that finds them (jobs/move_causes.ts) and shown as being looked up.
  *  Where the store is not there (a database from before this change) the moves are shown without reasons. */
 async function movesFor(symbol: string, q: { name: string | null; exchange: string | null; currency: string | null; marketCap: number | null }, sector: string | null, own: Bar[], bench: { name: string; bars: Bar[] } | null): Promise<{ eligible: boolean; rule: MoveRule; sizes?: { day: number; large: number; small: number }; rows: MoveOut[] }> {
-  // A second rule is on trial for the stocks in SWING_TRIAL (bigmoves.ts). While it is, reasons are looked up for
-  // those stocks only: every other stock keeps its marks and the reasons already found, and a move without one
-  // is shown as on hold, not as being looked up.
-  const rule = ruleFor(symbol), paused = SWING_TRIAL.size > 0 && rule === "classic";
+  const rule = MOVE_RULE;
   if (!isLargeCap(q.marketCap, q.currency, q.currency === "JPY" ? 1 : await perUsd(q.currency))) return { eligible: false, rule, rows: [] };
   const now = Date.now() / 1000;
   // a session still in progress is not yet a day's move
@@ -103,9 +100,8 @@ async function movesFor(symbol: string, q: { name: string | null; exchange: stri
     const answered = (x?: { status: string }) => !!x && (x.status === "found" || x.status === "not_found");
     const text = moveText(m), hit = answered(own) || !answered(other) ? own ?? other : other;
     if (error) return { ...m, text, status: "off", cause: null, sources: [] };
-    if (hit && (hit.status === "found" || hit.status === "not_found" || !paused)) return { ...m, text, status: hit.status === "found" ? "found" : hit.status === "not_found" ? "not_found" : hit.status === "error" && hit.tries >= CAUSE_TRIES ? "failed" : "queued", cause: hit.status === "found" ? hit.cause : null, sources: hit.status === "found" ? hit.sources ?? [] : [] };
+    if (hit) return { ...m, text, status: hit.status === "found" ? "found" : hit.status === "not_found" ? "not_found" : hit.status === "error" && hit.tries >= CAUSE_TRIES ? "failed" : "queued", cause: hit.status === "found" ? hit.cause : null, sources: hit.status === "found" ? hit.sources ?? [] : [] };
     if (now - m.t > CAUSES_FOR_DAYS * 86400) return { ...m, text, status: "old", cause: null, sources: [] };
-    if (paused) return { ...m, text, status: "paused", cause: null, sources: [] };
     if (queue.length < QUEUE_PER_VIEW) {
       const ctx: MoveCtx = moveCtx(m, { symbol, name: q.name ?? symbol, exchange: q.exchange, sector, currency: q.currency }, bench);
       queue.push({ symbol, kind: m.kind, d: m.to, from_d: m.from, pct: m.pct, ctx });

@@ -29,27 +29,27 @@ export type ShortData =
   | { kind: "finra"; d: string; ratio: number }
   | { kind: "jpx"; d: string; ratio: number; shares: number | null; daysToCover: number | null; holders: Array<{ holder: string; ratio: number; d: string }> }
   | { kind: "interest"; d: string | null; shares: number | null; pctFloat: number | null; pctOut: number | null; daysToCover: number | null; prior: number | null; priorDate: string | null; finra: { d: string; ratio: number } | null };
-/** A big move of the stock (supabase/functions/_shared/bigmoves.ts): a day of 5% or more, five sessions of 10% or
- *  more, or a fall or rise of 20% or more within a month; by the rule on trial (19 Nov 2026) a day of 10% or
- *  more (d1), a new peak (pk) or a bottom (bt). `text` says it in words. `status` is where the search for its
- *  reason stands: found (with `cause` and `sources`), not_found (searched, nothing reliable), queued (being
- *  looked up), failed (the look-up itself failed three times), old (older than the twelve months reasons are
- *  looked up for), off (this server does not look reasons up), paused (look-ups for this stock are on hold while
- *  the rule is on trial for others). */
-export interface MoveRow { kind: "d1" | "w1" | "m1" | "pk" | "bt" | "p2" | "b2"; dir: 1 | -1; pct: number; from: string; to: string; fromPx: number; toPx: number; t: number; text: string; status: "found" | "not_found" | "queued" | "failed" | "old" | "off" | "paused"; cause: string | null; sources: Array<{ title: string; url: string }> }
+/** A big move of the stock (supabase/functions/_shared/bigmoves.ts). Since 19 Nov 2026: a day of 10% or more
+ *  (d1), a new peak (pk) or a bottom (bt) of its closes, or a smaller peak (p2) or bottom (b2); before that a day
+ *  of 5% or more, five sessions of 10% or more (w1), or a fall or rise of 20% or more within a month (m1).
+ *  `text` says it in words; `dir` is its colour: the day's move, and for a peak down, for a bottom up. `status`
+ *  is where the search for its reason stands: found (with `cause` and `sources`), not_found (searched, nothing
+ *  reliable), queued (being looked up), failed (the look-up itself failed three times), old (older than the
+ *  twelve months reasons are looked up for), off (this server does not look reasons up). */
+export interface MoveRow { kind: "d1" | "w1" | "m1" | "pk" | "bt" | "p2" | "b2"; dir: 1 | -1; pct: number; from: string; to: string; fromPx: number; toPx: number; t: number; text: string; status: "found" | "not_found" | "queued" | "failed" | "old" | "off"; cause: string | null; sources: Array<{ title: string; url: string }> }
 export type MoveRule = "classic" | "swings";
 export interface MoveSizes { day: number; large: number; small: number }
 /** A smaller peak or bottom: drawn as a smaller circle and a smaller dot. */
 export const isSmallMove = (m: { kind: MoveRow["kind"] }): boolean => m.kind === "p2" || m.kind === "b2";
 /** The rule a stock's marks follow, in the words of the page: the short parts for the panel's header and one
- *  sentence for the phone. A server from before the trial sends no rule: that is the usual one. The sizes of the
- *  rule on trial come from the server (they are being tuned); the defaults are those of its first day. */
-export function moveRule(rule?: MoveRule, z: MoveSizes = { day: 10, large: 15, small: 10 }): { trial: boolean; parts: string[]; note: string } {
+ *  sentence for the phone. The sizes come from the server with the rows; the defaults are those of 19 Nov 2026.
+ *  A server from before that day sends no rule: its marks follow the first one. */
+export function moveRule(rule?: MoveRule, z: MoveSizes = { day: 10, large: 15, small: 10 }): { parts: string[]; note: string } {
   return rule === "swings"
-    ? { trial: true, parts: [`${z.day}% in a day`, "peaks red, bottoms green", `large circles: turns of ${z.large}%, a peak only when a 12-month high`, `small circles: turns of ${z.small}%`], note: `On trial for this stock: a day of ${z.day}% or more, and the peaks (red) and bottoms (green) of its closes. Large circles are turns of ${z.large}% or more, a peak only when it was a 12-month high; small circles are turns of ${z.small}%. Each is marked once the price has turned that far from it.` }
-    : { trial: false, parts: ["5% in a day", "10% in five sessions", "20% from high to low, or low to high, within a month"], note: "A day of 5% or more, five sessions of 10% or more, or 20% from a high to a low (or a low to a high) within a month." };
+    ? { parts: [`${z.day}% in a day`, "peaks red, bottoms green", `large circles: turns of ${z.large}%, a peak only when a 12-month high`, `small circles: turns of ${z.small}%`], note: `A day of ${z.day}% or more, and the peaks (red) and bottoms (green) of the closes. Large circles are turns of ${z.large}% or more, a peak only when it was a 12-month high; small circles are turns of ${z.small}%. Each is marked once the price has turned that far from it.` }
+    : { parts: ["5% in a day", "10% in five sessions", "20% from high to low, or low to high, within a month"], note: "A day of 5% or more, five sessions of 10% or more, or 20% from a high to a low (or a low to a high) within a month." };
 }
-export const whyText = (m: MoveRow): string => (m.status === "found" && m.cause ? m.cause : m.status === "not_found" ? "No reliable report of the reason was found." : m.status === "queued" ? "The reason is being looked up; it appears here when found." : m.status === "failed" ? "The look-up for this move failed; no reason is shown." : m.status === "old" ? "Not looked up: reasons are searched for moves of the last twelve months." : m.status === "paused" ? "Not looked up yet: look-ups are on hold while a new rule for these marks is tried on one stock." : "Reasons are not looked up on this server yet.");
+export const whyText = (m: MoveRow): string => (m.status === "found" && m.cause ? m.cause : m.status === "not_found" ? "No reliable report of the reason was found." : m.status === "queued" ? "The reason is being looked up; it appears here when found." : m.status === "failed" ? "The look-up for this move failed; no reason is shown." : m.status === "old" ? "Not looked up: reasons are searched for moves of the last twelve months." : "Reasons are not looked up on this server yet.");
 /** The moves as marks for the chart: one per day (the moves that end the same day share a circle, coloured by the
  *  largest; a small circle when they are all smaller peaks or bottoms). */
 export function chartMarks(rows: MoveRow[]): Array<{ t: number; dir: 1 | -1; small: boolean; title: string; items: Array<{ text: string; why: string }> }> {
