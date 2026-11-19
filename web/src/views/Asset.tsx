@@ -137,7 +137,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
         )}
       </Panel>
       {d.moves.eligible && (
-        <Panel no="05" title="BIG MOVES AND WHY" span={12} aux={<><span className="nb">{d.moves.rows.length} in three years, newest first</span>{rule.trial && <> · <span className="nb warn" id="st-rule">RULE ON TRIAL</span></>}{rule.parts.map((x) => <span key={x}> · <span className="nb">{x}</span></span>)} · <span className="nb">marked on the 3M, 12M and 36M charts</span></>}>
+        <Panel no="05" title="BIG MOVES AND WHY" span={12} aux={<><span className="nb">{d.moves.rows.length} in three years, newest first</span>{rule.parts.map((x) => <span key={x}> · <span className="nb">{x}</span></span>)} · <span className="nb">marked on the 3M, 12M and 36M charts</span></>}>
           {d.moves.rows.length ? (
             // a short box with its own scrolling (Shota, 19 Nov 2026): the whole list pushed FINANCIALS a long way down
             <div className="mvbox" id="st-movebox" tabIndex={0} aria-label="Big moves, newest first">

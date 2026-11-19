@@ -29,8 +29,9 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
   ] },
   { title: "Single-name page", rows: [
     ["Performance", "Price change against the benchmark over each window, dividends not included. A Tokyo name is set against both the Nikkei 225 and TOPIX."],
-    ["Big moves", "For companies of 1tn yen and above, or 10bn US dollars and above: 5% in a day, 10% in five sessions, or 20% from a high to a low (or a low to a high) within a month. Each is a circle on the 3M, 12M and 36M charts; tap or click it for the move and its reason."],
-    ["The reason", "Looked up by web search for moves of the last twelve months, and shown only with the reports it rests on, which are linked. Otherwise the page says that no reliable report was found, or that the look-up is still under way."],
+    ["Big moves", "For companies of 1tn yen and above, or 10bn US dollars and above: a day that closed 10% or more from the previous close, and the peaks and bottoms of the closes. A large circle is a turn of 15% or more (a peak only when it was a 12-month high), a small circle a turn of 10%. Each is a circle on the 3M, 12M and 36M charts; tap or click it for the move and its reason."],
+    ["Their colour", "A peak is red and a bottom green, whatever the move into it: the colour is the turn the stock took there. A day's move is green for a rise and red for a fall. A peak or a bottom appears once the price has turned that far from it, so the stretch still running has none yet."],
+    ["The reason", "Looked up by web search for marks of the last twelve months: for a peak or a bottom, what ended the rise or the fall there. Shown only with the reports it rests on, which are linked. Otherwise the page says that no reliable report was found, or that the look-up is still under way."],
     ["Financials", "Tokyo-listed companies: EDINET DB (有価証券報告書 and 決算短信). Other companies: Yahoo Finance fundamentals; a line the source has no figure for in any period (R&D or buybacks, for example) is left out. The source and the date fetched are at the top of the panel."],
     ["Short interest", "Tokyo: JPX short-position reports. United States: exchange-reported short interest, and FINRA's short-volume share of a day's trading, which is not short interest."],
     ["Next earnings (est.)", "A date estimated by Yahoo Finance, not confirmed by the company."],

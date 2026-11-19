@@ -266,11 +266,30 @@ checked in `sim/logic.test.ts` (sections L to P).
 
 ## Big moves and why (added 2026-11-18)
 
-For a company of 1tn yen and above, or 10bn US dollars and above, the stock page marks on the chart: a day that
-closed 5% or more from the previous close; five sessions that moved the close 10% or more; and, within 21
-sessions, a fall of 20% or more from a high to a later low or a rise of 20% or more from a low to a later high.
-Overlapping weeks (or months) in the same direction give one mark, the largest. A session still in progress is
-not counted. The rules are `_shared/bigmoves.ts`.
+For a company of 1tn yen and above, or 10bn US dollars and above, the stock page marks on the chart (the rule
+since 19 Nov 2026, `MOVE_RULE = "swings"` in `_shared/bigmoves.ts`):
+
+- a day that closed 10% or more from the previous close;
+- a **bottom**: the lowest close of a fall, marked once the close has since risen 15% from it;
+- a **new peak**: the highest close of a rise, marked once the close has since fallen 15% from it, and only if
+  it was the highest close of the twelve months before it;
+- the **smaller peaks and bottoms**: the same with turns of 10%, and with them a large peak that was not a
+  twelve-month high.
+
+Peaks and bottoms are the turning points of the closes when only moves of that size count (`turningPoints`), so a
+point, once marked, does not move; the stretch still running has none yet. A smaller point becomes a large one on
+the same day when the turn after it grows to 15%, and keeps its reason (`siblingKind`). A peak is red and a bottom
+green, whatever the move into it: the colour is the turn the stock took there, which is what the reason tells (a
+day keeps the colour of its move); the smaller ones are smaller circles and smaller dots. A session still in
+progress is not counted. The numbers are `SWING_D1`, `SWING_PCT`, `SWING_PCT_2` and `SWING_HIGH_DAYS`; the page is
+told them with the rows.
+
+How the rule came about. The first rule (18 Nov) marked a day of 5%, five sessions of 10% and a swing of 20%
+within a month; one volatile company had 54 such marks in twelve months, each a look-up of about USD 0.22. The
+second rule was tried on Nvidia on 19 Nov: its large level gives 4 marks in twelve months, and smaller turns of
+12% add 2, of 10% add 6, of 8% add 10, of 7% add 12, of 6% add 18; 10% was taken. Its ten reasons cost USD 2.39.
+It became the rule for every large company the same day. The first rule is still in the file (`"classic"`).
+Migration `20261119000005` took the first rule's waiting moves off the queue; answers already stored were kept.
 
 The reason for each move is found outside the database:
 
@@ -309,34 +328,10 @@ in all) and `trace` (print each look-up's searches, the pages returned and the r
 and `SUPABASE_SERVICE_ROLE_KEY` secrets the Morning Note already uses. To see what is waiting or stored:
 `select status, count(*) from move_causes group by 1;`
 
-### A second rule on trial (19 Nov 2026)
-
-One volatile company had 54 marks in twelve months, each a look-up of about USD 0.22. A rule with fewer marks is
-on trial for the stocks named in `SWING_TRIAL` (`_shared/bigmoves.ts`; Nvidia alone to begin with):
-
-- a day that closed 10% or more from the previous close;
-- a **bottom**: the lowest close of a fall, marked once the close has since risen 15% from it;
-- a **new peak**: the highest close of a rise, marked once the close has since fallen 15% from it, and only if
-  it was the highest close of the twelve months before it;
-- a second level, added the same day because the large turns alone were "a bit too rough": the **smaller peaks
-  and bottoms**, the same with turns of 10%, and with them a large peak that was not a twelve-month high.
-
-Peaks and bottoms are the turning points of the closes when only moves of that size count (`turningPoints`), so a
-point, once marked, does not move; the stretch still running has none yet. A smaller point becomes a large one on
-the same day when the turn after it grows to 15%, and keeps its reason (`siblingKind`). On the page a peak is red
-and a bottom green, whatever the move into it: the colour is the turn the stock took there, which is what the
-reason tells (a day keeps the colour of its move); the smaller ones are smaller circles and smaller dots. On
-Nvidia's closes of 19 Nov 2026 the large level gives 4 marks in the last twelve months (the usual rule had queued
-15 and had more to queue); smaller turns of 12% add 2, of 10% add 6, of 8% add 10, of 7% add 12, of 6% add 18.
-The numbers are `SWING_D1`, `SWING_PCT`, `SWING_PCT_2` and `SWING_HIGH_DAYS`; the page is told them with the rows.
-
-While `SWING_TRIAL` is not empty: the page of a stock on trial says RULE ON TRIAL and the rule; every other
-stock keeps the usual marks and the reasons already found, and a move of theirs without an answer reads as on
-hold and is not queued; the `move-causes` job looks up the trial's stocks only, by the rule on trial, and with
-`--seed` (which the workflow passes) first queues their moves itself from the source's daily closes, as the
-page would. For a turning point the question put to the model is what ended the rise or the fall there, with
-the days to search (two before to five after). To end the trial either way, empty `SWING_TRIAL` or make the
-rule on trial the rule for every stock in `ruleFor`.
+For a peak or a bottom the question put to the model is what ended the rise or the fall there, with the days to
+search (two before to five after). The job looks up only the marks of the rule in force, for any stock. With a
+symbol it first puts that stock's marks on the queue itself (`--seed`, an S&P 500 member), as its page would, so
+the reasons can be there before the page is opened: Actions › move-causes › Run workflow with `symbol`.
 
 ## Changing the shared sign-in password
 

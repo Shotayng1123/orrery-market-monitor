@@ -12,20 +12,19 @@
 //   npx tsx move_causes.ts --redo          every move chosen, also one that already has its answer (with --symbol)
 //   npx tsx move_causes.ts --parallel 1    look-ups at a time (default 3)
 //   npx tsx move_causes.ts --trace         print what each look-up did: its searches, the pages returned, its reply
-//   npx tsx move_causes.ts --seed          first put the moves of the trial's stocks on the queue (below)
+//   npx tsx move_causes.ts --symbol NVDA --seed   first put that stock's moves on the queue (below)
 //
-// A second rule for which moves are marked is on trial (Shota, 19 Nov 2026; _shared/bigmoves.ts, SWING_TRIAL):
-// one-day moves of 10% and the peaks and bottoms of the twelve-month chart. While SWING_TRIAL is not empty this
-// job looks up the moves of those stocks only, by that rule; every other stock's queue waits. A stock's page puts
-// its moves on the queue when someone opens it; --seed does the same from here (the source's daily closes, the
-// same rule), so the reasons can be there before the page is first opened.
+// Only the moves the page's rule marks are looked up (_shared/bigmoves.ts, MOVE_RULE; since 19 Nov 2026 a day of
+// 10%, and the peaks and bottoms of the closes): a queue may still hold moves of the first rule. A stock's page
+// puts its moves on the queue when someone opens it; --seed does the same from here for one S&P 500 member (the
+// source's daily closes, the same rule), so its reasons can be there before the page is first opened.
 // Needs ANTHROPIC_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY. Optional: MOVE_CAUSE_MODEL (default
 // claude-opus-5-5), MOVE_CAUSE_EFFORT (default medium), MOVE_CAUSE_SEARCHES (searches allowed a look-up, default 4). Each look-up prints what it cost, how many pages its
 // searches returned, any search that failed, and, when nothing is stored as the reason, which way it came to that.
 import { db } from "./lib/db.js";
 import { ask, newClient } from "./lib/llm.js";
 import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabase/functions/_shared/movecause.js";
-import { SWING_D1, SWING_HIGH_DAYS, SWING_PCT, SWING_TRIAL, bigMoves, moveCtx, settledBars, siblingKind, turningPoints } from "../supabase/functions/_shared/bigmoves.js";
+import { MOVE_RULE, SWING_D1, bigMoves, moveCtx, settledBars, siblingKind } from "../supabase/functions/_shared/bigmoves.js";
 import { localDate, marketById, marketState } from "../supabase/functions/_shared/sessions.js";
 import { spark } from "./lib/yahoo.js";
 
@@ -45,12 +44,11 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const WHY: Record<string, string> = { "none reported": "the model found no report", "no sentence": "the model gave no usable sentence", "no returned page cited": "the model gave a reason but cited no page its searches returned" };
 
 interface Row { symbol: string; kind: string; d: string; ctx: MoveCtx; tries: number }
-const TRIAL = [...SWING_TRIAL];
 const CAUSES_FOR_DAYS = 366, MOVES_SHOWN_MONTHS = 37;   // as on the page (_shared/stock.ts)
 
-/** Puts the moves of one of the trial's stocks on the queue, as its page would: the same daily closes (ten
- *  years, a day still trading left out), the same rule, the same context for the look-up. US-listed members of
- *  the S&P 500 only: that is what the trial holds, and where the name and the sector are read from. */
+/** Puts the moves of one stock on the queue, as its page would: the same daily closes (ten years, a day still
+ *  trading left out), the same rule, the same context for the look-up. US-listed members of the S&P 500 only:
+ *  that is where the name and the sector are read from here. */
 async function seed(sb: ReturnType<typeof db>, symbol: string): Promise<void> {
   const { data: con } = await sb.from("constituents").select("name,name_en,sector").eq("idx", "SP500").eq("symbol", symbol).limit(1);
   const who = (con ?? [])[0] as { name: string; name_en: string | null; sector: string | null } | undefined;
@@ -60,15 +58,10 @@ async function seed(sb: ReturnType<typeof db>, symbol: string): Promise<void> {
   const own = bars(s[symbol]), bench = bars(s["^GSPC"]);
   if (own.length < 300) { console.log(`seed ${symbol}: only ${own.length} daily closes from the source; nothing queued`); return; }
   const now = Date.now() / 1000, m = marketById("NYSE")!, state = marketState(m, new Date());
-  const moves = bigMoves(settledBars(own, state === "OPEN" || state === "BREAK", localDate(m.tz, now)), now - MOVES_SHOWN_MONTHS * 30.5 * 86400, "swings");
+  const moves = bigMoves(settledBars(own, state === "OPEN" || state === "BREAK", localDate(m.tz, now)), now - MOVES_SHOWN_MONTHS * 30.5 * 86400, MOVE_RULE);
   const recent = moves.filter((x) => now - x.t <= CAUSES_FOR_DAYS * 86400);
-  console.log(`seed ${symbol}: ${own.length} daily closes (${new Date(own[0].t * 1000).toISOString().slice(0, 10)} to ${new Date(own[own.length - 1].t * 1000).toISOString().slice(0, 10)}); ${moves.length} marks in three years by the rule on trial, ${recent.length} of them in the last twelve months:`);
+  console.log(`seed ${symbol}: ${own.length} daily closes (${new Date(own[0].t * 1000).toISOString().slice(0, 10)} to ${new Date(own[own.length - 1].t * 1000).toISOString().slice(0, 10)}); ${moves.length} marks in three years, ${recent.length} of them in the last twelve months:`);
   for (const x of moves) console.log(`  ${x.to} ${x.kind} ${x.pct >= 0 ? "+" : ""}${x.pct.toFixed(1)}% (from ${x.from}, ${x.fromPx.toFixed(2)} to ${x.toPx.toFixed(2)})${now - x.t <= CAUSES_FOR_DAYS * 86400 ? "" : "  [older than twelve months: no look-up]"}`);
-  // with --dry: how many marks a second, finer level of turning points would add, for several sizes of turn
-  if (DRY) for (const p2 of [6, 7, 8, 10, 12]) {
-    const t = turningPoints(settledBars(own, state === "OPEN" || state === "BREAK", localDate(m.tz, now)), SWING_PCT, SWING_HIGH_DAYS, p2).filter((x) => now - x.t <= CAUSES_FOR_DAYS * 86400);
-    console.log(`  with smaller turns of ${p2}%: ${t.length} peaks and bottoms in the last twelve months (${t.filter((x) => x.kind === "pk" || x.kind === "bt").length} large, ${t.filter((x) => x.kind === "p2" || x.kind === "b2").length} smaller): ${t.map((x) => `${x.to.slice(5)} ${x.kind} ${x.pct >= 0 ? "+" : ""}${x.pct.toFixed(0)}%`).join(", ")}`);
-  }
   if (DRY || !recent.length) return;
   // a turning point that already has its answer under its other level (a smaller peak that became a large one,
   // or the reverse) is not asked about again
@@ -81,13 +74,12 @@ async function seed(sb: ReturnType<typeof db>, symbol: string): Promise<void> {
 
 async function main(): Promise<void> {
   const sb = db(), client = newClient();
-  if (TRIAL.length && SYMBOL && !SWING_TRIAL.has(SYMBOL)) { console.log(`${SYMBOL} is not in the trial (${TRIAL.join(", ")}): while the rule for big moves is on trial, reasons are looked up for the trial's stocks only. Nothing done.`); return; }
-  if (SEED) for (const sym of SYMBOL ? [SYMBOL] : TRIAL) await seed(sb, sym);
+  if (SEED && !SYMBOL) { console.error("--seed needs --symbol"); process.exit(2); }
+  if (SEED) await seed(sb, SYMBOL);
   let q = sb.from("move_causes").select("symbol,kind,d,ctx,tries");
   if (SYMBOL) q = q.eq("symbol", SYMBOL);
-  // the trial's stocks, and of their moves only those the rule on trial marks (a stock's queue may still hold
-  // moves of the usual rule from before it joined the trial)
-  if (TRIAL.length) q = q.in("symbol", TRIAL).or(`kind.in.(pk,bt,p2,b2),and(kind.eq.d1,or(pct.gte.${SWING_D1},pct.lte.-${SWING_D1}))`);
+  // only the moves the page's rule marks: a queue may still hold moves of the first rule
+  if (MOVE_RULE === "swings") q = q.or(`kind.in.(pk,bt,p2,b2),and(kind.eq.d1,or(pct.gte.${SWING_D1},pct.lte.-${SWING_D1}))`);
   if (!REDO) q = q.in("status", AGAIN ? ["queued", "error", "not_found"] : ["queued", "error"]).lt("tries", MAX_TRIES);
   const { data, error } = await q.order("d", { ascending: false }).limit(MAX);
   if (error) {
@@ -96,7 +88,7 @@ async function main(): Promise<void> {
     throw new Error(error.message);
   }
   const rows = (data ?? []) as Row[];
-  console.log(`${rows.length} move(s) to look up (model ${MODEL}, effort ${EFFORT}, up to ${SEARCHES} searches each, ${PARALLEL} at a time${TRIAL.length ? `, the trial's stocks only: ${TRIAL.join(", ")}` : ""}${SYMBOL ? `, ${SYMBOL} only` : ""}${REDO ? ", including those already answered" : AGAIN ? ", including those stored as not found" : ""})`);
+  console.log(`${rows.length} move(s) to look up (model ${MODEL}, effort ${EFFORT}, up to ${SEARCHES} searches each, ${PARALLEL} at a time${SYMBOL ? `, ${SYMBOL} only` : ""}${REDO ? ", including those already answered" : AGAIN ? ", including those stored as not found" : ""})`);
   let found = 0, none = 0, failed = 0, cost = 0;
   const work = [...rows];
   await Promise.all(Array.from({ length: PARALLEL }, async () => {
