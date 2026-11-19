@@ -42,7 +42,8 @@ npm run build          # typecheck + production build into web/dist
 
 The stand-in feed (`web/src/lib/mock.ts`) fills every tab: generated prices and charts, and the stand-in rows of
 `web/src/lib/standin.json` (calendar, headlines, research, earnings dates, alerts, a watchlist, policy rates), which
-the browser checks answer with too. Its times are counted from when the page opens. The watchlist is kept in the
+the browser checks answer with too. Its times are counted from when the page opens; the headlines reach 31 hours
+back, so they always cross a midnight in Singapore and show their day bars at any hour. The watchlist is kept in the
 browser (`om_mock_watch`), so stars and the add box work; `?mock=empty` in the address shows every tab with no rows.
 None of it is in a production build.
 
@@ -69,15 +70,18 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   while it is drawn (it says so in its own space; the header and the other tabs stay), the welcome email as its
   reader sees it, a price feed that has stopped (the bar and the DATA chip say so), and the opening.
   The **layout guard** (`layout-guard`) opens all eight screens at five computer sizes (1280×720 to 2560×1440, and
-  1440×900 with small text) and on two phones, and fails a publish if a figure is cut (past the edge of a box that
-  hides its overflow, behind an ellipsis, or half outside it at the top or foot), a chart's axis label runs off its
-  canvas, anything scrolls sideways (a phone's statements and wide phone tables do so by design), or a phone tap
-  target is under 44 × 44 px, measured on what takes the tap (a drop-down's transparent select, a toggle's reach);
-  the few targets the designer listed as still small are printed with the change that fixes them. It also cuts
-  figures on purpose with throwaway styles, to show that it fails when one is cut. XL text and the one-screen
+  1440×900 with small text) and on two phones, and fails a publish if a figure is cut, unit and all (past the edge of
+  a box that hides its overflow, behind an ellipsis, or half outside it at the top or foot: "-4.8bp" showing as
+  "-4.8" is a cut figure), a figure is painted over by another element or clipped by a clip-path (each figure is
+  hit-tested where it stands, the page moved down a screen at a time), a chart's axis label runs off its canvas,
+  anything scrolls sideways (a phone's statements and wide phone tables do so by design), or a phone tap target is
+  under 44 × 44 px, measured on what takes the tap (a drop-down's transparent select, a toggle's reach); the few
+  targets the designer listed as still small are printed with the change that fixes them. It also cuts, clips and
+  covers figures on purpose with throwaway styles, to show that it fails each time. XL text and the one-screen
   layout join it once they are fixed. `nothing-cut` checks the designer's findings behind it one by one (whole
-  columns in a phone's statements, short interest at its natural height, chart titles, long headlines, phone
-  search, the watchlist's two columns, curve labels, the header's alert line).
+  columns in a phone's statements, short interest at its natural height, chart titles, long headlines under day
+  bars, phone search, the watchlist's two columns, curve labels, the header's alert line for every kind of alert),
+  in ways that hold at any time of day.
   `cd web && npm run e2e` starts the test servers it needs and runs them all (about seven minutes, three suites at
   a time); `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
   Needs Playwright's browser once: `npx playwright install chromium`.

@@ -19,13 +19,13 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
     ["Moving back", "Drag a chart to the right to move back in time (the chart follows your hand), to the left to come forward again; double-click to return to the latest."],
   ] },
   { title: "Equities", rows: [
-    ["Drivers", "Four instruments that move the index: its future, a currency, a yield or a volatility index, each with its own chart."],
-    ["Market breadth", "How many index members rose or fell over each window, their median and average move, and how many sat above their 50- and 200-day averages at the start of the window. Beside it, three years of the share above those averages and of the advancers (a ten-session average)."],
+    ["Drivers", "Four related markets shown beside the index, each with its own chart. Depending on the index: an index future, other stock indices, a currency or the dollar index, a government bond yield, the VIX, or copper. They are there to compare with: the Monitor does not measure how much any of them moves the index."],
+    ["Market breadth", "How many index members rose or fell over each window, their median and average move, and how many sat above their 50- and 200-day averages at the start of the window. On a computer, beside it, three years of the share above those averages and of the advancers (a ten-session average). The start-of-window figures and the three-year chart count today's members on each past day: a company that has left the index is not in them, and one that joined later is counted from before it joined."],
     ["Flow by sector · 1D", "Turnover is the value traded today. Share % is the sector's part of the index's turnover; Avg % its usual part; Δ pp the difference. Day / avg is today's turnover against the three-month average."],
     ["Net flow 1D", "Today's turnover signed by the move from the previous close and scaled by the day's range, capped at the full turnover. One session only: it does not follow PERIOD."],
     ["Sector performance", "GICS sectors, weighted by index weight where published, otherwise by market capitalisation."],
     ["Heat map", "Each tile is a company: size is market capitalisation, colour the 1D move."],
-    ["Movers", "The fifteen largest rises and falls of the day (1D) among the index's members, each with its change over the last week (1W) beside it."],
+    ["Movers", "The largest rises and falls of the day (1D) among the index's members: fifteen each on a computer, each with its change over the last week (1W) beside it; ten each on a phone, 1D only."],
     ["Short interest", "Japan, from JPX: the short-selling ratio (空売り集計), the share of TSE turnover sold short, with its scale and dates under the chart; the short-position reports (空売り残高報告) of holders of 0.5% and more, by name, with the date of the latest report; the share by sector; the margin balances (信用取引現在高). United States: FINRA's short-sale volume share."],
     ["SHORT POS % · SHORT VOL %", "In a sector's list: for Tokyo, the reported short positions as a share of the shares; for the US, FINRA's share of the day's volume sold short, which is not short interest."],
     ["STAND-IN", "A narrower index whose members stand in for a broader one, for example the Nasdaq-100 for the Nasdaq Composite."],
@@ -44,8 +44,8 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
   { title: "Watchlist", rows: [
     ["Adding a name", "Type part of a company's name or of its ticker and choose from the candidates; or use the star beside a name on its page."],
     ["What it adds", "Its earnings dates, its headlines, the research that mentions it, and alerts on it read from one-minute prices."],
-    ["As of", "What each line's figures are as of, in SGT: a stock at its last close (the date), a market instrument at its last print (the time today, otherwise the date and time), an official yield at the date it was published for. The sources are named at the top of the list."],
-    ["Yields", "A yield's changes are in basis points (bp), the same figures as on MARKETS; its level ends in %."],
+    ["As of", "What each line's figures are as of, in SGT: a stock at its last close (the date), a market instrument at its last print (the time today, otherwise the date and time), an official yield at the date it was published for. The sources are named at the top of the list on a computer, in a note under it on a phone."],
+    ["Yields", "A yield's changes are in basis points (bp), the same figures as on MARKETS; its level ends in %. A Treasury yield index that is not on MARKETS (the 13-week bill's, ^IRX) is read the same way."],
   ] },
   { title: "Alerts", rows: [
     ["Moves", "A single stock beyond its line at any point in the session, or an index beyond ±3%, against the previous close. The line is ±5% for a large company (1tn yen and above in Tokyo, 10bn US dollars and above elsewhere) and ±7% for the rest. For a stock the figure is the largest move of the session, also after it has come back; the official close is measured too."],
@@ -54,7 +54,7 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
     ["Buyback, guidance", "Raised from headlines, for companies worth USD 5bn or more."],
     ["M&A", "Raised from headlines that state a deal size of USD 1bn or more."],
     ["NEW ALERT", "An alert you have not opened yet, raised in the last half hour."],
-    ["The line", "Beside the tabs, the newest alert: its company, its move and its time (a news alert: its kind and its company). Only a long name is ever shortened; the whole message is on hover and in the list a click opens."],
+    ["The line", "Beside the tabs on a computer, the newest alert: its company, its move and what the move is, and its time. intraday: the largest move of the session, kept after a stock comes back, or an index's move while its market is open; at close: a stock's official close; 1D: an index's move on the day while its market is not trading. A news alert: its kind and its company, or, when it names no company with a page here, the first words of its headline and the publisher it came from. Only the name or the headline is ever shortened; the whole message is on hover and in the list a click opens. On a phone the whole message sits under the label."],
   ] },
   { title: "News", rows: [
     ["Headlines", "Under a bar for each day: the time, the category and the headline (the whole of it on hover if it runs past three lines), then the publisher and the companies it names; a company opens its page. Times are in SGT, as the panel says."],

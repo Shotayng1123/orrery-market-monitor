@@ -44,6 +44,36 @@ export function sourceName(provider: string | null | undefined, symbol: string):
  *  database hands back as "…+00:00" (table.ts): the date of a booked close, or null for a print. */
 export const closeDay = (lastAt: string | null | undefined): string | null => (lastAt && /^\d{4}-\d{2}-\d{2}T00:00:00Z$/.test(lastAt) ? lastAt.slice(0, 10) : null);
 
+/** The Cboe's Treasury yield indices as Yahoo quotes them, the yield itself in per cent: ^IRX the 13-week bill, ^FVX
+ *  five years, ^TNX ten, ^TYX thirty. The market table carries ^FVX, ^TNX and ^TYX; ^IRX reaches a watchlist only
+ *  through search, as a plain quote. */
+export const CBOE_YIELDS: readonly string[] = ["^IRX", "^FVX", "^TNX", "^TYX"];
+/** Whether a quote outside the market table is a yield, not a price (the reviewer's R2A-06, 19 Nov 2026): one of the
+ *  Cboe's yield indices, or an index Yahoo names as a Treasury yield or bill. A fund that holds bills is a price. */
+export const isYieldQuote = (symbol: string, name: string | null | undefined, quoteType: string | null | undefined): boolean =>
+  CBOE_YIELDS.includes(symbol) || (quoteType === "INDEX" && /\btreasury (?:yield|bill)/i.test(name ?? ""));
+
+/** What a plain quote gives (yahoo.ts QuoteRow, as far as a watchlist row needs it). */
+export interface QuoteLike {
+  name: string | null; quoteType: string | null; currency: string | null; price: number | null; prevClose: number | null;
+  time: number | null; marketCap: number | null; earningsAt: number | null; earningsEst: boolean | null;
+}
+/** The watchlist's row for a name that is neither a market-table instrument nor an index member: a plain quote, with
+ *  its 1D change only (a quote has no history). A yield moves in points like the table's yields (the page prints bp)
+ *  and has no per-cent change; a price keeps its per-cent change as before. No quote: the row's name and dashes. */
+export function watchRowFromQuote(symbol: string, listedName: string | null, q: QuoteLike | null | undefined) {
+  const y = !!q && isYieldQuote(symbol, q.name, q.quoteType);
+  const move = q?.price != null && q.prevClose != null ? q.price - q.prevClose : null;
+  return {
+    symbol, name: q?.name ?? listedName ?? symbol, kind: y ? "Fixed income" : q?.quoteType ?? "–", sector: null, ccy: q?.currency ?? null, last: q?.price ?? null,
+    asOf: q?.time ? new Date(q.time * 1000).toISOString() : null, asOfKind: (q?.time ? "print" : null) as AsOfKind | null, source: q ? "Yahoo Finance" : null,
+    pct1d: !y && q?.price != null && q.prevClose ? (q.price / q.prevClose - 1) * 100 : null, pct1w: null, pct1m: null, pct3m: null, pct12m: null,
+    chg1d: y ? move : null, chg1w: null, chg1m: null, chg3m: null, chg12m: null, vs200chg: null,
+    vs50: null, vs200: null, pos52: null, mcap: y ? null : q?.marketCap ?? null,
+    earningsAt: !y && q?.earningsAt ? new Date(q.earningsAt * 1000).toISOString() : null, earningsEst: y ? null : q?.earningsEst ?? null, isYield: y,
+  };
+}
+
 /** The watchlist's row for a market-table instrument. The as-of is a date for a close or a published figure and the
  *  print's own time otherwise. A page older than 19 Nov 2026 reads only the fields it knows: it shows a yield's
  *  changes as dashes (they are no longer sent as a per cent), and everything else as before. */

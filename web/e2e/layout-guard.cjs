@@ -2,16 +2,23 @@
 // before every publish). On all eight screens, at every size the scrolling layout and the phone layout are used at
 // (the designer's plan review §3.7: C1 1440x900, C2 1280x720, C6 1920x1080, C7 2560x1440, C8 1440x900 at text size
 // S; P1 iPhone SE, P2 iPhone 13), it checks what a reader would call cut or hidden:
-//   - no figure is cut: no run of digits sits past the side of a box that hides its overflow, behind an ellipsis, or
-//     with more than 30% of its line outside such a box at its top or foot (the text's own position is measured,
-//     character by character, so a cut name whose digits all show passes and a cut price fails);
+//   - no figure is cut: no figure (its digits and the unit written after them: %, bp, pp, σ, ×, x, tn, bn, m, k) sits
+//     past the side of a box that hides its overflow, behind an ellipsis, or with more than 30% of its line outside
+//     such a box at its top or foot (the text's own position is measured, character by character, so a cut name whose
+//     figures all show passes, and a price, or a bp cell cut down to its digits, fails);
+//   - no figure is painted over or clipped (the reviewer's R2A-03): with the window moved down the page 60% of its
+//     height at a time, every figure inside it is hit-tested near both ends and in the middle. Another element met
+//     there paints over it, unless that element is fixed or sticky (the header over scrolled content, a sticky column)
+//     or a drop-down's transparent <select> over its own label; the figure's own box missing there, with a clip-path
+//     on it or around it, is a clipped figure;
 //   - no chart label is cut: no ink at a chart canvas's edge inside its y-axis band (labels are drawn on the canvas);
 //   - nothing scrolls sideways: not the page, not a panel (a phone's statements table and wide phone tables scroll
 //     by design, with their names fixed);
 //   - on a phone, every tap target is 44 x 44 px or more, measured on the element that takes the tap: a drop-down's
 //     <select> (its frame plus 10 px), a toggle's or a chip's ::before (the designer's I-2 note (h)). The targets the
 //     designer listed as really under 44 px are printed and pass until the increment named beside them.
-// Then it proves it can fail: throwaway styles injected into the test page cut figures in each of those ways, the guard
+// Then it proves it can fail: throwaway styles injected into the test page cut figures in each of those ways (also a
+// unit cut off whole digits, on a computer and in a phone's pills, a clip-path, and a box laid over figures), the guard
 // must report them, and with the style removed it must report nothing again.
 // XL text and the one-screen (COMPACT) layout join when increment I-9 fixes them (the designer's D-06 and D-21).
 // Run from web/:  node e2e/run.cjs layout-guard   (the runner starts the servers this needs; see e2e/run.cjs)
@@ -40,9 +47,11 @@ const KNOWN_TAPS = [
   { sel: ".mp-moves .s a", why: "a big move's source link, 24 px (I-3)" },
 ];
 
-/** In the page: what is cut, hidden or too small (see the head of this file). Rects are screen px, client* layout px. */
+/** In the page: what is cut, hidden or too small (see the head of this file). Rects are screen px, client* layout px.
+ *  With `opt.occlusion`, only the paint-over probe of the figures now inside the window (see `occlusion` below). */
 function MEASURE(opt) {
-  const RUN = /\d[\d,.:]*/g;
+  // a figure is its digits and the unit written after them: "-4.8bp" cut to "-4.8", "4.859%" to "4.859" is a cut figure
+  const RUN = /\d[\d,.:]*(?:%|bp|pp|σ|×|tn|bn|x(?![A-Za-z])|m(?![A-Za-z])|k(?![A-Za-z]))?/g;
   const shown = (el) => el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) && el.getBoundingClientRect().width > 0.5;
   const where = (el) => {
     let s = el.tagName.toLowerCase(); if (el.id) s += "#" + el.id;
@@ -52,6 +61,49 @@ function MEASURE(opt) {
     return s + (t ? ` @[${t}]` : "");
   };
   const clips = (v) => v === "hidden" || v === "clip", scrolls = (v) => v === "auto" || v === "scroll";
+  if (opt.occlusion) {
+    // Each figure fully inside the window is hit-tested near both ends and in the middle. The figure's own element (or
+    // what it holds) must be what a pointer meets there. Another element met instead paints over it, unless that
+    // element is fixed or sticky (the header, a sticky column over scrolled content, by design) or is a drop-down's
+    // transparent <select> over its own label. The figure's own ancestor met instead means its box is not there
+    // (clip-path), unless something between does not take the pointer. A figure cut or scrolled away inside a box
+    // that hides or scrolls its overflow is the rest of MEASURE's business.
+    const pinned = (el) => { for (let a = el; a && a !== document.body; a = a.parentElement) { const p = getComputedStyle(a).position; if (p === "fixed" || p === "sticky") return true; } return false; };
+    const covered = []; let probed = 0;
+    const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = tw.nextNode(); n; n = tw.nextNode()) {
+      RUN.lastIndex = 0; if (!RUN.test(n.data)) continue;
+      const pe = n.parentElement; if (!pe) continue;
+      const pr = pe.getBoundingClientRect(); if (pr.bottom < 0 || pr.top > innerHeight || pr.right < 0 || pr.left > innerWidth) continue;
+      if (!shown(pe) || pinned(pe)) continue;
+      const boxes = []; for (let a = pe; a && a !== document.body; a = a.parentElement) { const cs = getComputedStyle(a); if (cs.overflowX !== "visible" || cs.overflowY !== "visible") boxes.push(a.getBoundingClientRect()); }
+      RUN.lastIndex = 0; let m, hit = null;
+      while (!hit && (m = RUN.exec(n.data))) {
+        const rg = document.createRange(); rg.setStart(n, m.index); rg.setEnd(n, m.index + m[0].length);
+        for (const q of rg.getClientRects()) {
+          if (q.width < 2 || q.height < 2 || q.top < 0 || q.bottom > innerHeight || q.left < 0 || q.right > innerWidth) continue;
+          if (boxes.some((r) => q.left < r.left - 0.5 || q.right > r.right + 0.5 || q.top < r.top - 0.5 || q.bottom > r.bottom + 0.5)) continue;
+          probed++;
+          for (const fx of [0.12, 0.5, 0.88]) {
+            const h = document.elementFromPoint(q.left + q.width * fx, q.top + q.height / 2);
+            if (!h || h === pe || pe.contains(h)) continue;
+            if (h.contains(pe)) {
+              let free = false; for (let a = pe; a && a !== h; a = a.parentElement) if (getComputedStyle(a).pointerEvents === "none") { free = true; break; }
+              if (free) continue;
+              let cp = null; for (let a = pe; a && !cp; a = a.parentElement) if (getComputedStyle(a).clipPath !== "none") cp = a;
+              if (cp) { hit = { how: "clipped by clip-path", by: where(cp) }; break; }
+              continue;
+            }
+            if (pinned(h) || (h.tagName === "SELECT" && h.closest(".pick")?.contains(pe))) continue;
+            hit = { how: "painted over", by: where(h) }; break;
+          }
+          if (hit) break;
+        }
+      }
+      if (hit) covered.push({ el: where(pe), figure: m[0], ...hit, text: (pe.textContent || "").trim().replace(/\s+/g, " ").slice(0, 60) });
+    }
+    return { covered, probed };
+  }
   const out = { ox: document.documentElement.scrollWidth - document.documentElement.clientWidth, scrollX: [], clipped: [], canvasCut: [], taps: [], figures: 0, hiding: 0, axes: 0, targets: 0 };
   const tw0 = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n = tw0.nextNode(); n; n = tw0.nextNode()) { RUN.lastIndex = 0; if (RUN.test(n.data) && n.parentElement && shown(n.parentElement)) out.figures++; }
@@ -143,8 +195,22 @@ async function settle(p) {
   }
 }
 const measure = (p, phone) => p.evaluate(MEASURE, { phone, sidewaysOk: SIDEWAYS_OK, known: KNOWN_TAPS.map((k) => k.sel) });
-const problems = (m, phone) => ({ ox: m.ox > 1 ? m.ox : 0, cut: m.clipped, canvas: m.canvasCut, sideways: m.scrollX.filter((s) => !(phone && s.ok)) });
-const clean = (x) => !x.ox && !x.cut.length && !x.canvas.length && !x.sideways.length;
+/** The paint-over probe over the whole page: the window is moved down 60% of its height at a time, so every figure is
+ *  wholly inside it at least once, and each figure is reported once. */
+async function occlusion(p) {
+  const found = new Map(); let probed = 0;
+  for (let y = 0, i = 0; i < 80; i++) {
+    const at = await p.evaluate((y) => new Promise((res) => { scrollTo(0, y); requestAnimationFrame(() => requestAnimationFrame(() => res({ y: scrollY, vh: innerHeight, h: document.documentElement.scrollHeight }))); }), y);
+    const m = await p.evaluate(MEASURE, { occlusion: true });
+    probed += m.probed; for (const c of m.covered) { const k = `${c.el}|${c.figure}|${c.by}`; if (!found.has(k)) found.set(k, c); }
+    if (at.y + at.vh >= at.h - 1) break;
+    y = at.y + Math.max(200, Math.round(at.vh * 0.6));
+  }
+  await p.evaluate(() => scrollTo(0, 0));
+  return { covered: [...found.values()], probed };
+}
+const problems = (m, phone, oc) => ({ ox: m.ox > 1 ? m.ox : 0, cut: m.clipped, canvas: m.canvasCut, sideways: m.scrollX.filter((s) => !(phone && s.ok)), covered: oc ? oc.covered : [] });
+const clean = (x) => !x.ox && !x.cut.length && !x.canvas.length && !x.sideways.length && !x.covered.length;
 const open = async (b, s) => {
   const ctx = await b.newContext(s.ctx);
   // every chart asks for its line at once, as if scrolled into view, so each one is measured drawn
@@ -159,9 +225,9 @@ const open = async (b, s) => {
     const { ctx, p, errs } = await open(b, s);
     for (const h of SCREENS) {
       await p.goto(MOCK + "#" + h, { waitUntil: "networkidle" }); await settle(p);
-      const m = await measure(p, !!s.phone), x = problems(m, !!s.phone);
+      const m = await measure(p, !!s.phone), oc = await occlusion(p), x = problems(m, !!s.phone, oc);
       const allowed = m.scrollX.filter((q) => s.phone && q.ok).map((q) => q.el.replace(/ @.*/, ""));
-      ck(`#${h}: no figure cut (${m.figures} texts with figures, ${m.hiding} boxes that hide what overflows them), no chart label cut (${m.axes} axes), nothing sideways${allowed.length ? ` but ${[...new Set(allowed)].join(", ")}, by design` : ""}`, clean(x), x);
+      ck(`#${h}: no figure cut, unit and all (${m.figures} texts with figures, ${m.hiding} boxes that hide what overflows them), none painted over or clipped (${oc.probed} probed in view), no chart label cut (${m.axes} axes), nothing sideways${allowed.length ? ` but ${[...new Set(allowed)].join(", ")}, by design` : ""}`, clean(x), x);
       if (s.phone) {
         const unknown = m.taps.filter((t) => t.known < 0);
         for (const t of m.taps.filter((q) => q.known >= 0)) knownSeen.set(t.known, (knownSeen.get(t.known) ?? 0) + 1);
@@ -192,6 +258,39 @@ const open = async (b, s) => {
     ck(`the MARKETS table made wider than its panel: the panel reported scrolling sideways (${r.m.scrollX.map((q) => q.el).join(", ")}); without the style, nothing`, r.m.scrollX.some((q) => /MARKET/.test(q.el)) && clean(problems(r.after)), { m: r.m.scrollX, after: problems(r.after) });
     r = await canary(p, "#grid{min-width:3200px!important}");
     ck(`the page made wider than the window: ${r.m.ox}px reported sideways; without the style, none`, r.m.ox > 100 && clean(problems(r.after)), { ox: r.m.ox, after: problems(r.after) });
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+  // the cuts the guard let through until the reviewer's R2A-03: a unit cut off whole digits ("-4.8bp" reading "-4.8"),
+  // a clip-path over figures, and a box laid over them (nothing overflows in the last two)
+  const cutUnits = (p, sel) => p.evaluate((sel) => { let n = 0;
+    for (const el of document.querySelectorAll(sel)) {
+      const t = el.textContent, m = /^([+−-]?[\d.,]+)(bp|%)$/.exec(t); if (!m || el.children.length || !el.firstChild) continue;
+      const rg = document.createRange(); rg.setStart(el.firstChild, 0); rg.setEnd(el.firstChild, m[1].length);
+      const k = el.offsetWidth ? el.getBoundingClientRect().width / el.offsetWidth : 1, s = document.createElement("span");
+      s.style.cssText = `display:inline-block;overflow:hidden;white-space:nowrap;vertical-align:bottom;width:${rg.getBoundingClientRect().width / k}px`; s.textContent = t; el.replaceChildren(s); n++;
+    }
+    return n; }, sel);
+  const unitsOnly = (m) => m.clipped.filter((c) => /(bp|%)$/.test(c.figure) && c.how === "cut at the side");
+  { const { ctx, p, errs } = await open(b, SIZES[0]);
+    await p.goto(MOCK + "#watch", { waitUntil: "networkidle" }); await settle(p);
+    const n = await cutUnits(p, "table.wlT td.num:not(:has(*)), table.wlT td.num > b"); await settle(p);
+    const u = unitsOnly(await measure(p, false));
+    await p.reload({ waitUntil: "networkidle" }); await settle(p); const back = problems(await measure(p, false));
+    ck(`MY NAMES with the unit cut off ${n} figures, every digit still showing: ${u.length} reported cut at the side (e.g. "${u[0]?.figure}" in ${u[0]?.el}); reloaded, none`, n >= 20 && u.length >= n - 2 && clean(back), { n, u: u.length, first: u.slice(0, 2), back });
+    await p.evaluate(() => { const st = document.createElement("style"); st.id = "canary"; st.textContent = "table.wlT td.num{clip-path:inset(0 0 0 70%)}"; document.head.appendChild(st); }); await settle(p);
+    let oc = await occlusion(p); const clipped = oc.covered.filter((c) => c.how === "clipped by clip-path");
+    await p.evaluate(() => document.getElementById("canary")?.remove()); await settle(p); let after = await occlusion(p);
+    ck(`MY NAMES' figure cells cut by a clip-path to their right 30%: ${clipped.length} figures reported clipped (e.g. "${clipped[0]?.figure}" in ${clipped[0]?.el}); without it, none of ${after.probed} probed`, clipped.length >= 10 && after.covered.length === 0, { clipped: clipped.length, first: clipped.slice(0, 2), after: after.covered.slice(0, 3) });
+    await p.evaluate(() => { const r = document.querySelector("table.wlT").getBoundingClientRect(), d = document.createElement("div"); d.id = "canary-cover"; d.style.cssText = `position:absolute;left:${r.left + scrollX + r.width * 0.45}px;top:${r.top + scrollY}px;width:${r.width * 0.25}px;height:${r.height}px;background:#222;z-index:5`; document.documentElement.appendChild(d); }); await settle(p);
+    oc = await occlusion(p); const over = oc.covered.filter((c) => c.how === "painted over" && /canary-cover/.test(c.by));
+    await p.evaluate(() => document.getElementById("canary-cover")?.remove()); await settle(p); after = await occlusion(p);
+    ck(`a box laid over a quarter of MY NAMES' columns: ${over.length} figures reported painted over (e.g. "${over[0]?.figure}" under ${over[0]?.by}); without it, none`, over.length >= 10 && after.covered.length === 0, { over: over.length, first: over.slice(0, 2), after: after.covered.slice(0, 3) });
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+  { const { ctx, p, errs } = await open(b, SIZES[6]);
+    await p.goto(MOCK + "#watch", { waitUntil: "networkidle" }); await settle(p);
+    const n = await cutUnits(p, ".mp-chg > .fig"); await settle(p);
+    const u = unitsOnly(await measure(p, true));
+    await p.reload({ waitUntil: "networkidle" }); await settle(p); const back = problems(await measure(p, true), true);
+    ck(`phone: the watchlist's ${n} change pills with their unit cut off ("-4.8bp" reading "-4.8"): ${u.length} reported (e.g. "${u[0]?.figure}"); reloaded, none`, n >= 8 && u.length >= n - 1 && clean(back), { n, u: u.length, first: u.slice(0, 2), back });
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
   { const { ctx, p, errs } = await open(b, SIZES[0]);
     await p.goto(MOCK + "#equities", { waitUntil: "networkidle" }); await settle(p);

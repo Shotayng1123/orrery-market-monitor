@@ -1,7 +1,8 @@
 // Stand-in API answers for the browser checks (synthetic; nothing here is a real figure), and a page opener.
 // The rows are those of web/src/lib/standin.json (read by e2e/standin.cjs), which the local copy's mock feed
-// shows too: 70 calendar events from three days back to four ahead, 45 earnings dates, 70 headlines, 39 daily
-// notes and 6 weekly reports, each time counted from when the suite starts.
+// shows too: 70 calendar events from three days back to four ahead, 45 earnings dates, 70 headlines over the last
+// 31 hours (so they always cross a midnight in Singapore), 39 daily notes and 6 weekly reports, each time counted
+// from when the suite starts.
 const { chromium } = require("playwright");
 const { S, note, report } = require("./standin.cjs");
 const BASE = "http://localhost:5181/orrery-market-monitor/";

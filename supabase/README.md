@@ -465,6 +465,10 @@ What the Monitor does about it:
   as its session's date; `print`: a quote, sent with its time; `published`: an official curve's yield, sent as its
   date) and `source` (Yahoo Finance, or the yield's publisher: US Treasury, Japan MOF, Bundesbank, Bank of England, ECB,
   Bank of Canada). A page older than this ignores the new fields and shows a yield's changes as dashes; a newer page
-  given an older answer does the same, and reads the as-of from its form.
+  given an older answer does the same, and reads the as-of from its form. A name that is neither a market-table
+  instrument nor an index member is read from a plain quote (`watchRowFromQuote`): its 1D only. A Treasury yield index
+  among them (the Cboe's ^IRX, ^FVX, ^TNX, ^TYX, or an index Yahoo names as a Treasury yield or bill; ^IRX, the 13-week
+  bill, is the one the table lacks) is sent as a yield: `isYield`, no per-cent change, `chg1d` = last − previous
+  close in points. A page older than the yield rows shows its 1D as a dash.
 - EQUITIES while a market is open (19 Nov 2026): the flow job keeps each constituent's quote price, its previous close and the time it printed (`constituent_stats.q_price`, `q_prev`, `q_time`). `api?action=index_stats` reads a row at its quote when the quote is from a later session than the row's booked close (`_shared/intraday.ts`), for the whole list or not at all: at least half the names must have such a quote. The 1D figures (movers, breadth, sectors, heat map) are then today's moves so far, at most ten to twenty minutes old, and the answer carries `live: { asOf, n }`; changes over longer periods stay measured to the last close, and the page says so.
 - Closing levels are held until the next session's first print: the quote is used only while its exchange-local date is newer than the last booked close.

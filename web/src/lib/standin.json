@@ -186,11 +186,11 @@
     {"id":63,"publishedAt":"{h:-17.57}","source":"Nikkei Asia","title":"Oil climbs for a third day on supply worries","url":"https://example.com/n/62","category":"Commodities","tickers":[]},
     {"id":64,"publishedAt":"{h:-17.85}","source":"CNBC Markets","title":"Treasury yields ease after softer inflation data; curve steepens","url":"https://example.com/n/63","category":"DM Rates","tickers":[]},
     {"id":65,"publishedAt":"{h:-18.13}","source":"MarketWatch","title":"Chipmakers slide after a guidance cut as investors question the pace of AI spending (stand-in headline)","url":"https://example.com/n/64","category":"US Equities","tickers":[{"s":"NVDA","n":"NVIDIA"},{"s":"6857.T","n":"Advantest"}]},
-    {"id":66,"publishedAt":"{h:-18.42}","source":"FT Markets","title":"Yen firms as traders weigh the Bank of Japan&#x2019;s next move","url":"https://example.com/n/65","category":"Currency","tickers":[]},
-    {"id":67,"publishedAt":"{h:-18.7}","source":"WSJ Markets","title":"Oil climbs for a third day on supply worries","url":"https://example.com/n/66","category":"Commodities","tickers":[]},
-    {"id":68,"publishedAt":"{h:-18.98}","source":"Nikkei Asia","title":"Treasury yields ease after softer inflation data; curve steepens","url":"https://example.com/n/67","category":"DM Rates","tickers":[]},
-    {"id":69,"publishedAt":"{h:-19.27}","source":"CNBC Markets","title":"Chipmakers slide after a guidance cut as investors question the pace of AI spending (stand-in headline)","url":"https://example.com/n/68","category":"US Equities","tickers":[{"s":"NVDA","n":"NVIDIA"},{"s":"6857.T","n":"Advantest"}]},
-    {"id":70,"publishedAt":"{h:-19.55}","source":"MarketWatch","title":"Yen firms as traders weigh the Bank of Japan&#x2019;s next move","url":"https://example.com/n/69","category":"Currency","tickers":[]}
+    {"id":66,"publishedAt":"{h:-21}","source":"FT Markets","title":"Yen firms as traders weigh the Bank of Japan&#x2019;s next move","url":"https://example.com/n/65","category":"Currency","tickers":[]},
+    {"id":67,"publishedAt":"{h:-23.5}","source":"WSJ Markets","title":"Oil climbs for a third day on supply worries","url":"https://example.com/n/66","category":"Commodities","tickers":[]},
+    {"id":68,"publishedAt":"{h:-26}","source":"Nikkei Asia","title":"Treasury yields ease after softer inflation data; curve steepens","url":"https://example.com/n/67","category":"DM Rates","tickers":[]},
+    {"id":69,"publishedAt":"{h:-28.5}","source":"CNBC Markets","title":"Chipmakers slide after a guidance cut as investors question the pace of AI spending (stand-in headline)","url":"https://example.com/n/68","category":"US Equities","tickers":[{"s":"NVDA","n":"NVIDIA"},{"s":"6857.T","n":"Advantest"}]},
+    {"id":70,"publishedAt":"{h:-31}","source":"MarketWatch","title":"Yen firms as traders weigh the Bank of Japan&#x2019;s next move","url":"https://example.com/n/69","category":"Currency","tickers":[]}
   ],
   "notes": [
     {"id":100,"d":"{h:-3|day}","title":"Chip rout meets Toyota surge as Nikkei futures point lower, the yen firms and JGB yields climb before the open","generatedAt":"{h:-3}","kind":"daily"},
@@ -431,7 +431,8 @@
       {"symbol":"6201.T","name":"Toyota Industries Corp","kind":"Equity","note":"NK225 · Machinery"},
       {"symbol":"8015.T","name":"Toyota Tsusho Corp","kind":"Equity","note":"NK225 · Wholesale Trade"},
       {"symbol":"TM","name":"Toyota Motor Corporation ADR","kind":"Equity","note":"NYSE"},
-      {"symbol":"285A.T","name":"Kioxia Holdings","kind":"Equity","note":"NK225 · Technology"}
+      {"symbol":"285A.T","name":"Kioxia Holdings","kind":"Equity","note":"NK225 · Technology"},
+      {"symbol":"^IRX","name":"13 WEEK TREASURY BILL","kind":"Index","note":"Cboe (stand-in search hit)"}
     ],
     "feed": {
       "alerts": [

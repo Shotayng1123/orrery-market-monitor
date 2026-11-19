@@ -87,15 +87,20 @@ function BreadthTable({ s, hist }: { s: IndexStats; hist: BreadthRow[] }) {
           <tr><td className="l">Names down</td>{cols.map((c) => <td key={c.label} className="num dn">{pc(c.down, c.n)}</td>)}</tr>
           <tr><td className="l">Median move</td>{cols.map((c) => <td key={c.label} className={`num ${signCls(c.median)}`}>{fmtPct(c.median, 1)}</td>)}</tr>
           <tr><td className="l">Average move</td>{cols.map((c) => <td key={c.label} className={`num ${signCls(c.mean)}`}>{fmtPct(c.mean, 1)}</td>)}</tr>
-          <tr className="sep"><td className="l" title="Share of names above their 50-day average at the start of the window (1D = latest session)">Above 50d, window start</td>{cols.map((c) => <td key={c.label} className="num">{c.then ? pc(c.then.above50, c.then.n) : "–"}</td>)}</tr>
-          <tr><td className="l" title="Share of names above their 200-day average at the start of the window">Above 200d, window start</td>{cols.map((c) => <td key={c.label} className="num">{c.then ? pc(c.then.above200, c.then.n) : "–"}</td>)}</tr>
+          <tr className="sep"><td className="l" title={`Share of today's ${b.n} members above their 50-day average at the start of the window (1D = latest session)`}>Above 50d, window start</td>{cols.map((c) => <td key={c.label} className="num">{c.then ? pc(c.then.above50, c.then.n) : "–"}</td>)}</tr>
+          <tr><td className="l" title={`Share of today's ${b.n} members above their 200-day average at the start of the window`}>Above 200d, window start</td>{cols.map((c) => <td key={c.label} className="num">{c.then ? pc(c.then.above200, c.then.n) : "–"}</td>)}</tr>
           <tr><td className="l">52w highs / lows, window start</td>{cols.map((c) => <td key={c.label} className="num mut">{c.then ? `${c.then.new_hi} / ${c.then.new_lo}` : "–"}</td>)}</tr>
           <tr><td className="l mut">Session</td>{cols.map((c) => <td key={c.label} className="num mut" style={{ fontSize: 9.5 }}>{c.then?.d ?? "–"}</td>)}</tr>
         </tbody>
       </table>
+      <div className="brnote mut" id="br-members">{PAST_MEMBERS(b.n, true)}</div>
     </>
   );
 }
+/** What the start-of-window figures and the three-year chart count. The server's breadth_history is recomputed each
+ *  day for every past date over the index's members as of that day's run, so the past is today's members: a company
+ *  that has left the index is missing, and one that joined later counts from before it joined. Said where they show. */
+export const PAST_MEMBERS = (n: number, chart: boolean) => `${chart ? "Window start and the three-year chart" : "Start of each window"}: today's ${n} members on each past day; a company that has left the index is not in ${chart ? "them" : "it"}.`;
 
 // ---- flow by sector: turnover against the three-month pattern, plus the day's net money flow ----
 function SectorFlow({ s, onSector }: { s: IndexStats; onSector: (sector: string) => void }) {
@@ -303,13 +308,13 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
         {main ? <div className="bigwrap"><ChartPanel row={main} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes /></div> : <Empty title="Awaiting the data feed">{table.error ?? "The index chart loads with the market table."}</Empty>}
       </Panel>
       <Panel no="02" title="DRIVERS" span={4} k="eq-drivers" aux={`${support.length} of 4`}>
-        {support.length ? <div className="sqgrid">{support.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="square" />)}</div> : <Empty title="Drivers">Futures, FX, rates and volatility that drive this index.</Empty>}
+        {support.length ? <div className="sqgrid">{support.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="square" />)}</div> : <Empty title="Drivers">Four related markets shown beside the index (an index future, other indices, a currency, a yield, the VIX or copper) load with the market table.</Empty>}
       </Panel>
       <Panel no="03" title="SECTOR PERFORMANCE" span={6} k="eq-sectors" aux={<>{statsAux} · <span title={(ix.stats === "SP500" ? "Official GICS sectors from the S&P 500 constituent list. " : "GICS sector names; classification from Yahoo Finance (official GICS where the name is in the S&P 500). ") + "Sector moves are weighted by the published index weight where there is one, otherwise by market cap."}>GICS sectors · cap-weighted</span></>}>{s ? <Sectors s={s} onSector={setDrawer} /> : noStats}</Panel>
       <Panel no="04" title="FLOW BY SECTOR · 1D" span={6} k="eq-flow" aux={s ? <>{s.idx} · {ccy}{s.quoteAt ? ` · turnover ${fmtStamp(s.quoteAt)}` : ""}{s.mfD ? ` · net flow ${s.mfD}` : ""}{standIn}</> : ""}>{s ? <SectorFlow s={s} onSector={setDrawer} /> : noStats}</Panel>
       <Panel no="05" title="MOVERS" span={12} k="eq-movers" aux={statsAux}>{s ? <div className="msg2"><Movers rows={movers.top} title="Top 15 by 1D" s={s} /><Movers rows={movers.bottom} title="Bottom 15 by 1D" s={s} /></div> : noStats}</Panel>
       <Panel no="06" title="MARKET BREADTH" span={12} k="eq-breadth" aux={statsAux}>
-        {s ? <div className="brwrap"><div><BreadthTable s={s} hist={bh.data?.rows ?? []} /></div><div className="brchart"><div className="minih">Breadth over three years, daily</div><BreadthChart rows={bh.data?.rows ?? []} height={210} /></div></div> : noStats}
+        {s ? <div className="brwrap"><div><BreadthTable s={s} hist={bh.data?.rows ?? []} /></div><div className="brchart"><div className="minih" id="br-caption" title="Each day counted over the index's members as of today: a company that has left the index is not in the line, and one that joined later counts from before it joined">Breadth over three years, daily · today's {s.breadth?.n ?? s.rows.length} members</div><BreadthChart rows={bh.data?.rows ?? []} height={210} /></div></div> : noStats}
       </Panel>
       <Panel no="07" title="SHORT INTEREST" span={12} k="eq-short" aux={jp ? "JPX short-selling ratio (空売り集計) · short-position reports (空売り残高報告) · margin balances (信用取引現在高)" : s?.shorts ? <>FINRA consolidated short-sale volume · {s.shorts.d}</> : ""}>
         {jp ? <JpShortPanel idx={ix.stats} /> : s?.shorts ? (

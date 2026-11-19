@@ -13,7 +13,7 @@ import { quotes } from "../_shared/yahoo.ts";
 import { pushState, pushSubscribe, pushTest, pushUnsubscribe } from "../_shared/push.ts";
 import { stockPage } from "../_shared/stock.ts";
 import { liveRows } from "../_shared/intraday.ts";
-import { watchRowFromTable, type TableLike } from "../_shared/watchrow.ts";
+import { watchRowFromQuote, watchRowFromTable, type TableLike } from "../_shared/watchrow.ts";
 import { localDate, type Holidays } from "../_shared/sessions.ts";
 import { feedState } from "../_shared/feedhealth.ts";
 import { beatFresh, type Reading, type RelayNote } from "../_shared/relay.ts";
@@ -448,7 +448,8 @@ async function watchSymbols(userId: string): Promise<Array<{ symbol: string; nam
 }
 /** The user's names with the figures the Monitor holds for them: the market table for its instruments (as MARKETS
  *  shows them: a yield's changes in level, never in per cent of it; `_shared/watchrow.ts`), the constituent
- *  statistics for index members, a plain quote for anything else. Each row says what its figures are as of
+ *  statistics for index members, a plain quote for anything else (a Treasury yield index such as ^IRX moving in points,
+ *  `watchRowFromQuote`). Each row says what its figures are as of
  *  (`asOfKind`: a close, a print or an official publisher's daily figure) and whose they are (`source`). */
 async function watchList(userId: string) {
   const wl = await watchSymbols(userId);
@@ -469,7 +470,7 @@ async function watchList(userId: string) {
     const t = tBy.get(w.symbol), s = sBy.get(w.symbol), q = qBy[w.symbol];
     if (t) return { ...watchRowFromTable(t), symbol: w.symbol };
     if (s) return { symbol: w.symbol, name: s.name, kind: "Stock", sector: s.sector, ccy: CCY[s.idx] ?? null, last: s.close, asOf: s.d, asOfKind: "close", source: "Yahoo Finance", pct1d: s.pct1d, pct1w: s.pct1w, pct1m: s.pct1m, pct3m: s.pct3m, pct12m: s.pct12m, ...noLevel, vs50: pctOf(s.close, s.dma50), vs200: pctOf(s.close, s.dma200), pos52: s.hi52 != null && s.lo52 != null && s.hi52 > s.lo52 ? ((s.close - s.lo52) / (s.hi52 - s.lo52)) * 100 : null, mcap: s.mcap, earningsAt: s.earnings_at, earningsEst: s.earnings_est, isYield: false };
-    return { symbol: w.symbol, name: q?.name ?? w.name ?? w.symbol, kind: q?.quoteType ?? "–", sector: null, ccy: q?.currency ?? null, last: q?.price ?? null, asOf: q?.time ? new Date(q.time * 1000).toISOString() : null, asOfKind: q?.time ? "print" : null, source: q ? "Yahoo Finance" : null, pct1d: pctOf(q?.price ?? null, q?.prevClose ?? null), pct1w: null, pct1m: null, pct3m: null, pct12m: null, ...noLevel, vs50: null, vs200: null, pos52: null, mcap: q?.marketCap ?? null, earningsAt: q?.earningsAt ? new Date(q.earningsAt * 1000).toISOString() : null, earningsEst: q?.earningsEst ?? null, isYield: false };
+    return watchRowFromQuote(w.symbol, w.name, q);   // a plain quote; a Treasury yield index (^IRX) moves in points
   });
   return { rows };
 }

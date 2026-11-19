@@ -13,11 +13,11 @@ import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { mergeClasses } from "../lib/classes";
 import { fmtStamp } from "../lib/time";
 import { InstrumentRow } from "./MarketPhone";
-import { CCY, HeatMap, INDICES, JpShortPanel, PERIODS, pos52, shortName, signed, vs, type BreadthRow, type IndexStats, type SectorRow, type StatRow } from "./Equities";
+import { CCY, HeatMap, INDICES, JpShortPanel, PAST_MEMBERS, PERIODS, pos52, shortName, signed, vs, type BreadthRow, type IndexStats, type SectorRow, type StatRow } from "./Equities";
 import { RANGE_52W } from "./Market";
 
 /** EQUITIES for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026). The same index statistics as the desktop tab,
- *  laid out as cards down one column: the index with its chart, the instruments that drive it, breadth, the day's
+ *  laid out as cards down one column: the index with its chart, the related markets beside it, breadth, the day's
  *  flow and the performance by sector, short interest, the movers, the heat map and a screener of the names. */
 const WINDOWS: PickOption<SigmaWindow>[] = [{ value: "m1", label: "1M" }, { value: "m12", label: "12M" }, { value: "m36", label: "36M" }];
 const SECTOR_KEY: Record<ChartPeriod, keyof SectorRow> = { "1D": "pct1d", "1W": "pct1w", "1M": "pct1m", "3M": "pct3m", "12M": "pct12m", "36M": "pct12m" };   // sectors carry no 36M figure: 12M stands in
@@ -52,6 +52,7 @@ function Breadth({ s, hist }: { s: IndexStats; hist: BreadthRow[] }) {
         <thead><tr><th>Window</th><th>Above 50d</th><th>Above 200d</th><th>Highs / lows</th></tr></thead>
         <tbody>{rows.map((c) => <tr key={c.label} title={c.then ? `session ${c.then.d}` : undefined}><td>{c.label}</td><td>{c.then ? pc(c.then.above50, c.then.n) : "–"}</td><td>{c.then ? pc(c.then.above200, c.then.n) : "–"}</td><td>{c.then ? `${c.then.new_hi} / ${c.then.new_lo}` : "–"}</td></tr>)}</tbody>
       </table>
+      <p className="mp-note in" id="br-members">{PAST_MEMBERS(b.n, false)}</p>
     </>
   );
 }
@@ -164,7 +165,7 @@ export function EquitiesPhone({ sub, onSub, tick }: { sub: string; onSub: (s: st
         {main ? <InstrumentRow r={main} period={period} tick={tick} open fixed sigmaWindow={sigmaWindow} /> : <Empty title="Awaiting the data feed">{table.error ?? "The index chart loads with the market table."}</Empty>}
       </Section>
       <Section title="Drivers" aux={`${support.length} of 4`}>
-        {support.length ? support.map((r) => <InstrumentRow key={r.symbol} r={r} period={period} tick={tick} sigmaWindow={sigmaWindow} open={open === r.symbol} onToggle={() => setOpen(open === r.symbol ? null : r.symbol)} />) : <Empty title="Drivers">Futures, FX, rates and volatility that drive this index.</Empty>}
+        {support.length ? support.map((r) => <InstrumentRow key={r.symbol} r={r} period={period} tick={tick} sigmaWindow={sigmaWindow} open={open === r.symbol} onToggle={() => setOpen(open === r.symbol ? null : r.symbol)} />) : <Empty title="Drivers">Four related markets shown beside the index (an index future, other indices, a currency, a yield, the VIX or copper) load with the market table.</Empty>}
       </Section>
       <Section title="Market breadth" card={false}>{s ? <div className="mp-card pad">{s.breadth ? <Breadth s={s} hist={bh.data?.rows ?? []} /> : <Empty title="No breadth yet" />}</div> : noStats}</Section>
       <Section title="Flow by sector · 1D" aux={s ? ccy : ""} card={false}>{s ? <div className="mp-card"><Flow s={s} /></div> : noStats}</Section>

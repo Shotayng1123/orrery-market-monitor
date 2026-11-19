@@ -7,12 +7,15 @@
 //   D-10  phone search: rows a finger can hit, under the field, whole names (with D-37: the placeholder)
 //   D-25  WATCHLIST: alert and research texts whole, on the two-column page (the designer's §3.4)
 //   D-28  every curve's lowest yield label whole; the phone curve's source line wraps
-// and the header's alert line, whose time was cut on every screen (the layout guard's first finding).
+// and the header's alert line, whose time was cut on every screen (the layout guard's first finding): its figure says
+// what it is (intraday, at close, 1D), and a news alert that names no company shows its headline and its publisher.
+// The day bars and the alert line are checked in ways that hold at any time of day (the reviewer's R2A-01).
 // The general rules (no figure cut, nothing sideways, 44-px taps) on every screen are e2e/layout-guard.cjs.
 // Run from web/:  node e2e/run.cjs nothing-cut   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
 const { S } = require("./standin.cjs");
-const MOCK = "http://localhost:5179/orrery-market-monitor/";
+const { routes } = require("./harness.cjs");
+const MOCK = "http://localhost:5179/orrery-market-monitor/", FAKE = "http://localhost:5181/orrery-market-monitor/";
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d).slice(0, 1500)}`); };
 const H120 = S.news[0].title;
 const DESK = { C1: { viewport: { width: 1440, height: 900 } }, C2: { viewport: { width: 1280, height: 720 } }, C6: { viewport: { width: 1920, height: 1080 } }, C7: { viewport: { width: 2560, height: 1440 } } };
@@ -25,6 +28,23 @@ async function page(b, opts, prefs) {
 const go = async (p, hash, sel) => { await p.goto(MOCK + hash, { waitUntil: "networkidle" }); if (sel) await p.waitForSelector(sel); await p.evaluate(() => document.fonts.ready); await p.waitForTimeout(500); };
 // a panel by its title, inside the page
 const PANEL = (title) => [...document.querySelectorAll("#grid .panel")].find((x) => x.querySelector(".phead .t")?.textContent === title);
+// Day bars over a list of headlines, newest first, read as the reader sees it ({ bar: "Friday 20 Nov" } or { t: "23:22" }
+// in page order). Going down the list the time of day falls until midnight in Singapore is crossed, where it jumps up:
+// a bar must stand exactly there, and each bar is the day before the one above it. Nothing here depends on the time
+// the check runs: the stand-in headlines span 31 hours, so the list always crosses at least one midnight.
+function dayBars(seq) {
+  const mins = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)), WD = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const bad = [], bars = seq.filter((x) => x.bar).map((x) => x.bar);
+  if (!seq.length || !seq[0].bar) bad.push("the list does not open with a day bar");
+  let prev = null, bar = false;
+  for (const x of seq) {
+    if (x.bar) { bar = true; continue; }
+    if (prev != null && (mins(x.t) > mins(prev)) !== bar) bad.push(`${prev} then ${x.t}: ${bar ? "a bar where the day did not turn" : "the day turned with no bar"}`);
+    prev = x.t; bar = false;
+  }
+  for (let i = 1; i < bars.length; i++) { const a = WD.indexOf(bars[i - 1].split(" ")[0]), b = WD.indexOf(bars[i].split(" ")[0]); if (a < 0 || b !== (a + 6) % 7) bad.push(`"${bars[i]}" under "${bars[i - 1]}" is not the day before`); }
+  return { bars, bad };
+}
 // the statements box at rest after a scroll (a snap or a smooth scroll takes a moment; waited for, not timed)
 const rest = (p) => p.waitForFunction(() => new Promise((res) => { const bx = document.querySelector(".finbox"), a = bx.scrollLeft; setTimeout(() => res(bx.scrollLeft === a), 160); }), null, { timeout: 5000, polling: 50 }).catch(() => undefined);
 // the statements table on a phone: where each period's text sits against the line names' right edge
@@ -48,9 +68,11 @@ const finState = (p) => p.evaluate(() => {
     const h = await p.evaluate(([H, PS]) => { const panel = eval(PS)("HEADLINES"), row = [...panel.querySelectorAll(".nwrow")].find((r) => r.querySelector(".nwh a")?.textContent === H); if (!row) return null;
       const nwh = row.querySelector(".nwh"), m = row.querySelector(".nwm"), lh = parseFloat(getComputedStyle(nwh).lineHeight), hr = nwh.getBoundingClientRect(), mr = m.getBoundingClientRect(), z = hr.height / nwh.offsetHeight;
       return { whole: nwh.scrollHeight <= nwh.clientHeight + 1 && nwh.scrollWidth <= nwh.clientWidth + 1, lines: Math.round(nwh.clientHeight / lh), second: m.textContent, below: mr.top >= hr.bottom - 1, chips: [...m.querySelectorAll(".tk")].map((x) => x.textContent), time: row.querySelector(".nwt").textContent, tip: nwh.title === H,
-        times: [...panel.querySelectorAll(".nwrow .nwt")].map((x) => x.textContent), sgtRows: [...panel.querySelectorAll(".nwrow")].filter((r) => /SGT/.test(r.textContent)).length, head: panel.querySelector(".phead").textContent, days: [...panel.querySelectorAll(".nwday")].map((x) => x.textContent), z }; }, [H120, PANEL.toString()]);
+        times: [...panel.querySelectorAll(".nwrow .nwt")].map((x) => x.textContent), sgtRows: [...panel.querySelectorAll(".nwrow")].filter((r) => /SGT/.test(r.textContent)).length, head: panel.querySelector(".phead").textContent,
+        seq: [...panel.querySelectorAll(".nwlist > .nwday, .nwlist > .nwrow")].map((e) => (e.classList.contains("nwday") ? { bar: e.textContent } : { t: e.querySelector(".nwt").textContent })), z }; }, [H120, PANEL.toString()]);
     ck(`${name}: the headline shows all its words on ${h?.lines} line(s) (at most three), its publisher and its three companies on a muted line under it ("${h?.second}")`, !!h && h.whole && h.lines <= 3 && h.below && h.chips.join() === "NVIDIA,Advantest,Tokyo Electron" && /^FT Markets/.test(h.second) && h.tip, h);
-    ck(`${name}: each row gives its time alone ("${h?.time}"), the panel says once that times are SGT, and the rows sit under day bars ("${h?.days?.[0]}" …)`, !!h && h.times.every((t) => /^\d\d:\d\d$/.test(t)) && h.sgtRows === 0 && /HEADLINES/.test(h.head) && /times in SGT/.test(h.head) && h.days.length >= 2 && h.days.every((d) => /^[A-Z][a-z]+day \d{1,2} [A-Z][a-z]{2}$/.test(d)), h && { times: h.times.slice(0, 3), sgtRows: h.sgtRows, head: h.head, days: h.days });
+    const d = h ? dayBars(h.seq) : null;
+    ck(`${name}: each row gives its time alone ("${h?.time}"), the panel says once that times are SGT, and the rows sit under day bars, a new one exactly where the day turns in Singapore (${d?.bars.join(", ")})`, !!h && h.times.every((t) => /^\d\d:\d\d$/.test(t)) && h.sgtRows === 0 && /HEADLINES/.test(h.head) && /times in SGT/.test(h.head) && d.bars.length >= 2 && d.bad.length === 0 && d.bars.every((x) => /^[A-Z][a-z]+day \d{1,2} [A-Z][a-z]{2}$/.test(x)), h && { times: h.times.slice(0, 3), sgtRows: h.sgtRows, head: h.head, bars: d.bars, bad: d.bad.slice(0, 6) });
     ck("no page errors", errs.length === 0, errs); await ctx.close();
   }
 
@@ -174,14 +196,33 @@ const finState = (p) => p.evaluate(() => {
     ck(`iPhone 13: under each curve (MARKETS ${m.length}, RATES & FX ${r.length}) ${Math.min(...m, ...r)} px or more; the source line under MARKETS' curve wraps whole ("…${line?.text.slice(-24)}")`, m.length >= 1 && r.length >= 1 && [...m, ...r].every((x) => x >= 7) && !!line && line.whole, { m, r, line });
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
 
-  console.log("\n[the header's alert line: label, name, figure and time, and only the name is ever cut]");
+  console.log("\n[the header's alert line: label, name, figure with what it is, and time; only the name is ever cut]");
+  const lineParts = (p) => p.evaluate(() => { const al = document.querySelector("#alerts .alrt"), ar = al.getBoundingClientRect(); const part = (s) => { const e = al.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return { t: e.textContent, whole: e.scrollWidth <= e.clientWidth + 1 && r.right <= ar.right + 0.5 && r.width > 0 }; }; return { k: part(".k"), kd: part(".one .kd"), nm: part(".one .nm"), fig: part(".one .fig"), q: part(".one .q"), src: part(".one .src"), t: part(".t"), msgShown: al.querySelector(".msg").checkVisibility(), tip: al.title.split("\n")[0] }; });
+  const said = (a) => [a.k, a.kd, a.nm, a.fig, a.q, a.src, a.t].filter(Boolean).map((x) => x.t).join(" · ");
   for (const [name, opts] of [["1440x900", DESK.C1], ["1280x720", DESK.C2]]) {
     const { ctx, p, errs } = await page(b, opts, AUTO);
     await go(p, "#watch", "#alerts .alrt .one");
-    const a = await p.evaluate(() => { const al = document.querySelector("#alerts .alrt"), ar = al.getBoundingClientRect(); const part = (s) => { const e = al.querySelector(s); if (!e) return null; const r = e.getBoundingClientRect(); return { t: e.textContent, whole: e.scrollWidth <= e.clientWidth + 1 && r.right <= ar.right + 0.5 && r.width > 0 }; }; return { k: part(".k"), nm: part(".one .nm"), fig: part(".one .fig"), t: part(".t"), msgShown: al.querySelector(".msg").checkVisibility(), tip: al.title.split("\n")[0] }; });
-    ck(`${name}: "${a.k?.t} · ${a.nm?.t} · ${a.fig?.t} · ${a.t?.t}": the figure and the time whole; the whole message on hover ("${a.tip}")`, a.k?.whole && a.fig?.whole && a.t?.whole && /^\d\d\/\d\d \d\d:\d\d$/.test(a.t.t) && /^[+−-]?\d+\.\d%$/.test(a.fig.t) && !a.msgShown && /down 11\.2% intraday/.test(a.tip), a);
+    const a = await lineParts(p);
+    ck(`${name}: "${said(a)}": the figure says what it is (the session's largest move, "intraday"), whole, as is the time; the whole message on hover ("${a.tip}")`, a.k?.whole && a.fig?.whole && a.q?.whole && a.q.t === "intraday" && a.t?.whole && /^\d\d\/\d\d \d\d:\d\d$/.test(a.t.t) && /^[+−-]?\d+\.\d%$/.test(a.fig.t) && !a.msgShown && /down 11\.2% intraday/.test(a.tip), a);
     ck("no page errors", errs.length === 0, errs); await ctx.close();
   }
+  // every kind of latest alert, as the server words it, from the alerts list the stand-in server answers here
+  { const ago = new Date(Date.now() - 5 * 60e3).toISOString(), day = ago.slice(0, 10), mv = (o) => ({ id: 900, at: ago, d: day, price: 1, url: null, ...o });
+    const orphan = S.alerts.find((x) => /^news:/.test(x.symbol)), company = S.alerts.find((x) => x.kind === "mna" && !/^news:/.test(x.symbol));
+    const CASES = [
+      { what: "an index while its market is not trading: its 1D", sizes: [DESK.C1], row: mv({ symbol: "^N225", name: "Nikkei 225", kind: "index", pct: -3.4, market: "TSE", msg: "Nikkei 225 down 3.4%" }), ok: (a) => a.fig?.t === "-3.4%" && a.q?.t === "1D" && a.q.whole && !a.src },
+      { what: "a stock measured at its official close: at close", sizes: [DESK.C1], row: mv({ symbol: "INTU", name: "Intuit Inc.", kind: "stock", pct: -7.2, market: "NYSE", msg: "Intuit Inc. down 7.2%" }), ok: (a) => a.fig?.t === "-7.2%" && a.q?.t === "at close" && a.q.whole && !a.src },
+      { what: "a deal with a company: its kind and the company, no figure", sizes: [DESK.C1], row: company, ok: (a) => a.kd?.t === "M&A" && a.nm?.t === company.name && !a.fig && !a.q && !a.src },
+      { what: "a deal that names no company here: the headline's first words where the name goes, and the publisher it came from", sizes: [DESK.C1, DESK.C2], row: orphan, ok: (a) => a.kd?.t === "M&A" && a.nm?.t === orphan.msg.replace(/^M&A: /, "") && a.src?.t === `via ${orphan.market}` && a.src.whole && !a.fig && a.tip.endsWith(`(${orphan.market}) · ${a.t?.t} SGT`) },
+    ];
+    for (const c of CASES) for (const opts of c.sizes) {
+      const { ctx, p, errs } = await page(b, opts, AUTO); await routes(p);
+      await p.route("**/fakeapi?*", (r) => (new URL(r.request().url()).searchParams.get("action") === "alerts" ? r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ rows: [c.row] }) }) : r.fallback()));
+      await p.goto(FAKE + "#news", { waitUntil: "networkidle" }); await p.waitForSelector("#alerts .alrt .one .nm"); await p.waitForTimeout(300);
+      const a = await lineParts(p);
+      ck(`${opts.viewport.width}x${opts.viewport.height}, ${c.what}: "${said(a)}"; the time whole`, c.ok(a) && a.k?.whole && a.t?.whole, a);
+      ck("no page errors", errs.length === 0, errs); await ctx.close();
+    } }
   { const { ctx, p, errs } = await page(b, { ...devices["iPhone 13"] });
     await go(p, "#market", "#alerts .alrt .msg"); const m = await p.evaluate(() => ({ msg: document.querySelector("#alerts .alrt .msg").checkVisibility() ? document.querySelector("#alerts .alrt .msg").textContent : null, one: document.querySelector("#alerts .alrt .one").checkVisibility() }));
     ck(`iPhone 13: the header still shows the whole message under the label ("${m.msg}")`, /down 11\.2% intraday$/.test(m.msg ?? "") && !m.one, m);
