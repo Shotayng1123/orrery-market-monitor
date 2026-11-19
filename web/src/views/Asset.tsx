@@ -11,7 +11,7 @@ import type { TableRow } from "../lib/types";
 import type { MarketId } from "../lib/sessions";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtStamp } from "../lib/time";
-import { chartMarks, finSections, fmtCount, fmtPc, fmtX, siteOf, whyText, type Fin, type MoveRow, type StockPage } from "../lib/stock";
+import { chartMarks, finSections, fmtCount, fmtPc, fmtX, moveRule, siteOf, whyText, type Fin, type MoveRow, type StockPage } from "../lib/stock";
 import { AssetViewLegacy } from "./AssetLegacy";
 
 export const marketOf = (symbol: string): MarketId => (/\.T$/.test(symbol) ? "TSE" : /\.KS$/.test(symbol) ? "KRX" : /\.HK$/.test(symbol) ? "HKEX" : /\.SS$|\.SZ$/.test(symbol) ? "SSE" : /\.L$/.test(symbol) ? "LSE" : /\.SI$/.test(symbol) ? "SGX" : "NYSE");
@@ -66,6 +66,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
   const f = d.fin, sh = shortLine(d), s = d.short;
   const fs = f ? finSections(f, view) : null;
   const marks = d.moves.eligible ? chartMarks(d.moves.rows) : undefined;
+  const rule = moveRule(d.moves.rule);
   const bms = d.benchmarks, title = bms.map((b) => b.name).join(" AND ");
   const pp = (v: number | null) => (v == null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1).replace("-", "\u2212")}`);
   return (
@@ -136,7 +137,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
         )}
       </Panel>
       {d.moves.eligible && (
-        <Panel no="05" title="BIG MOVES AND WHY" span={12} aux={<><span className="nb">{d.moves.rows.length} in three years, newest first</span> · <span className="nb">5% in a day</span> · <span className="nb">10% in five sessions</span> · <span className="nb">20% from high to low, or low to high, within a month</span> · <span className="nb">marked on the 3M, 12M and 36M charts</span></>}>
+        <Panel no="05" title="BIG MOVES AND WHY" span={12} aux={<><span className="nb">{d.moves.rows.length} in three years, newest first</span>{rule.trial && <> · <span className="nb warn" id="st-rule">RULE ON TRIAL</span></>}{rule.parts.map((x) => <span key={x}> · <span className="nb">{x}</span></span>)} · <span className="nb">marked on the 3M, 12M and 36M charts</span></>}>
           {d.moves.rows.length ? (
             // a short box with its own scrolling (Shota, 19 Nov 2026): the whole list pushed FINANCIALS a long way down
             <div className="mvbox" id="st-movebox" tabIndex={0} aria-label="Big moves, newest first">

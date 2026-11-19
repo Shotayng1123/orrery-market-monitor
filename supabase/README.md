@@ -309,6 +309,29 @@ in all) and `trace` (print each look-up's searches, the pages returned and the r
 and `SUPABASE_SERVICE_ROLE_KEY` secrets the Morning Note already uses. To see what is waiting or stored:
 `select status, count(*) from move_causes group by 1;`
 
+### A second rule on trial (19 Nov 2026)
+
+One volatile company had 54 marks in twelve months, each a look-up of about USD 0.22. A rule with fewer marks is
+on trial for the stocks named in `SWING_TRIAL` (`_shared/bigmoves.ts`; Nvidia alone to begin with):
+
+- a day that closed 10% or more from the previous close;
+- a **bottom**: the lowest close of a fall, marked once the close has since risen 15% from it;
+- a **new peak**: the highest close of a rise, marked once the close has since fallen 15% from it, and only if
+  it was the highest close of the twelve months before it.
+
+Peaks and bottoms are the turning points of the closes when only moves of 15% count (`turningPoints`), so a point,
+once marked, does not move; the stretch still running has none yet. On Nvidia's closes of 19 Nov 2026 the rule
+gives 20 marks in three years and 4 in the last twelve months (the usual rule had queued 15 and had more to
+queue). The two numbers are `SWING_PCT` and `SWING_HIGH_DAYS`; the day's line is `SWING_D1`.
+
+While `SWING_TRIAL` is not empty: the page of a stock on trial says RULE ON TRIAL and the rule; every other
+stock keeps the usual marks and the reasons already found, and a move of theirs without an answer reads as on
+hold and is not queued; the `move-causes` job looks up the trial's stocks only, by the rule on trial, and with
+`--seed` (which the workflow passes) first queues their moves itself from the source's daily closes, as the
+page would. For a turning point the question put to the model is what ended the rise or the fall there, with
+the days to search (two before to five after). To end the trial either way, empty `SWING_TRIAL` or make the
+rule on trial the rule for every stock in `ruleFor`.
+
 ## Changing the shared sign-in password
 
 The password exists only as the function secret `MONITOR_PASSWORD`; it is not in git or in the database, and

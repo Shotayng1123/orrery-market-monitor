@@ -30,12 +30,22 @@ export type ShortData =
   | { kind: "jpx"; d: string; ratio: number; shares: number | null; daysToCover: number | null; holders: Array<{ holder: string; ratio: number; d: string }> }
   | { kind: "interest"; d: string | null; shares: number | null; pctFloat: number | null; pctOut: number | null; daysToCover: number | null; prior: number | null; priorDate: string | null; finra: { d: string; ratio: number } | null };
 /** A big move of the stock (supabase/functions/_shared/bigmoves.ts): a day of 5% or more, five sessions of 10% or
- *  more, or a fall or rise of 20% or more within a month; `text` says it in words. `status` is where the search
- *  for its reason stands: found (with `cause` and `sources`), not_found (searched, nothing reliable), queued
- *  (being looked up), failed (the look-up itself failed three times), old (older than the twelve months reasons
- *  are looked up for), off (this server does not look reasons up). */
-export interface MoveRow { kind: "d1" | "w1" | "m1"; dir: 1 | -1; pct: number; from: string; to: string; fromPx: number; toPx: number; t: number; text: string; status: "found" | "not_found" | "queued" | "failed" | "old" | "off"; cause: string | null; sources: Array<{ title: string; url: string }> }
-export const whyText = (m: MoveRow): string => (m.status === "found" && m.cause ? m.cause : m.status === "not_found" ? "No reliable report of the reason was found." : m.status === "queued" ? "The reason is being looked up; it appears here when found." : m.status === "failed" ? "The look-up for this move failed; no reason is shown." : m.status === "old" ? "Not looked up: reasons are searched for moves of the last twelve months." : "Reasons are not looked up on this server yet.");
+ *  more, or a fall or rise of 20% or more within a month; by the rule on trial (19 Nov 2026) a day of 10% or
+ *  more (d1), a new peak (pk) or a bottom (bt). `text` says it in words. `status` is where the search for its
+ *  reason stands: found (with `cause` and `sources`), not_found (searched, nothing reliable), queued (being
+ *  looked up), failed (the look-up itself failed three times), old (older than the twelve months reasons are
+ *  looked up for), off (this server does not look reasons up), paused (look-ups for this stock are on hold while
+ *  the rule is on trial for others). */
+export interface MoveRow { kind: "d1" | "w1" | "m1" | "pk" | "bt"; dir: 1 | -1; pct: number; from: string; to: string; fromPx: number; toPx: number; t: number; text: string; status: "found" | "not_found" | "queued" | "failed" | "old" | "off" | "paused"; cause: string | null; sources: Array<{ title: string; url: string }> }
+export type MoveRule = "classic" | "swings";
+/** The rule a stock's marks follow, in the words of the page: the short parts for the panel's header and one
+ *  sentence for the phone. A server from before the trial sends no rule: that is the usual one. */
+export function moveRule(rule?: MoveRule): { trial: boolean; parts: string[]; note: string } {
+  return rule === "swings"
+    ? { trial: true, parts: ["10% in a day", "peaks and bottoms: turns of 15% or more", "a peak only when a 12-month high"], note: "On trial for this stock: a day of 10% or more, and the peaks and bottoms of its closes. A peak or a bottom is marked once the price has turned 15% from it; a peak only when it was a 12-month high." }
+    : { trial: false, parts: ["5% in a day", "10% in five sessions", "20% from high to low, or low to high, within a month"], note: "A day of 5% or more, five sessions of 10% or more, or 20% from a high to a low (or a low to a high) within a month." };
+}
+export const whyText = (m: MoveRow): string => (m.status === "found" && m.cause ? m.cause : m.status === "not_found" ? "No reliable report of the reason was found." : m.status === "queued" ? "The reason is being looked up; it appears here when found." : m.status === "failed" ? "The look-up for this move failed; no reason is shown." : m.status === "old" ? "Not looked up: reasons are searched for moves of the last twelve months." : m.status === "paused" ? "Not looked up yet: look-ups are on hold while a new rule for these marks is tried on one stock." : "Reasons are not looked up on this server yet.");
 /** The moves as marks for the chart: one per day (the moves that end the same day share a circle, coloured by the largest). */
 export function chartMarks(rows: MoveRow[]): Array<{ t: number; dir: 1 | -1; title: string; items: Array<{ text: string; why: string }> }> {
   const by = new Map<string, MoveRow[]>();
@@ -59,7 +69,7 @@ export interface StockPage {
   turnover: { d20: { shares: number | null; value: number | null }; d60: { shares: number | null; value: number | null } };
   shares: { outstanding: number | null; diluted: number | null; dilutedNote: string | null; treasury: number | null; float: number | null; asOf: string | null; source: string | null };
   short: ShortData | null;
-  moves: { eligible: boolean; rows: MoveRow[] };   // eligible: 1tn yen / 10bn US dollars and above
+  moves: { eligible: boolean; rule?: MoveRule; rows: MoveRow[] };   // eligible: 1tn yen / 10bn US dollars and above
   earningsAt: string | null; earningsEst: boolean | null;
   val: { pe: number | null; peGuide: number | null; pb: number | null; yield: number | null; yieldGuide: number | null; basis: string | null };
   fin: Fin | null; finNote: string | null;
