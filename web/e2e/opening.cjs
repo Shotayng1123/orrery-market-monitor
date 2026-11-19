@@ -101,6 +101,29 @@ const gone = (p, ms = 3000) => p.waitForFunction(() => !document.querySelector("
     ck("installed as an app on a computer it is once a day too: every time is for the phone", first && (await look(p)) === null);
     await ctx.close(); }
 
+  console.log("\n[not while an account is being created]");
+  { const ctx = await b.newContext({ ...devices["iPhone 13"] }); await person(ctx); await homeScreen(ctx); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+    // in the phone app, where it otherwise plays on every open: a verification email is out (the person has left for the mail app and comes back)
+    await p.goto(MOCK + "#market", { waitUntil: "domcontentloaded" }); await plays(p); await p.touchscreen.tap(195, 400); await gone(p, 2000);
+    await p.evaluate(() => localStorage.setItem("om_signup", JSON.stringify({ email: "new.reader@example.com", at: Date.now() - 60e3, codeMin: 15, resendSec: 60 })));
+    await p.reload({ waitUntil: "domcontentloaded" }); await p.waitForSelector("#root > *"); await p.waitForTimeout(700); const out1 = (await look(p)) === null;
+    await p.reload({ waitUntil: "domcontentloaded" }); await p.waitForSelector("#root > *"); await p.waitForTimeout(700); const out2 = (await look(p)) === null;
+    ck("in the phone app, while a verification email is out, coming back to the app plays no opening, however often", out1 && out2, { out1, out2 });
+    await p.evaluate(() => localStorage.setItem("om_signup", JSON.stringify({ email: "new.reader@example.com", at: Date.now() - 16 * 60e3, codeMin: 15, resendSec: 60 })));
+    await p.reload({ waitUntil: "domcontentloaded" }); const lapsed = await plays(p); await p.touchscreen.tap(195, 400); await gone(p, 2000);
+    await p.evaluate(() => localStorage.removeItem("om_signup")); await p.reload({ waitUntil: "domcontentloaded" }); const done = await plays(p);
+    ck("once that email has lapsed (15 minutes), or the account is made, the next open plays it again", lapsed && done, { lapsed, done });
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+  { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); await person(ctx); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+    // the email's button, opened in a browser that has not shown the opening today
+    const link = "#verify=123456." + Buffer.from("new.reader@example.com").toString("base64url");
+    await p.goto(MOCK + link, { waitUntil: "domcontentloaded" }); await p.waitForSelector("#root > *"); await p.waitForTimeout(800);
+    const st = await p.evaluate(() => ({ day: localStorage.getItem("om.opening.day"), hash: location.hash }));
+    ck("the page the email's button opens plays no opening, even as that browser's first open of the day, and the link is out of the address bar as before", (await look(p)) === null && st.day === null && !/verify/.test(st.hash), st);
+    await p.goto(MOCK + "#market", { waitUntil: "domcontentloaded" }); await p.reload({ waitUntil: "domcontentloaded" });
+    ck("the next ordinary open of that browser plays it", await plays(p));
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+
   console.log("\n[kept smooth: the eye never stops, the picture is coarse only while it moves, the Monitor waits]");
   { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 }); await person(ctx); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
     // the pull-back itself, read from the code the page runs: its speed at every hundredth of a second

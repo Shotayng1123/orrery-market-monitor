@@ -339,9 +339,12 @@ export const dayOf = (d: Date): string => `${d.getFullYear()}-${String(d.getMont
  *    kept on the device (`stored`).
  *  - Never for a reader who has asked their device for less motion, nor in a browser driven by a program (the
  *    browser checks open a fresh one for every suite).
+ *  - Never while an account is being created (`signingUp`: a verification email is out on this device, or the
+ *    page was opened by that email's button): the person is on their way to the next step, and five seconds in
+ *    front of it each time they come back is in their way. Their next opening is the next ordinary open.
  *  - `forced` (the address ends ?opening=1) plays it whatever else, for looking at it again. */
-export function openingDue(today: string, stored: string | null, o: { reducedMotion: boolean; automated: boolean; forced: boolean; everyOpen?: boolean }): boolean {
+export function openingDue(today: string, stored: string | null, o: { reducedMotion: boolean; automated: boolean; forced: boolean; everyOpen?: boolean; signingUp?: boolean }): boolean {
   if (o.forced) return true;
-  if (o.reducedMotion || o.automated) return false;
+  if (o.reducedMotion || o.automated || o.signingUp) return false;
   return o.everyOpen === true || stored !== today;
 }

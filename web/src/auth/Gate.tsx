@@ -2,21 +2,9 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Logo } from "../components/Logo";
 import { apiConfigured, authInfo, login, signup, signupFinish, signupStart, signupVerify, type AuthInfo } from "../lib/api";
 import type { VerifyLink } from "../lib/verify";
+import { keepPending, readPending, type Pending } from "../lib/pending";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-// A verification email that is on its way is remembered on this device (the address and the time only, never the
-// code or a password): on a phone the person leaves for the mail app, and the page may be started afresh when
-// they return.
-const PEND = "om_signup";
-interface Pending { email: string; at: number; codeMin: number; resendSec: number }
-function readPending(): Pending | null {
-  try {
-    const p = JSON.parse(localStorage.getItem(PEND) ?? "null") as Pending | null;
-    return p && typeof p.email === "string" && typeof p.at === "number" && Date.now() - p.at < (p.codeMin || 15) * 60e3 ? p : null;
-  } catch { return null; }
-}
-function keepPending(p: Pending | null): void { try { if (p) localStorage.setItem(PEND, JSON.stringify(p)); else localStorage.removeItem(PEND); } catch { /* storage blocked: the step still works until the page is closed */ } }
 
 /** The gate: sign in with your email and your own password, or create an account.
  *  A new account: give the email address; an email arrives with a "Verify my email" button; the button opens this

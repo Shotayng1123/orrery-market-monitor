@@ -3,11 +3,14 @@ import { OPENING_KEY, OPENING_S, OPENING_SKIP_KEY, T_MARK, dayOf, openingDue, pr
 import { holdAnswers, letGo } from "../lib/hold";
 import { isInstalled } from "../lib/install";
 import { PHONE } from "../lib/phone";
+import { readPending } from "../lib/pending";
+import { openedByButton } from "../lib/verify";
 
 /** The opening (lib/opening.ts) over the whole screen while the Monitor loads behind it. In the app on a phone's
  *  home screen it plays every time the app is opened; in a browser tab and on a computer once a day on each
  *  device (the day it last played is kept on the device). A tap or a click anywhere ends it at once (SKIP at the
- *  foot says so), as do Esc, Enter and Space. The address ending ?opening=1 plays it again whatever the day.
+ *  foot says so), as do Esc, Enter and Space. It does not play while an account is being created (a
+ *  verification email out on this device, or the page opened by that email's button). The address ending ?opening=1 plays it again whatever the day.
  *  It ends on the click, not on the press: by then the layer is still on top, so the click that ends it cannot
  *  land on a button of the Monitor underneath.
  *
@@ -30,7 +33,7 @@ export function openingNow(): boolean {
   // the page the new-version bar has just loaded is the same visit going on, not the app being opened
   let sameVisit = false;
   try { sameVisit = sessionStorage.getItem(OPENING_SKIP_KEY) === "1"; sessionStorage.removeItem(OPENING_SKIP_KEY); } catch { /* nothing kept */ }
-  const play = (forced || !sameVisit) && openingDue(dayOf(new Date()), stored, { reducedMotion: mq("(prefers-reduced-motion: reduce)"), automated: navigator.webdriver === true, forced, everyOpen: isInstalled() && mq(PHONE) });
+  const play = (forced || !sameVisit) && openingDue(dayOf(new Date()), stored, { reducedMotion: mq("(prefers-reduced-motion: reduce)"), automated: navigator.webdriver === true, forced, everyOpen: isInstalled() && mq(PHONE), signingUp: openedByButton() || readPending() != null });
   if (play) holdAnswers((OPENING_S + 2.5) * 1000);
   return play;
 }
