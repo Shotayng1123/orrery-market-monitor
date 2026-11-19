@@ -39,7 +39,7 @@ export const FIRST: string[] = [
   "On your phone, add the Monitor to the Home Screen and turn on notifications.",
 ];
 export const HELP = "Every column, colour and badge is explained behind the ? in the Monitor's header.";
-export const SMALL = "Orrery Monitor shows market data from third-party feeds that may be delayed or incomplete. Information only; nothing here is investment advice. This is the only email of its kind: it was sent because an account was just created with this address.";
+export const SMALL = "Orrery Monitor shows market data from third-party feeds that may be delayed or incomplete. Information only; nothing here is investment advice. This is the only email of its kind: it is sent once, when an account with this address first signs in.";
 
 // colours of the Monitor itself (web/src/styles/tokens.css)
 const BG = "#050505", PANEL = "#0c0c0c", LINE = "#26272b", TXT = "#e8e5de", TXT2 = "#c6c2b7", MUT = "#8f8b82", CORAL = "#ff6f61", BRASS = "#d8c49a";

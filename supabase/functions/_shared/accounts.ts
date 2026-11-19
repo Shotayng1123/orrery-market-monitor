@@ -35,7 +35,7 @@ async function newHash(pw: string): Promise<{ pw_hash: string; pw_salt: string; 
   return { pw_hash: await hashPw(pw, salt, ITER), pw_salt: hex(salt), pw_iter: ITER };
 }
 
-export interface Account { email: string; pw_hash: string; pw_salt: string; pw_iter: number; role: "manager" | "user"; status: "pending" | "active" | "disabled"; must_change: boolean; tokens_after: string; created_at: string; last_seen: string | null; logins: number; verified_at?: string | null; welcomed_at?: string | null }
+export interface Account { email: string; pw_hash: string; pw_salt: string; pw_iter: number; role: "manager" | "user"; status: "pending" | "active" | "disabled"; must_change: boolean; tokens_after: string; created_at: string; last_seen: string | null; logins: number; verified_at?: string | null; welcomed_at?: string | null; welcome_tries?: number }
 
 const EMAIL = /^[a-z0-9._%+-]+@[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 export const cleanEmail = (v: unknown): string | null => { const s = String(v ?? "").trim().toLowerCase(); return s.length <= 254 && EMAIL.test(s) ? s : null; };
@@ -135,16 +135,27 @@ export async function signupVerify(req: Request): Promise<Response> {
   return (await tryCode(req, ip, email, code, false)) ?? json(req, { ok: true, email });
 }
 
-/** The welcome email, once the account is open. It never stands in the account's way: if it cannot be sent, or
- *  takes longer than eight seconds, that is logged and the person is signed in all the same. */
+const WELCOME_TRIES = 3;
+/** The welcome email: once to each account, at the first sign-in that succeeds after the account has none (for
+ *  a new account that is the moment its password is set). It never stands in the account's way: if it cannot be
+ *  sent, or takes longer than eight seconds, that is logged and the person is signed in all the same, and the
+ *  next sign-in tries again, three times in all.
+ *  The account is marked as welcomed before the email is sent and the mark is taken back if the sending fails:
+ *  two sign-ins at the same moment cannot both send it. */
 async function welcome(email: string): Promise<void> {
+  if (!mailReady()) return;
+  const { data: mine, error } = await db.from("accounts").update({ welcomed_at: new Date().toISOString() }).eq("email", email).is("welcomed_at", null).lt("welcome_tries", WELCOME_TRIES).select("welcome_tries");
+  if (error) { console.error("welcome email: the account could not be marked:", error.message); return; }
+  const row = ((mine ?? []) as Array<{ welcome_tries: number | null }>)[0];
+  if (!row) return;   // it has had it, or another sign-in is sending it now, or three sendings failed
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([sendMail({ to: email, ...welcomeMail(siteUrl()) }), new Promise<never>((_, no) => { timer = setTimeout(() => no(new Error("no answer from the mail server within 8 s")), 8000); })]);
-    const { error } = await db.from("accounts").update({ welcomed_at: new Date().toISOString() }).eq("email", email);
-    if (error) console.error("welcome email sent, but not recorded:", error.message);
-  } catch (e) { console.error("welcome email not sent:", e instanceof Error ? e.message : String(e)); }
-  finally { clearTimeout(timer); }
+  } catch (e) {
+    console.error("welcome email not sent:", e instanceof Error ? e.message : String(e));
+    const { error: back } = await db.from("accounts").update({ welcomed_at: null, welcome_tries: (row.welcome_tries ?? 0) + 1 }).eq("email", email);
+    if (back) console.error("welcome email: the mark could not be taken back:", back.message);
+  } finally { clearTimeout(timer); forget(email); }
 }
 
 /** Step 3: the confirmed address (email + code again) and a password. The account is active at once and the
@@ -225,6 +236,9 @@ export async function login(req: Request): Promise<Response> {
   await db.from("accounts").update({ last_seen: new Date().toISOString(), logins: a.logins + 1 }).eq("email", email);
   const { data: u } = await db.from("users").select("logins").eq("id", email).maybeSingle();
   await db.from("users").upsert({ id: email, last_seen: new Date().toISOString(), logins: (u?.logins ?? 0) + 1, remember }, { onConflict: "id" });
+  // an account that has not had the welcome email (one from before it existed, one approved by hand, one whose
+  // first sending failed) gets it now, once
+  if (!a.welcomed_at && (a.welcome_tries ?? 0) < WELCOME_TRIES) await welcome(email);
   return json(req, { token, id: email, role: a.role, mustChange: a.must_change, expiresIn: ttlOf(remember) });
 }
 
