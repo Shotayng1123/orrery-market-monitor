@@ -25,7 +25,7 @@
 import { db } from "./lib/db.js";
 import { ask, newClient } from "./lib/llm.js";
 import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabase/functions/_shared/movecause.js";
-import { SWING_D1, SWING_TRIAL, bigMoves, moveCtx, settledBars } from "../supabase/functions/_shared/bigmoves.js";
+import { SWING_D1, SWING_HIGH_DAYS, SWING_PCT, SWING_TRIAL, bigMoves, moveCtx, settledBars, turningPoints } from "../supabase/functions/_shared/bigmoves.js";
 import { localDate, marketById, marketState } from "../supabase/functions/_shared/sessions.js";
 import { spark } from "./lib/yahoo.js";
 
@@ -64,6 +64,11 @@ async function seed(sb: ReturnType<typeof db>, symbol: string): Promise<void> {
   const recent = moves.filter((x) => now - x.t <= CAUSES_FOR_DAYS * 86400);
   console.log(`seed ${symbol}: ${own.length} daily closes (${new Date(own[0].t * 1000).toISOString().slice(0, 10)} to ${new Date(own[own.length - 1].t * 1000).toISOString().slice(0, 10)}); ${moves.length} marks in three years by the rule on trial, ${recent.length} of them in the last twelve months:`);
   for (const x of moves) console.log(`  ${x.to} ${x.kind} ${x.pct >= 0 ? "+" : ""}${x.pct.toFixed(1)}% (from ${x.from}, ${x.fromPx.toFixed(2)} to ${x.toPx.toFixed(2)})${now - x.t <= CAUSES_FOR_DAYS * 86400 ? "" : "  [older than twelve months: no look-up]"}`);
+  // with --dry: how many marks a second, finer level of turning points would add, for several sizes of turn
+  if (DRY) for (const p2 of [6, 7, 8, 10, 12]) {
+    const t = turningPoints(settledBars(own, state === "OPEN" || state === "BREAK", localDate(m.tz, now)), SWING_PCT, SWING_HIGH_DAYS, p2).filter((x) => now - x.t <= CAUSES_FOR_DAYS * 86400);
+    console.log(`  with smaller turns of ${p2}%: ${t.length} peaks and bottoms in the last twelve months (${t.filter((x) => x.kind === "pk" || x.kind === "bt").length} large, ${t.filter((x) => x.kind === "p2" || x.kind === "b2").length} smaller): ${t.map((x) => `${x.to.slice(5)} ${x.kind} ${x.pct >= 0 ? "+" : ""}${x.pct.toFixed(0)}%`).join(", ")}`);
+  }
   if (DRY || !recent.length) return;
   const rows = recent.map((x) => ({ symbol, kind: x.kind, d: x.to, from_d: x.from, pct: x.pct, ctx: moveCtx(x, { symbol, name: who.name_en ?? who.name, exchange: null, sector: who.sector, currency: "USD" }, bench.length ? { name: "S&P 500", bars: bench } : null) }));
   const { error } = await sb.from("move_causes").upsert(rows, { onConflict: "symbol,kind,d", ignoreDuplicates: true });

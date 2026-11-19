@@ -4,7 +4,7 @@
 // The rule the page depends on: a reason is shown only when a report the search actually returned supports it.
 // So the model must name the pages it relied on, and a page it names that the search did not return is thrown
 // away; an answer left with no page is "not found", whatever it says.
-export interface MoveCtx { symbol: string; name: string; exchange: string | null; sector: string | null; currency: string | null; kind: "d1" | "w1" | "m1" | "pk" | "bt"; from: string; to: string; pct: number; fromPx: number; toPx: number; text: string; bench: string | null; benchPct: number | null }
+export interface MoveCtx { symbol: string; name: string; exchange: string | null; sector: string | null; currency: string | null; kind: "d1" | "w1" | "m1" | "pk" | "bt" | "p2" | "b2"; from: string; to: string; pct: number; fromPx: number; toPx: number; text: string; bench: string | null; benchPct: number | null }
 /** `why` is set on an answer that is not found: which of the three ways it came to that (for the job's log). */
 export interface CauseAnswer { found: boolean; cause: string | null; sources: Array<{ title: string; url: string }>; why?: "none reported" | "no sentence" | "no returned page cited" }
 

@@ -21,13 +21,13 @@ import { barOnOrBefore, type Bar } from "./stockstats.ts";
 import type { MoveCtx } from "./movecause.ts";
 
 export const BIG_D1 = 5, BIG_W1 = 10, BIG_M1 = 20, WEEK = 5, MONTH = 21;
-export const SWING_D1 = 10, SWING_PCT = 15, SWING_HIGH_DAYS = 252;
+export const SWING_D1 = 10, SWING_PCT = 15, SWING_PCT_2 = 8, SWING_HIGH_DAYS = 252;
 /** The stocks whose page uses the rule on trial. While this is not empty, reasons are looked up for these stocks
  *  only (stock.ts, jobs/move_causes.ts): the look-ups for every other stock wait for the rule to be settled. */
 export const SWING_TRIAL: ReadonlySet<string> = new Set(["NVDA"]);
 export type MoveRule = "classic" | "swings";
 export const ruleFor = (symbol: string): MoveRule => (SWING_TRIAL.has(symbol) ? "swings" : "classic");
-export interface BigMove { kind: "d1" | "w1" | "m1" | "pk" | "bt"; dir: 1 | -1; pct: number; from: string; to: string; fromPx: number; toPx: number; t: number }
+export interface BigMove { kind: "d1" | "w1" | "m1" | "pk" | "bt" | "p2" | "b2"; dir: 1 | -1; pct: number; from: string; to: string; fromPx: number; toPx: number; t: number }
 const iso = (t: number): string => new Date(t * 1000).toISOString().slice(0, 10);
 const mv = (kind: BigMove["kind"], a: Bar, b: Bar): BigMove => { const pct = (b.c / a.c - 1) * 100; return { kind, dir: pct >= 0 ? 1 : -1, pct, from: iso(a.t), to: iso(b.t), fromPx: a.c, toPx: b.c, t: b.t }; };
 const EPS = 1e-9;   // 930/1000 is -6.999999999999995%: a move that is exactly on the line counts
@@ -43,12 +43,11 @@ function largestApart(c: Array<{ i: number; j: number; m: BigMove }>): BigMove[]
   return kept.map((k) => k.m);
 }
 
-/** The peaks and bottoms of the bars (time order), oldest first: the turning points of the closes when only moves
- *  of `pct` per cent count. A peak is given from the bottom before it, a bottom from the peak before it (the
- *  first one from the lowest or highest close before it); a peak is given only when it was the highest close of
- *  the `highDays` sessions before it. The stretch still running at the end has no turning point yet. */
-export function turningPoints(bars: Bar[], pct = SWING_PCT, highDays = SWING_HIGH_DAYS): BigMove[] {
-  const b = bars.filter((x) => x.c > 0), out: BigMove[] = [];
+/** The turning points of the closes when only moves of `pct` per cent count, oldest first, as indices into `b`:
+ *  each with the turning point before it (the first one with the lowest or highest close before it). The stretch
+ *  still running at the end has no turning point yet. */
+function pivots(b: Bar[], pct: number): Array<{ i: number; from: number; peak: boolean }> {
+  const out: Array<{ i: number; from: number; peak: boolean }> = [];
   const up = 1 + pct / 100, down = 1 - pct / 100;
   // dir: +1 after a bottom (looking for the peak), -1 after a peak (looking for the bottom), 0 before the first
   let dir = 0, hi = 0, lo = 0, last = -1;
@@ -58,17 +57,37 @@ export function turningPoints(bars: Bar[], pct = SWING_PCT, highDays = SWING_HIG
     if (dir <= 0 && b[j].c < b[lo].c) lo = j;
     if (dir >= 0 && b[j].c <= b[hi].c * down * (1 + EPS)) {
       const from = last >= 0 ? last : extreme(hi, -1);
-      let top = true;
-      for (let i = Math.max(0, hi - highDays); i < hi; i++) if (b[i].c > b[hi].c) { top = false; break; }
-      if (top && from !== hi) out.push(mv("pk", b[from], b[hi]));
+      if (from !== hi) out.push({ i: hi, from, peak: true });
       last = hi; dir = -1; lo = j;
     } else if (dir <= 0 && b[j].c >= b[lo].c * up * (1 - EPS)) {
       const from = last >= 0 ? last : extreme(lo, 1);
-      if (from !== lo) out.push(mv("bt", b[from], b[lo]));
+      if (from !== lo) out.push({ i: lo, from, peak: false });
       last = lo; dir = 1; hi = j;
     }
   }
   return out;
+}
+
+/** The peaks and bottoms of the bars (time order), oldest first, on two levels.
+ *  The large ones are the turning points when only moves of `pct` per cent count: a bottom (bt), and a peak that
+ *  was the highest close of the `highDays` sessions before it (pk). The smaller ones (p2, b2) are the further
+ *  turning points when moves of `pct2` per cent count, and with them a large peak that was not a twelve-month
+ *  high. Each is given from the turning point of its own level before it. A peak points down and a bottom up
+ *  (`dir`): that is the turn the stock took there, and what its reason is about; `pct` is the move into it.
+ *  `pct2` of 0 gives the large ones alone. */
+export function turningPoints(bars: Bar[], pct = SWING_PCT, highDays = SWING_HIGH_DAYS, pct2 = SWING_PCT_2): BigMove[] {
+  const b = bars.filter((x) => x.c > 0), out: BigMove[] = [];
+  const turn = (kind: BigMove["kind"], p: { i: number; from: number; peak: boolean }): BigMove => ({ ...mv(kind, b[p.from], b[p.i]), dir: p.peak ? -1 : 1 });
+  const large = pivots(b, pct), small = pct2 > 0 && pct2 < pct ? pivots(b, pct2) : [];
+  const smallAt = new Map(small.map((p) => [p.i, p])), marked = new Set<number>();
+  for (const p of large) {
+    let top = p.peak;
+    if (top) for (let i = Math.max(0, p.i - highDays); i < p.i; i++) if (b[i].c > b[p.i].c) { top = false; break; }
+    if (!p.peak) out.push(turn("bt", p)); else if (top) out.push(turn("pk", p)); else if (small.length) out.push(turn("p2", smallAt.get(p.i) ?? p)); else continue;
+    marked.add(p.i);
+  }
+  for (const p of small) if (!marked.has(p.i)) out.push(turn(p.peak ? "p2" : "b2", p));
+  return out.sort((x, y) => x.t - y.t);
 }
 
 /** Every big move in the bars (time order, one per trading day) that ends on or after `sinceT`, newest first,
