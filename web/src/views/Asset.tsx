@@ -11,7 +11,7 @@ import type { TableRow } from "../lib/types";
 import type { MarketId } from "../lib/sessions";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtStamp } from "../lib/time";
-import { chartMarks, finSections, fmtCount, fmtPc, fmtX, moveRule, siteOf, whyText, type Fin, type MoveRow, type StockPage } from "../lib/stock";
+import { chartMarks, finSections, fmtCount, fmtPc, fmtX, isSmallMove, moveRule, siteOf, whyText, type Fin, type MoveRow, type StockPage } from "../lib/stock";
 import { AssetViewLegacy } from "./AssetLegacy";
 
 export const marketOf = (symbol: string): MarketId => (/\.T$/.test(symbol) ? "TSE" : /\.KS$/.test(symbol) ? "KRX" : /\.HK$/.test(symbol) ? "HKEX" : /\.SS$|\.SZ$/.test(symbol) ? "SSE" : /\.L$/.test(symbol) ? "LSE" : /\.SI$/.test(symbol) ? "SGX" : "NYSE");
@@ -66,7 +66,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
   const f = d.fin, sh = shortLine(d), s = d.short;
   const fs = f ? finSections(f, view) : null;
   const marks = d.moves.eligible ? chartMarks(d.moves.rows) : undefined;
-  const rule = moveRule(d.moves.rule);
+  const rule = moveRule(d.moves.rule, d.moves.sizes);
   const bms = d.benchmarks, title = bms.map((b) => b.name).join(" AND ");
   const pp = (v: number | null) => (v == null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1).replace("-", "\u2212")}`);
   return (
@@ -145,7 +145,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
               <thead><tr><th className="l">Ended</th><th className="l">Move</th><th className="l">Why</th></tr></thead>
               <tbody>{d.moves.rows.map((m) => (
                 <tr key={`${m.kind}${m.to}`} data-kind={m.kind} data-status={m.status}>
-                  <td className="l d"><span className={`dot ${m.dir > 0 ? "up" : "dn"}`} />{m.to}</td>
+                  <td className="l d"><span className={`dot ${m.dir > 0 ? "up" : "dn"}${isSmallMove(m) ? " sm" : ""}`} />{m.to}</td>
                   <td className={`l m ${m.dir > 0 ? "up" : "dn"}`}>{m.text}</td>
                   <td className="l w"><MoveWhy m={m} /></td>
                 </tr>

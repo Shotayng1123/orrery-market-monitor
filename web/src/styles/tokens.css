@@ -941,6 +941,8 @@ button.go.ghost:hover{color:var(--txt);border-color:var(--amber)}
 .mvT td.w a{color:var(--cyan);text-decoration:none;margin-right:8px;white-space:nowrap}
 .mvT .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:baseline}
 .mvT .dot.up{background:var(--up)} .mvT .dot.dn{background:var(--dn)}
+/* a smaller peak or bottom (the rule on trial, 19 Nov 2026): a smaller dot, as its circle on the chart is smaller */
+.mvT .dot.sm{width:5px;height:5px;margin:0 7px 1px 2px}
 .kvT td.l{color:var(--txt2)}
 .kvT td.num{white-space:nowrap}
 .rng{display:inline-flex;align-items:center;gap:7px}
@@ -1328,6 +1330,7 @@ body.pv2 .mvtip .t,body.pv2 .mvtip .l{font-size:12px}
 .mp-moves .h b{min-width:0}
 .mp-moves .h .d{flex:none;margin-left:auto;color:var(--mut);font-size:12px;white-space:nowrap}
 .mp-moves .dot{flex:none;width:9px;height:9px;border-radius:50%;align-self:center}
+.mp-moves .dot.sm{width:6px;height:6px;margin:0 1.5px}
 .mp-moves .dot.up{background:var(--up)} .mp-moves .dot.dn{background:var(--dn)}
 .mp-moves .w{margin-top:5px;font-size:14px;line-height:1.45}
 .mp-moves .s{margin-top:5px;font-size:12.5px;line-height:1.5}

@@ -25,8 +25,8 @@ const AXIS = SHARED_AXIS;
 /** A mark on the chart: a small circle on the close of day `t` (Unix seconds, any time that day), green for a
  *  rise and red for a fall. Pointing at it (or tapping it) shows `title` and then each item: what moved, and
  *  why. Daily charts only. */
-export interface ChartMark { t: number; dir: 1 | -1; title: string; items: Array<{ text: string; why: string }> }
-const MARK_R = 4.5;   // the circle's radius in CSS pixels
+export interface ChartMark { t: number; dir: 1 | -1; small?: boolean; title: string; items: Array<{ text: string; why: string }> }
+const MARK_R = 4.5, MARK_R_SMALL = 3.4;   // a circle's radius in CSS pixels; the smaller one is a smaller peak or bottom
 
 export interface SigmaChartProps {
   points: SeriesPoint[];          // full series including history behind the window (for bands and panning)
@@ -143,8 +143,8 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
           g.save();
           for (const { m, i } of placed) {
             const xv = xsAll[i]; if (xv < x0 || xv > x1) continue;
-            g.beginPath(); g.arc(u.valToPos(xv, "x", true), u.valToPos(data[1][i] as number, "y", true), MARK_R * pr, 0, Math.PI * 2);
-            g.fillStyle = m.dir > 0 ? UP : DN; g.fill(); g.lineWidth = 1.5 * pr; g.strokeStyle = "#0b0b0c"; g.stroke();
+            g.beginPath(); g.arc(u.valToPos(xv, "x", true), u.valToPos(data[1][i] as number, "y", true), (m.small ? MARK_R_SMALL : MARK_R) * pr, 0, Math.PI * 2);
+            g.fillStyle = m.dir > 0 ? UP : DN; g.fill(); g.lineWidth = (m.small ? 1 : 1.5) * pr; g.strokeStyle = "#0b0b0c"; g.stroke();
           }
           g.restore();
         }],

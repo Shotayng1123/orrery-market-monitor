@@ -36,21 +36,26 @@ export type ShortData =
  *  looked up), failed (the look-up itself failed three times), old (older than the twelve months reasons are
  *  looked up for), off (this server does not look reasons up), paused (look-ups for this stock are on hold while
  *  the rule is on trial for others). */
-export interface MoveRow { kind: "d1" | "w1" | "m1" | "pk" | "bt"; dir: 1 | -1; pct: number; from: string; to: string; fromPx: number; toPx: number; t: number; text: string; status: "found" | "not_found" | "queued" | "failed" | "old" | "off" | "paused"; cause: string | null; sources: Array<{ title: string; url: string }> }
+export interface MoveRow { kind: "d1" | "w1" | "m1" | "pk" | "bt" | "p2" | "b2"; dir: 1 | -1; pct: number; from: string; to: string; fromPx: number; toPx: number; t: number; text: string; status: "found" | "not_found" | "queued" | "failed" | "old" | "off" | "paused"; cause: string | null; sources: Array<{ title: string; url: string }> }
 export type MoveRule = "classic" | "swings";
+export interface MoveSizes { day: number; large: number; small: number }
+/** A smaller peak or bottom: drawn as a smaller circle and a smaller dot. */
+export const isSmallMove = (m: { kind: MoveRow["kind"] }): boolean => m.kind === "p2" || m.kind === "b2";
 /** The rule a stock's marks follow, in the words of the page: the short parts for the panel's header and one
- *  sentence for the phone. A server from before the trial sends no rule: that is the usual one. */
-export function moveRule(rule?: MoveRule): { trial: boolean; parts: string[]; note: string } {
+ *  sentence for the phone. A server from before the trial sends no rule: that is the usual one. The sizes of the
+ *  rule on trial come from the server (they are being tuned); the defaults are those of its first day. */
+export function moveRule(rule?: MoveRule, z: MoveSizes = { day: 10, large: 15, small: 10 }): { trial: boolean; parts: string[]; note: string } {
   return rule === "swings"
-    ? { trial: true, parts: ["10% in a day", "peaks and bottoms: turns of 15% or more", "a peak only when a 12-month high"], note: "On trial for this stock: a day of 10% or more, and the peaks and bottoms of its closes. A peak or a bottom is marked once the price has turned 15% from it; a peak only when it was a 12-month high." }
+    ? { trial: true, parts: [`${z.day}% in a day`, "peaks red, bottoms green", `large circles: turns of ${z.large}%, a peak only when a 12-month high`, `small circles: turns of ${z.small}%`], note: `On trial for this stock: a day of ${z.day}% or more, and the peaks (red) and bottoms (green) of its closes. Large circles are turns of ${z.large}% or more, a peak only when it was a 12-month high; small circles are turns of ${z.small}%. Each is marked once the price has turned that far from it.` }
     : { trial: false, parts: ["5% in a day", "10% in five sessions", "20% from high to low, or low to high, within a month"], note: "A day of 5% or more, five sessions of 10% or more, or 20% from a high to a low (or a low to a high) within a month." };
 }
 export const whyText = (m: MoveRow): string => (m.status === "found" && m.cause ? m.cause : m.status === "not_found" ? "No reliable report of the reason was found." : m.status === "queued" ? "The reason is being looked up; it appears here when found." : m.status === "failed" ? "The look-up for this move failed; no reason is shown." : m.status === "old" ? "Not looked up: reasons are searched for moves of the last twelve months." : m.status === "paused" ? "Not looked up yet: look-ups are on hold while a new rule for these marks is tried on one stock." : "Reasons are not looked up on this server yet.");
-/** The moves as marks for the chart: one per day (the moves that end the same day share a circle, coloured by the largest). */
-export function chartMarks(rows: MoveRow[]): Array<{ t: number; dir: 1 | -1; title: string; items: Array<{ text: string; why: string }> }> {
+/** The moves as marks for the chart: one per day (the moves that end the same day share a circle, coloured by the
+ *  largest; a small circle when they are all smaller peaks or bottoms). */
+export function chartMarks(rows: MoveRow[]): Array<{ t: number; dir: 1 | -1; small: boolean; title: string; items: Array<{ text: string; why: string }> }> {
   const by = new Map<string, MoveRow[]>();
   for (const r of rows) by.set(r.to, [...(by.get(r.to) ?? []), r]);
-  return [...by.entries()].map(([to, rs]) => ({ t: rs[0].t, dir: [...rs].sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0].dir, title: to, items: rs.map((r) => ({ text: r.text, why: whyText(r) })) }));
+  return [...by.entries()].map(([to, rs]) => ({ t: rs[0].t, dir: [...rs].sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0].dir, small: rs.every(isSmallMove), title: to, items: rs.map((r) => ({ text: r.text, why: whyText(r) })) }));
 }
 /** The site a source is on, for a short link label: "reuters.com". */
 export const siteOf = (url: string): string => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; } };
@@ -69,7 +74,7 @@ export interface StockPage {
   turnover: { d20: { shares: number | null; value: number | null }; d60: { shares: number | null; value: number | null } };
   shares: { outstanding: number | null; diluted: number | null; dilutedNote: string | null; treasury: number | null; float: number | null; asOf: string | null; source: string | null };
   short: ShortData | null;
-  moves: { eligible: boolean; rule?: MoveRule; rows: MoveRow[] };   // eligible: 1tn yen / 10bn US dollars and above
+  moves: { eligible: boolean; rule?: MoveRule; sizes?: MoveSizes; rows: MoveRow[] };   // eligible: 1tn yen / 10bn US dollars and above
   earningsAt: string | null; earningsEst: boolean | null;
   val: { pe: number | null; peGuide: number | null; pb: number | null; yield: number | null; yieldGuide: number | null; basis: string | null };
   fin: Fin | null; finNote: string | null;

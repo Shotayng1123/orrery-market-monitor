@@ -4,7 +4,7 @@
 // The rule the page depends on: a reason is shown only when a report the search actually returned supports it.
 // So the model must name the pages it relied on, and a page it names that the search did not return is thrown
 // away; an answer left with no page is "not found", whatever it says.
-export interface MoveCtx { symbol: string; name: string; exchange: string | null; sector: string | null; currency: string | null; kind: "d1" | "w1" | "m1" | "pk" | "bt" | "p2" | "b2"; from: string; to: string; pct: number; fromPx: number; toPx: number; text: string; bench: string | null; benchPct: number | null }
+export interface MoveCtx { symbol: string; name: string; exchange: string | null; sector: string | null; currency: string | null; kind: "d1" | "w1" | "m1" | "pk" | "bt" | "p2" | "b2"; from: string; to: string; pct: number; fromPx: number; toPx: number; text: string; bench: string | null; benchPct: number | null; /** for a peak or a bottom: the turn, in per cent, that made it one */ turn?: number }
 /** `why` is set on an answer that is not found: which of the three ways it came to that (for the job's log). */
 export interface CauseAnswer { found: boolean; cause: string | null; sources: Array<{ title: string; url: string }>; why?: "none reported" | "no sentence" | "no returned page cited" }
 
@@ -30,14 +30,14 @@ export function causeQuestion(c: MoveCtx): string {
   const px = (v: number) => (v >= 1000 ? Math.round(v).toLocaleString("en-GB") : v.toFixed(2));
   const who = `Stock: ${c.name} (${c.symbol}${c.exchange ? `, ${c.exchange}` : ""}${c.sector ? `, ${c.sector}` : ""})`;
   const benchLine = c.bench && c.benchPct != null ? `Over the same dates the ${c.bench} changed ${c.benchPct >= 0 ? "+" : ""}${c.benchPct.toFixed(1)}%.` : "The benchmark's change over these dates is not available.";
-  if (c.kind === "pk" || c.kind === "bt") {
-    // a turning point of the twelve-month chart (bigmoves.ts): the question is what ended the rise or the fall there
-    const peak = c.kind === "pk", size = `${Math.abs(c.pct).toFixed(1)}%`, ccy = c.currency ? ` ${c.currency}` : "";
+  if (c.kind === "pk" || c.kind === "bt" || c.kind === "p2" || c.kind === "b2") {
+    // a turning point of the chart (bigmoves.ts): the question is what ended the rise or the fall there
+    const peak = c.kind === "pk" || c.kind === "p2", size = `${Math.abs(c.pct).toFixed(1)}%`, ccy = c.currency ? ` ${c.currency}` : "", turn = c.turn ?? 15;
     return [
       who,
       peak
-        ? `Turning point: a closing high of ${px(c.toPx)}${ccy} on ${dayWords(c.to)}, the highest close in twelve months, ${size} above the closing low of ${dayWords(c.from)} (${px(c.fromPx)}). After it the stock fell 15% or more.`
-        : `Turning point: a closing low of ${px(c.toPx)}${ccy} on ${dayWords(c.to)}, ${size} below the closing high of ${dayWords(c.from)} (${px(c.fromPx)}). After it the stock rose 15% or more.`,
+        ? `Turning point: a closing high of ${px(c.toPx)}${ccy} on ${dayWords(c.to)}${c.kind === "pk" ? ", the highest close in twelve months" : ""}, ${size} above the closing low of ${dayWords(c.from)} (${px(c.fromPx)}). After it the stock fell ${turn}% or more.`
+        : `Turning point: a closing low of ${px(c.toPx)}${ccy} on ${dayWords(c.to)}, ${size} below the closing high of ${dayWords(c.from)} (${px(c.fromPx)}). After it the stock rose ${turn}% or more.`,
       benchLine,
       `Search for reports dated from two days before ${dayWords(c.to)} to five days after it.`,
       peak ? "What is the reported reason the rise ended at this high?" : "What is the reported reason the fall ended at this low and the stock turned up?",

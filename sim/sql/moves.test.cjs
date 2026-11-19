@@ -51,6 +51,11 @@ const ck = (name, cond, detail) => { if (cond) { pass++; console.log("  ✓ " + 
   await db.exec(kinds); await db.exec(kinds);
   await put("NVDA", "pk", "2026-10-21"); await put("NVDA", "bt", "2026-11-17");
   let still = false; try { await db.exec("insert into move_causes (symbol, kind, d, from_d, pct, ctx) values ('X', 'y1', '2026-01-03', '2026-01-01', 1, '{}')"); } catch { still = true; }
+  let early2 = false; try { await put("NVDA", "p2", "2026-01-29"); } catch { early2 = true; }
+  const small = fs.readFileSync(path.join(MIG, "20261119000004_move_kinds_small.sql"), "utf8");
+  await db.exec(small); await db.exec(small);
+  await put("NVDA", "p2", "2026-01-29"); await put("NVDA", "b2", "2026-02-05");
+  ck("the second level's kinds (a smaller peak, a smaller bottom) can be queued once its change is applied, not before", early2 && Number((await one("select count(*) as n from move_causes where symbol = 'NVDA' and kind in ('p2','b2')")).n) === 2);
   ck("before the change of 19 Nov a peak cannot be queued; after it (applied twice) a peak and a bottom can, the earlier kinds still can, and an unknown kind is still refused", early && still && Number((await one("select count(*) as n from move_causes where symbol = 'NVDA' and kind in ('pk','bt')")).n) === 2 && Number((await one("select count(*) as n from move_causes where kind in ('d1','w1','m1')")).n) >= 3);
   await db.exec("update move_causes set status = 'found' where status = 'queued'");
   ck("once nothing waits, nothing is asked", (await kick()) === "nothing queued");

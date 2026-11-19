@@ -26,14 +26,18 @@ function mockMoves(pts: Array<{ t: number; v: number }>, variant: "classic" | "s
   if (n < 200) return [];
   const mk = (kind: MoveRow["kind"], i: number, back: number, pct: number, status: MoveRow["status"], cause: string | null, sources: MoveRow["sources"] = []): MoveRow => {
     const from = day(i - back), to = day(i), p = `${pct > 0 ? "+" : "\u2212"}${Math.abs(pct).toFixed(1)}%`;
-    const text = kind === "d1" ? `${p} on the day` : kind === "pk" ? `New high: ${p} from the low of ${d(from)}` : kind === "bt" ? `Bottom: ${p} from the high of ${d(from)}` : kind === "w1" ? `${p} in five sessions (from ${d(from)})` : pct < 0 ? `${p} from the high of ${d(from)} to the low of ${d(to)}` : `${p} from the low of ${d(from)} to the high of ${d(to)}`;
-    return { kind, dir: pct >= 0 ? 1 : -1, pct, from, to, fromPx: pts[i - back].v, toPx: pts[i].v, t: pts[i].t, text, status, cause, sources };
+    const text = kind === "d1" ? `${p} on the day` : kind === "pk" ? `New high: ${p} from the low of ${d(from)}` : kind === "bt" ? `Bottom: ${p} from the high of ${d(from)}` : kind === "p2" ? `Smaller peak: ${p} from the low of ${d(from)}` : kind === "b2" ? `Smaller bottom: ${p} from the high of ${d(from)}` : kind === "w1" ? `${p} in five sessions (from ${d(from)})` : pct < 0 ? `${p} from the high of ${d(from)} to the low of ${d(to)}` : `${p} from the low of ${d(from)} to the high of ${d(to)}`;
+    // a peak points down and a bottom up: the turn the stock took there (as the server sends it)
+    const dir = kind === "pk" || kind === "p2" ? -1 : kind === "bt" || kind === "b2" ? 1 : pct >= 0 ? 1 : -1;
+    return { kind, dir, pct, from, to, fromPx: pts[i - back].v, toPx: pts[i].v, t: pts[i].t, text, status, cause, sources };
   };
   // the rule on trial (NVDA in the mock): a day of 10% or more, and the peaks and bottoms of the closes
   if (variant === "swings") return [
     mk("bt", n - 12, 28, -28.1, "queued", null),
     mk("d1", n - 39, 1, -12.3, "found", "Mock: the shares fell after a report that export limits would cover its newest chips.", [{ title: "Mock chipmaker falls on export report (mock source)", url: "https://example.com/news/mock-export" }]),
     mk("pk", n - 40, 70, 62.4, "found", "Mock: the rise ended when the export limits were reported; the high was set the day before.", [{ title: "Mock chipmaker hits record before export report (mock source)", url: "https://example.org/markets/mock-record" }]),
+    mk("b2", n - 62, 9, -11.8, "found", "Mock: the dip ended when a large customer confirmed its orders.", [{ title: "Mock customer confirms orders (mock source)", url: "https://example.com/news/mock-orders" }]),
+    mk("p2", n - 71, 20, 14.6, "queued", null),
     mk("bt", n - 110, 50, -34.5, "not_found", null),
   ].sort((a, b) => b.t - a.t);
   return [
@@ -135,7 +139,7 @@ export function mockStock(symbol: string, last?: number, pts: Array<{ t: number;
     shares: { outstanding: sharesOut, diluted: jp ? null : sharesOut * 1.012, dilutedNote: jp ? "The filings give no diluted share count for this company" : "Weighted average diluted shares, latest fiscal year (Yahoo Finance)", treasury: jp ? sharesOut * 0.04 : null, float: null, asOf: "2026-09-30", source: jp ? "EDINET DB" : "Yahoo Finance" },
     short: jp ? { kind: "jpx", d: iso(now), ratio: 0.0123, shares: sharesOut * 0.0123, daysToCover: (sharesOut * 0.0123) / 2.0e7, holders: [{ holder: "Mock Capital LLP", ratio: 0.0071, d: iso(now) }, { holder: "Mock Asset Management", ratio: 0.0052, d: iso(now) }] }
       : { kind: "interest", d: "2026-10-30", shares: 2.1e7, pctFloat: 1.4, pctOut: 1.4, daysToCover: 1.1, prior: 1.9e7, priorDate: "2026-09-30", finra: { d: iso(now), ratio: 0.47 } },
-    moves: { eligible: !/^9999/.test(symbol), rule: symbol === "NVDA" ? "swings" : "classic", rows: /^9999/.test(symbol) ? [] : mockMoves(pts, symbol === "NVDA" ? "swings" : symbol === "MSFT" ? "held" : "classic") },
+    moves: { eligible: !/^9999/.test(symbol), rule: symbol === "NVDA" ? "swings" : "classic", ...(symbol === "NVDA" ? { sizes: { day: 10, large: 15, small: 10 } } : {}), rows: /^9999/.test(symbol) ? [] : mockMoves(pts, symbol === "NVDA" ? "swings" : symbol === "MSFT" ? "held" : "classic") },
     earningsAt: new Date(now.getTime() + 12 * 86400e3).toISOString(), earningsEst: !jp,
     val: { pe: price / eps[years - 1], peGuide: jp ? price / (eps[years - 1] * 1.1) : null, pb: price / (equity[years - 1] / sharesOut), yield: ((annual.lines.dps as number[])[years - 1] / price) * 100, yieldGuide: jp ? ((dps[years - 1] + 10) / price) * 100 : null, basis: "On the latest fiscal year's EPS, book value and DPS, and the company's guidance" },
     fin, finNote: null,

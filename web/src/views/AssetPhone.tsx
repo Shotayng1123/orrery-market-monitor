@@ -10,7 +10,7 @@ import { JumpPick, Section, Stat } from "../components/PhoneKit";
 import { useApi } from "../lib/useApi";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtStamp } from "../lib/time";
-import { chartMarks, finSections, fmtCount, fmtPc, fmtX, moveRule, siteOf, whyText, type StockPage } from "../lib/stock";
+import { chartMarks, finSections, fmtCount, fmtPc, fmtX, isSmallMove, moveRule, siteOf, whyText, type StockPage } from "../lib/stock";
 import { chartRow, GuidanceLine, shortLine } from "./Asset";
 import { AssetPhoneLegacy } from "./AssetPhoneLegacy";
 
@@ -110,13 +110,13 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
               // a short box with its own scrolling (Shota, 19 Nov 2026): the whole list pushed the statements a long way down
               <ul className="mp-moves" id="st-movebox" tabIndex={0} aria-label="Big moves, newest first">{d.moves.rows.map((m) => (
                 <li key={`${m.kind}${m.to}`} data-kind={m.kind} data-status={m.status}>
-                  <div className="h"><span className={`dot ${m.dir > 0 ? "up" : "dn"}`} /><b className={m.dir > 0 ? "up" : "dn"}>{m.text}</b><span className="d">{m.to}</span></div>
+                  <div className="h"><span className={`dot ${m.dir > 0 ? "up" : "dn"}${isSmallMove(m) ? " sm" : ""}`} /><b className={m.dir > 0 ? "up" : "dn"}>{m.text}</b><span className="d">{m.to}</span></div>
                   <div className="w">{whyText(m)}</div>
                   {m.sources.length > 0 && <div className="s">{m.sources.map((x) => <a key={x.url} href={x.url} target="_blank" rel="noreferrer">{siteOf(x.url)}</a>)}</div>}
                 </li>
               ))}</ul>
             ) : <Empty title="No big moves">None in the last three years by these measures.</Empty>}
-            <p className="mp-note in">{d.moves.rows.length > 3 ? `${d.moves.rows.length} moves in three years, newest first: scroll inside the box for earlier ones. ` : ""}{moveRule(d.moves.rule).note}</p>
+            <p className="mp-note in">{d.moves.rows.length > 3 ? `${d.moves.rows.length} moves in three years, newest first: scroll inside the box for earlier ones. ` : ""}{moveRule(d.moves.rule, d.moves.sizes).note}</p>
           </div>
         </Section>
       )}

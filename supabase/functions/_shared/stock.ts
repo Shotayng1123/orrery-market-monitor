@@ -10,7 +10,7 @@ import { avgTurnover, betaCorr, maxDrawdown, perfRows, range52w, realisedVol, ty
 import { justReported, resultsDateToWatch, valuation, type Fin, type FinLine } from "./fin.ts";
 import { yahooFin, yahooFinTypes } from "./finsrc.ts";
 import { edinetStatements } from "./edinet.ts";
-import { SWING_TRIAL, bigMoves, isLargeCap, moveCtx, moveText, ruleFor, settledBars, type BigMove, type MoveRule } from "./bigmoves.ts";
+import { SWING_D1, SWING_PCT, SWING_PCT_2, SWING_TRIAL, bigMoves, isLargeCap, moveCtx, moveText, ruleFor, settledBars, siblingKind, type BigMove, type MoveRule } from "./bigmoves.ts";
 import { stockMarket } from "./moves.ts";
 import { localDate, marketById, marketState } from "./sessions.ts";
 import type { MoveCtx } from "./movecause.ts";
@@ -84,7 +84,7 @@ type MoveOut = BigMove & { text: string; status: "found" | "not_found" | "queued
 /** The big moves of a large company with the reason stored for each. A move of the last twelve months with no
  *  reason yet is put on the queue for the job that finds them (jobs/move_causes.ts) and shown as being looked up.
  *  Where the store is not there (a database from before this change) the moves are shown without reasons. */
-async function movesFor(symbol: string, q: { name: string | null; exchange: string | null; currency: string | null; marketCap: number | null }, sector: string | null, own: Bar[], bench: { name: string; bars: Bar[] } | null): Promise<{ eligible: boolean; rule: MoveRule; rows: MoveOut[] }> {
+async function movesFor(symbol: string, q: { name: string | null; exchange: string | null; currency: string | null; marketCap: number | null }, sector: string | null, own: Bar[], bench: { name: string; bars: Bar[] } | null): Promise<{ eligible: boolean; rule: MoveRule; sizes?: { day: number; large: number; small: number }; rows: MoveOut[] }> {
   // A second rule is on trial for the stocks in SWING_TRIAL (bigmoves.ts). While it is, reasons are looked up for
   // those stocks only: every other stock keeps its marks and the reasons already found, and a move without one
   // is shown as on hold, not as being looked up.
@@ -98,7 +98,10 @@ async function movesFor(symbol: string, q: { name: string | null; exchange: stri
   const stored = new Map(((data ?? []) as Array<{ kind: string; d: string; status: string; cause: string | null; sources: Array<{ title: string; url: string }> | null; tries: number }>).map((r) => [`${r.kind}|${r.d}`, r]));
   const queue: Array<Record<string, unknown>> = [];
   const rows = found.map((m): MoveOut => {
-    const text = moveText(m), hit = stored.get(`${m.kind}|${m.to}`);
+    // a turning point keeps its answer when it passes from the smaller level to the large one (siblingKind)
+    const sib = siblingKind(m.kind), own = stored.get(`${m.kind}|${m.to}`), other = sib ? stored.get(`${sib}|${m.to}`) : undefined;
+    const answered = (x?: { status: string }) => !!x && (x.status === "found" || x.status === "not_found");
+    const text = moveText(m), hit = answered(own) || !answered(other) ? own ?? other : other;
     if (error) return { ...m, text, status: "off", cause: null, sources: [] };
     if (hit && (hit.status === "found" || hit.status === "not_found" || !paused)) return { ...m, text, status: hit.status === "found" ? "found" : hit.status === "not_found" ? "not_found" : hit.status === "error" && hit.tries >= CAUSE_TRIES ? "failed" : "queued", cause: hit.status === "found" ? hit.cause : null, sources: hit.status === "found" ? hit.sources ?? [] : [] };
     if (now - m.t > CAUSES_FOR_DAYS * 86400) return { ...m, text, status: "old", cause: null, sources: [] };
@@ -113,7 +116,7 @@ async function movesFor(symbol: string, q: { name: string | null; exchange: stri
     const { error: e } = await db.from("move_causes").upsert(queue, { onConflict: "symbol,kind,d", ignoreDuplicates: true });
     if (e) console.log("stock: queueing moves:", e.message); else await db.rpc("move_causes_kick");
   }
-  return { eligible: true, rule, rows };
+  return { eligible: true, rule, ...(rule === "swings" ? { sizes: { day: SWING_D1, large: SWING_PCT, small: SWING_PCT_2 } } : {}), rows };
 }
 
 export async function stockPage(symbol: string) {

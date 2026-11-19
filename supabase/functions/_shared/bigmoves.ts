@@ -14,14 +14,19 @@
 //   pk   a new peak: the highest close of a rise, marked once the close has since fallen 15% from it, and only if
 //        it was the highest close of the twelve months before it
 //   bt   a bottom: the lowest close of a fall, marked once the close has since risen 15% from it
-// Peaks and bottoms are the turning points of the closes when only moves of 15% count (the same reading whichever
-// day it is made on: a turning point, once marked, does not move). A high that was not a twelve-month high is
-// still a turning point (the next bottom is measured from it) but is not marked.
+//   p2   a smaller peak, b2 a smaller bottom: the same with turns of SWING_PCT_2 per cent, for the detail between
+//        the large ones (added the same day: the large turns alone were "a bit too rough"); a large peak that
+//        was not a twelve-month high is among them
+// Peaks and bottoms are the turning points of the closes when only moves of that size count (the same reading
+// whichever day it is made on: a turning point, once marked, does not move). On the page a peak is red and a
+// bottom green: the colour is the turn the stock took there, which is what its reason tells.
 import { barOnOrBefore, type Bar } from "./stockstats.ts";
 import type { MoveCtx } from "./movecause.ts";
 
 export const BIG_D1 = 5, BIG_W1 = 10, BIG_M1 = 20, WEEK = 5, MONTH = 21;
-export const SWING_D1 = 10, SWING_PCT = 15, SWING_PCT_2 = 8, SWING_HIGH_DAYS = 252;
+// The smaller turn was chosen on Nvidia's closes of 19 Nov 2026, where the large turns alone gave 4 marks in
+// twelve months: turns of 12% add 2, of 10% add 6, of 8% add 10, of 7% add 12, of 6% add 18.
+export const SWING_D1 = 10, SWING_PCT = 15, SWING_PCT_2 = 10, SWING_HIGH_DAYS = 252;
 /** The stocks whose page uses the rule on trial. While this is not empty, reasons are looked up for these stocks
  *  only (stock.ts, jobs/move_causes.ts): the look-ups for every other stock wait for the rule to be settled. */
 export const SWING_TRIAL: ReadonlySet<string> = new Set(["NVDA"]);
@@ -140,6 +145,8 @@ export function moveText(m: Pick<BigMove, "kind" | "pct" | "from" | "to">): stri
   if (m.kind === "d1") return `${p} on the day`;
   if (m.kind === "pk") return `New high: ${p} from the low of ${day(m.from)}`;
   if (m.kind === "bt") return `Bottom: ${p} from the high of ${day(m.from)}`;
+  if (m.kind === "p2") return `Smaller peak: ${p} from the low of ${day(m.from)}`;
+  if (m.kind === "b2") return `Smaller bottom: ${p} from the high of ${day(m.from)}`;
   if (m.kind === "w1") return `${p} in five sessions (from ${day(m.from)})`;
   return m.pct < 0 ? `${p} from the high of ${day(m.from)} to the low of ${day(m.to)}` : `${p} from the low of ${day(m.from)} to the high of ${day(m.to)}`;
 }
@@ -149,5 +156,11 @@ export function moveText(m: Pick<BigMove, "kind" | "pct" | "from" | "to">): stri
  *  moves itself (jobs/move_causes.ts --seed). */
 export function moveCtx(m: BigMove, who: { symbol: string; name: string; exchange: string | null; sector: string | null; currency: string | null }, bench: { name: string; bars: Bar[] } | null): MoveCtx {
   const a = bench ? barOnOrBefore(bench.bars, Date.parse(m.from + "T00:00:00Z") / 1000) : null, z = bench ? barOnOrBefore(bench.bars, m.t) : null;
-  return { ...who, kind: m.kind, from: m.from, to: m.to, pct: m.pct, fromPx: m.fromPx, toPx: m.toPx, text: moveText(m), bench: bench?.name ?? null, benchPct: a && z && a.c > 0 ? (z.c / a.c - 1) * 100 : null };
+  const turn = m.kind === "pk" || m.kind === "bt" ? SWING_PCT : m.kind === "p2" || m.kind === "b2" ? SWING_PCT_2 : undefined;
+  return { ...who, kind: m.kind, from: m.from, to: m.to, pct: m.pct, fromPx: m.fromPx, toPx: m.toPx, text: moveText(m), bench: bench?.name ?? null, benchPct: a && z && a.c > 0 ? (z.c / a.c - 1) * 100 : null, ...(turn ? { turn } : {}) };
 }
+
+/** The other level of the same turning point: a smaller peak that the stock has since fallen further from becomes
+ *  a large one (p2 to pk, b2 to bt) on the same day, and its reason is the same reason. The page and the job
+ *  use the answer stored under either. */
+export const siblingKind = (k: BigMove["kind"]): BigMove["kind"] | null => (k === "pk" ? "p2" : k === "p2" ? "pk" : k === "bt" ? "b2" : k === "b2" ? "bt" : null);
