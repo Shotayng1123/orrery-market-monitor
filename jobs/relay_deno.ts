@@ -92,12 +92,19 @@ for (;;) {
       if (DRY) step = `dry: would ${act === "take" ? "take over and " : ""}write ${got.filter((g) => g.ok).length} quotes (${view})`;
       else {
         // the beat first: the server reads it at its next minute and stands down
-        await relayBeat({ at: now.toISOString(), run: RUN, since, note: forced ? "forced" : null });
-        const st = await store(got, now);
-        const { rows, note } = await tableAndAlerts(now, holidays);
-        const jobs = await runJobs(lastJobsMs, t0); lastJobsMs = t0;
-        // and again after the work, so that a long minute does not read as silence
-        await relayBeat({ at: new Date().toISOString(), run: RUN, since, note: forced ? "forced" : null });
+        const beat = () => relayBeat({ at: new Date().toISOString(), run: RUN, since, note: forced ? "forced" : null });
+        await beat();
+        // and every forty seconds while this minute's work lasts (a scan of 700 stocks or a statistics job can
+        // take minutes), so that long work does not read as silence. Only while it lasts: a minute that fails
+        // leaves no beat, and after 150 seconds the server carries on.
+        const keep = setInterval(() => { beat().catch(() => undefined); }, 40000);
+        let st, rows, note, jobs;
+        try {
+          st = await store(got, now);
+          ({ rows, note } = await tableAndAlerts(now, holidays));
+          jobs = await runJobs(lastJobsMs, t0); lastJobsMs = t0;
+        } finally { clearInterval(keep); }
+        await beat();
         wrote++;
         step = `${act === "take" ? "TOOK OVER. " : ""}${st.quotes}/${due.length} quotes, ${st.bars} 1m bars, table ${rows} rows${st.older ? `, ${st.older} older than the stored print left alone` : ""}${note}${jobs}; ${view}`;
       }
