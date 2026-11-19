@@ -11,7 +11,7 @@ import { db, logRun, sourceErr } from "../_shared/db.ts";
 import { isCron, json } from "../_shared/http.ts";
 import { loadHolidays } from "../_shared/table.ts";
 import { pushNewAlerts } from "../_shared/push.ts";
-import { dueInstruments, printsOf, pull, store, tableAndAlerts } from "../_shared/tick.ts";
+import { dueInstruments, printsOf, pull, store, tableAndAlerts, type Pulled } from "../_shared/tick.ts";
 import { current, reading } from "../_shared/relay.ts";
 import { relayOn, saveOwn } from "../_shared/relaystore.ts";
 
@@ -21,7 +21,10 @@ Deno.serve(async (req) => {
   try {
     const holidays = await loadHolidays();
     const due = await dueInstruments(now, holidays);
-    const { got, sparked } = due.length ? await pull(due, "chart") : { got: [], sparked: 0 };
+    // A pull that fails outright (the source refusing this machine) is read like one that brought nothing back:
+    // not current, so the relay is asked for. The failure itself is still this run's result, further down.
+    let got: Pulled[] = [], sparked = 0, pullErr: unknown = null;
+    if (due.length) { try { ({ got, sparked } = await pull(due, "chart")); } catch (e) { pullErr = e; } }
     // how far behind this machine's own answers are: on record every minute, for the relay to read
     const own = reading(printsOf(got), due.length, now.getTime(), holidays);
     let ownNote = "";
@@ -43,6 +46,7 @@ Deno.serve(async (req) => {
       try { const { data, error } = await db.rpc("feed_relay_kick"); ownNote += `, own answers stopped (${behind}): relay ${error ? "not asked: " + error.message : data}`; }
       catch (e) { ownNote += `, relay not asked: ${e instanceof Error ? e.message : e}`; }
     }
+    if (pullErr) throw new Error(`${pullErr instanceof Error ? pullErr.message : String(pullErr)}${ownNote}`);
     if (!due.length) {
       await logRun("tick", true, "idle: no market open" + ownNote, t0);
       return json(req, { ok: true, idle: true });
