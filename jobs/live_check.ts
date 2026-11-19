@@ -14,7 +14,7 @@ const utc = (iso: string | null | undefined): string => (iso ? iso.slice(0, 16).
 const head = (t: string): void => console.log(`\n== ${t}`);
 // a table or a column that a database from before some change does not have is said, not thrown
 // LIVE_CHECK_ONLY (the workflow's "only" input): a comma-separated choice of parts, by the first word of each title
-// below (jobs, sources, market, source, equities, alerts, reasons, edinet, counts); empty for all of them
+// below (jobs, relay, sources, market, source, equities, alerts, reasons, edinet, counts); empty for all of them
 const ONLY = (process.env.LIVE_CHECK_ONLY ?? "").toLowerCase().split(",").map((x) => x.trim()).filter(Boolean);
 async function part(key: string, title: string, f: () => Promise<void>): Promise<void> { if (ONLY.length && !ONLY.includes(key)) return; head(title); try { await f(); } catch (e) { console.log(`  could not be read: ${e instanceof Error ? e.message : String(e)}`); } }
 const must = <T>(r: { data: T | null; error: { message: string } | null }): T => { if (r.error) throw new Error(r.error.message); return r.data as T; };
@@ -34,6 +34,29 @@ async function main(): Promise<void> {
       console.log(`  ${job}: last ${age(rs[0].at)} (${rs[0].ok ? "ok" : "FAILED"}${rs[0].ms != null ? `, ${rs[0].ms} ms` : ""}); ${day.length} runs in 24 h, ${bad.length} failed${bad.length ? `; last failure ${utc(bad[0].at)}: ${(bad[0].detail ?? "").slice(0, 160)}` : ""}`);
     }
     if (!by.size) console.log("  no runs on record in the last 48 hours");
+  });
+
+  await part("relay", "relay: the second path for prices (the server's own answers, the relay on GitHub, and the requests made to GitHub)", async () => {
+    const notes = must(await sb.from("snapshots").select("key,payload,at").in("key", ["feed_own", "relay"])) as Array<{ key: string; payload: Record<string, unknown>; at: string }>;
+    const own = notes.find((n) => n.key === "feed_own")?.payload as { at: string; expected: boolean; lateMin: number | null; symbol: string | null; newest: string | null; got: number; due: number } | undefined;
+    const relay = notes.find((n) => n.key === "relay")?.payload as { at: string | null; run: string | null; since: string | null; note: string | null } | undefined;
+    if (!own) console.log("  the server's tick has left no reading of its own answers yet (a server from before the second path)");
+    else console.log(`  the server's own answers, read ${age(own.at)}: ${own.got} of ${own.due} instruments answered; ${own.expected ? `the freshest open market is ${own.lateMin} min behind (${own.symbol}, last print ${utc(own.newest)}); the relay is asked for at 10` : "no market open long enough to expect a price"}`);
+    const on = !!relay?.at && now - Date.parse(relay.at) <= 150e3;
+    console.log(relay ? `  the relay: ${on ? `WRITING NOW (run ${relay.run}, since ${utc(relay.since)}; last beat ${age(relay.at)})` : `not running; the last one was run ${relay.run}, ${relay.since ? `which wrote from ${utc(relay.since)}` : "which wrote nothing"}`}` : "  the relay has never written");
+    const runs = must(await sb.from("job_runs").select("job,at,ok,detail").like("job", "relay%").order("at", { ascending: false }).limit(400)) as Array<{ job: string; at: string; ok: boolean; detail: string | null }>;
+    const mins = runs.filter((r) => r.job === "relay");
+    console.log(`  relay lines on record (the newest 400 at most): ${mins.length} of the relay itself, ${runs.length - mins.length} of the jobs it ran`);
+    for (const r of mins.slice(0, 6)) console.log(`    ${utc(r.at)} ${r.ok ? "ok" : "FAILED"}: ${(r.detail ?? "").slice(0, 300)}`);
+    for (const r of runs.filter((x) => x.job !== "relay").slice(0, 6)) console.log(`    ${utc(r.at)} ${r.job} ${r.ok ? "ok" : "FAILED"}: ${(r.detail ?? "").slice(0, 160)}`);
+    const stood = must(await sb.from("job_runs").select("job,at,detail").or("detail.like.standing down%,detail.like.stood down%").order("at", { ascending: false }).limit(5)) as Array<{ job: string; at: string; detail: string | null }>;
+    console.log(stood.length ? `  the server last stood down ${age(stood[0].at)}: ${stood[0].job}: ${(stood[0].detail ?? "").slice(0, 220)}` : "  the server has never stood down for a relay");
+    // what the database asked GitHub for, and what GitHub answered (kept a few hours only)
+    const asked = await sb.rpc("monitor_dispatch_status");
+    if (asked.error) console.log(`  requests to GitHub: could not be read (${asked.error.message})`);
+    else { const rows = (asked.data ?? []) as Array<{ at: string; workflow: string; status: number | null; answer: string | null }>;
+      console.log(rows.length ? `  the database's last requests to GitHub (204 = accepted; 401 = the token is wrong or has expired; no status = answered too long ago to be kept):` : "  the database has never asked GitHub to start a workflow: no GitHub token is stored (NOTE_DISPATCH_TOKEN), so the relay starts on GitHub's schedule only");
+      for (const r of rows.slice(0, 6)) console.log(`    ${utc(r.at)} ${r.workflow}: ${r.status ?? "–"}${r.status && r.status !== 204 ? " " + (r.answer ?? "").slice(0, 120) : ""}`); }
   });
 
   await part("sources", "sources whose last attempt failed", async () => {

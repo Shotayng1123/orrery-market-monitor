@@ -1,0 +1,52 @@
+name: feed-relay
+# The second path for prices (supabase/functions/_shared/relay.ts). On 18 Nov 2026 the source answered the
+# Monitor's server with the same prices for seven and a half hours while it gave GitHub's machines current ones.
+# This job pulls the prices from here and writes them while the server's own answers are stopped, and ends when
+# they are current again.
+#
+# It is started three ways:
+#   - by the database, within a minute of the server finding its own answers stopped (feed_relay_kick; needs the
+#     GitHub token, the repository secret NOTE_DISPATCH_TOKEN, which deploy-server hands to the database);
+#   - by GitHub's schedule, twice an hour, as the net under that: it looks, finds the prices current and ends in
+#     a few seconds. GitHub starts this repository's scheduled runs late, so on its own this is a slow start;
+#   - by hand. force_min is a drill: the relay takes over for that many minutes although nothing is wrong.
+# A run that finds another relay writing ends at once. A relay still needed after five and a half hours asks for
+# its next shift itself (a GitHub job may run six hours).
+on:
+  schedule:
+    - cron: "9,39 * * * *"
+  workflow_dispatch:
+    inputs:
+      force_min:
+        description: "A drill: take over for this many minutes although the prices are current (0 = only when needed)"
+        default: "0"
+      dry:
+        description: "true = look once and say what it would do; nothing is written"
+        default: "false"
+permissions:
+  contents: read
+  actions: write
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Relay
+        id: relay
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RELAY_FORCE_MIN: ${{ github.event.inputs.force_min || '0' }}
+          RELAY_DRY: ${{ github.event.inputs.dry == 'true' && '1' || '0' }}
+          YAHOO_RETRIES: "2"
+        run: deno run -A --node-modules-dir=none jobs/relay_deno.ts
+      # the server's answers still stopped at the end of a shift: the next one, taking over at once
+      - name: Next shift
+        if: steps.relay.outputs.again == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run feed-relay.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f force_min=2

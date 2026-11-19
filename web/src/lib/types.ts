@@ -51,6 +51,9 @@ export interface Health {
   /** Whether prices are arriving: among the markets open now, the most recent print and how far behind it is
    *  (absent from a server older than 19 Nov 2026). */
   feed?: { expected: boolean; ok: boolean; newest: string | null; symbol: string | null; lateMin: number | null };
+  /** Set while prices are written by the second path (the relay on GitHub) because the server's own answers
+   *  from the source have stopped: since when, and how far behind the server's own answers are now. */
+  relay?: { since: string | null; ownLateMin: number | null } | null;
   sources: Array<{ name: string; lastOk: string | null; lastError: string | null }>;
   holidays: Partial<Record<MarketId, string[]>>;
   holidaysVerified: boolean;

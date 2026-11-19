@@ -15,6 +15,7 @@ import { stockPage } from "../_shared/stock.ts";
 import { liveRows } from "../_shared/intraday.ts";
 import { localDate, type Holidays } from "../_shared/sessions.ts";
 import { feedState } from "../_shared/feedhealth.ts";
+import { beatFresh, type Reading, type RelayNote } from "../_shared/relay.ts";
 
 const RANGES: Record<string, number> = { "1W": 7, "1M": 31, "3M": 93, "12M": 366, "36M": 1096 };
 const SIGMA_LOOKBACK_DAYS = 1120;   // 756 trading days ≈ 1,100 calendar days, so the 36M band is defined from the first point shown
@@ -164,7 +165,7 @@ async function reportPut(req: Request): Promise<Response> {
 // ---------- health ----------
 async function health() {
   const now = Date.now();
-  const [{ data: tick }, { data: daily }, { data: sources }, { data: cal }, unverifiedRes, { data: inst }, { data: prints }] = await Promise.all([
+  const [{ data: tick }, { data: daily }, { data: sources }, { data: cal }, unverifiedRes, { data: inst }, { data: prints }, { data: notes }] = await Promise.all([
     db.from("job_runs").select("at,ok,detail").eq("job", "tick").order("at", { ascending: false }).limit(1).maybeSingle(),
     db.from("job_runs").select("at,ok,detail,job").like("job", "daily:%").order("at", { ascending: false }).limit(1).maybeSingle(),
     db.from("source_status").select("*"),
@@ -172,7 +173,12 @@ async function health() {
     db.from("sessions_cal").select("market", { count: "exact", head: true }).eq("verified", false),
     db.from("instruments").select("symbol,market").eq("active", true),
     db.from("quotes_latest").select("symbol,market_time"),
+    db.from("snapshots").select("key,payload").in("key", ["relay", "feed_own"]),
   ]);
+  // the second path (_shared/relay.ts): is the relay on GitHub the one writing prices right now?
+  const noteOf = <T>(k: string): T | null => (((notes ?? []) as Array<{ key: string; payload: unknown }>).find((r) => r.key === k)?.payload as T | undefined) ?? null;
+  const relayNote = noteOf<RelayNote>("relay"), own = noteOf<Reading>("feed_own");
+  const relay = relayNote && beatFresh(relayNote.at, now) ? { since: relayNote.since, ownLateMin: own && now - Date.parse(own.at) < 5 * 60000 ? own.lateMin : null } : null;
   const unverifiedCount = unverifiedRes.count ?? 0;
   const tickAge = tick ? Math.round((now - Date.parse(tick.at)) / 60000) : null;
   const holidays: Record<string, string[]> = {};
@@ -189,6 +195,7 @@ async function health() {
     tick: { lastAt: tick?.at ?? null, ageMin: tickAge, ok: tickOk, note: tick ? (tick.ok ? tick.detail : `last run failed: ${tick.detail}`) : "no tick yet" },
     daily: { lastAt: daily?.at ?? null, ok: !!daily && daily.ok, note: daily ? `${daily.job}: ${daily.detail}` : "no daily run yet" },
     feed,
+    relay,
     // a source that has neither succeeded nor failed for a week is no longer called (a feed that was dropped): not listed
     sources: (sources ?? []).filter((s) => Math.max(Date.parse(s.last_ok ?? "") || 0, Date.parse(s.last_error_at ?? "") || 0) > now - 7 * 86400e3).map((s) => ({ name: s.name, lastOk: s.last_ok, lastError: s.last_error })),
     holidays,

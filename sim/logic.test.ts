@@ -20,6 +20,8 @@ import { liveRows } from "../supabase/functions/_shared/intraday.ts";
 import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabase/functions/_shared/movecause.ts";
 import { ALERTS, COMPANY, FIRST, PHILOSOPHY, PHONE, TABS, WELCOME_SUBJECT, welcomeMail } from "../supabase/functions/_shared/welcome.ts";
 import { FEED_LATE_MIN, OWN_SHORT_MIN, barDayEnd, barSettled, feedState, fxTrading, silence, stoppedBeforeClose, type Print } from "../supabase/functions/_shared/feedhealth.ts";
+import { OWN_FRESH_MIN, RELAY_BEAT_MAX_S, RELAY_CRON, RELAY_JOBS, RELAY_LATE_MIN, RELAY_OK_RUN, RELAY_WAIT_MIN, beatFresh, cronDue, current, newerOnly, reading, relayAct, relayJobsDue, usable, type RelayView } from "../supabase/functions/_shared/relay.ts";
+import { readFileSync as readText, readdirSync as listDir } from "node:fs";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
 let pass = 0, fail = 0;
@@ -832,6 +834,62 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck("sent by the Monitor's own sender it is one message with the plain text and the page side by side, each arriving whole, and no line longer than 78 characters", /^Subject: Welcome to Orrery Monitor$/m.test(wire) && /multipart\/alternative/.test(wire) && parts.length === 4 && back(parts[1]) === m.text.replace(/\n/g, "\r\n") && back(parts[2]) === m.html.replace(/\n/g, "\r\n") && wl.every((l) => l.length <= 78), { parts: parts.length, longest: Math.max(...wl.map((l) => l.length)) });
     const other = welcomeMail("https://monitor.example.com/");
     ck("another site address is used throughout", !other.html.includes("example.github.io") && other.html.includes('href="https://monitor.example.com/#watch"') && other.text.includes("\nhttps://monitor.example.com/\n"));
+  }
+
+  console.log("\n[the second path for prices: when the relay on GitHub takes over, and when it hands back]");
+  {
+    const at = (iso: string) => Date.parse(iso), P = (symbol: string, market: string, marketTime: string): Print => ({ symbol, market, marketTime });
+    // what each machine was handed on 18 Nov 2026 at 17:30 UTC: the server the prices of 15:52, GitHub current ones
+    const now = at("2026-11-18T17:30:00Z");
+    const server = reading([P("BTC-USD", "CRYPTO", "2026-11-18T17:29:00Z"), P("USDJPY=X", "FX", "2026-11-18T15:52:00Z"), P("^GSPC", "NYSE", "2026-11-18T15:52:00Z"), P("ES=F", "CME", "2026-11-18T15:42:00Z")], 4, now);
+    const github = reading([P("BTC-USD", "CRYPTO", "2026-11-18T17:29:00Z"), P("USDJPY=X", "FX", "2026-11-18T17:29:00Z"), P("^GSPC", "NYSE", "2026-11-18T17:29:00Z"), P("ES=F", "CME", "2026-11-18T17:19:00Z")], 4, now);
+    ck("18 Nov as it was: the server's own answers are 98 minutes behind and not current; GitHub's are a minute behind, current and usable", server.expected && server.lateMin === 98 && !current(server) && !usable(server) && github.lateMin === 1 && current(github) && usable(github) && server.got === 4 && server.due === 4, { server, github });
+    const edge = (min: number) => reading([P("EURUSD=X", "FX", new Date(now - min * 60000).toISOString())], 1, now);
+    ck(`the line is ${RELAY_LATE_MIN} minutes behind: nine is current, ten is not (the red bar on screen waits for twenty)`, RELAY_LATE_MIN === 10 && RELAY_LATE_MIN < FEED_LATE_MIN && current(edge(9)) && !current(edge(10)));
+    ck("a pull that brings back less than half of what was asked is not current, however fresh the few are; half is enough", !current(reading([P("USDJPY=X", "FX", "2026-11-18T17:29:00Z")], 3, now)) && current(reading([P("USDJPY=X", "FX", "2026-11-18T17:29:00Z"), P("EURUSD=X", "FX", "2026-11-18T17:29:00Z")], 4, now)) && !current(reading([], 80, now)));
+    const sat = reading([], 0, at("2026-11-21T12:00:00Z")), satFx = reading([P("USDJPY=X", "FX", "2026-11-20T21:59:00Z")], 1, at("2026-11-21T12:00:00Z"));
+    ck("nothing due, or no market open, is current (the server is not asked to stand down for a quiet weekend) but not usable: there is nothing to write", current(sat) && !usable(sat) && current(satFx) && !usable(satFx) && !sat.expected);
+
+    const v = (o: Partial<RelayView>): RelayView => ({ active: false, screenStopped: false, mineOk: true, ownOkRun: 0, heldMin: 0, forced: false, ...o });
+    ck("a relay that starts and finds the prices on screen current has nothing to do (GitHub's schedule starts one twice an hour)", relayAct(v({})) === "not-needed" && relayAct(v({ mineOk: false, heldMin: 1 })) === "not-needed" && relayAct(v({ ownOkRun: 9 })) === "not-needed");
+    ck("the prices on screen behind and its own answers usable: it takes over", relayAct(v({ screenStopped: true })) === "take");
+    ck(`behind on screen and not usable here either: it waits, writing nothing, and gives up after ${RELAY_WAIT_MIN} minutes (the source has stopped for everyone)`, relayAct(v({ screenStopped: true, mineOk: false, heldMin: 1 })) === "hold" && relayAct(v({ screenStopped: true, mineOk: false, heldMin: RELAY_WAIT_MIN - 1 })) === "hold" && relayAct(v({ screenStopped: true, mineOk: false, heldMin: RELAY_WAIT_MIN })) === "give-up");
+    ck("once on, it writes every minute its answers are usable, whatever the screen now says (the screen is current because it writes)", relayAct(v({ active: true })) === "write" && relayAct(v({ active: true, screenStopped: true })) === "write" && relayAct(v({ active: true, ownOkRun: RELAY_OK_RUN - 1 })) === "write");
+    ck(`it hands back when the server has reported its own answers current ${RELAY_OK_RUN} minutes in a row, not before; one current minute is not a recovery`, RELAY_OK_RUN === 3 && relayAct(v({ active: true, ownOkRun: 1 })) === "write" && relayAct(v({ active: true, ownOkRun: 3 })) === "hand-back" && relayAct(v({ active: true, ownOkRun: 3, mineOk: false, heldMin: 4 })) === "hand-back");
+    ck("on, and its own answers stop too: it holds (no beat, so the server carries on) and gives up after ten such minutes", relayAct(v({ active: true, mineOk: false, heldMin: 2 })) === "hold" && relayAct(v({ active: true, mineOk: false, heldMin: 10 })) === "give-up");
+    ck("a drill, or the next shift of a relay that is on, takes over at once although the screen is current, and does not hand back while it lasts; without usable answers it still writes nothing", relayAct(v({ forced: true })) === "take" && relayAct(v({ forced: true, active: true, ownOkRun: 9 })) === "write" && relayAct(v({ forced: true, mineOk: false, heldMin: 1 })) === "hold" && relayAct(v({ active: true, ownOkRun: 9 })) === "hand-back");
+    // the evening of 18 Nov, minute by minute, with the rules as they are now
+    { let active = false, wrote = 0, took = -1, back = -1; const stopAt = 0, recoverAt = 454;   // 15:52 to 23:26 UTC
+      for (let m = 0; m <= 470 && back < 0; m++) {
+        const ownLate = m < recoverAt ? m - stopAt : 1, screenLate = active ? 1 : ownLate, ownOkRun = m >= recoverAt ? m - recoverAt + 1 : 0;
+        const act = relayAct({ active, screenStopped: screenLate >= RELAY_LATE_MIN, mineOk: true, ownOkRun, heldMin: 0, forced: false });
+        if (act === "take") { active = true; took = m; }
+        if (act === "take" || act === "write") wrote++;
+        if (act === "hand-back") back = m;
+      }
+      ck("18 Nov replayed: a relay looking every minute takes over ten minutes into the stop, writes for the seven hours and more, and hands back three minutes after the server's answers return", took === 10 && back === 456 && wrote === 446, { took, back, wrote }); }
+
+    const t = at("2026-11-18T17:30:25Z");
+    ck(`the relay's beat counts for ${RELAY_BEAT_MAX_S} seconds: one from the last minute is fresh, one three minutes old is not, an ended relay (no time) or an unreadable one is not, nor one stamped far in the future`, beatFresh("2026-11-18T17:29:25Z", t) && beatFresh("2026-11-18T17:27:55Z", t) && !beatFresh("2026-11-18T17:27:25Z", t) && !beatFresh(null, t) && !beatFresh(undefined, t) && !beatFresh("soon", t) && !beatFresh("2026-11-18T17:40:00Z", t) && OWN_FRESH_MIN === 3);
+
+    const q = (symbol: string, market_time: string) => ({ symbol, market_time, price: 1 });
+    const kept = newerOnly([q("USDJPY=X", "2026-11-18T15:52:00Z"), q("^GSPC", "2026-11-18T17:29:00Z"), q("ES=F", "2026-11-18T17:19:00.000Z"), q("NEW", "2026-11-18T15:52:00Z")], new Map([["USDJPY=X", "2026-11-18T17:29:00+00:00"], ["^GSPC", "2026-11-18T17:28:00+00:00"], ["ES=F", "2026-11-18T17:19:00+00:00"]]));
+    ck("a print never replaces a newer one already stored (the server's old answer in the minute the relay takes over); a newer one, an equal one and a first one are written", kept.map((x) => x.symbol).join() === "^GSPC,ES=F,NEW", kept);
+
+    // the timetable: the same minutes as the database's own
+    const u = (iso: string) => at(iso);
+    ck("a timetable line is read as pg_cron reads it, in UTC: steps, lists, ranges, weekdays", cronDue("*/10 14-21 * * 1-5", u("2026-11-18T14:00:00Z")) && cronDue("*/10 14-21 * * 1-5", u("2026-11-18T21:50:30Z")) && !cronDue("*/10 14-21 * * 1-5", u("2026-11-18T22:00:00Z")) && !cronDue("*/10 14-21 * * 1-5", u("2026-11-18T14:05:00Z")) && !cronDue("*/10 14-21 * * 1-5", u("2026-11-21T14:00:00Z")) && cronDue("3,23,43 0-6 * * 1-5", u("2026-11-19T06:43:00Z")) && !cronDue("3,23,43 0-6 * * 1-5", u("2026-11-19T07:03:00Z")) && cronDue("35 22 * * 1-5", u("2026-11-18T22:35:59Z")) && !cronDue("35 22 * * 1-5", u("2026-11-22T22:35:00Z")) && cronDue("40 0 * * *", u("2026-11-22T00:40:00Z")) && cronDue("30 2 * * 2-6", u("2026-11-21T02:30:00Z")) && !cronDue("30 2 * * 2-6", u("2026-11-23T02:30:00Z")) && cronDue("0 0 * * 7", u("2026-11-22T00:00:00Z")) && !cronDue("bad", u("2026-11-18T14:00:00Z")) && !cronDue("61 * * * *", u("2026-11-18T14:00:00Z")));
+    const names = (a: number, b: number) => relayJobsDue(a, b).map((j) => j.name).sort().join();
+    ck("at 14:10 UTC on a weekday the S&P 500's flow is due; at 14:15 the Nasdaq 100's; at 22:35 the daily closes; on a Saturday nothing", names(u("2026-11-18T14:09:25Z"), u("2026-11-18T14:10:25Z")) === "monitor-flow-sp500" && names(u("2026-11-18T14:14:25Z"), u("2026-11-18T14:15:25Z")) === "monitor-flow-ndx" && names(u("2026-11-18T22:34:25Z"), u("2026-11-18T22:35:25Z")) === "monitor-history-us" && names(u("2026-11-21T14:09:25Z"), u("2026-11-21T14:10:25Z")) === "");
+    ck("a relay minute that ran long does not skip a job: the minutes since the last look are all read, each job once; nor does it replay an afternoon (ten minutes back at most)", names(u("2026-11-18T14:08:25Z"), u("2026-11-18T14:11:40Z")) === "monitor-flow-sp500" && relayJobsDue(u("2026-11-18T14:00:25Z"), u("2026-11-18T14:21:25Z")).filter((j) => j.idx === "SP500").length === 1 && names(u("2026-11-18T10:00:00Z"), u("2026-11-18T14:21:25Z")) === "monitor-flow-ndx,monitor-flow-sp500" && names(u("2026-11-18T14:10:25Z"), u("2026-11-18T14:10:50Z")) === "");
+    // against the database's timetable itself: the newest migration that defines monitor_install_cron
+    const migDir = new URL("../supabase/migrations/", import.meta.url), newest = listDir(migDir).filter((f) => f.endsWith(".sql")).sort().filter((f) => /function monitor_install_cron/.test(readText(new URL(f, migDir), "utf8"))).pop()!;
+    const body = readText(new URL(newest, migDir), "utf8"), fn = body.slice(body.indexOf("function monitor_install_cron"), body.indexOf("end $$", body.indexOf("function monitor_install_cron")));
+    const lines = [...fn.matchAll(/cron\.schedule\('([^']+)',\s*'([^']+)',\s*\$c\$select monitor_call\('daily', 'job=([a-z0-9]+)(?:&idx=([A-Z0-9]+))?[^']*'\)\$c\$\)/g)].map((m) => ({ name: m[1], cron: m[2], job: m[3], idx: m[4] }));
+    const wanted = lines.filter((l) => (RELAY_JOBS as readonly string[]).includes(l.job)), key = (l: { name: string; cron: string; job: string; idx?: string }) => `${l.name}|${l.cron}|${l.job}|${l.idx ?? ""}`;
+    const missing = wanted.filter((l) => !RELAY_CRON.some((r) => key(r) === key(l))).map(key), extra = RELAY_CRON.filter((r) => !wanted.some((l) => key(l) === key(r))).map(key);
+    ck(`the relay's timetable is the database's own (${newest}): every flow, statistics and history line, the same minutes, none more (${wanted.length} lines)`, lines.length > 40 && wanted.length === 24 && missing.length === 0 && extra.length === 0, { missing, extra });
+    ck("the server's `daily` function stands down for exactly the jobs the relay runs, and the tick asks for the relay through the database", /RELAY_JOBS\.includes\(job as RelayJob\)/.test(readText(new URL("../supabase/functions/daily/index.ts", import.meta.url), "utf8")) && RELAY_JOBS.join() === "flow,mflow,stats,history" && /db\.rpc\("feed_relay_kick"\)/.test(readText(new URL("../supabase/functions/tick/index.ts", import.meta.url), "utf8")) && /YAHOO_RETRIES/.test(readText(new URL("../.github/workflows/feed-relay.yml", import.meta.url), "utf8")));
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");
