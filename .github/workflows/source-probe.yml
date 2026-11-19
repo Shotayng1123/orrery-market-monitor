@@ -1,0 +1,60 @@
+name: source-probe
+
+# Tries an outside data source from GitHub's machines before a job is built on it (19 Nov 2026). The machine the
+# Monitor is developed on reaches almost no outside hosts, and a source that answers one machine may refuse
+# another (FRED refuses GitHub's runners and the edge runtime: README.md), so a source is tried from where its job
+# will run. A probe is a read-only script in jobs/probes/ that fetches and prints what it finds. It is given no
+# secrets and writes nothing anywhere.
+#   Run on the branch that holds the probe: Actions > source-probe > Run workflow, probe = the file's name.
+on:
+  workflow_dispatch:
+    inputs:
+      probe:
+        description: "The probe: a file name in jobs/probes/ without .ts (letters, digits, - and _)"
+        required: true
+      runtime:
+        description: "node (tsx, as the jobs on GitHub run) or deno (as relay_deno.ts and the server's code run)"
+        required: false
+        default: "node"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: jobs
+    steps:
+      - uses: actions/checkout@v4
+      # the inputs reach the shell as variables, never spliced into the script
+      - name: Which probe
+        env:
+          PROBE: ${{ github.event.inputs.probe }}
+          RUNTIME: ${{ github.event.inputs.runtime || 'node' }}
+        run: |
+          case "$PROBE" in ""|*[!A-Za-z0-9_-]*) echo "::error::not a probe name (letters, digits, - and _ only)"; exit 2;; esac
+          case "$RUNTIME" in node|deno) ;; *) echo "::error::runtime must be node or deno"; exit 2;; esac
+          test -f "probes/$PROBE.ts" || { echo "::error::there is no jobs/probes/$PROBE.ts on $GITHUB_REF_NAME"; exit 2; }
+          echo "probe $PROBE on $GITHUB_REF_NAME ($(git rev-parse --short HEAD)), runtime $RUNTIME"
+      - if: (github.event.inputs.runtime || 'node') == 'node'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: jobs/package-lock.json
+      - if: (github.event.inputs.runtime || 'node') == 'node'
+        run: npm ci
+      - if: github.event.inputs.runtime == 'deno'
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Probe
+        env:
+          PROBE: ${{ github.event.inputs.probe }}
+          RUNTIME: ${{ github.event.inputs.runtime || 'node' }}
+        run: |
+          if [ "$RUNTIME" = "deno" ]; then deno run --allow-net --allow-env --allow-read --node-modules-dir=none "probes/$PROBE.ts"
+          else npx tsx "probes/$PROBE.ts"; fi
