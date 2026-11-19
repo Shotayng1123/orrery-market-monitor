@@ -18,7 +18,10 @@ export function readVerify(hash: string): VerifyLink | null {
 export function takeVerifyLink(): VerifyLink | null {
   try {
     const v = readVerify(location.hash);
-    if (v) history.replaceState(null, "", location.pathname + location.search);
+    if (v) { byButton = true; history.replaceState(null, "", location.pathname + location.search); }
     return v;
   } catch { return null; }
 }
+let byButton = false;
+/** Whether this page was opened by the email's button (known once takeVerifyLink has looked). */
+export const openedByButton = (): boolean => byButton;
