@@ -15,7 +15,7 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
   { title: "Charts", rows: [
     ["Lines", "Grey is the rolling mean, blue the ±1σ band, amber the ±2σ band, over the Σ WINDOW chosen at the top."],
     ["PERIOD", "1D uses one-minute bars, 1W fifteen-minute bars, 1M hourly bars, 3M and longer daily closes."],
-    ["Moving back", "Drag a chart to move back in time; double-click to return to the latest."],
+    ["Moving back", "Drag a chart to the right to move back in time (the chart follows your hand), to the left to come forward again; double-click to return to the latest."],
   ] },
   { title: "Equities", rows: [
     ["Market breadth", "How many index members rose or fell over each window, their median and average move, and how many sat above their 50- and 200-day averages at the start of the window."],

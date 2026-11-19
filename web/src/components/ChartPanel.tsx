@@ -80,7 +80,7 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
       {points.length
         ? <SigmaChart points={points} windowSec={windowSec} intraday={intraday} decimals={row.decimals} sigmaWindow={sigmaWindow} onReadout={setRd} onPan={setPan} color={color} fill={shape !== "wide"} height={shape === "wide" ? chartHeight : undefined} axes={axes} volume={volume} marks={marks} />
         : <div className="chartbox empty" style={shape === "wide" ? { height: chartHeight } : undefined}>{s.error ?? (s.loading || !seen ? "loading…" : "no history yet")}</div>}
-      <div className="rdout mut" title="Click, hold and drag the chart to move back in time; double-click to return to the latest">
+      <div className="rdout mut" title="Click, hold and drag the chart to the right to go back in time, to the left to come forward; double-click returns to the latest">
         {rd ? <>{intraday ? <>{fmtStamp(rd.t * 1000, SGT)} · {fmtNum(rd.v, row.decimals)}</> : <>{new Date(rd.t * 1000).toISOString().slice(0, 10)} · {fmtNum(rd.v, row.decimals)} · {WIN_LABEL[sigmaWindow]} {z(rd.z)}</>}{volume && rd.q != null ? <> · vol {fmtVol(rd.q)}</> : null}</>
           : <span style={{ opacity: .6 }}>{panLabel || (period === "1D" ? "1-minute bars · drag to pan" : intraday ? (s.data?.res === "15m" ? "15-minute bars · drag to pan" : "hourly bars · drag to pan") : `daily closes · σ corridors${volume ? " · volume" : ""} · drag to pan`)}</span>}
       </div>

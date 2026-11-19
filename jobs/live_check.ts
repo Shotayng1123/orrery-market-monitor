@@ -147,6 +147,21 @@ async function main(): Promise<void> {
     const n = (s: string) => rows.filter((r) => r.status === s).length, cost = rows.reduce((a, r) => a + (r.cost_usd ?? 0), 0);
     console.log(`  ${rows.length} moves on record: ${n("found")} with a reason, ${n("not_found")} with none found, ${n("queued")} waiting, ${n("error")} failed (of which ${rows.filter((r) => r.status === "error" && r.tries >= 3).length} given up after three tries)`);
     console.log(`  cost of the look-ups stored (the last one of each move): USD ${cost.toFixed(2)}`);
+    // how many companies the rule covers: the lists' own market values (1tn yen and above in Tokyo, USD 10bn and above elsewhere)
+    try {
+      const CCY: Record<string, string> = { SP500: "USD", NDX: "USD", NK225: "JPY", TOPIX: "JPY", KOSPI200: "KRW", HSI: "HKD", SSE180: "CNY" }, PAIR: Record<string, string> = { KRW: "KRW=X", HKD: "HKD=X", CNY: "CNY=X" };
+      const fx = must(await sb.from("quotes_latest").select("symbol,price").in("symbol", Object.values(PAIR))) as Array<{ symbol: string; price: number }>;
+      const per = (ccy: string): number | null => (ccy === "USD" ? 1 : fx.find((q) => q.symbol === PAIR[ccy])?.price ?? null);
+      const large = new Map<string, string>();
+      for (let from = 0; from < 20000; from += 1000) {
+        const page = must(await sb.from("constituent_stats").select("idx,symbol,mcap").order("symbol").range(from, from + 999)) as Array<{ idx: string; symbol: string; mcap: number | null }>;
+        for (const r of page) { const ccy = CCY[r.idx], m = r.mcap; if (!ccy || m == null || !(m > 0)) continue; const rate = per(ccy); if (ccy === "JPY" ? m >= 1e12 : rate != null && rate > 0 && m / rate >= 1e10) large.set(r.symbol, ccy); }
+        if (page.length < 1000) break;
+      }
+      const by = (c: string) => [...large.values()].filter((x) => x === c).length, lk = rows.filter((r) => r.status === "found" || r.status === "not_found"), done = new Set(lk.map((r) => r.symbol)), looked = lk.length, spent = lk.reduce((a, r) => a + (r.cost_usd ?? 0), 0);
+      console.log(`  large companies on the Monitor's lists: ${large.size} (United States ${by("USD")}, Tokyo ${by("JPY")}, Seoul ${by("KRW")}, Hong Kong ${by("HKD")}, Shanghai ${by("CNY")}); companies with at least one move looked up: ${done.size}`);
+      if (looked && done.size) console.log(`  so far a finished look-up has cost USD ${(spent / looked).toFixed(2)} and a company looked up has ${(looked / done.size).toFixed(1)} finished marks on average: USD ${(spent / done.size).toFixed(2)} a company`);
+    } catch (e) { console.log(`  large companies: could not be counted (${e instanceof Error ? e.message : String(e)})`); }
     const syms = new Map<string, string[]>();
     for (const r of rows) { const a = syms.get(r.symbol) ?? []; a.push(r.status); syms.set(r.symbol, a); }
     for (const [s, st] of [...syms].sort()) console.log(`  ${s}: ${st.length} moves; ${["found", "not_found", "queued", "error"].filter((k) => st.includes(k)).map((k) => `${st.filter((x) => x === k).length} ${k}`).join(", ")}`);
