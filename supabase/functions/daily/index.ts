@@ -18,6 +18,8 @@ import { computeIndexStats, computeMoneyFlow, loadShortVolume, refreshQuotes } f
 import { loadMarginTotals, loadShortPositions, loadShortRatio } from "../_shared/jpx.ts";
 import { loadUniverse, scanNewsAlerts, tagHeadline } from "../_shared/newsalerts.ts";
 import { fetchNasdaq100 } from "../_shared/constituents.ts";
+import { RELAY_JOBS, type RelayJob } from "../_shared/relay.ts";
+import { relayOn } from "../_shared/relaystore.ts";
 
 Deno.serve(async (req) => {
   if (!isCron(req)) return json(req, { error: "forbidden" }, 403);
@@ -26,6 +28,17 @@ Deno.serve(async (req) => {
   const t0 = Date.now();
   try {
     let detail = "";
+    // While the relay on GitHub is writing prices (the server's own answers have stopped: _shared/relay.ts) the
+    // jobs that read prices from the source are the relay's, on this same timetable. Run here they would write
+    // the stopped prices over the current ones.
+    if (RELAY_JOBS.includes(job as RelayJob) && url.searchParams.get("force") !== "1") {
+      const relay = await relayOn();
+      if (relay) {
+        detail = `stood down: prices are coming through GitHub (run ${relay.run ?? "?"}); this job runs there`;
+        await logRun(`daily:${job}`, true, detail, t0);
+        return json(req, { ok: true, job, detail });
+      }
+    }
     switch (job) {
       case "history": detail = await history(); break;
       case "hourly": detail = await hourly(); break;

@@ -57,9 +57,10 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   Needs Playwright's browser once: `npx playwright install chromium`.
 - **Logic checks** (`sim/logic.test.ts`): exchange sessions, rolling bands, alert measures, the push encryption,
   the verification email for a new account, and every figure of the stock page (performance, ratios, statements
-  as read from each source, big moves, the reading of a move's reason). `cd jobs && npx tsx ../sim/logic.test.ts`.
+  as read from each source, big moves, the reading of a move's reason), and the second path for prices (when the
+  relay takes over and hands back, its timetable against the database's own). `cd jobs && npx tsx ../sim/logic.test.ts`.
 - **Database checks** (`sim/sql`): the rules that live in database functions (the limits on verification emails;
-  the queue for the reasons of big moves),
+  the queue for the reasons of big moves; the request for the second path),
   run with the migration file itself on PGlite, a Postgres inside Node. `cd sim/sql && npm ci && npm test`.
 
 The `deploy-web` workflow runs the browser and logic checks before it publishes: a failing check stops the publish.
@@ -70,7 +71,7 @@ when the server's functions or migrations change.
 
 | Data | Source |
 |---|---|
-| Quotes, intraday bars, daily history | Yahoo Finance chart and spark endpoints (unofficial; delays declared per exchange) |
+| Quotes, intraday bars, daily history | Yahoo Finance chart and spark endpoints (unofficial; delays declared per exchange). When the source stops answering the server, a job on GitHub pulls the same prices until the server's own answers are current again (the second path: `supabase/README.md`, "When the price feed stops") |
 | US yield curve | US Treasury daily par yield curve CSV |
 | JGB yield curve | Japan MOF `jgbcme.csv` |
 | Policy rates | ECB, Bank of England and HKMA data feeds (`daily?job=policy`); Fed target range from the New York Fed's EFFR data (`jobs/fed.ts`, GitHub Actions). FRED supplied the earlier Fed history but refuses connections from GitHub's runners and the edge runtime |

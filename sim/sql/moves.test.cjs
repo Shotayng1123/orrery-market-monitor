@@ -80,6 +80,25 @@ const ck = (name, cond, detail) => { if (cond) { pass++; console.log("  ✓ " + 
   const stored = /\.update\(\{ status: a\.found[^}]*\}\)/.exec(job)[0].match(/(\w+):/g).map((x) => x.slice(0, -1)), taken = /from\("move_causes"\)\.select\("([^"]+)"\)/.exec(job)[1].split(",");
   const missing = [...queued, ...read, ...stored, ...taken].filter((c) => !cols.includes(c));
   ck(`the page (queues ${queued.join(", ")}; reads ${read.join(", ")}) and the job (takes ${taken.join(", ")}; stores ${stored.join(", ")}) use only columns the table has`, missing.length === 0 && queued.length === 6 && stored.length >= 6, missing);
+
+  // the second path for prices (19 Nov 2026): the tick asks GitHub for the relay when its own answers have stopped
+  console.log("\n[the relay's request]");
+  const relaySql = fs.readFileSync(path.join(MIG, "20261119000006_feed_relay.sql"), "utf8");
+  await db.exec(relaySql); await db.exec(relaySql);
+  const rk = async () => (await one("select feed_relay_kick() as r")).r;
+  const rAsked = async () => Number((await one("select count(*) as n from monitor_dispatches where workflow = 'feed-relay.yml'")).n);
+  const before = await asked();
+  ck("the first request asks GitHub for the relay", (await rk()) === "asked" && (await rAsked()) === 1);
+  ck("the tick asks every minute while its answers are stopped: within ten minutes GitHub is asked once", (await rk()) === "asked recently" && (await rk()) === "asked recently" && (await rAsked()) === 1);
+  await db.exec("update monitor_dispatches set at = at - interval '11 minutes' where workflow = 'feed-relay.yml'");
+  ck("after ten minutes without a relay it asks again", (await rk()) === "asked" && (await rAsked()) === 2);
+  await db.exec("update monitor_dispatches set at = at - interval '11 minutes'; update token set has = false");
+  ck("without the GitHub token nothing is asked, and that is said", (await rk()) === "no token" && (await rAsked()) === 2);
+  await db.exec("update token set has = true");
+  ck("it leaves the look-ups' own requests alone", (await asked()) === before);
+  const priv = (await db.query("select has_function_privilege('anon', 'feed_relay_kick()', 'execute') as a, has_function_privilege('authenticated', 'feed_relay_kick()', 'execute') as b")).rows[0];
+  ck("a visitor or a signed-in user cannot ask for the relay", priv.a === false && priv.b === false, priv);
+
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`));
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error("ERR", e); process.exit(1); });

@@ -61,6 +61,7 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
     ["Curves", "Official sources. Japan, the euro area, the UK and Canada publish a day late."],
     ["DATA OK", "Green when the minute and daily jobs have run on time and prices are arriving for the markets that are open. Hover or tap for the detail."],
     ["No new prices", "A red bar at the foot of the screen, and DATA ✕, when no market that is open has had a new price for more than twenty minutes beyond its feed's usual delay. The source has stopped sending; the figures on screen are as of the time the bar gives."],
+    ["DATA ! · second path", "When the source stops answering the Monitor's server, a second machine (a job on GitHub) pulls the same prices and writes them until the server's own answers are current again. Prices stay current; the chip turns amber and its detail says since when."],
     ["Keys", "1 to 6 switch tabs; / jumps to search; Esc leaves full screen."],
   ] },
 ];

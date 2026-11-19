@@ -16,10 +16,10 @@ const arriving = () => ({ expected: true, ok: true, newest: new Date(Date.now() 
   for (const [name, opts, phone] of [["desktop", { viewport: { width: 1440, height: 900 } }, false], ["phone", { ...devices["iPhone 13"] }, true]]) {
     console.log(`\n[${name}]`);
     const ctx = await b.newContext(opts); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
-    let feed = stopped();
+    let feed = stopped(), relay;   // relay: absent from a server older than the second path
     await routes(p);
     await p.route("**/fakeapi?*", (r) => { const a = new URL(r.request().url()).searchParams.get("action"); if (a !== "health") return r.fallback();
-      r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ ...base(), ...(feed ? { feed } : {}) }) }); });
+      r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ ...base(), ...(feed ? { feed } : {}), ...(relay !== undefined ? { relay } : {}) }) }); });
     await p.goto(STANDIN + "#market", { waitUntil: "networkidle" }); await p.waitForSelector("#feedbar", { timeout: 8000 }); await p.waitForTimeout(300);
     const menu = async (open) => { if (!phone) return; const on = await p.evaluate(() => document.querySelector("#topbar").classList.contains("open")); if (on !== open) { await p.locator('#topbar button[aria-expanded]').click(); await p.waitForTimeout(250); } };
     const see = async () => { await menu(true); const v = await p.evaluate(() => { const bar = document.querySelector("#feedbar"), chip = document.querySelector("#hlth"), nav = document.querySelector("#pnav"), r = bar ? bar.getBoundingClientRect() : null;
@@ -39,6 +39,15 @@ const arriving = () => ({ expected: true, ok: true, newest: new Date(Date.now() 
     feed = null; await menu(true); await p.locator("#nxt").click(); await menu(false); await p.waitForTimeout(900);
     const older = await see();
     ck("with every market closed, or a server that does not give the reading, there is no bar and the chip is as before", closed.bar === null && /DATA\s*OK/.test(closed.chip) && older.bar === null && /DATA\s*OK/.test(older.chip) && errs.length === 0, { closed: closed.chip, older: older.chip, errs });
+    // the second path (19 Nov 2026): the relay on GitHub is writing, so prices are current, and the chip says how
+    feed = arriving(); relay = { since: new Date(Date.now() - 42 * 60e3).toISOString(), ownLateMin: 52 }; await menu(true); await p.locator("#nxt").click(); await menu(false); await p.waitForTimeout(900);
+    const second = await see();
+    ck("while the second path is writing the prices there is no bar (they are current); the chip is amber and says since when and why", second.bar === null && /DATA\s*!/.test(second.chip) && /hl-warn/.test(second.chipCls) && /^DATA HEALTH: PRICES THROUGH THE SECOND PATH since \d\d\/\d\d \d\d:\d\d SGT: the source has stopped answering the Monitor's server \(its own answers are 52 min behind\), so a job on GitHub is pulling the prices and they are current; tick 1 min old/.test(second.title), { chip: second.chip, title: second.title });
+    relay = null; await menu(true); await p.locator("#nxt").click(); await menu(false); await p.waitForTimeout(900);
+    const handed = await see();
+    feed = stopped(); relay = { since: new Date(Date.now() - 42 * 60e3).toISOString(), ownLateMin: 52 }; await menu(true); await p.locator("#nxt").click(); await menu(false); await p.waitForSelector("#feedbar", { timeout: 8000 });
+    const both = await see();
+    ck("handed back, the chip is green again; and if the prices stop although a relay is on, the red bar and DATA ✕ stand", /DATA\s*OK/.test(handed.chip) && !/SECOND PATH/.test(handed.title) && both.bar !== null && /DATA\s*✕/.test(both.chip) && /^DATA HEALTH: NO NEW PRICES/.test(both.title) && !/SECOND PATH/.test(both.title) && errs.length === 0, { handed: handed.chip, both: both.chip, title: both.title, errs });
     await ctx.close();
   }
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0);

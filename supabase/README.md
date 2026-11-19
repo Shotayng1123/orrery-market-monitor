@@ -122,6 +122,10 @@ GitHub starts this repository's scheduled workflows hours late (the note, due 07
 (pg_cron job `monitor-morning-note`, which calls `monitor_dispatch('morning-note.yml')`). GitHub's own schedule stays
 as the fallback. Until a token is stored, `monitor_dispatch` does nothing.
 
+The same token serves three things: the note at 07:00 SGT, the look-up of a big move's reason as soon as a page
+queues it ("Big moves and why"), and, since 19 Nov, the start of the second path for prices within a minute of the
+server's own answers stopping ("When the price feed stops"). Without it all three wait for GitHub's schedule.
+
 1. `npx supabase db push` (migration `20261118000002_note_on_time.sql`). This also adds one quote pull after the
    Tokyo and Seoul closes, for alerts on closing-auction moves.
 2. A GitHub token that may start this repository's workflows. GitHub › Settings › Developer settings › Personal
@@ -387,7 +391,7 @@ What the Monitor does about it:
   nothing, and says `NOT BOOKED …` in its line in `job_runs`. On an exchange's half day other than New York's
   the close is held until that exchange's next session prints.
 - **Putting wrong closes right.** `history-catchup` (Actions › Run workflow) is the same job run from GitHub's
-  machines. On 19 Nov at 23:16 UTC it replaced the closes of 18 Nov wherever the source had a daily bar for the
+  machines. On 18 Nov at 23:16 UTC it replaced the closes of 18 Nov wherever the source had a daily bar for the
   day. It cannot replace a future's close while that future is trading again (its day is skipped as still open
   until 05:00 UTC), nor a close whose daily bar the source has not published yet (four European indices that
   night); a later run does.
@@ -405,6 +409,32 @@ What the Monitor does about it:
   the start of "In brief" and never to present those figures as closing levels, and the note's page shows the
   warnings above its tables. Where the close was booked again from the real one, the writer is only told, in the
   pack's `notes`, that the minute feed had stopped and the closing levels were booked afterwards.
+- **The second path** (`_shared/relay.ts`, `jobs/relay_deno.ts`, the workflow `feed-relay`). The source is one,
+  but there are two roads to it, and on 18 Nov only the server's was stopped. Every minute the tick now records how
+  far behind its own answers are (`snapshots` key `feed_own`). When they are ten minutes behind, or fewer than
+  half of the instruments answer, it asks GitHub for the relay (`feed_relay_kick`, at most once in ten minutes).
+  The relay pulls the same prices from GitHub's machines and, if its own answers are current, does the tick's
+  work from there once a minute with the same code: quotes, minute bars, the table, the alerts, and the
+  constituent jobs (`flow`, `mflow`, `stats`, `history`) at the minutes of the database's own timetable
+  (`RELAY_CRON`, checked against `monitor_install_cron` by the logic checks). While its beat is fresh
+  (`snapshots` key `relay`, 150 seconds) the server stands down: the tick stores nothing and only sends the
+  notifications, and `daily` skips those four jobs, so there is one writer at a time; a print never replaces a
+  newer one already stored. The relay hands back when the server has reported its own answers current three
+  minutes in a row. Replayed on 18 Nov's times it takes over ten minutes into the stop. On screen the chip
+  reads DATA ! and says "PRICES THROUGH THE SECOND PATH since …"; the prices are current, so there is no red bar.
+  - *How it starts.* By the database, within a minute, if the GitHub token is stored (the repository secret
+    `NOTE_DISPATCH_TOKEN`, the same one as for the Morning Note: see "The Morning Note on time"). Without the
+    token only by GitHub's schedule, twice an hour, which this repository's runs have been starting hours late:
+    a slow net, not a fix. By hand: Actions › feed-relay › Run workflow; `force_min` = 3 is a drill (the relay
+    takes over for three minutes although nothing is wrong, then hands back), `dry` = true looks once and
+    writes nothing.
+  - *What it does not cover.* The source stopping for everyone: the relay then finds its own answers stopped
+    too, writes nothing, gives up after ten minutes with a red run, and the "No new prices" bar stays. The
+    quarter-hour and hourly bars of the 1W and 1M charts are not relayed; they fill in when the server's
+    answers return. A relay still needed after five and a half hours asks for its next shift itself.
+  - *Looking.* Actions › live-check with `only` = `relay`: the server's own reading, whether a relay is
+    writing, its last lines, when the server last stood down, and what GitHub answered to the database's
+    requests (204 = accepted; 401 = the token has expired).
 - **Looking.** Actions › live-check with `only` = `market,source` prints each quote with the time it last
   printed, the last three booked closes beside it (a close equal to a stopped quote is marked), and the source's
   own daily closes and newest minute bar as GitHub's machines are given them. Actions › morning-note with

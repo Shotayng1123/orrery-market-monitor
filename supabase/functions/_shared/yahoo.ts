@@ -10,15 +10,24 @@ export interface ChartSeries { symbol: string; tz: string; timestamp: number[]; 
 const HOSTS = ["https://query1.finance.yahoo.com", "https://query2.finance.yahoo.com"];
 const headers = { "user-agent": BROWSER_UA, accept: "application/json" };
 
+// YAHOO_RETRIES: how many more rounds over the hosts after one in which a host answered 429, a little later each
+// time. None on the server, where a minute's work must fit in the minute; the relay on GitHub sets it
+// (feed-relay.yml), as the batch jobs' own reader has always done (jobs/lib/yahoo.ts).
+const RETRIES = Math.max(0, Math.min(4, Number((typeof Deno !== "undefined" ? Deno.env.get("YAHOO_RETRIES") : undefined) ?? "0") || 0));   // (no Deno in the logic checks, which run on Node)
 async function getJson(path: string, timeoutMs = 25000): Promise<unknown> {
   let lastErr: unknown = null;
-  for (const h of HOSTS) {
-    try {
-      const r = await fetch(h + path, { headers, signal: AbortSignal.timeout(timeoutMs) });
-      if (r.status === 429) { lastErr = new Error("HTTP 429 rate limited"); continue; }
-      if (!r.ok) { lastErr = new Error(`HTTP ${r.status}`); continue; }
-      return await r.json();
-    } catch (e) { lastErr = e; }
+  for (let attempt = 0; attempt <= RETRIES; attempt++) {
+    let limited = false;
+    for (const h of HOSTS) {
+      try {
+        const r = await fetch(h + path, { headers, signal: AbortSignal.timeout(timeoutMs) });
+        if (r.status === 429) { lastErr = new Error("HTTP 429 rate limited"); limited = true; continue; }
+        if (!r.ok) { lastErr = new Error(`HTTP ${r.status}`); continue; }
+        return await r.json();
+      } catch (e) { lastErr = e; }
+    }
+    if (!limited || attempt === RETRIES) break;
+    await new Promise((res) => setTimeout(res, 1500 * (attempt + 1)));
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }

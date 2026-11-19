@@ -163,8 +163,10 @@ export default function App() {
 
   // a feed that has stopped is the worst reading there is: every price on screen is old, whatever the jobs say
   const feedStopped = !!health?.feed && health.feed.expected && !health.feed.ok;
-  const healthState: "ok" | "warn" | "bad" | "unk" = !apiConfigured ? "unk" : healthErr ? "bad" : !health ? "unk" : feedStopped ? "bad" : health.ok ? (health.tick.ok && health.daily.ok ? "ok" : "warn") : "bad";
-  const healthTitle = !apiConfigured ? "DATA HEALTH: API not configured" : healthErr ? `DATA HEALTH: ${healthErr}` : health ? `DATA HEALTH: ${feedStopped ? `NO NEW PRICES since ${health.feed!.newest ? fmtStamp(health.feed!.newest) : "?"} (${lateText(health.feed!.lateMin ?? 0)} behind): the source has stopped sending new prices; ` : ""}tick ${health.tick.ageMin ?? "?"} min old (${health.tick.ok ? "ok" : health.tick.note ?? "late"}), daily ${health.daily.ok ? "ok" : health.daily.note ?? "late"}${health.holidaysVerified ? "" : "; holiday calendar unverified"}` : "DATA HEALTH: loading";
+  // prices current, but only because the second path is writing them (the relay on GitHub): said, in amber
+  const relayed = !!health?.relay && !feedStopped;
+  const healthState: "ok" | "warn" | "bad" | "unk" = !apiConfigured ? "unk" : healthErr ? "bad" : !health ? "unk" : feedStopped ? "bad" : health.ok ? (health.tick.ok && health.daily.ok && !relayed ? "ok" : "warn") : "bad";
+  const healthTitle = !apiConfigured ? "DATA HEALTH: API not configured" : healthErr ? `DATA HEALTH: ${healthErr}` : health ? `DATA HEALTH: ${feedStopped ? `NO NEW PRICES since ${health.feed!.newest ? fmtStamp(health.feed!.newest) : "?"} (${lateText(health.feed!.lateMin ?? 0)} behind): the source has stopped sending new prices; ` : ""}${relayed ? `PRICES THROUGH THE SECOND PATH since ${health.relay!.since ? fmtStamp(health.relay!.since) : "?"}: the source has stopped answering the Monitor's server${health.relay!.ownLateMin != null ? ` (its own answers are ${lateText(health.relay!.ownLateMin)} behind)` : ""}, so a job on GitHub is pulling the prices and they are current; ` : ""}tick ${health.tick.ageMin ?? "?"} min old (${health.tick.ok ? "ok" : health.tick.note ?? "late"}), daily ${health.daily.ok ? "ok" : health.daily.note ?? "late"}${health.holidaysVerified ? "" : "; holiday calendar unverified"}` : "DATA HEALTH: loading";
 
   if (!signedIn) return <div className="gatewrap"><Gate verify={verify} onSignedIn={() => { setVerify(null); setTok(getToken()); }} /><FootBars /></div>;
   if (me?.mustChange) return (

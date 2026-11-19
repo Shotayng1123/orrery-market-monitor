@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: "Parts to print, comma-separated (jobs, sources, market, source, equities, alerts, reasons, edinet, counts); empty for all"
+        description: "Parts to print, comma-separated (jobs, relay, sources, market, source, equities, alerts, reasons, edinet, counts); empty for all"
         required: false
         default: ""
 
