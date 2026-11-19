@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { OPENING_KEY, OPENING_S, T_MARK, dayOf, openingDue, prepareOpening, renderOpening } from "../lib/opening";
+import { OPENING_KEY, OPENING_S, OPENING_SKIP_KEY, T_MARK, dayOf, openingDue, prepareOpening, renderOpening } from "../lib/opening";
 import { holdAnswers, letGo } from "../lib/hold";
+import { isInstalled } from "../lib/install";
+import { PHONE } from "../lib/phone";
 
-/** The opening (lib/opening.ts) over the whole screen while the Monitor loads behind it. Once a day on each
- *  device: the day it last played is kept on the device. A tap or a click anywhere ends it at once (SKIP at the
+/** The opening (lib/opening.ts) over the whole screen while the Monitor loads behind it. In the app on a phone's
+ *  home screen it plays every time the app is opened; in a browser tab and on a computer once a day on each
+ *  device (the day it last played is kept on the device). A tap or a click anywhere ends it at once (SKIP at the
  *  foot says so), as do Esc, Enter and Space. The address ending ?opening=1 plays it again whatever the day.
  *  It ends on the click, not on the press: by then the layer is still on top, so the click that ends it cannot
  *  land on a button of the Monitor underneath.
@@ -23,8 +26,11 @@ export function openingNow(): boolean {
   let stored: string | null = null;
   try { stored = localStorage.getItem(OPENING_KEY); } catch { /* a browser that keeps nothing: it plays */ }
   const forced = new URLSearchParams(location.search).get("opening") === "1";
-  const reducedMotion = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const play = openingDue(dayOf(new Date()), stored, { reducedMotion, automated: navigator.webdriver === true, forced });
+  const mq = (q: string): boolean => { try { return typeof matchMedia === "function" && matchMedia(q).matches; } catch { return false; } };
+  // the page the new-version bar has just loaded is the same visit going on, not the app being opened
+  let sameVisit = false;
+  try { sameVisit = sessionStorage.getItem(OPENING_SKIP_KEY) === "1"; sessionStorage.removeItem(OPENING_SKIP_KEY); } catch { /* nothing kept */ }
+  const play = (forced || !sameVisit) && openingDue(dayOf(new Date()), stored, { reducedMotion: mq("(prefers-reduced-motion: reduce)"), automated: navigator.webdriver === true, forced, everyOpen: isInstalled() && mq(PHONE) });
   if (play) holdAnswers((OPENING_S + 2.5) * 1000);
   return play;
 }

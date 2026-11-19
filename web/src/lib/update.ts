@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { OPENING_SKIP_KEY } from "./opening";
 
 /** Noticing that a newer version of the Monitor has been published (Shota, 18 Nov 2026). An open page keeps the
  *  code it started with: the data refreshes every minute, the layout does not. The host also lets a browser reuse
@@ -51,7 +52,7 @@ export function useUpdate(): { id: string | null; apply: () => void } {
   }, []);
   const apply = useCallback(() => {
     if (!id) return;
-    try { sessionStorage.setItem(TRIED_KEY, JSON.stringify({ id, at: Date.now() })); } catch { /* not kept */ }
+    try { sessionStorage.setItem(TRIED_KEY, JSON.stringify({ id, at: Date.now() })); sessionStorage.setItem(OPENING_SKIP_KEY, "1"); } catch { /* not kept */ }   // and no opening on the page this loads
     const u = new URL(location.href);
     u.searchParams.set("v", id);
     location.replace(u.toString());
