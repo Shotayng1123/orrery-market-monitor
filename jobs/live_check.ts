@@ -174,6 +174,11 @@ async function main(): Promise<void> {
       const r = await sb.from(t).select("*", { count: "exact", head: true });
       console.log(`  ${what}: ${r.error ? `could not be read (${r.error.message})` : r.count}`);
     }
+    // the welcome email: how many accounts have had it (numbers only, no address)
+    const acc = await sb.from("accounts").select("status,welcomed_at,welcome_tries");
+    if (acc.error) console.log(`  welcome email: could not be read (${acc.error.message})`);
+    else { const rows = (acc.data ?? []) as Array<{ status: string; welcomed_at: string | null; welcome_tries: number | null }>, open = rows.filter((r) => r.status === "active"), had = open.filter((r) => r.welcomed_at), gaveUp = open.filter((r) => !r.welcomed_at && (r.welcome_tries ?? 0) >= 3), last = had.map((r) => r.welcomed_at as string).sort().pop();
+      console.log(`  welcome email: ${had.length} of ${open.length} open accounts have had it${last ? ` (the last one ${age(last)})` : ""}; ${open.length - had.length - gaveUp.length} get it at their next sign-in; ${gaveUp.length} given up after three failed sendings`); }
   });
 }
 main().catch((e) => { console.error(e); process.exit(1); });

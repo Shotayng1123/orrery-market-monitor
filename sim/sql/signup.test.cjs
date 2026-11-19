@@ -109,6 +109,21 @@ const ck = (name, cond, detail) => { if (cond) { pass++; console.log("  ✓ " + 
   const wcol = (await db.query("select data_type from information_schema.columns where table_name = 'accounts' and column_name = 'welcomed_at'")).rows;
   const wsrc = fs.readFileSync(path.join(__dirname, "..", "..", "supabase", "functions", "_shared", "accounts.ts"), "utf8");
   ck("accounts has the welcomed_at column, a time, and the server writes it by that name", wcol.length === 1 && /timestamp with time zone/.test(wcol[0].data_type) && /\.update\(\{ welcomed_at: /.test(wsrc), wcol);
+  // the welcome email at a sign-in (20261119000007): the count of failed sendings, and the claim the server makes
+  const tsql = fs.readFileSync(path.join(MIG, "20261119000007_welcome_at_sign_in.sql"), "utf8");
+  await db.exec(tsql); await db.exec(tsql);
+  await db.query("insert into accounts (email, pw_hash, pw_salt, pw_iter, role, status) values ('old.reader@example.com', 'h', 's', 1, 'user', 'active') on conflict (email) do nothing");
+  const fresh = (await db.query("select welcomed_at, welcome_tries from accounts where email = 'old.reader@example.com'")).rows[0];
+  // the claim, as accounts.ts makes it: mark the account only if it has had no welcome and fewer than three failed sendings
+  const claim = async () => (await db.query("update accounts set welcomed_at = now() where email = 'old.reader@example.com' and welcomed_at is null and welcome_tries < 3 returning welcome_tries")).rows;
+  const first = await claim(), second = await claim();
+  ck("an account from before the welcome email has none on record and no failed sendings; the first sign-in claims it, a second at the same moment finds nothing to claim (so it is sent once)", fresh.welcomed_at === null && fresh.welcome_tries === 0 && first.length === 1 && second.length === 0, { fresh, first, second });
+  await db.query("update accounts set welcomed_at = null, welcome_tries = welcome_tries + 1 where email = 'old.reader@example.com'");
+  const again = await claim();
+  await db.query("update accounts set welcomed_at = null, welcome_tries = 3 where email = 'old.reader@example.com'");
+  const stopped = await claim();
+  ck("a sending that failed gives the claim back and the next sign-in tries again; after three failures nothing is claimed any more", again.length === 1 && stopped.length === 0, { again, stopped });
+  ck("the server makes the claim that way, sends at a sign-in only to an account without it, and counts a failure", /\.update\(\{ welcomed_at: new Date\(\)\.toISOString\(\) \}\)\.eq\("email", email\)\.is\("welcomed_at", null\)\.lt\("welcome_tries", WELCOME_TRIES\)/.test(wsrc) && /if \(!a\.welcomed_at && \(a\.welcome_tries \?\? 0\) < WELCOME_TRIES\) await welcome\(email\);/.test(wsrc) && /welcomed_at: null, welcome_tries: \(row\.welcome_tries \?\? 0\) \+ 1/.test(wsrc) && /const WELCOME_TRIES = 3;/.test(wsrc));
   const rls = (await db.query("select relrowsecurity from pg_class where relname = 'email_codes'")).rows[0].relrowsecurity;
   ck("email_codes is closed to everything but the service role (row level security on, no policies)", rls === true);
   const acl = (await db.query("select proname, has_function_privilege('anon', oid, 'execute') as anon, has_function_privilege('authenticated', oid, 'execute') as auth from pg_proc where proname like 'email_code_%' order by 1")).rows;

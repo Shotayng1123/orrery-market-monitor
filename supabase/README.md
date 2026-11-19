@@ -207,18 +207,23 @@ conversation with a mail server), `sim/sql/signup.test.cjs` (the database functi
 
 ### The welcome email (added 2026-11-19)
 
-Once the password is set and the account is open, the new reader gets one welcome email
-(`supabase/functions/_shared/welcome.ts`): the idea behind the name first, then what the account opens (the six
-tabs, a company's own page, alerts, notifications on a phone, the watchlist) and a first five minutes. It is
-sent by the same sender as the verification email, through `signupFinish`, and never stands in the account's
-way: if it cannot be sent, or the mail server takes longer than eight seconds, that is logged and the person is
-signed in all the same. `accounts.welcomed_at` (migration `20261119000002`) records the sending.
+Every account gets one welcome email (`supabase/functions/_shared/welcome.ts`), by itself: the idea behind the
+name first, then what the account opens (the six tabs, a company's own page, alerts, notifications on a phone,
+the watchlist) and a first five minutes. It goes out at the first sign-in that succeeds while the account has
+none: for a new account that is the moment its password is set (`signupFinish`); for an account from before the
+email existed, one approved by hand, or one whose first sending failed, it is the next sign-in (`login`). It is
+sent by the same sender as the verification email and never stands in the account's way: if it cannot be sent,
+or the mail server takes longer than eight seconds, that is logged, the person is signed in all the same, and
+the next sign-in tries again, three times in all (`accounts.welcome_tries`, migration `20261119000007`).
+`accounts.welcomed_at` (migration `20261119000002`) records the sending; it is set before the email is sent and
+taken back if the sending fails, so two sign-ins at the same moment cannot both send it. Actions › live-check
+with `only` = `counts` says how many accounts have had it.
 
 - To read it as a new reader does: Account › Accounts › **SEND IT TO ME** sends it to the manager's own address.
 - Its two pictures (the Monitor's mark and a drawing of an orrery) are files of the site,
   `web/public/mail/mark.png` and `orrery.png`, fetched by the reader's mail program from `MONITOR_SITE_URL`;
   `web/tools/mail-pictures.cjs` draws them. With pictures switched off the email still reads whole.
-- An account from before this change, and one a manager approves where no email sender is set up, gets none.
+- With no email sender set up, nobody gets one; once a sender is set, each account gets it at its next sign-in.
 - Checked in `sim/logic.test.ts` (its words, its links, the rules an email must keep) and
   `web/e2e/welcome-mail.cjs` (drawn at a desktop mail program's width and at a phone's).
 
