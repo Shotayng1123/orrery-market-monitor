@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import uPlot from "uplot";
-import { AXIS as SHARED_AXIS, boxHeight, zoomMove } from "../lib/chart";
-import { termMode } from "../lib/prefs";
+import { AXIS as SHARED_AXIS, boxHeight, insideEl, zoomMove } from "../lib/chart";
+import { termMode, zoomNow } from "../lib/prefs";
 import "uplot/dist/uPlot.min.css";
 import { rollingBands } from "../lib/stats";
 import type { SeriesPoint } from "../lib/types";
@@ -10,8 +10,8 @@ import { fmtStamp, SGT } from "../lib/time";
 // Orrery Analytics tile grammar: one line on black, green or red by the sign of the change, no axes.
 // The σ corridors are thin monochrome lines, told apart by dash pattern (1M solid, 12M dashed, 36M dotted),
 // with the rolling mean a little more visible. Intraday and hourly views space bars evenly (gaps collapsed,
-// a short break at each session boundary), as on the Analytics tiles. Click-hold-drag pans the window back
-// through the loaded history; double-click returns to the latest.
+// a short break at each session boundary), as on the Analytics tiles. Click, hold and drag: the chart follows
+// the hand, so dragging it to the right brings the earlier history in; double-click returns to the latest.
 export const UP = "#3fd07e", DN = "#ff4d42", FLAT = "#b3afa4";
 export type SigmaWindow = "m1" | "m12" | "m36";
 const WIN_DAYS: Record<SigmaWindow, number> = { m1: 21, m12: 252, m36: 756 };
@@ -222,8 +222,11 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
     const onMove = (e: PointerEvent) => {
       if (!drag || e.pointerId !== drag.id) return;
       if (Math.abs(e.clientX - drag.x0) > 6 || Math.abs(e.clientY - drag.y0) > 6) { drag.moved = true; if (pinned) { pin(null); hideMark(); } }
-      const pxW = over.clientWidth || u.bbox.width / devicePixelRatio;
-      const dIdx = Math.round(((drag.x0 - e.clientX) / Math.max(1, pxW)) * winN);   // drag left = move the window back in time
+      // The chart follows the hand (Shota, 19 Nov 2026): drag it to the right and the earlier bars come in from the
+      // left; to the left and it comes forward again. The plot's width is taken in the pointer's own (screen)
+      // pixels, so the bar that was grabbed stays under the pointer whatever the page's scale.
+      const pxW = (over.clientWidth || u.bbox.width / devicePixelRatio) * zoomNow();
+      const dIdx = Math.round(((e.clientX - drag.x0) / Math.max(1, pxW)) * winN);
       i1 = Math.min(nAll - 1, Math.max(winN, drag.i1_0 - dIdx)); i0 = i1 - winN; apply();
     };
     // a press that did not move is a tap: on a mark it opens that mark's read-out and keeps it open; elsewhere it closes it
@@ -232,8 +235,8 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
       const tap = !drag.moved && e.type === "pointerup";
       drag = null; over.style.cursor = "grab";
       if (!tap || !placed.length) return;
-      const r = over.getBoundingClientRect(), z = r.width / (over.clientWidth || r.width);   // z: the page's CSS zoom
-      const hit = markNear((e.clientX - r.left) / z, (e.clientY - r.top) / z, e.pointerType === "mouse" ? 9 : 22);
+      const [mx, my] = insideEl(e.clientX, e.clientY, over.getBoundingClientRect(), over.offsetWidth, over.offsetHeight, zoomNow());
+      const hit = markNear(mx, my, e.pointerType === "mouse" ? 9 : 22);
       pin(hit && hit !== pinned ? hit : null);
       if (pinned) { showMark(pinned); tip.style.display = "none"; } else hideMark();
     };

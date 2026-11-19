@@ -39,6 +39,7 @@ const SUITES = [
   { name: "welcome-mail", needs: ["mock"] },
   { name: "stale-feed", needs: ["standin"] },
   { name: "opening", needs: ["mock", "standin"] },
+  { name: "chart-pointer", needs: ["mock"] },
   { name: "update-bar", needs: ["mock", "built"] },
   { name: "offline", needs: ["mock", "built"] },
   { name: "notifications", needs: ["mock", "built"] },
