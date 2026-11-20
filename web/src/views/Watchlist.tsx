@@ -9,7 +9,8 @@ import { hideCard, money, openAsset, showCard } from "../components/CompanyCard"
 import { useApi } from "../lib/useApi";
 import { useWatch } from "../lib/watch";
 import { fallbackDecimals, fmtLevel, fmtPct, signCls } from "../lib/fmt";
-import { asOfCell, asOfOf, asOfTitle, fmtDate, fmtDayTime, fmtWhen, type AsOfKind } from "../lib/time";
+import { asOfCell, asOfOf, asOfTitle, fmtDate, fmtWhen, type AsOfKind } from "../lib/time";
+import { byResultsDay, fmtResultsDate, RESULTS_SOURCE, resultsStatus, resultsTip } from "../lib/results";
 import { classLabel, hitLine, MKT_CAP, NEXT_RESULTS, RESULTS_AHEAD, VS_200D, VS_50D } from "../lib/labels";
 import { cellBp, changeShade, RANGE_52W, RANGE_52W_TIP } from "./Market";
 
@@ -80,7 +81,8 @@ export function WatchlistView({ tick }: { tick: number }) {
   const cell = (v: number | null | undefined, full: number) => <td className={`num ${signCls(v, 1)}`} style={{ background: shade(v ?? null, full) }}>{fmtPct(v, 1)}</td>;
   // a yield's changes in bp with MARKETS' own figures and tints (full at 50bp; 75bp from the 200-day average)
   const bp = (v: number | null | undefined, full: number) => <td className={`num ${signCls(v == null ? null : v * 100, 1)}`} style={{ background: changeShade(v ?? null, full) }}>{cellBp(v)}</td>;
-  const ahead = rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3).sort((a, b) => a.earningsAt!.localeCompare(b.earningsAt!));
+  // each name's next results in the order of their days, each day the company's own market's (A-30)
+  const ahead = byResultsDay(rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3), (r) => r.earningsAt, (r) => r.symbol);
   const name = (s: string) => rows.find((r) => r.symbol === s)?.name ?? s;
   const how = "Press the star beside a name on its own page, in the screener or in the results calendar, or type part of a name or of a symbol above (toyota, nvid, 7203, ^N225) and choose from the list.";
   const sources = sourcesOf(rows);
@@ -113,7 +115,7 @@ export function WatchlistView({ tick }: { tick: number }) {
         </div>
         {rows.length ? (
           <table className="secT wlT">
-            <thead><tr><th /><th className="l">Name</th><th className="l">Sector / kind</th><th>Last</th><th className="l asof" title="What the row's figures are as of, in SGT: the date of a close or of an official yield's publication, the time of today's last print">As of</th><th>1D</th><th>1W</th><th>1M</th><th>3M</th><th>12M</th><th title="% for prices, bp for yields">{VS_50D}</th><th title="% for prices, bp for yields">{VS_200D}</th><th title={RANGE_52W_TIP}>{RANGE_52W}</th><th>{MKT_CAP}</th><th className="l" title="The company's next results date, in SGT; est. = estimated, not confirmed by the company">{NEXT_RESULTS}</th></tr></thead>
+            <thead><tr><th /><th className="l">Name</th><th className="l">Sector / kind</th><th>Last</th><th className="l asof" title="What the row's figures are as of, in SGT: the date of a close or of an official yield's publication, the time of today's last print">As of</th><th>1D</th><th>1W</th><th>1M</th><th>3M</th><th>12M</th><th title="% for prices, bp for yields">{VS_50D}</th><th title="% for prices, bp for yields">{VS_200D}</th><th title={RANGE_52W_TIP}>{RANGE_52W}</th><th>{MKT_CAP}</th><th className="l" title={`The company's next results date as ${RESULTS_SOURCE} gives it: the day in the company's own market (Tokyo, New York …), without a time of day, as the source does not state the release time; est. = estimated, not confirmed by the company`}>{NEXT_RESULTS}</th></tr></thead>
             <tbody>{rows.map((r) => {
               const a = asOfOf(r.asOf, r.asOfKind);
               return (
@@ -128,7 +130,7 @@ export function WatchlistView({ tick }: { tick: number }) {
                     : <>{cell(r.pct1d, 4)}{cell(r.pct1w, 8)}{cell(r.pct1m, 12)}{cell(r.pct3m, 20)}{cell(r.pct12m, 50)}{cell(r.vs50, 10)}{cell(r.vs200, 20)}</>}
                   <td className="num mut">{r.pos52 == null ? "–" : `${Math.round(r.pos52)}%`}</td>
                   <td className="num mut">{r.mcap == null ? "–" : money(r.mcap, r.ccy)}</td>
-                  <td className="l mut">{r.earningsAt ? `${fmtDate(r.earningsAt)}${r.earningsEst ? " est." : ""}` : "–"}</td>
+                  <td className="l mut" title={r.earningsAt ? resultsTip(r.symbol, r.earningsEst) : undefined}>{r.earningsAt ? `${fmtResultsDate(r.earningsAt, r.symbol)}${r.earningsEst ? " est." : ""}` : "–"}</td>
                 </tr>
               );
             })}</tbody>
@@ -143,9 +145,9 @@ export function WatchlistView({ tick }: { tick: number }) {
           Under 1,100 CSS px of layout, and in the one-screen layout, the panels follow each other. */}
       <div className="pcols">
         <div className="pcol w4">
-          <Panel no="02" title={RESULTS_AHEAD.toUpperCase()} span={4} k="wl-earn" aux="my names · times in SGT">
+          <Panel no="02" title={RESULTS_AHEAD.toUpperCase()} span={4} k="wl-earn" aux={<span title="Each company's day in its own market (Tokyo, New York …), as the source gives it. No time of day: the source gives a time with the date but does not say that it is the company's release time.">my names · {RESULTS_SOURCE} · dates only</span>}>
             {ahead.length ? (
-              <table className="secT"><tbody>{ahead.map((r) => <tr key={r.symbol}><td className="l mut num">{fmtDayTime(r.earningsAt)}</td><td className="l wrap"><span className="lnk" onClick={() => openAsset(r.symbol)}>{r.name}</span></td><td className="l mut">{r.earningsEst ? "est." : "confirmed"}</td></tr>)}</tbody></table>
+              <table className="secT"><tbody>{ahead.map((r) => <tr key={r.symbol} title={resultsTip(r.symbol, r.earningsEst)}><td className="l mut num">{fmtDate(r.day)}</td><td className="l wrap"><span className="lnk" onClick={() => openAsset(r.symbol)}>{r.name}</span></td><td className="l mut">{resultsStatus(r.earningsEst) ?? "–"}</td></tr>)}</tbody></table>
             ) : <Empty title="No dates ahead">{rows.length ? "None of your names has a results date in the feed." : "Add names to see their results dates."}</Empty>}
           </Panel>
           <Panel no="04" title="ALERTS ON MY NAMES" span={4} k="wl-alerts" aux={feed.data ? `${alerts.length} recent · times in SGT` : ""}>

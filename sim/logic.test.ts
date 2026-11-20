@@ -47,6 +47,8 @@ import { codeOf, monthOf, rollWords } from "../web/src/lib/futures.ts";
 import { contractLine, lastRollLine, rollMarks, rollsOutLine, SERIES_LINE } from "../web/src/lib/instrument.ts";
 import { mockSegments } from "../web/src/lib/mockInstr.ts";
 import type { TableRow } from "../web/src/lib/types.ts";
+import { byResultsDay, fmtResultsDate, listingCity, listingTz, RESULTS_NOTE, resultsDay, resultsDayLabel, resultsStatus, resultsStatusShort, resultsTip, resultsWords } from "../web/src/lib/results.ts";
+import { opensAtTop } from "../web/src/lib/nav.ts";
 import { readFileSync as readText, readdirSync as listDir } from "node:fs";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
@@ -1434,6 +1436,25 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const rl = [{ d: new Date(bars[260].t * 1000).toISOString().slice(0, 10), prevClose: bars[259].c * 1.03 }, { d: new Date(bars[120].t * 1000).toISOString().slice(0, 10), prevClose: null }];
     const a = mockSegments(bars, rl), b = rollSegments(bars, rl);
     ck(`the local copy's stand-in rule (mockSegments) gives the server's pieces (${a.map((x) => x.length).join("+")})`, a.length === b.length && a.every((seg, i) => seg.length === b[i].length && seg.every((x, j) => x.t === b[i][j].t && Math.abs(x.c - b[i][j].c) < 1e-9)));
+  }
+
+  console.log("\n[Y] a results date as its source gives it (A-30, first step) and where a page opens (B-28)");
+  {
+    ck("a listing's market by its symbol: Tokyo, New York (no suffix, an ADR too), Hong Kong, Seoul, Shanghai, London; a stand-in symbol by its index list", listingTz("7203.T") === "Asia/Tokyo" && listingTz("NVDA") === "America/New_York" && listingTz("TM") === "America/New_York" && listingTz("0700.HK") === "Asia/Hong_Kong" && listingTz("005930.KS") === "Asia/Seoul" && listingTz("600519.SS") === "Asia/Shanghai" && listingTz("BP.L") === "Europe/London" && listingTz("XHK8", ["HSI"]) === "Asia/Hong_Kong" && listingTz("US0", ["SP500"]) === "America/New_York" && listingTz("7203.T", ["SP500"]) === "Asia/Tokyo" && listingCity("7203.T") === "Tokyo" && listingCity("NVDA") === "New York");
+    // Yahoo's stamps of 19 Nov 2026 (calendarEvents in the source probe): Toyota 1801722600, NVIDIA 1794949200
+    const toyota = new Date(1801722600 * 1000).toISOString(), nvda = new Date(1794949200 * 1000).toISOString();
+    ck(`Toyota's stamp ${toyota} (15:30 in Tokyo, the close) is 4 Feb 2027 there; NVIDIA's ${nvda} (16:00 in New York) is 17 Nov 2026 there, not the 18th it is in Singapore`, resultsDay(toyota, "7203.T") === "2027-02-04" && fmtResultsDate(toyota, "7203.T") === "4 Feb 2027" && resultsDay(nvda, "NVDA") === "2026-11-17" && fmtResultsDate(nvda, "NVDA") === "17 Nov 2026" && fmtDate(nvda) === "18 Nov 2026");
+    ck("a plain date is read as written (JPX's, later); none, empty or unreadable is a dash; never a time of day", resultsDay("2027-02-04", "NVDA") === "2027-02-04" && resultsDay(null, "NVDA") === null && resultsDay("", "NVDA") === null && resultsDay("soon", "NVDA") === null && fmtResultsDate(null, "7203.T") === "–" && [toyota, nvda, "2026-11-20T23:59:00Z"].every((t) => !/\d:\d\d/.test(fmtResultsDate(t, "NVDA") + fmtResultsDate(t, "7203.T"))));
+    ck(`a day bar: "${resultsDayLabel("2026-11-17")}", "${resultsDayLabel("2027-02-04")}"`, resultsDayLabel("2026-11-17") === "Tuesday 17 Nov" && resultsDayLabel("2027-02-04") === "Thursday 4 Feb" && resultsDayLabel("x") === "x");
+    // a US name late on the 17th in New York comes after a Tokyo name early on the 18th by the clock, but before it by its day
+    const list = byResultsDay([{ s: "7203.T", at: "2026-11-18T00:00:00Z" }, { s: "NVDA", at: "2026-11-18T04:00:00Z" }, { s: "AAPL", at: null }, { s: "6758.T", at: "2026-11-17T06:30:00Z" }], (r) => r.at, (r) => r.s);
+    ck(`a list in the order of each company's own day, then its moment; a name without a date left out (${list.map((r) => `${r.s} ${r.day}`).join(", ")})`, list.map((r) => r.s).join() === "6758.T,NVDA,7203.T" && list.map((r) => r.day).join() === "2026-11-17,2026-11-17,2026-11-18");
+    ck("the source's mark in the designer's words: est. (Yahoo Finance), confirmed (Yahoo Finance), the source alone where it says nothing; conf. / est. / a dash in a narrow column", resultsWords(true) === "est. (Yahoo Finance)" && resultsWords(false) === "confirmed (Yahoo Finance)" && resultsWords(null) === "Yahoo Finance" && resultsStatus(true) === "est." && resultsStatus(false) === "confirmed" && resultsStatus(undefined) === null && resultsStatusShort(true) === "est." && resultsStatusShort(false) === "conf." && resultsStatusShort(null) === "–");
+    const tip = resultsTip("NVDA", true);
+    ck(`its tooltip names the day's market and why there is no time: "${tip.slice(0, 92)}…"`, /the day in New York, where the company is listed; estimated by Yahoo, not confirmed by the company\. No time of day: the source gives a time with the date but does not say that it is the company's release time\.$/.test(tip) && /the day in Tokyo/.test(resultsTip("7203.T", false)) && /no time of day: the source states no release time$/.test(RESULTS_NOTE));
+    const R = (view: string, sub = "") => ({ view, sub });
+    ck("a page opened from a list starts at its top: a name's page from any tab or from another name's; an index's page on EQUITIES from another tab", opensAtTop(R("market"), R("asset", "USDJPY=X")) && opensAtTop(R("watch"), R("asset", "GC=F")) && opensAtTop(R("asset", "NVDA"), R("asset", "7203.T")) && opensAtTop(null, R("asset", "NVDA")) && opensAtTop(R("market"), R("equities", "nk225")) && opensAtTop(R("news"), R("equities", "sp500")));
+    ck("and nothing else: the same name again, another index from EQUITIES' own picker, a tab of its own, a piece of RESEARCH (it places itself)", !opensAtTop(R("asset", "NVDA"), R("asset", "NVDA")) && !opensAtTop(R("equities", "topix"), R("equities", "nk225")) && !opensAtTop(R("market"), R("equities")) && !opensAtTop(R("market"), R("news")) && !opensAtTop(R("research"), R("research", "note:2026-11-20")) && !opensAtTop(R("market"), R("asset")));
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

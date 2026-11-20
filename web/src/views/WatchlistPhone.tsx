@@ -9,9 +9,9 @@ import { NotifyNudge } from "../components/Notify";
 import { useApi } from "../lib/useApi";
 import { useWatch } from "../lib/watch";
 import { fmtPct, signCls } from "../lib/fmt";
-import { asOfLine, asOfOf, asOfTitle, fmtClock, fmtDate, fmtWhen, SGT } from "../lib/time";
+import { asOfLine, asOfOf, asOfTitle, fmtDate, fmtWhen } from "../lib/time";
 import { classLabel, hitLine, PERIOD, RESULTS_AHEAD, TAB } from "../lib/labels";
-import { dayLabel, dayOf } from "./News";
+import { byResultsDay, RESULTS_NOTE, resultsDayLabel, resultsStatusShort } from "../lib/results";
 import { cellBp } from "./Market";
 import { decode, lastOf, sourcesOf, WINDOWS, type Feed, type WatchRow } from "./Watchlist";
 
@@ -35,7 +35,8 @@ export function WatchlistPhone({ tick }: { tick: number }) {
   const box = useAddBox(w.has);
   const rows = list.data?.rows ?? [], src = sourcesOf(rows);
   const alerts = feed.data?.alerts ?? [], news = feed.data?.news ?? [], research = feed.data?.research ?? [];
-  const ahead = rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3).sort((a, b) => a.earningsAt!.localeCompare(b.earningsAt!));
+  // each name's next results under the day bar of its own market's day, no time of day (A-30)
+  const ahead = byResultsDay(rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3), (r) => r.earningsAt, (r) => r.symbol);
   const name = (s: string) => rows.find((r) => r.symbol === s)?.name ?? s;
   return (
     <Screen title={TAB.watch} sub={list.data ? `${rows.length} name${rows.length === 1 ? "" : "s"}${rows.length ? " · times in SGT" : ""}` : list.error ? <span className="warn">{list.error}</span> : "loading…"} right={<Pick label={PERIOD} value={k} options={KEYS} onChange={setK} />}>
@@ -71,17 +72,19 @@ export function WatchlistPhone({ tick }: { tick: number }) {
         </div>
         {rows.length > 0 && <p className="mp-note" id="wl-src">{src ? `${/[,;]/.test(src) ? "Sources" : "Source"}: ${src}. ` : ""}A stock is at its last close, a market instrument at its last print; a yield's changes are in bp.</p>}
       </Section>
-      <Section title={RESULTS_AHEAD} aux="times in SGT">
-        {ahead.length ? ahead.map((r, i, arr) => (
-          <Fragment key={r.symbol}>
-            {(i === 0 || dayOf(r.earningsAt!) !== dayOf(arr[i - 1].earningsAt!)) && <div className="ev-day">{dayLabel(r.earningsAt!)}</div>}
-            <div className="ev-row tap" role="button" tabIndex={0} onClick={() => openAsset(r.symbol)}>
-              <span className="ev-t">{fmtClock(new Date(r.earningsAt!), SGT)}</span>
-              <span className="ev-m"><span className="ev-n">{r.name}</span><span className="ev-s">{r.symbol} · {r.sector ?? classLabel(r.kind)}</span></span>
-              <span className="ev-a sm">{r.earningsEst ? "est." : "confirmed"}</span>
-            </div>
-          </Fragment>
-        )) : <Empty title="No dates ahead">{rows.length ? "None of your names has a results date in the feed." : "Add names to see their results dates."}</Empty>}
+      <Section title={RESULTS_AHEAD} aux="Yahoo Finance · dates only" card={false}>
+        <div className="mp-card">
+          {ahead.length ? ahead.map((r, i, arr) => (
+            <Fragment key={r.symbol}>
+              {(i === 0 || r.day !== arr[i - 1].day) && <div className="ev-day">{resultsDayLabel(r.day)}</div>}
+              <div className="ev-row tap" role="button" tabIndex={0} onClick={() => openAsset(r.symbol)}>
+                <span className="ev-t">{resultsStatusShort(r.earningsEst)}</span>
+                <span className="ev-m"><span className="ev-n">{r.name}</span><span className="ev-s">{r.symbol} · {r.sector ?? classLabel(r.kind)}</span></span>
+              </div>
+            </Fragment>
+          )) : <Empty title="No dates ahead">{rows.length ? "None of your names has a results date in the feed." : "Add names to see their results dates."}</Empty>}
+        </div>
+        {ahead.length > 0 && <p className="mp-note" id="wl-results-note">{RESULTS_NOTE} · conf. or est., as the source marks the date.</p>}
       </Section>
       <Section title="Alerts on my names" aux={feed.data ? `${alerts.length} recent` : ""}>
         {rows.length > 0 && <NotifyNudge />}

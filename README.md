@@ -29,6 +29,9 @@ web/        Vite + React + TypeScript. src/styles/tokens.css is the design syste
             solar system and into the mark): every time the app on a phone's home screen is opened, once a day
             on each device elsewhere, and never while an account is being created; `?opening=1` plays it again. While it
             plays the Monitor's answers are held (lib/hold.ts), so nothing else is drawn and it stays smooth.
+            src/lib/nav.ts: a page opened from a list (a name's, or an index's on EQUITIES) starts at its top; Back
+            returns the list to where it stood, holding the place while a late answer draws the list, and finds a
+            phone list's open line still open (each history entry carries a key in history.state).
 supabase/   migrations/ and functions/ (tick, daily, api), cron.sql.
 jobs/       TypeScript scripts for GitHub Actions.
 ```
@@ -48,7 +51,8 @@ npm run build          # typecheck + production build into web/dist
 
 The stand-in feed (`web/src/lib/mock.ts`) fills every tab: generated prices and charts, and the stand-in rows of
 `web/src/lib/standin.json` (calendar, headlines, research, earnings dates, alerts, a watchlist, policy rates), which
-the browser checks answer with too. Its times are counted from when the page opens; the headlines reach 31 hours
+the browser checks answer with too. Its times are counted from when the page opens (a results date: a day from today
+at its market's close, 06:30 UTC for Tokyo and 21:00 UTC for New York, as Yahoo stamps them); the headlines reach 31 hours
 back, so they always cross a midnight in Singapore and show their day bars at any hour. The watchlist is kept in the
 browser (`om_mock_watch`), so stars and the add box work; `?mock=empty` in the address shows every tab with no rows.
 None of it is in a production build.
@@ -66,7 +70,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, about 1,580 checks in 30 suites): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, about 1,630 checks in 32 suites): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -77,7 +81,11 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   5Y and 10Y, the two-column page and a server from before NEWS), an instrument's page (`instrument-pages`: a pair, two
   yields, gold and an index without an EQUITIES page on both layouts with no stock-only line, a yield's figures in bp,
   JGB 10Y from Japan MOF, USD/JPY's events and yen headlines, every instrument name on MARKETS and RATES & FX opening
-  its page, NEWS's Currency picker, and a server from before), moves in σ (`sigma-moves`: MOVERS IN σ and the 1D IN σ
+  its page, NEWS's Currency picker, and a server from before), where a page opens (`page-top`: a page opened from MARKETS,
+  RATES & FX, WATCHLIST, EQUITIES, a headline's company or search starts at its top with its name on a phone and on a
+  computer, and Back returns the list to where it stood with its open line, also when the answers come late), results
+  dates (`results-dates`: the day in each company's own market and no time of day, in KEY DATA, on WATCHLIST and in
+  NEWS › Results calendar, both layouts), moves in σ (`sigma-moves`: MOVERS IN σ and the 1D IN σ
   column on both layouts and in the one-screen layout and at XL, sorting within each bar, the stand-in 2.7σ alert, gold's
   stand-in roll day kept out of its 1D, its σ, its volatility and its largest fall, the roll marked on its chart, and a
   server from before), the classic phone layout, the sign-in screen, creating an
@@ -104,7 +112,7 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   columns at both edges of a phone's statements, pressed back and swiped, short interest at its natural height, chart titles, long headlines under day
   bars, phone search, the watchlist's two columns at the feed's real lengths, curve labels, the header's alert line for every kind of alert),
   in ways that hold at any time of day.
-  `cd web && npm run e2e` starts the test servers it needs and runs them all (about eleven minutes, three suites at
+  `cd web && npm run e2e` starts the test servers it needs and runs them all (about twelve minutes, three suites at
   a time); `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
   A suite that fails once is tried again; when the second try passes, the lines that failed the first time are
   printed all the same, so a check that fails only now and then can be found from the publish job's log.
@@ -182,7 +190,8 @@ and never prints.
 | Chart with σ corridors and volume; price history; PERIOD 1D to 36M, and 5Y and 10Y (since 2026-11-20) | Yahoo Finance daily and intraday bars (split-adjusted, dividends not included; ten years of daily bars) |
 | Change over 1D, 1M, 3M, 6M, 12M, 36M, 60M against the benchmark | Worked out from those bars (`_shared/stockstats.ts`). Tokyo names are set against the Nikkei 225 and TOPIX; TOPIX is read from the `1306.T` fund (PROXY). Other names against their home index |
 | 52-week range, volatility, beta, largest fall, average daily volume and value | Worked out from the same bars |
-| Market cap, shares outstanding, float, next earnings date | Yahoo Finance quote and key statistics |
+| Market cap, shares outstanding, float | Yahoo Finance quote and key statistics |
+| Next results (the date alone since 2026-11-20) | Yahoo Finance's quote gives it as a moment (`earningsTimestamp`), and in the source probe of 19 Nov 2026 that moment was a market's close (15:30 in Tokyo for Toyota, 16:00 in New York for NVIDIA), not a time the company announced. So every screen shows the day in the company's own market (`web/src/lib/results.ts`: NVIDIA's 17 Nov stays 17 Nov, although it is the 18th in Singapore), with confirmed or est. as Yahoo marks it, and no time of day: KEY DATA, WATCHLIST and NEWS › Results calendar alike. Tokyo names' dates from JPX's 決算発表予定日 come later |
 | Short interest | Tokyo: the positions of 0.5% and above reported to JPX (already stored for the EQUITIES tab). Elsewhere: the exchange-reported short interest Yahoo republishes, with FINRA's daily short-volume share beside it |
 | Statements (income statement, balance sheet, cash flow), ratios, guidance | Tokyo: EDINET DB (有価証券報告書 and 決算短信): ten fiscal years, the company's guidance with later revision notices and the progress against it, and twelve single quarters as EDINET DB derives them. Share counts are the company's own from its latest 決算短信. Yahoo stands in, and the page says so, when no EDINET DB key is set or the day's allowance is used up. Elsewhere: Yahoo Finance fundamentals (about four years and five quarters; no guidance), with the lines of a company reporting under US GAAP or IFRS; a line the company does not report is left out |
 | A column's document (since 2026-11-20) | The address the source gives for it, never a made-up one: a year's 有価証券報告書 on EDINET (`edinetFilingUrl`, unless EDINET DB's `edinetFilingUrlAvailability` says the filing has aged out of EDINET's ~10-year retention: then no link, and the header's tip says so), the 決算短信 PDF of the guidance, of a quarter or of a year known only from it (`pdfUrl`, which EDINET DB gives on some rows only). A header without an address is plain and says so. Yahoo gives none |

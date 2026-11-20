@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Empty } from "../components/Panel";
 import { ChartPanel, CHART_PERIODS, type ChartPeriod } from "../components/ChartPanel";
 import type { SigmaWindow } from "../components/SigmaChart";
@@ -18,6 +17,7 @@ import { commonWindow, moveLine, moversInSigma, sigmaTip, SIGMA_LINE, SIGMA_QUIE
 import { pageHash } from "../lib/indices";
 import { Sig } from "../components/Sig";
 import { InstallHint } from "../components/InstallHint";
+import { useEntryState } from "../lib/nav";
 
 /** MARKET for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026). The same rows and figures as the desktop table,
  *  laid out for a phone instead of shrunk to fit one: a list by asset class with the name, the last level and one
@@ -125,8 +125,9 @@ export function MarketPhone({ tick }: { tick: number }) {
   // it is the news of the day (36 hours); an older one is not offered as today's.
   const notes = useApi<{ rows: Array<{ d: string; title: string; generatedAt: string; kind?: string }> }>("notes", { n: 5 }, Math.floor(tick / 10));
   const note = (notes.data?.rows ?? []).find((n) => (n.kind ?? "daily") !== "weekly" && !!n.title && Date.now() - Date.parse(n.generatedAt) < NOTE_FRESH_MS);
-  const [period, setPeriod] = useState<ChartPeriod>("1D");
-  const [open, setOpen] = useState<string | null>(null);
+  // the open row and the period stay with this visit of the list: Back from a page opened here finds them as they were (B-28)
+  const [period, setPeriod] = useEntryState<ChartPeriod>("period", "1D");
+  const [open, setOpen] = useEntryState<string | null>("open", null);
   const rows = (table.data?.rows ?? []).filter((r) => r.marketTab !== false).sort((a, b) => a.order - b.order);   // the curated table set
   const groups = new Map<string, TableRow[]>();
   for (const r of rows) groups.set(r.cls, [...(groups.get(r.cls) ?? []), r]);

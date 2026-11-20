@@ -3,7 +3,8 @@ import { Empty } from "../components/Panel";
 import { Pick } from "../components/Pick";
 import { Star } from "../components/Star";
 import { money, openAsset } from "../components/CompanyCard";
-import { REGION, REGIONS, SIZES, type EarningsRow } from "../components/Earnings";
+import { calendarDays, REGION, REGIONS, resultsPast, SIZES, type EarningsRow } from "../components/Earnings";
+import { RESULTS_NOTE, resultsDayLabel, resultsStatusShort } from "../lib/results";
 import { Screen, Section, usePlaceAtNext } from "../components/PhoneKit";
 import { useApi } from "../lib/useApi";
 import { useRowCap } from "../lib/useRowCap";
@@ -46,20 +47,22 @@ function MacroList({ events, listKey }: { events: EconEvent[]; listKey: string }
   );
 }
 
+/** The results calendar's lines: under the bar of each company's own market's day, its date's mark (conf. or est.)
+ *  where the time used to be, as the source gives no release time (A-30). */
 function EarningsList({ rows }: { rows: EarningsRow[] }) {
   const box = useRef<HTMLDivElement>(null);
   useRowCap(box, SHOWN, ".ev-row", ".ev-day", [rows.length > 0]);
-  const now = Date.now();
+  const days = useMemo(() => calendarDays(rows), [rows]);
   return (
     <div className="mp-scroll" ref={box}><div>
-      {rows.map((r, i, arr) => (
+      {days.map((r, i, arr) => (
         <Fragment key={r.symbol}>
-          {(i === 0 || dayOf(r.at) !== dayOf(arr[i - 1].at)) && <div className="ev-day">{dayLabel(r.at)}</div>}
-          <div className={`ev-row tap${Date.parse(r.at) < now ? " past" : ""}`} role="button" tabIndex={0} title={`${r.name} (${r.symbol}) · ${r.indices.join(", ")}`} onClick={() => openAsset(r.symbol)}>
-            <span className="ev-t">{fmtClock(new Date(r.at), SGT)}<small>{r.estimate ? "est." : r.symbol}</small></span>
+          {(i === 0 || r.day !== arr[i - 1].day) && <div className="ev-day">{resultsDayLabel(r.day)}</div>}
+          <div className={`ev-row tap${resultsPast(r) ? " past" : ""}`} role="button" tabIndex={0} title={`${r.name} (${r.symbol}) · ${r.indices.join(", ")}`} onClick={() => openAsset(r.symbol)}>
+            <span className="ev-t">{resultsStatusShort(r.estimate)}<small>{r.symbol}</small></span>
             <span className="ev-m">
               <span className="ev-n">{r.name}</span>
-              <span className="ev-s">{r.estimate ? `${r.symbol} · ` : ""}{r.sector ?? "–"}</span>
+              <span className="ev-s">{r.sector ?? "–"}</span>
             </span>
             <span className="ev-a sm">{r.mcapUsd == null ? "–" : `$${money(r.mcapUsd)}`}</span>
             <Star symbol={r.symbol} name={r.name} />
@@ -109,7 +112,7 @@ export function NewsPhone({ tick }: { tick: number }) {
         <p className="mp-note">
           {macro
             ? <>{events.length} events{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""} · scroll inside the box for more</>
-            : <>{companies.length} companies over three weeks · est. = date not confirmed by the company</>}
+            : <span id="ern-note">{companies.length} companies over three weeks · {RESULTS_NOTE} · conf. or est., as the source marks the date</span>}
         </p>
       </Section>
       <Section title={HEADLINES} aux={<Pick label="Category" value={cat} options={CATEGORY_OPTIONS} onChange={(c) => { setCat(c); setShown(PAGE); }} />} card={false}>

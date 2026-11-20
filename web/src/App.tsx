@@ -1,5 +1,5 @@
 import { pageHash } from "./lib/indices";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Topbar, VIEWS, type ViewId } from "./components/Topbar";
 import { CrashSwitch, TabGuard } from "./components/TabGuard";
 import { Gate } from "./auth/Gate";
@@ -34,6 +34,7 @@ import { RatesFxView } from "./views/RatesFx";
 import { AssetView } from "./views/Asset";
 import { WatchlistView } from "./views/Watchlist";
 import { CardLayer } from "./components/CompanyCard";
+import { navChanged, navDrawn, navPopped, navStart } from "./lib/nav";
 
 interface Route { view: ViewId; sub: string }
 function parseHash(): Route {
@@ -42,7 +43,7 @@ function parseHash(): Route {
   if (v === "asset") {
     // an address of the single-name page for an index that has its page on EQUITIES (an older link, a bookmark) goes there
     const [to, id] = pageHash(sub).split("/");
-    if (to === "equities") { history.replaceState(null, "", `#equities/${id}`); return { view: "equities", sub: id }; }
+    if (to === "equities") { history.replaceState(history.state, "", `#equities/${id}`); return { view: "equities", sub: id }; }   // the entry keeps its key (lib/nav.ts)
     return { view: "asset", sub };
   }
   return { view: VIEWS.some((x) => x.id === v) ? (v as ViewId) : "market", sub };
@@ -58,7 +59,8 @@ const DEV_BYPASS = import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS === "1
 const OPEN_INTERVAL = 60, CLOSED_INTERVAL = 60;   // one minute always (Shota): FX is open most of the week and the check is cheap
 
 export default function App() {
-  const [route, setRoute] = useState<Route>(parseHash);
+  // the entry the Monitor opens on is marked before anything is drawn, so a list's kept state has its entry (lib/nav.ts)
+  const [route, setRoute] = useState<Route>(() => { const r = parseHash(); navStart(r); return r; });
   const [token, setTok] = useState<string | null>(() => getToken());
   const [prefs, setPrefsState] = useState<Prefs>(loadPrefs);
   const [full, setFull] = useState(false);
@@ -89,7 +91,10 @@ export default function App() {
     return () => { live = false; };
   }, [token]);
 
-  useEffect(() => { const f = () => setRoute(parseHash()); window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
+  // B-28: a page opened from a list starts at its top, and Back returns the list to where it stood (lib/nav.ts)
+  useEffect(() => { const f = () => { const r = parseHash(); navChanged(r); setRoute(r); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
+  useEffect(() => { window.addEventListener("popstate", navPopped); return () => window.removeEventListener("popstate", navPopped); }, []);
+  useLayoutEffect(() => { navDrawn(); }, [route]);
   useEffect(() => { const f = () => setTok(null); window.addEventListener("om:unauth", f); return () => window.removeEventListener("om:unauth", f); }, []);
   // The scale and the one-screen layout follow the window: re-applied on every resize (and on monitor changes).
   const phone = usePhone(), pv2 = usePhoneV2();   // pv2: a phone in the layout made for phones (lib/phone.ts), the default there

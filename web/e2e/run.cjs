@@ -54,6 +54,8 @@ const SUITES = [
   { name: "notifications", needs: ["mock", "built"] },
   { name: "local-copy", needs: ["mock", "built"] },
   { name: "sigma-moves", needs: ["mock", "standin"] },
+  { name: "page-top", needs: ["mock", "standin"] },
+  { name: "results-dates", needs: ["mock", "standin"] },
 ];
 
 const args = process.argv.slice(2), serial = args.includes("--serial"), names = args.filter((a) => !a.startsWith("--"));

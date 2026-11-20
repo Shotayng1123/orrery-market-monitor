@@ -153,7 +153,9 @@ export function mockStock(symbol: string, last?: number, pts: Array<{ t: number;
     short: jp ? { kind: "jpx", d: iso(now), ratio: 0.0123, shares: sharesOut * 0.0123, daysToCover: (sharesOut * 0.0123) / 2.0e7, holders: [{ holder: "Mock Capital LLP", ratio: 0.0071, d: iso(now) }, { holder: "Mock Asset Management", ratio: 0.0052, d: iso(now) }] }
       : { kind: "interest", d: "2026-10-30", shares: 2.1e7, pctFloat: 1.4, pctOut: 1.4, daysToCover: 1.1, prior: 1.9e7, priorDate: "2026-09-30", finra: { d: iso(now), ratio: 0.47 } },
     moves: { eligible: !/^9999/.test(symbol), rule: "swings", sizes: { day: 10, large: 15, small: 10 }, rows: /^9999/.test(symbol) ? [] : mockMoves(pts, symbol === "NVDA" ? "detail" : "usual") },
-    earningsAt: new Date(now.getTime() + 12 * 86400e3).toISOString(), earningsEst: !jp,
+    // the next results as Yahoo stamps them: on a day twelve days ahead, at the listing's close (06:30 UTC is 15:30 in
+    // Tokyo; 21:00 UTC is 16:00 in New York and already the next day in Singapore), a time no company announced (A-30)
+    earningsAt: new Date(Math.floor(now.getTime() / 864e5) * 864e5 + 12 * 864e5 + (jp ? 6.5 : 21) * 36e5).toISOString(), earningsEst: !jp,
     val: { pe: price / eps[years - 1], peGuide: jp ? price / (eps[years - 1] * 1.1) : null, pb: price / (equity[years - 1] / sharesOut), yield: ((annual.lines.dps as number[])[years - 1] / price) * 100, yieldGuide: jp ? ((dps[years - 1] + 10) / price) * 100 : null, basis: "On the latest fiscal year's EPS, book value and DPS, and the company's guidance" },
     fin, finNote: null,
   };

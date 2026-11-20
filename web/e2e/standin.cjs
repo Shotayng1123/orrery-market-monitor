@@ -1,11 +1,13 @@
 // The stand-in rows of the browser checks: web/src/lib/standin.json, the same rows the local copy's mock feed shows
 // (web/src/lib/mock.ts). Synthetic: nothing in them is a real figure. Read once when a suite starts, with the same
-// rule as the mock: "{h:N}" becomes the time N hours from now (ISO), "{h:N|day}" that time's date in Singapore.
+// rule as the mock: "{h:N}" becomes the time N hours from now (ISO), "{h:N|day}" that time's date in Singapore,
+// "{d:N@HH:MM}" HH:MM UTC on the day N days from today in UTC (a results date as Yahoo stamps one).
 const raw = require("../src/lib/standin.json");
 const HOUR = 3600e3;
 function live(x, now) {
   const at = (n, day) => { const t = now + Number(n) * HOUR; return day ? new Date(t + 8 * HOUR).toISOString().slice(0, 10) : new Date(t).toISOString(); };
-  const walk = (v) => (typeof v === "string" ? v.replace(/\{h:(-?\d+(?:\.\d+)?)(\|day)?\}/g, (_m, n, d) => at(n, d))
+  const onDay = (n, hm) => new Date(Math.floor(now / 864e5) * 864e5 + Number(n) * 864e5 + (Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5))) * 60e3).toISOString();
+  const walk = (v) => (typeof v === "string" ? v.replace(/\{h:(-?\d+(?:\.\d+)?)(\|day)?\}/g, (_m, n, d) => at(n, d)).replace(/\{d:(-?\d+)@(\d\d:\d\d)\}/g, (_m, n, hm) => onDay(n, hm))
     : Array.isArray(v) ? v.map(walk) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, w]) => [k, walk(w)])) : v);
   return walk(x);
 }

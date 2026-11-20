@@ -201,10 +201,12 @@ export function mockCurve(country: string, ago: string | null): { country: strin
 // ---- the stand-in rows (./standin.json, shared with web/e2e/standin.cjs) ----
 const HOUR = 3600e3;
 /** The rows with their times made real: "{h:N}" becomes the time N hours from `now` (ISO), "{h:N|day}" that time's
- *  date in Singapore. The same rule as web/e2e/standin.cjs, so the local copy and the checks show the same rows. */
+ *  date in Singapore, "{d:N@HH:MM}" HH:MM UTC on the day N days from today in UTC (a results date as Yahoo stamps
+ *  one, at a market's close). The same rule as web/e2e/standin.cjs, so the local copy and the checks show the same rows. */
 function live<T>(x: T, now: number): T {
   const at = (n: string, day?: string) => { const t = now + Number(n) * HOUR; return day ? new Date(t + 8 * HOUR).toISOString().slice(0, 10) : new Date(t).toISOString(); };
-  const walk = (v: unknown): unknown => (typeof v === "string" ? v.replace(/\{h:(-?\d+(?:\.\d+)?)(\|day)?\}/g, (_m, n: string, d?: string) => at(n, d))
+  const onDay = (n: string, hm: string) => new Date(Math.floor(now / 864e5) * 864e5 + Number(n) * 864e5 + (Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5))) * 60e3).toISOString();
+  const walk = (v: unknown): unknown => (typeof v === "string" ? v.replace(/\{h:(-?\d+(?:\.\d+)?)(\|day)?\}/g, (_m, n: string, d?: string) => at(n, d)).replace(/\{d:(-?\d+)@(\d\d:\d\d)\}/g, (_m, n: string, hm: string) => onDay(n, hm))
     : Array.isArray(v) ? v.map(walk) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, w]) => [k, walk(w)])) : v);
   return walk(x) as T;
 }
