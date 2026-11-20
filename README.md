@@ -140,7 +140,10 @@ TOPIX has no Yahoo ticker: the `1306.T` ETF stands in for the live level (badge 
 
 A new source is tried from GitHub's machines before a job is built on it: a read-only script in `jobs/probes/`
 (the pattern is `jobs/probes/example.ts`), run by the `source-probe` workflow on the branch that holds it
-(Actions › source-probe › Run workflow). It is given no secrets and writes nothing.
+(Actions › source-probe › Run workflow). It writes nothing and is given no secrets, with one exception asked for by
+name: the input `sec_user_agent` = true gives the probe's own step, and no other, the secret `SEC_USER_AGENT` (the
+contact the SEC asks automated readers to declare), which a probe of sec.gov (`pf_sec`) sends only as its User-Agent
+and never prints.
 
 ### The stock page (`#asset/SYMBOL`, since 2026-11-18)
 
