@@ -2,7 +2,7 @@
 // subscribed devices by the tick, within a minute of being written. Off until the server holds a VAPID key pair
 // (VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY; supabase/README.md).
 import { db, selectAll } from "./db.ts";
-import { notesFor, PUSH_SCOPES, type AlertLite, type Note, type PushScope } from "./pushrules.ts";
+import { notesFor, prefsFromBody, PUSH_LINES, PUSH_SCOPES, sigmaReaches, type AlertLite, type Note, type PushScope } from "./pushrules.ts";
 import { pushEndpointOk, sendPush, type KeyPair } from "./webpush.ts";
 
 const SITE = "https://shotayng1123.github.io/orrery-market-monitor/";
@@ -11,7 +11,7 @@ export function vapid(): { key: KeyPair; subject: string } | null {
   return publicKey && privateKey ? { key: { publicKey, privateKey }, subject: Deno.env.get("VAPID_SUBJECT") ?? SITE } : null;
 }
 
-interface Sub { id: number; user_id: string; endpoint: string; p256dh: string; auth: string; scope: PushScope; fails: number }
+interface Sub { id: number; user_id: string; endpoint: string; p256dh: string; auth: string; scope: PushScope; fails: number; kinds: string[] | null; sigma_line: number | null }
 const RECENT_MS = 2 * 3600e3;    // an alert is timed at the minute its move began, which a delayed feed shows up to half an hour late; older rows are back-fills
 const MAX_ALERTS = 40, MAX_SENDS = 120, DROP_AFTER = 20;
 
@@ -19,20 +19,29 @@ const MAX_ALERTS = 40, MAX_SENDS = 120, DROP_AFTER = 20;
 export async function pushNewAlerts(now: Date): Promise<string> {
   const v = vapid();
   if (!v) return "";
-  const { data: al, error } = await db.from("alerts").select("id,at,symbol,name,kind,pct,msg").is("pushed_at", null).gte("at", new Date(now.getTime() - RECENT_MS).toISOString()).order("at").limit(MAX_ALERTS);
+  const COLS = "id,at,symbol,name,kind,pct,msg,sigma,note,pushed_sigma";
+  const recent = new Date(now.getTime() - RECENT_MS).toISOString();
+  const { data: al, error } = await db.from("alerts").select(COLS).is("pushed_at", null).gte("at", recent).order("at").limit(MAX_ALERTS);
   if (error) throw new Error("push: " + error.message);
-  const alerts = (al ?? []) as AlertLite[];
+  // a σ move already offered that has since grown past a device's line (2.5 or 3σ) is offered again, to those devices
+  const { data: gr, error: ge } = await db.from("alerts").select(COLS).eq("kind", "sigma").not("pushed_at", "is", null).gte("upd", recent).order("upd").limit(MAX_ALERTS);
+  if (ge) throw new Error("push: " + ge.message);
+  type Row = AlertLite & { pushed_sigma: number | null };
+  const lite = (r: Row): AlertLite => ({ ...r, pushedSigma: r.pushed_sigma });
+  const fresh = ((al ?? []) as Row[]).map(lite);
+  const grown = ((gr ?? []) as Row[]).filter((r) => PUSH_LINES.some((l) => sigmaReaches(l, r.sigma, r.pushed_sigma))).map(lite);
+  const alerts = [...fresh, ...grown];
   if (!alerts.length) return "";
-  // marked first: an alert is offered once, also when a send fails or this run is cut short
-  const { error: me } = await db.from("alerts").update({ pushed_at: now.toISOString() }).in("id", alerts.map((a) => a.id));
-  if (me) throw new Error("push: " + me.message);
-  const subs = await selectAll<Sub>(() => db.from("push_subs").select("id,user_id,endpoint,p256dh,auth,scope,fails").order("id"));
+  // marked first: an alert is offered once (a σ move once per line it crosses), also when a send fails or this run is cut short
+  if (fresh.length) { const { error: me } = await db.from("alerts").update({ pushed_at: now.toISOString() }).in("id", fresh.map((a) => a.id)); if (me) throw new Error("push: " + me.message); }
+  for (const a of alerts) if (a.kind === "sigma") { const { error: se } = await db.from("alerts").update({ pushed_sigma: Math.abs(a.sigma ?? 0) }).eq("id", a.id); if (se) throw new Error("push: " + se.message); }
+  const subs = await selectAll<Sub>(() => db.from("push_subs").select("id,user_id,endpoint,p256dh,auth,scope,fails,kinds,sigma_line").order("id"));
   if (!subs.length) return `, push: ${alerts.length} alerts, no devices`;
   const mineUsers = [...new Set(subs.filter((s) => s.scope === "mine").map((s) => s.user_id))];
   const watch = new Map<string, Set<string>>();
   if (mineUsers.length) for (const w of await selectAll<{ user_id: string; symbol: string }>(() => db.from("watchlists").select("user_id,symbol").in("user_id", mineUsers).order("symbol"))) { if (!watch.has(w.user_id)) watch.set(w.user_id, new Set()); watch.get(w.user_id)!.add(w.symbol); }
   const jobs: Array<{ sub: Sub; note: Note }> = [];
-  for (const s of subs) for (const note of notesFor(alerts, s.scope, watch.get(s.user_id) ?? new Set())) jobs.push({ sub: s, note });
+  for (const s of subs) for (const note of notesFor(alerts, { scope: s.scope, kinds: s.kinds, sigmaLine: s.sigma_line }, watch.get(s.user_id) ?? new Set())) jobs.push({ sub: s, note });
   let sent = 0, failed = 0; const ok = new Set<number>(), gone = new Set<number>(), bad = new Map<number, number>();
   const work = jobs.slice(0, MAX_SENDS);
   await Promise.all(Array.from({ length: Math.min(6, work.length) }, async () => {
@@ -53,28 +62,34 @@ export async function pushNewAlerts(now: Date): Promise<string> {
 
 // ---- the page's side: one device's subscription (api: push_key, push_state, push_sub, push_unsub, push_test) ----
 const MAX_DEVICES = 10;
-interface Body { endpoint?: unknown; p256dh?: unknown; auth?: unknown; scope?: unknown }
+interface Body { endpoint?: unknown; p256dh?: unknown; auth?: unknown; scope?: unknown; kinds?: unknown; sigmaLine?: unknown }
 const B64U = /^[A-Za-z0-9_-]+$/;
 
-export async function pushState(userId: string, b: Body): Promise<{ on: boolean; scope: PushScope | null }> {
-  const { data } = await db.from("push_subs").select("scope").eq("endpoint", String(b.endpoint ?? "")).eq("user_id", userId).maybeSingle();
-  return { on: !!data, scope: (data as { scope: PushScope } | null)?.scope ?? null };
+/** This device's subscription: on or off, which alerts, and since 20 Nov 2026 which kinds (null: the kinds it received
+ *  before, every kind but the σ moves) and its σ line. A page from before reads `on` and `scope` only. */
+export async function pushState(userId: string, b: Body): Promise<{ on: boolean; scope: PushScope | null; kinds: string[] | null; sigmaLine: number | null }> {
+  const { data } = await db.from("push_subs").select("scope,kinds,sigma_line").eq("endpoint", String(b.endpoint ?? "")).eq("user_id", userId).maybeSingle();
+  const r = data as { scope: PushScope; kinds: string[] | null; sigma_line: number | null } | null;
+  return { on: !!r, scope: r?.scope ?? null, kinds: r?.kinds ?? null, sigmaLine: r?.sigma_line ?? null };
 }
+
 /** Stores (or re-points to this account, or changes the choice of) this device's subscription. */
 export async function pushSubscribe(userId: string, b: Body, ua: string | null): Promise<{ status: number; body: Record<string, unknown> }> {
   const endpoint = String(b.endpoint ?? ""), p256dh = String(b.p256dh ?? ""), auth = String(b.auth ?? ""), scope = String(b.scope ?? "all") as PushScope;
   if (!pushEndpointOk(endpoint)) return { status: 400, body: { error: "This browser's push service is not one the Monitor sends to" } };
   if (!B64U.test(p256dh) || !B64U.test(auth) || p256dh.length > 120 || auth.length > 40) return { status: 400, body: { error: "bad subscription keys" } };
   if (!PUSH_SCOPES.includes(scope)) return { status: 400, body: { error: "bad choice" } };
+  const prefs = prefsFromBody(b);
+  if (prefs.error) return { status: 400, body: { error: prefs.error } };
   const { data: mine } = await db.from("push_subs").select("endpoint").eq("user_id", userId);
   if ((mine ?? []).length >= MAX_DEVICES && !(mine ?? []).some((r) => r.endpoint === endpoint)) return { status: 400, body: { error: `Notifications can be on for up to ${MAX_DEVICES} devices per account` } };
-  const { error } = await db.from("push_subs").upsert({ user_id: userId, endpoint, p256dh, auth, scope, ua: ua ? ua.slice(0, 200) : null, fails: 0 }, { onConflict: "endpoint" });
+  const { error } = await db.from("push_subs").upsert({ user_id: userId, endpoint, p256dh, auth, scope, ua: ua ? ua.slice(0, 200) : null, fails: 0, ...(prefs.kinds ? { kinds: prefs.kinds } : {}), ...(prefs.sigmaLine != null ? { sigma_line: prefs.sigmaLine } : {}) }, { onConflict: "endpoint" });
   if (error) return { status: 500, body: { error: error.message } };
-  return { status: 200, body: { on: true, scope } };
+  return { status: 200, body: { on: true, scope, ...(prefs.kinds ? { kinds: prefs.kinds } : {}), ...(prefs.sigmaLine != null ? { sigmaLine: prefs.sigmaLine } : {}) } };
 }
-export async function pushUnsubscribe(userId: string, b: Body): Promise<{ on: boolean; scope: null }> {
+export async function pushUnsubscribe(userId: string, b: Body): Promise<{ on: boolean; scope: null; kinds: null; sigmaLine: null }> {
   await db.from("push_subs").delete().eq("endpoint", String(b.endpoint ?? "")).eq("user_id", userId);
-  return { on: false, scope: null };
+  return { on: false, scope: null, kinds: null, sigmaLine: null };
 }
 /** A notification to this device only, so its owner sees that they arrive. */
 export async function pushTest(userId: string, b: Body, now: Date): Promise<{ status: number; body: Record<string, unknown> }> {

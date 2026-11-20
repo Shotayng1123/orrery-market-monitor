@@ -82,13 +82,42 @@ function walkBack(times: number[], endValue: number, stepVol: number, seed: numb
   return out;
 }
 
-/** Daily closes: weekdays, `n` points ending yesterday, daily vol as declared. */
+/** I-6 and B-27 in the local copy. USD/JPY's day is a 2.7σ move (the stand-in σ alert names it). Gold's day is a change
+ *  of contract (B-27's stand-in roll day): its closes before the newest point are the old contract's, 3% under the new
+ *  one's, so the series steps by 3% that is not a move; the roll is recorded with the new contract's own close before. */
+// (literals only, never one constant read from another at the top level: the production build then drops all of it)
+const GOLD_TO = "GCG27.CMX", GOLD_EXPIRES_IN = 96;
+export const MOCK_ROLL = { symbol: "GC=F", from: "GCZ26.CMX", to: GOLD_TO, step: 0.03, expiresIn: GOLD_EXPIRES_IN } as const;
+const MOCK_SIGMA_DAY: Record<string, number> = { "USDJPY=X": 2.7 };
+/** The contract each stand-in future names, as the server's record (fut_contracts) does, its expiry in days from now (so
+ *  the stand-in contract never runs past it, whatever the date) and the day its record starts. */
+export const MOCK_CONTRACTS: Record<string, { contract: string; expiresIn: number; since: number }> = {
+  "GC=F": { contract: GOLD_TO, expiresIn: GOLD_EXPIRES_IN, since: 60 }, "CL=F": { contract: "CLF27.NYM", expiresIn: 31, since: 25 }, "NKD=F": { contract: "NKDZ26.CME", expiresIn: 21, since: 40 },
+};
+const inDays = (n: number): string => new Date(Date.now() + n * 86400e3).toISOString().slice(0, 10);
+/** σ of the 63 daily changes into points `to - 62` … `to` (in per cent for a price, points for a yield), as the server. */
+function sd63(v: number[], to: number, rate: boolean): number {
+  const xs: number[] = [];
+  for (let k = to - 62; k <= to; k++) xs.push(rate ? v[k] - v[k - 1] : (v[k] / v[k - 1] - 1) * 100);
+  const m = xs.reduce((a, x) => a + x, 0) / xs.length;
+  return Math.sqrt(xs.reduce((a, x) => a + (x - m) ** 2, 0) / (xs.length - 1));
+}
+/** Daily closes: weekdays, `n` points ending yesterday, daily vol as declared; the newest point is the mock's print. */
 function dailySeries(symbol: string, n: number): Array<{ t: number; v: number }> {
   const m = master(symbol);
   const today = Math.floor(Date.now() / 1000 / DAY) * DAY;
   const days: number[] = [];
   for (let d = today - DAY; days.length < n; d -= DAY) { const wd = new Date(d * 1000).getUTCDay(); if (wd !== 0 && wd !== 6) days.unshift(d); }
-  return walkBack(days, m.base, m.vol, seedOf(symbol));
+  const out = walkBack(days, m.base, m.vol, seedOf(symbol)), L = out.length - 1;
+  const z = MOCK_SIGMA_DAY[symbol];
+  if (z && L > 66) for (let i = 0; i < 4; i++) { const v = out.map((p) => p.v); out[L - 1] = { ...out[L - 1], v: m.base / (1 + (z * sd63(v, L - 1, false)) / 100) }; }
+  if (symbol === MOCK_ROLL.symbol) for (let k = 0; k < L; k++) out[k] = { ...out[k], v: out[k].v / (1 + MOCK_ROLL.step) };
+  return out;
+}
+/** The stand-in roll: on the newest point's day, measured from the new contract's own close before it. */
+function mockRoll(s: Array<{ t: number; v: number }>): { d: string; from: string; to: string; prevClose: number; step: number } {
+  const L = s.length - 1;
+  return { d: new Date(s[L].t * 1000).toISOString().slice(0, 10), from: MOCK_ROLL.from, to: MOCK_ROLL.to, prevClose: s[L - 1].v * (1 + MOCK_ROLL.step), step: MOCK_ROLL.step * 100 };
 }
 /** One-minute bars for the last five weekdays, 09:00–15:30 SGT; minute vol = daily vol / sqrt(390). */
 function intradaySeries(symbol: string): Array<{ t: number; v: number }> {
@@ -114,16 +143,25 @@ export function mockTable(): { rows: TableRow[]; asOf: string } {
     const at = (daysBack: number) => s[Math.max(0, s.length - 1 - daysBack)];
     const a = { d1: at(1), w1: at(5), m1: at(21), m3: at(63), m12: at(252), m36: at(756) };
     const closes: TableRow["closes"] = {}, closeDates: TableRow["closeDates"] = {}, pct: TableRow["pct"] = {};
-    for (const [k, p] of Object.entries(a) as Array<[keyof typeof a, { t: number; v: number }]>) { closes[k] = p.v; closeDates[k] = new Date(p.t * 1000).toISOString().slice(0, 10); pct[k] = (last / p.v - 1) * 100; }
-    // σ 1M, 52-week position and distance to the 200-day average from the same synthetic closes, so those columns are not blank in the preview
-    const tail = (n: number) => s.slice(-n).map((p) => p.v), mean = (xs: number[]) => xs.reduce((x, y) => x + y, 0) / xs.length;
-    const m21 = tail(21), mu = mean(m21), sd = Math.sqrt(mean(m21.map((v) => (v - mu) ** 2))), y = tail(252), lo = Math.min(...y, last), hi = Math.max(...y, last), m200 = mean(tail(200));
+    // B-27: gold's stand-in roll day: its 1D is the change within the new contract, from that contract's own close before
+    const roll = m.symbol === MOCK_ROLL.symbol ? mockRoll(s) : null;
+    for (const [k, p] of Object.entries(a) as Array<[keyof typeof a, { t: number; v: number }]>) { const base = k === "d1" && roll ? roll.prevClose : p.v; closes[k] = base; closeDates[k] = new Date(p.t * 1000).toISOString().slice(0, 10); pct[k] = (last / base - 1) * 100; }
+    // σ 1M, 52-week position and distance to the 200-day average from the same synthetic closes, so those columns are not
+    // blank in the preview (σ vs 1M avg on a future set on the new contract's level, as the server's)
+    const tail = (n: number) => s.slice(-n).map((p, i, xs) => (roll && i < xs.length - 1 ? p.v * (1 + MOCK_ROLL.step) : p.v)), mean = (xs: number[]) => xs.reduce((x, y) => x + y, 0) / xs.length;
+    const m21 = tail(21), mu = mean(m21), sd = Math.sqrt(mean(m21.map((v) => (v - mu) ** 2))), y = s.slice(-252).map((p) => p.v), lo = Math.min(...y, last), hi = Math.max(...y, last), m200 = mean(s.slice(-200).map((p) => p.v));
     const rate = m.group === "rates" && !m.symbol.endsWith("=F"), source = providerOf(m.symbol);
+    // I-6: the day in σ, by the server's rule (supabase/functions/_shared/sigma.ts): the day's change over the σ of the 63
+    // daily changes before it (the newest point is the print, the one before it the last close)
+    const L = s.length - 1, sdz = sd63(s.map((p) => p.v), L - 1, rate), day = rate ? last - (closes.d1 ?? last) : pct.d1 ?? 0;
+    const fut = MOCK_CONTRACTS[m.symbol];
     // as the server's table (table.ts): a print's own time; an official yield, which has no quote, stamped with the
     // date it was published for at midnight UTC ("<date>T00:00:00Z": a date, no time of day; the reviewer's R2B-01)
     const lastAt = source === "yahoo" ? new Date().toISOString() : `${new Date(s[s.length - 1].t * 1000).toISOString().slice(0, 10)}T00:00:00Z`;
     return { ...m, proxyFor: m.proxyFor, last, lastAt, source, live: source === "yahoo" && (m.market === "FX" || m.market === "CME"), closes, closeDates, pct,
-      z1m: sd > 0 ? (last - mu) / sd : null, pos52: hi > lo ? ((last - lo) / (hi - lo)) * 100 : null, vs200: rate ? last - m200 : (last / m200 - 1) * 100 };
+      z1m: sd > 0 ? (last - mu) / sd : null, pos52: hi > lo ? ((last - lo) / (hi - lo)) * 100 : null, vs200: rate ? last - m200 : (last / m200 - 1) * 100,
+      z1d: sdz > 0 ? day / sdz : null, sd1d: sdz, zFrom: new Date(s[L - 64].t * 1000).toISOString().slice(0, 10), zTo: new Date(s[L - 1].t * 1000).toISOString().slice(0, 10), zN: 63,
+      contract: fut?.contract ?? null, roll: roll ? { d: roll.d, from: roll.from, to: roll.to, step: roll.step } : null };
   });
   return { rows, asOf: new Date().toISOString() };
 }
@@ -296,7 +334,9 @@ function instrumentAnswer(sym: string): unknown {
   // the table's own row (as the server sends it, so the page, its chart and MARKETS agree), or one made the table's way;
   // an official yield's figure is its last published close
   const row = tableRow ?? rowFromBars(def, bars.slice(0, -1), def.base, lastAt);   // the walk's last point is the print
-  return mockInstrument({ ...row, lastAt: pub ? lastAt : row.lastAt, live: pub ? false : row.live, source: providerOf(sym) }, bars, { official: pub, monitor: !!known, calendar: S.calendar as unknown as EconEvent[], news: S.news as unknown as NewsItem[], alerts: [...(S.watch.feed.alerts as unknown as Alert[]).map((a) => ({ ...a, id: a.id + 1000 })), ...(S.alerts as unknown as Alert[])], now: Date.now() });
+  const fut = known ? MOCK_CONTRACTS[sym] : undefined, roll = sym === MOCK_ROLL.symbol ? mockRoll(pts) : null;
+  const futures = fut ? { contract: fut.contract, expires: inDays(fut.expiresIn), since: new Date(pts[Math.max(0, pts.length - 1 - fut.since)].t * 1000).toISOString().slice(0, 10), rolls: roll ? [{ d: roll.d, from: roll.from, to: roll.to, prevClose: roll.prevClose }] : [] } : null;
+  return mockInstrument({ ...row, lastAt: pub ? lastAt : row.lastAt, live: pub ? false : row.live, source: providerOf(sym) }, bars, { official: pub, monitor: !!known, futures, calendar: S.calendar as unknown as EconEvent[], news: S.news as unknown as NewsItem[], alerts: [...(S.watch.feed.alerts as unknown as Alert[]).map((a) => ({ ...a, id: a.id + 1000 })), ...(S.alerts as unknown as Alert[])], now: Date.now() });
 }
 
 /** `?mock=empty`: what the server sends for each action when its tables hold nothing. */

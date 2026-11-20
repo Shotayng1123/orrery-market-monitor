@@ -98,6 +98,30 @@ export async function quotes(symbols: string[]): Promise<Record<string, QuoteRow
   return out;
 }
 
+/** A future's quote as the roll record needs it (futures.ts, B-27): the named contract the =F series is on, that
+ *  contract's own previous close, the quote's time, and, for a named contract's own quote, its expiry and name. Asked
+ *  for with every field, as the source probe of 20 Nov 2026 read them (`underlyingSymbol`, `expireIsoDate`). */
+export interface FutQuote { symbol: string; underlying: string | null; prevClose: number | null; price: number | null; time: number | null; expires: string | null; name: string | null }
+export async function futuresQuotes(symbols: string[]): Promise<Record<string, FutQuote>> {
+  const out: Record<string, FutQuote> = {};
+  if (!symbols.length) return out;
+  const { cookie, crumb: cr } = await crumb();
+  for (let i = 0; i < symbols.length; i += 50) {
+    const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbols.slice(i, i + 50).join(","))}&crumb=${encodeURIComponent(cr)}`;
+    // a failed request's own message can carry the address, and with it the crumb: the note says only what failed
+    let r: Response;
+    try { r = await fetch(url, { headers: { ...headers, cookie }, signal: AbortSignal.timeout(20000) }); }
+    catch (e) { throw new Error(`yahoo quote (futures): ${e instanceof Error && e.name === "TimeoutError" ? "no answer in 20 s" : "the request failed"}`); }
+    if (!r.ok) throw new Error(`yahoo quote (futures): HTTP ${r.status}`);
+    const j = (await r.json()) as { quoteResponse?: { result?: Array<{ symbol: string; underlyingSymbol?: string; regularMarketPreviousClose?: number; regularMarketPrice?: number; regularMarketTime?: number; expireIsoDate?: string; expireDate?: number; shortName?: string; longName?: string }> } };
+    for (const q of j.quoteResponse?.result ?? []) {
+      const exp = typeof q.expireIsoDate === "string" && /^\d{4}-\d{2}-\d{2}/.test(q.expireIsoDate) ? q.expireIsoDate.slice(0, 10) : typeof q.expireDate === "number" ? new Date(q.expireDate * 1000).toISOString().slice(0, 10) : null;
+      out[q.symbol] = { symbol: q.symbol, underlying: typeof q.underlyingSymbol === "string" && q.underlyingSymbol ? q.underlyingSymbol : null, prevClose: q.regularMarketPreviousClose ?? null, price: q.regularMarketPrice ?? null, time: q.regularMarketTime ?? null, expires: exp, name: q.shortName ?? q.longName ?? null };
+    }
+  }
+  return out;
+}
+
 /** Last non-null close and its timestamp. */
 export function lastPrint(s: { timestamp: number[]; close: Array<number | null> }): { price: number; t: number } | null {
   for (let i = s.close.length - 1; i >= 0; i--) { const v = s.close[i]; if (v != null && Number.isFinite(v)) return { price: v, t: s.timestamp[i] }; }

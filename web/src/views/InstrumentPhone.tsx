@@ -10,7 +10,7 @@ import type { EconEvent } from "../lib/types";
 import { fmtLevel, fmtSigma, signCls } from "../lib/fmt";
 import { fmtClock, fmtDate, fmtStamp, SGT } from "../lib/time";
 import { EVENTS, LARGEST_FALL, LARGEST_RISE, LEVEL_THEN, NEWS, NEXT_MEETING, PERIOD, RANGE_52W, REALISED_VOL, SIGMA_1M, SIGMA_WINDOW, VS_200D } from "../lib/labels";
-import { asOfWords, calSource, ccyWords, distCls, distText, impactOk, lastAndDay, matchedWords, moveCls, moveText, noEvents, pctlText, periodsOf, volLine, volTip, workedLine, type ImpactPick, type InstrumentPage } from "../lib/instrument";
+import { asOfWords, calSource, ccyWords, contractLine, distCls, distText, impactOk, lastAndDay, lastRollLine, matchedWords, moveCls, moveText, noEvents, pctlText, periodsOf, rollMarks, rollsOutLine, SERIES_LINE, volLine, volTip, workedLine, type ImpactPick, type InstrumentPage } from "../lib/instrument";
 import { keyLabel, useLiveRow } from "./Instrument";
 import { dayLabel, dayOf, IMPACTS } from "./News";
 
@@ -58,6 +58,7 @@ export function InstrumentPhone({ d, tick }: { d: InstrumentPage; tick: number }
   const feed = d.feed ?? null, vol = volLine(i.vol, u), r52 = i.range52, v3 = i.vol.m3;
   const asOf = i.asOfKind === "print" && row.lastAt ? fmtStamp(row.lastAt) : asOfWords(i);
   const p = periods.includes(period) ? period : "12M";
+  const fut = i.futures, marks = fut ? rollMarks(fut) : undefined;   // B-27: a future's rolls, marked on its daily chart
   return (
     <div className="mp">
       <header className="mp-head doc"><button type="button" className="mp-back" onClick={back}>&#8249; Back</button><Star symbol={d.symbol} name={d.name} /></header>
@@ -77,15 +78,17 @@ export function InstrumentPhone({ d, tick }: { d: InstrumentPage; tick: number }
         <Pick label={SIGMA_WINDOW} value={sigmaWindow} options={WINDOWS} onChange={setSigmaWindow} />
         <JumpPick dep={`${d.symbol}|${!!ev}|${!!feed}`} />
       </div>
-      <div className="mp-card pad mp-hero"><ChartPanel row={row} period={p} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes /></div>
-      <p className="mp-note">A tap on the chart reads that day: date, level and σ under it.{i.official ? ` ${i.source} publishes this yield once a day: daily charts only.` : ""}</p>
+      <div className="mp-card pad mp-hero"><ChartPanel row={row} period={p} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes marks={marks} /></div>
+      <p className="mp-note">A tap on the chart reads that day: date, level and σ under it.{i.official ? ` ${i.source} publishes this yield once a day: daily charts only.` : ""}{fut?.rolls.length ? " A grey diamond marks a change of contract: tap it." : ""}</p>
 
       <Section title="Key data" aux={i.asOfKind === "published" ? asOf : `as of ${asOf}`} card={false}>
         <div className="mp-card pad" id="in-key">
           <table className="mp-t left kv"><tbody>
             <KV k="Last" sub={asOf}>{lvl(last)}</KV>
             <KV k="Day's range" sub={i.official ? "published once a day: none" : undefined}>{i.session && i.session.low != null && i.session.high != null ? `${lvl(i.session.low)} – ${lvl(i.session.high)}` : "–"}</KV>
-            <KV k="Previous close" sub={i.prev.date ? fmtDate(i.prev.date) : undefined}>{lvl(i.prev.level)}</KV>
+            <KV k="Previous close" sub={i.prev.date ? `${fmtDate(i.prev.date)}${row.roll?.step != null ? " · new contract's" : ""}` : undefined}>{lvl(i.prev.level)}</KV>
+            {fut && <KV k="Contract" sub={`${fut.source.replace(/ quote:.*$/, "")}${fut.seenAt ? ` · read ${fmtStamp(fut.seenAt)}` : ""}`}><span className="wv" id="in-contract">{contractLine(fut)}</span></KV>}
+            {fut && <KV k="Last change of contract"><span className="wv" id="in-roll">{lastRollLine(fut)}</span></KV>}
             <KV k={keyLabel(i, RANGE_52W, "range52")} sub={`${fmtDate(r52.loDate)} · ${fmtDate(r52.hiDate)}`}>{lvl(r52.lo)} – {lvl(r52.hi)}</KV>
             <KV k={keyLabel(i, "From 52W high / low", "fromHiLo")}><span className={distCls(r52.fromHi, u)}>{distText(r52.fromHi, u)}</span> / <span className={distCls(r52.fromLo, u)}>{distText(r52.fromLo, u)}</span></KV>
             <KV k={keyLabel(i, SIGMA_1M, "z1m")}><span className={signCls(i.z1m, 1)}>{fmtSigma(i.z1m)}</span></KV>
@@ -96,6 +99,7 @@ export function InstrumentPhone({ d, tick }: { d: InstrumentPage; tick: number }
           </tbody></table>
         </div>
         <p className="mp-note" id="in-worked">{workedLine(i)} A percentile needs three years of readings: "–" where the history is shorter. Source: {i.source}, as of {asOf}.</p>
+        {fut && <p className="mp-note" id="in-rolls">{SERIES_LINE} {rollsOutLine(i)}</p>}
       </Section>
 
       <Section title="Performance" aux={u === "yield" ? "change in bp" : "price change"} card={false}>

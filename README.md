@@ -66,7 +66,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, about 1,400 checks in 29 suites): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, about 1,580 checks in 30 suites): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -77,9 +77,12 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   5Y and 10Y, the two-column page and a server from before NEWS), an instrument's page (`instrument-pages`: a pair, two
   yields, gold and an index without an EQUITIES page on both layouts with no stock-only line, a yield's figures in bp,
   JGB 10Y from Japan MOF, USD/JPY's events and yen headlines, every instrument name on MARKETS and RATES & FX opening
-  its page, NEWS's Currency picker, and a server from before), the classic phone layout, the sign-in screen, creating an
+  its page, NEWS's Currency picker, and a server from before), moves in σ (`sigma-moves`: MOVERS IN σ and the 1D IN σ
+  column on both layouts and in the one-screen layout and at XL, sorting within each bar, the stand-in 2.7σ alert, gold's
+  stand-in roll day kept out of its 1D, its σ, its volatility and its largest fall, the roll marked on its chart, and a
+  server from before), the classic phone layout, the sign-in screen, creating an
   account by verification email, the manager's accounts list, the
-  home-screen hint, the new-version bar, opening without a connection, notifications, a tab that fails
+  home-screen hint, the new-version bar, opening without a connection, notifications (with the kinds a device receives and its σ line), a tab that fails
   while it is drawn (it says so in its own space; the header and the other tabs stay), the welcome email as its
   reader sees it, a price feed that has stopped (the bar and the DATA chip say so), and the opening.
   The **layout guard** (`layout-guard`) opens all eight screens at five computer sizes (1280×720 to 2560×1440, and
@@ -101,7 +104,7 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   columns at both edges of a phone's statements, pressed back and swiped, short interest at its natural height, chart titles, long headlines under day
   bars, phone search, the watchlist's two columns at the feed's real lengths, curve labels, the header's alert line for every kind of alert),
   in ways that hold at any time of day.
-  `cd web && npm run e2e` starts the test servers it needs and runs them all (about seven minutes, three suites at
+  `cd web && npm run e2e` starts the test servers it needs and runs them all (about eleven minutes, three suites at
   a time); `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
   A suite that fails once is tried again; when the second try passes, the lines that failed the first time are
   printed all the same, so a check that fails only now and then can be found from the publish job's log.
@@ -110,7 +113,10 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   the verification email for a new account, and every figure of the stock page (performance, ratios, statements
   as read from each source, big moves, the reading of a move's reason), every figure of an instrument's page (its
   units, volatility and percentile, largest moves, the table's anchors and statistics for a name it does not keep, the
-  calendar's currencies and the headlines' words, and the fields a page from before still reads), the server's reads
+  calendar's currencies and the headlines' words, and the fields a page from before still reads), moves in σ and their
+  alerts (the σ of 63 daily changes in % or bp, the day against it live and closed, one alert per instrument and session,
+  who is notified at which σ line), a future's contract and its rolls (the trade date, a roll from the quote's contract,
+  the session after it, the series with the step taken out, and the page's own lines for both), the server's reads
   for a stock's NEWS and an instrument's page run against a stand-in database that records each query, and the second path for prices (when the
   relay takes over and hands back, its timetable against the database's own), where a statements table wider
   than the screen comes to rest, and the one formatting of figures, dates and words (`lib/fmt.ts`, `lib/time.ts`,
@@ -118,7 +124,9 @@ Three sets, none of which needs the real API, the live database or a sign-in:
 - **Database checks** (`sim/sql`): the rules that live in database functions (the limits on verification emails;
   the queue for the reasons of big moves; the request for the second path),
   run with the migration file itself on PGlite, a Postgres inside Node; and the pattern an instrument's headlines are
-  matched by in the database (`words.test.cjs`). `cd sim/sql && npm ci && npm test`.
+  matched by in the database (`words.test.cjs`); and the market table's σ of daily changes and σ vs 1M avg against the
+  server's own rule, rolls included, with the probe's record of futures and the alerts' and devices' new columns
+  (`sigma.test.cjs`). `cd sim/sql && npm ci && npm test`.
 
 The `deploy-web` workflow runs the browser and logic checks before it publishes: a failing check stops the publish.
 A pull request that touches `web/` runs them without publishing. `logic-tests` runs the logic and database checks
@@ -137,6 +145,28 @@ when the server's functions or migrations change.
 | Constituents | Wikipedia lists (S&P 500, Nikkei 225), checked monthly |
 
 TOPIX has no Yahoo ticker: the `1306.T` ETF stands in for the live level (badge PROXY) and the official JPX close is used for daily figures.
+
+### Moves in σ (MARKETS, since 2026-11-20)
+
+| On the page | Where it comes from |
+|---|---|
+| MOVERS IN σ (the ten largest of the day, any class) and the 1D IN σ column | Worked out by the Monitor from its stored daily closes (`_shared/sigma.ts`, and the database's `fn_table_stats` with the same rule): the day's change over the standard deviation of the instrument's own daily changes in the 63 sessions before it, a yield's in points of its level (bp), a price's in per cent. The newest change is never in its own yardstick. An official-curve yield's day counts once it is booked (it is published a day late). Each figure's closes are on its tooltip |
+| σ moves in the alert list and as notifications | The same figure, for every currency, yield, commodity, volatility index, future and coin (the equity indices keep their ±3% alert): raised from 2σ, one per instrument and session, updated while the move grows; the lists everyone reads show them from 2.5σ, and each device chooses its kinds and its own line (2, 2.5 or 3σ) in Notifications. Each names its σ, its window and its source |
+
+### A future's contract and its rolls (B-27, since 2026-11-20)
+
+The Monitor's futures (ES=F, CL=F, GC=F …) are Yahoo's front-month series: on a roll day the series moves to the next
+contract without adjustment, and that step is not a move. With each minute's prices the Monitor reads which named
+contract Yahoo's quote is on (`underlyingSymbol`; its short name can lag a roll) and that contract's own previous close,
+and records a roll when the contract changes (`fut_contracts`, `fut_rolls`; `_shared/futures.ts`). A roll day's 1D is the
+change within the new contract (MARKETS marks it ROLL), and the change of contract is left out of the 1D in σ and its
+63-session σ, σ vs 1M avg, the σ alerts, and the page's realised volatility, its percentile and the largest rise and fall.
+The page names the contract, its expiry and the last change of contract (labelled Yahoo Finance (unofficial), as the
+owner decided for Yahoo's named contracts), and marks each roll on the chart. Yahoo keeps no expired contract, so rolls
+before the Monitor's record are not known: the record starts with what the source probe of 20 Nov 2026 read (five rolls
+of that day measured; earlier ones in its six months dated, their change of contract not known, those days left out),
+and the page says from when it runs. The 52-week range, vs 200D and the changes over 1W to
+36M stay the series' own.
 
 A new source is tried from GitHub's machines before a job is built on it: a read-only script in `jobs/probes/`
 (the pattern is `jobs/probes/example.ts`), run by the `source-probe` workflow on the branch that holds it
@@ -171,7 +201,8 @@ opens it (the name a teal link, the whole row a pointer, a chart tile's title a 
 | Chart with σ corridors; PERIOD 1D to 10Y (an official yield: 3M to 10Y, it is published once a day) | The Monitor's own series (the market table's instruments) or Yahoo Finance's bars for a name found by search |
 | Last, the day's change, previous close, the change over 1D to 36M, σ vs 1M avg, 52W range, vs 200D | A Monitor instrument: MARKETS' own figures, from the same market table, so the page and MARKETS agree. A name found by search: its Yahoo quote and daily closes, with the table's rules |
 | The day's range | The Yahoo quote's session high and low; none for an official yield |
-| Realised volatility 1M / 3M / 12M and its percentile among three years of daily readings; the 52-week high and low with their dates; the largest rise and fall of 12 months | Worked out from the stored daily closes (`_shared/instrstats.ts`), marked † on both layouts with a line under KEY DATA naming the closes and their dates. A yield in bp of its level (bp a day, bp a year), a price in per cent |
+| Realised volatility 1M / 3M / 12M and its percentile among three years of daily readings; the 52-week high and low with their dates; the largest rise and fall of 12 months | Worked out from the stored daily closes (`_shared/instrstats.ts`), marked † on both layouts with a line under KEY DATA naming the closes and their dates. A yield in bp of its level (bp a day, bp a year), a price in per cent. A future's changes of contract left out (above) |
+| A future's contract and its last change of contract (since 2026-11-20) | Yahoo Finance's quote: the named contract it is on and that contract's expiry, as the Monitor has recorded them, with its rolls (above) |
 | Events | The economic calendar the Monitor stores (FXStreet, ForexFactory as the fallback): the events of its currencies, five days back and eight ahead. A pair's two currencies; an index future's index's currency first, then the one it is quoted in where that differs (the CME's Nikkei 225 future: JPY and USD); otherwise the currency it is quoted in (`_shared/instrfeed.ts`). The banks' next meetings: a dash, "not kept yet", on both layouts until the Monitor keeps their calendars |
 | News | The Monitor's own headlines of the last 30 days whose title holds one of the instrument's words (USD/JPY: yen, JPY, BoJ, Bank of Japan; the page names them, `_shared/instrfeed.ts`), and its own alerts on it |
 

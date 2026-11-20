@@ -411,7 +411,6 @@ body.term .bigwrap{height:100%}
 body.term .sqgrid{height:100%;grid-template-rows:repeat(2,minmax(0,1fr))}
 body.term .cgrid{grid-auto-rows:minmax(0,1fr);height:100%}
 body.term .cgrid .mtile.cp{aspect-ratio:auto;height:100%;min-height:0}
-body.term #grid[data-view="market"] .panel[data-no="01"]{grid-row:span 2}
 body.term #grid[data-view="news"] .panel[data-no="01"]{grid-row:span 2}
 body.term #grid[data-view="asset"] .panel[data-no="01"],body.term #grid[data-view="asset"] .panel[data-no="02"]{grid-row:span 2}
 body.term .c12 .chips,body.term .c12 .pbar{margin:0}
@@ -481,9 +480,6 @@ body.term #grid[data-view="equities"]>.panel[data-k="eq-short"]{grid-column:5 / 
 body.term #grid[data-view="equities"]>.panel[data-k="eq-heat"]{grid-column:9 / span 4;grid-row:4 / span 2}
 body.term #grid[data-view="equities"]>.panel[data-k="eq-movers"]{grid-column:1 / span 8;grid-row:5}
 body.term #grid[data-view="equities"]>.panel[data-k="eq-screener"]{grid-column:1 / -1;grid-row:6}
-body.term #grid[data-view="market"] .panel[data-no="01"]{grid-column:span 6;grid-row:span 3}
-body.term #grid[data-view="market"] .panel[data-no="02"],body.term #grid[data-view="market"] .panel[data-no="03"]{grid-column:span 6;grid-row:span 1}
-body.term #grid[data-view="market"] .panel[data-no="04"],body.term #grid[data-view="market"] .panel[data-no="05"]{grid-column:span 3;grid-row:span 1}
 body.term #grid[data-view="market"] .cgrid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
 body.term #grid[data-view="news"] .panel[data-no="01"]{grid-column:span 7;grid-row:span 2}
 body.term #grid[data-view="news"] .panel[data-no="02"],body.term #grid[data-view="news"] .panel[data-no="03"]{grid-column:span 5;grid-row:span 1}
@@ -681,9 +677,15 @@ td[style*="background"]{color:#fff!important}
 /* MARKET, one-screen layout (Shota, 15 Nov): every chart tile the size of UST 2Y yield. The four chart panels
    stack beside the table, each as wide as RATES (three tiles across); EQUITIES and RATES show two rows,
    CURRENCY and COMMODITIES one, and the rest scrolls. TileGrid gives all four the same tile height. */
-body.term #grid[data-view="market"]:has(>.c12:not(.panel)){grid-template-rows:auto minmax(0,2fr) minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)}   /* :has() to outrank the generic selector-strip rule above */
-body.term #grid[data-view="market"] .panel[data-no="01"]{grid-column:span 6;grid-row:span 4}
-body.term #grid[data-view="market"] .panel[data-no="02"],body.term #grid[data-view="market"] .panel[data-no="03"],body.term #grid[data-view="market"] .panel[data-no="04"],body.term #grid[data-view="market"] .panel[data-no="05"]{grid-column:span 6;grid-row:span 1}
+/* I-6: MOVERS IN σ is the first row (its own height: the names and σ on one line), then the table beside the four
+   chart panels; placed by the panels' kind, not their number (the designer's §3.4) */
+body.term #grid[data-view="market"]:has(>.c12:not(.panel)){grid-template-rows:auto auto minmax(0,2fr) minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)}   /* :has() to outrank the generic selector-strip rule above */
+body.term #grid[data-view="market"] .panel[data-k="sigma"]{grid-column:1 / -1;grid-row:2}
+body.term #grid[data-view="market"] .panel[data-k="mkt"]{grid-column:1 / span 6;grid-row:3 / span 4}
+body.term #grid[data-view="market"] .panel[data-k="mk-eq"]{grid-column:7 / span 6;grid-row:3}
+body.term #grid[data-view="market"] .panel[data-k="mk-rates"]{grid-column:7 / span 6;grid-row:4}
+body.term #grid[data-view="market"] .panel[data-k="mk-fx"]{grid-column:7 / span 6;grid-row:5}
+body.term #grid[data-view="market"] .panel[data-k="mk-cmdty"]{grid-column:7 / span 6;grid-row:6}
 
 /* NEWS: the note folded away (HIDE / SHOW in its header). Only the header bar stays; in the one-screen layout
    the calendar and the news share the freed space. */
@@ -1710,3 +1712,54 @@ body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]):not(:has
 body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]:not([data-screen])) .panel[data-k="in-news"]{grid-column:9 / span 4;grid-row:4}
 body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"][data-screen="news"]){grid-template-rows:auto minmax(0,1fr)}
 body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"][data-screen="news"]) .panel[data-k="in-news"]{grid-column:1 / -1;grid-row:2}
+
+/* I-6 (20 Nov 2026), the designer's I-6 note: MOVERS IN σ on MARKETS. Ten cells in one row (two rows of five under a
+   1,100-CSS-px layout), each a link: the name in teal (it opens the page; it may wrap, never cut), the day in σ in its
+   sign's colour, the change and the level under it. At the alert line (2.5σ) an amber border; under 1.5σ muted. */
+.sgstrip{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:6px}
+.sgcell{display:flex;flex-direction:column;gap:2px;min-width:0;padding:6px 8px 7px;border:1px solid var(--bord);border-radius:3px;background:var(--panel2);color:var(--txt);text-decoration:none}
+.sgcell .nm{font-size:11px;line-height:1.25;color:var(--cyan);overflow-wrap:anywhere}
+.sgcell .z{font-family:var(--mono);font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sgcell .mv{font-family:var(--mono);font-size:10.5px;color:var(--mut);font-variant-numeric:tabular-nums;white-space:normal}
+.sgcell.hot{border-color:var(--amber)}
+.sgcell.quiet .z{color:var(--mut)}
+.sgcell:hover .nm{text-decoration:underline}
+.sgnote{margin-top:6px}
+.sgempty{min-height:40px}
+@container wrap (max-width:1100px){.sgstrip{grid-template-columns:repeat(5,minmax(0,1fr))}}
+body.term .panel[data-k="sigma"] .pbody{padding:2px 6px}
+body.term .sgstrip{gap:3px}
+body.term .sgcell{flex-direction:row;align-items:baseline;gap:5px;padding:1px 5px}
+body.term .sgcell .nm{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+body.term .sgcell .z{font-size:11px}
+body.term .sgcell .mv,body.term .sgnote{display:none}
+/* the 1D IN σ header sorts (▼ while sorted), and a future's ROLL mark beside its name (B-27) */
+table.mkt th.sortable{cursor:pointer;user-select:none}
+table.mkt th.sortable:hover,table.mkt th.sortable.on{color:var(--amber)}
+.badge.roll{color:var(--txt2);border-color:var(--bord2);cursor:help}
+.mp-st .roll{color:var(--txt2)}
+/* the phone: Movers in σ first, one row of cards that moves sideways and stops on a card, no scrollbar; 132 x 76 px */
+.mp-sgrow{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:0 0 2px}
+.mp-sgrow::-webkit-scrollbar{display:none}
+.mp-sgcard{flex:0 0 132px;box-sizing:border-box;height:76px;scroll-snap-align:start;display:flex;flex-direction:column;justify-content:space-between;padding:8px 10px;border:1px solid var(--bord2);border-radius:10px;background:var(--panel);color:var(--txt);text-decoration:none;overflow:hidden}
+.mp-sgcard .nm{font-size:14px;line-height:1.15;color:var(--cyan);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-sgcard .z{font-family:var(--mono);font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mp-sgcard .mv{font-family:var(--mono);font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-sgcard.hot{border-color:var(--amber)}
+.mp-sgcard.quiet .z{color:var(--mut)}
+#mk-sigma.mp-sec h2{margin-top:10px}
+/* a roll's card on the chart: a hollow diamond for its dot (B-27) */
+.mvtip .t .dot.roll{width:7px;height:7px;border-radius:0;transform:rotate(45deg);background:transparent;border:1.5px solid var(--txt2);margin-right:7px}
+/* a σ move in the alert list: its window and source under its line (I-6) */
+.aldrop .alnote{display:block;color:var(--mut);font-size:10px;line-height:1.3;white-space:normal}
+/* the notifications window: which kinds reach this device, and its σ line (I-6, the designer's I-6 note) */
+.ntf-kinds{margin:10px 0 12px}
+.ntf-kinds>.k{color:var(--mut);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}
+.ntf-kind{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:26px}
+.ntf-kind label.chk{flex:1 1 auto;min-width:0}
+.ntf-kind .ntf-new{margin-left:2px}
+.ntf-kind .pick{margin:0}
+body.pv2 .ntf-kinds>.k{font-size:11.5px}
+body.pv2 .ntf-kind{min-height:44px}
+/* a future's contract and last roll on the phone's Key data: long values wrap at the right instead of widening the table */
+table.mp-t.kv td .wv{display:inline-block;white-space:normal;max-width:52vw;text-align:right;overflow-wrap:anywhere;font-weight:600;line-height:1.35}

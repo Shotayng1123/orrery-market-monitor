@@ -41,6 +41,8 @@ const PAGES = [
 const NKD_JP = ["JP CPI y/y", "JP PMI Manufacturing (flash)", "JP GDP q/q (preliminary)"];
 // the designer's † after a label the Monitor works out itself (R2B-05); σ vs 1M avg and vs 200D are MARKETS' own here
 const KEY_ROWS = ["Day's range", "Previous close", "52W range †", "From 52W high / low †", "σ vs 1M avg", "vs 200D", "Realised vol, 1M / 3M / 12M †", "Largest rise, 12M †", "Largest fall, 12M †", "Source · as of"];
+// a future also names its contract and its last change of contract, after the previous close (B-27, I-6)
+const keyRows = (hash) => (/%3DF$/.test(hash) ? [...KEY_ROWS.slice(0, 2), "Contract", "Last change of contract", ...KEY_ROWS.slice(2)] : KEY_ROWS);
 const DATE = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
 const STOCK_ONLY = /Mkt cap|Shares outstanding|Diluted shares|P\/E|P\/B|Dividend yield|Next results|Short interest|Beta vs|Avg daily|Volume today|FINANCIALS|BIG MOVES|SHORT INTEREST|Statements/;
 async function page(b, opts, prefs) {
@@ -78,7 +80,7 @@ const desk = (p) => p.evaluate(() => {
     evAux: document.querySelector('.panel[data-k="in-events"] .phead .aux')?.textContent ?? "",
     meet: document.querySelector("#in-meet")?.textContent.replace(/\s+/g, " ").trim() ?? null,
     newsAux: document.querySelector('.panel[data-k="in-news"] .phead .aux')?.textContent ?? "",
-    news: [...document.querySelectorAll("#st-news .snrow")].map((r) => ({ kind: r.dataset.kind, title: r.querySelector(".snt").textContent })),
+    news: [...document.querySelectorAll("#st-news .snrow")].map((r) => ({ kind: r.dataset.kind, title: r.querySelector(".snt").textContent, src: r.querySelector(".snm .src")?.textContent ?? null })),
     newsEmpty: document.querySelector('.panel[data-k="in-news"] .empty')?.textContent ?? null,
     ox: document.documentElement.scrollWidth - innerWidth,
   };
@@ -93,7 +95,7 @@ const pc = (t) => /^[+-]?\d[\d,]*\.\d+%$/.test(t) || t === "–";
       await go(p, MOCK, pg.hash, "#in-key"); await p.waitForSelector(".bigwrap canvas, .bigwrap .chartbox");
       const d = await desk(p);
       ck(`${pg.name}: an instrument's page, panels in reading order (${d.panels.join(" · ")}), and no stock-only line: no market cap, shares, valuation, results, short interest, big moves or statements`, d.panels.join("|") === `01 ${pg.name.toUpperCase()}|02 KEY DATA|03 PERFORMANCE|04 EVENTS|05 NEWS` && !d.fin && !STOCK_ONLY.test(d.text), { panels: d.panels, stockOnly: (STOCK_ONLY.exec(d.text) || [])[0] });
-      ck(`${pg.name}: KEY DATA in the designer's order (Last and Day, then the day's range … the source and as-of)`, d.krow.join() === "Last,Day" && Object.keys(d.rows).join("|") === KEY_ROWS.join("|"), { krow: d.krow, rows: Object.keys(d.rows) });
+      ck(`${pg.name}: KEY DATA in the designer's order (Last and Day, then the day's range … the source and as-of)`, d.krow.join() === "Last,Day" && Object.keys(d.rows).join("|") === keyRows(pg.hash).join("|"), { krow: d.krow, rows: Object.keys(d.rows) });
       if (pg.yield) {
         const [hi, lo] = d.rows["From 52W high / low †"].split(" / "), [rise] = d.rows["Largest rise, 12M †"].split(" · "), [fall] = d.rows["Largest fall, 12M †"].split(" · ");
         ck(`${pg.name}: every change in bp (B's defect 1): the day ${d.day}, 1D … 36M ${d.chg.join(" ")}, from the 52W high and low ${hi} / ${lo}, vs 200D ${d.rows["vs 200D"]}, largest rise ${rise} and fall ${fall}; the tile "${d.tile.trim()}"`, bp(d.day) && d.chg.length === 6 && d.chg.every(bp) && bp(hi) && bp(lo) && bp(d.rows["vs 200D"]) && bp(rise) && bp(fall) && /^[+-]?\d+(\.\d)?bp\s/.test(d.tile.trim()), d);
@@ -121,8 +123,13 @@ const pc = (t) => /^[+-]?\d[\d,]*\.\d+%$/.test(t) || t === "–";
     }
     // USD/JPY's headlines: those that say yen, JPY, BoJ or Bank of Japan, and the page says how they were matched
     await go(p, MOCK, "#asset/USDJPY%3DX", "#in-key");
-    const d = await desk(p), want = headlinesOf(["yen", "JPY", "BoJ", "Bank of Japan"]);
-    ck(`USD/JPY: NEWS says how it matched ("${d.newsAux}") and lists the yen headlines, newest first (${want.length} in the stand-in rows, fifteen shown)`, d.newsAux === "matched by: yen, JPY, BoJ, Bank of Japan · 30 days · times in SGT" && want.length > 15 && d.news.length === 15 && d.news.every((n, i) => n.kind === "headline" && n.title === decode(want[i].title)), { aux: d.newsAux, got: d.news.slice(0, 3), want: want.slice(0, 3).map((n) => n.title) });
+    const d = await desk(p), heads = headlinesOf(["yen", "JPY", "BoJ", "Bank of Japan"]);
+    // with its own alerts on it, in one list newest first (the stand-in 2.7σ move of I-6 among them)
+    const since = Date.now() - 30 * 864e5, own = [...S.watch.feed.alerts.map((a) => ({ ...a, id: a.id + 1000 })), ...S.alerts].filter((a) => a.symbol === "USDJPY=X" && Date.parse(a.at) >= since);
+    const want = [...heads.map((n) => ({ kind: "headline", title: decode(n.title), t: Date.parse(n.publishedAt), key: `h${n.id}` })), ...own.map((a) => ({ kind: "alert", title: a.msg, t: Date.parse(a.at), key: `a${a.id}`, a }))].sort((x, y) => y.t - x.t || x.key.localeCompare(y.key));
+    ck(`USD/JPY: NEWS says how it matched ("${d.newsAux}") and lists the yen headlines and its own alerts, newest first (${heads.length} headlines and ${own.length} alert in the stand-in rows, fifteen shown)`, d.newsAux === "matched by: yen, JPY, BoJ, Bank of Japan · 30 days · times in SGT" && heads.length > 15 && own.length >= 1 && d.news.length === 15 && d.news.every((n, i) => n.kind === want[i].kind && n.title === want[i].title), { aux: d.newsAux, got: d.news.slice(0, 3), want: want.slice(0, 3).map((n) => n.title) });
+    const sg = d.news.find((n) => n.kind === "alert"), sa = own.find((a) => a.kind === "sigma");
+    ck(`USD/JPY: its σ move names its window and source where a move names its exchange ("${sg?.title}", "${sg?.src}")`, !!sg && !!sa && sg.title === sa.msg && sg.src === `σ move, ${sa.note}`, sg);
     await go(p, MOCK, "#asset/GC%3DF", "#in-key");
     const g = await desk(p);
     ck(`Gold: no stand-in headline says gold or bullion, and the list says which words it looked for ("${g.newsEmpty}")`, g.newsEmpty === "In the last 30 days no headline matched gold or bullion, and there was no alert on Gold." && g.newsAux.startsWith("matched by: gold, bullion · 30 days"), g);

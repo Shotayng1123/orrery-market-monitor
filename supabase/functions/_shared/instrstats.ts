@@ -14,6 +14,7 @@
 // from. A yield read from an official curve has no quote at all: no session, no day's range. Anything else (an index,
 // a pair or a future found by search) is worked out from its quote and Yahoo's daily closes, with the table's rules.
 import { barOnOrBefore, maxDrawdown, monthsBack, perfRows, range52w, realisedVol, type Bar } from "./stockstats.ts";
+import { contractName, rollSegments, rollViews, type RollLite, type RollView } from "./futures.ts";
 
 export type Units = "yield" | "price";
 export type PeriodKey = "d1" | "w1" | "m1" | "m3" | "m12" | "m36";
@@ -30,13 +31,15 @@ export function change(now: number | null | undefined, then: number | null | und
   return units === "yield" ? now - then : then !== 0 ? (now / then - 1) * 100 : null;
 }
 
-/** Day-to-day changes in own units: a yield's change of level (points), a price's log return. */
-function steps(bars: Bar[], units: Units): Array<{ t: number; x: number }> {
+/** Day-to-day changes in own units: a yield's change of level (points), a price's log return. A future's changes of
+ *  contract are taken out (B-27; futures.ts rollSegments): a roll day's change is the change within the new contract,
+ *  and none is measured across a roll whose change of contract is not known. */
+function steps(bars: Bar[], units: Units, rolls: RollLite[] = []): Array<{ t: number; x: number }> {
   const out: Array<{ t: number; x: number }> = [];
-  for (let i = 1; i < bars.length; i++) {
-    const a = bars[i - 1].c, b = bars[i].c;
-    if (units === "yield") { if (ok(a) && ok(b)) out.push({ t: bars[i].t, x: b - a }); }
-    else if (a > 0 && b > 0) out.push({ t: bars[i].t, x: Math.log(b / a) });
+  for (const seg of rolls.length ? rollSegments(bars, rolls) : [bars]) for (let i = 1; i < seg.length; i++) {
+    const a = seg[i - 1].c, b = seg[i].c;
+    if (units === "yield") { if (ok(a) && ok(b)) out.push({ t: seg[i].t, x: b - a }); }
+    else if (a > 0 && b > 0) out.push({ t: seg[i].t, x: Math.log(b / a) });
   }
   return out;
 }
@@ -50,8 +53,8 @@ function steps(bars: Bar[], units: Units): Array<{ t: number; x: number }> {
  *           readings do not reach back three years (a short history is never given a percentile)
  *    since  the date of the first reading counted */
 export interface VolStat { day: number | null; ann: number | null; pctl: number | null; since: string | null }
-export function volStat(bars: Bar[], n: number, units: Units): VolStat {
-  const xs = steps(bars, units), none: VolStat = { day: null, ann: null, pctl: null, since: null };
+export function volStat(bars: Bar[], n: number, units: Units, rolls: RollLite[] = []): VolStat {
+  const xs = steps(bars, units, rolls), none: VolStat = { day: null, ann: null, pctl: null, since: null };
   if (n < 2 || xs.length < n) return none;
   // every reading: the sample standard deviation of the n steps ending that day (running sums)
   const reads: Array<{ t: number; sd: number }> = [];
@@ -75,18 +78,23 @@ export function volStat(bars: Bar[], n: number, units: Units): VolStat {
 /** The largest rise (a low to a later high) and the largest fall (a high to a later low) of the last `months`
  *  months, in own units, with the dates of both ends. Measured on closes, the last print included. */
 export interface Swing { chg: number; from: string; to: string }
-export function swings(bars: Bar[], units: Units, months = 12): { rise: Swing | null; fall: Swing | null } {
+export function swings(bars: Bar[], units: Units, months = 12, rolls: RollLite[] = []): { rise: Swing | null; fall: Swing | null } {
   const end = bars.length ? bars[bars.length - 1] : null;
   if (!end) return { rise: null, fall: null };
   const start = monthsBack(end.t, months);
-  let lo: Bar | null = null, hi: Bar | null = null, rise: Swing | null = null, fall: Swing | null = null;
-  for (const b of bars) {
-    if (b.t < start || !ok(b.c)) continue;
-    if (!lo || b.c < lo.c) lo = b;
-    if (!hi || b.c > hi.c) hi = b;
-    const up = change(b.c, lo.c, units), dn = change(b.c, hi.c, units);
-    if (up != null && up > 0 && (!rise || up > rise.chg)) rise = { chg: up, from: iso(lo.t), to: iso(b.t) };
-    if (dn != null && dn < 0 && (!fall || dn < fall.chg)) fall = { chg: dn, from: iso(hi.t), to: iso(b.t) };
+  let rise: Swing | null = null, fall: Swing | null = null;
+  // a future's series on its newest contract's level, cut where a change of contract is not known (futures.ts): no
+  // rise or fall is measured across a roll's step
+  for (const seg of rolls.length ? rollSegments(bars, rolls) : [bars]) {
+    let lo: Bar | null = null, hi: Bar | null = null;
+    for (const b of seg) {
+      if (b.t < start || !ok(b.c)) continue;
+      if (!lo || b.c < lo.c) lo = b;
+      if (!hi || b.c > hi.c) hi = b;
+      const up = change(b.c, lo.c, units), dn = change(b.c, hi.c, units);
+      if (up != null && up > 0 && (!rise || up > rise.chg)) rise = { chg: up, from: iso(lo.t), to: iso(b.t) };
+      if (dn != null && dn < 0 && (!fall || dn < fall.chg)) fall = { chg: dn, from: iso(hi.t), to: iso(b.t) };
+    }
   }
   return { rise, fall };
 }
@@ -166,6 +174,7 @@ export interface InstrumentInput {
   bars: Bar[];                 // daily closes, oldest first: the stored ones for a Monitor instrument, Yahoo's otherwise
   yieldQuote: boolean;         // a quote outside the table that is a yield (watchrow.ts isYieldQuote: ^IRX)
   now: number;                 // ms
+  rolls?: RollLite[];          // a future's changes of contract, which its volatility and largest moves leave out (B-27)
 }
 export interface InstrumentFigures {
   units: Units; kind: string; monitor: boolean; official: boolean; source: string;
@@ -179,6 +188,17 @@ export interface InstrumentFigures {
   rise: Swing | null; fall: Swing | null;
   perf: Array<{ h: string; from: string | null; base: number | null; chg: number | null }>;
   history: { from: string | null; to: string | null; n: number; source: string };
+  rollsOut?: number;           // a future: the changes of contract left out of its volatility and largest moves
+}
+
+/** A future's contract and its changes of contract, as its page shows them (B-27; pagefeed.ts reads them): the named
+ *  contract its last price is from, its month and expiry, when it was read, from when the Monitor's record runs, and every
+ *  roll recorded with its change of contract (null where not measured). */
+export interface FuturesInfo { contract: string | null; month: string | null; expires: string | null; seen: string | null; seenAt: string | null; knownFrom: string | null; rolls: RollView[]; lastRoll: RollView | null; source: string }
+export function futuresInfo(latest: { d: string; contract: string; expires: string | null; seen_at?: string | null } | null, rolls: Array<{ d: string; from_contract: string | null; to_contract: string; prev_close: number | null; source: string }>, first: string | null, bars: Bar[]): FuturesInfo {
+  const views = rollViews(rolls, bars), from = [first, ...rolls.map((r) => r.d)].filter((d): d is string => !!d).sort()[0] ?? null;
+  return { contract: latest?.contract ?? null, month: latest ? contractName(latest.contract)?.label ?? null : null, expires: latest?.expires ?? null, seen: latest?.d ?? null, seenAt: latest?.seen_at ?? null,
+    knownFrom: from, rolls: views, lastRoll: views.length ? views[views.length - 1] : null, source: "Yahoo Finance (unofficial) quote: the contract it names (underlyingSymbol)" };
 }
 
 /** The figures of an instrument's page. */
@@ -225,7 +245,8 @@ export function instrumentFigures(i: InstrumentInput): InstrumentFigures {
   // the largest rise and fall run to the last print when it is newer than the last close
   const lastT = row.lastAt ? Date.parse(row.lastAt) / 1000 : NaN;
   const withLast = ok(last) && Number.isFinite(lastT) && (!lastBar || Math.floor(lastT / DAY) * DAY > lastBar.t) ? [...booked, { t: Math.floor(lastT / DAY) * DAY, c: last }] : booked;
-  const { rise, fall } = swings(withLast, units);
+  const rolls = i.rolls ?? [];
+  const { rise, fall } = swings(withLast, units, 12, rolls);
   const closeDay = row.lastAt && /^\d{4}-\d{2}-\d{2}T00:00:00(\.000)?Z$/.test(row.lastAt) ? row.lastAt.slice(0, 10) : null;
   const asOfKind = row.lastAt == null ? null : official ? "published" : closeDay ? "close" : "print";
   return {
@@ -238,10 +259,11 @@ export function instrumentFigures(i: InstrumentInput): InstrumentFigures {
     // the position as MARKETS has it (a print beyond the range reads past 0 or 100; the page's bar stops at the ends)
     range52: { lo: st.lo, loDate: st.loDate, hi: st.hi, hiDate: st.hiDate, pos, fromHi: change(last, st.hi, units), fromLo: change(last, st.lo, units) },
     z1m: row.z1m ?? st.z1m, vs200: row.vs200 ?? st.vs200,
-    vol: { m1: volStat(booked, 21, units), m3: volStat(booked, 63, units), m12: volStat(booked, 252, units) },
+    vol: { m1: volStat(booked, 21, units, rolls), m3: volStat(booked, 63, units, rolls), m12: volStat(booked, 252, units, rolls) },
     rise, fall,
     perf: PERIOD_KEYS.map((k) => ({ h: LABEL[k], from: row.closeDates[k] ?? null, base: lev(k), chg: chgOf(k) })),
     history: { from: bars.length ? iso(bars[0].t) : null, to: lastBar ? iso(lastBar.t) : null, n: bars.length, source: def ? (official ? publisher(def.provider, symbol) : "the Monitor's stored daily closes") : "Yahoo Finance daily closes" },
+    ...(rolls.length ? { rollsOut: rolls.filter((r) => bars.length && r.d > iso(bars[0].t)).length } : {}),
   };
 }
 

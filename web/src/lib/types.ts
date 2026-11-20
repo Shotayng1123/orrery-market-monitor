@@ -33,13 +33,22 @@ export interface TableRow extends Instrument {
   z1m?: number | null;   // (last − 21-day mean) / 21-day sd
   pos52?: number | null; // position in the 52-week range, 0–100
   vs200?: number | null; // % above the 200-day average (yield points for rates)
+  // I-6 (20 Nov 2026; absent from a server of before): the day's change over the σ of the instrument's daily changes in
+  // the 63 sessions before it, that σ in the row's units (% for a price, points for a yield), and the closes it is
+  // worked out from (the first and last, the changes counted)
+  z1d?: number | null; sd1d?: number | null; zFrom?: string | null; zTo?: string | null; zN?: number | null;
+  // B-27: a future's named contract (as the quote names it), and the change of contract its 1D runs across (the 1D is
+  // then the change within the new contract; `step` the change of contract in %, null where not measured)
+  contract?: string | null;
+  roll?: { d: string; from: string | null; to: string; step: number | null } | null;
 }
 
 export interface SeriesPoint { t: number; v: number; q?: number | null }   // epoch seconds, value; q = volume of the bar, where the feed has it (stocks)
 export interface Series { symbol: string; res: "1m" | "5m" | "15m" | "1h" | "1d"; points: SeriesPoint[]; asOf: string | null }
 
 /** An excessive move: a single stock beyond its line (±5% for a large company, ±7% otherwise) or an index beyond ±3%, against the previous close. */
-export interface Alert { id: number; at: string; upd?: string; d: string; symbol: string; name: string; kind: "stock" | "index" | "buyback" | "revision" | "mna"; pct: number | null; price: number | null; market: string; msg: string; url?: string | null }
+export interface Alert { id: number; at: string; upd?: string; d: string; symbol: string; name: string; kind: "stock" | "index" | "buyback" | "revision" | "mna" | "sigma"; pct: number | null; price: number | null; market: string; msg: string; url?: string | null;
+  sigma?: number | null; note?: string | null }   // a σ move (I-6): its size in σ, and its window and source
 
 export interface CurvePoint { tenor: string; years: number; yield: number }
 export interface Curve { country: string; date: string; points: CurvePoint[]; source: string }

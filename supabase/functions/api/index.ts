@@ -17,6 +17,7 @@ import { watchRowFromQuote, watchRowFromTable, type TableLike } from "../_shared
 import { localDate, type Holidays } from "../_shared/sessions.ts";
 import { feedState } from "../_shared/feedhealth.ts";
 import { beatFresh, type Reading, type RelayNote } from "../_shared/relay.ts";
+import { LISTED_ALERTS } from "../_shared/sigma.ts";
 
 
 Deno.serve(async (req) => {
@@ -92,8 +93,9 @@ Deno.serve(async (req) => {
       case "search": return json(req, await search(q("q") ?? ""));
       case "alerts": {
         // newest first by the time shown on the page: when the alert was first raised (`upd` moves whenever a move is re-measured)
-        const { data } = await db.from("alerts").select("id,at,upd,d,symbol,name,kind,pct,price,market,msg,url").order("at", { ascending: false }).order("id", { ascending: false }).limit(Math.min(50, Number(q("n") ?? 20)));
-        return json(req, { rows: (data ?? []).map((a) => ({ id: a.id, at: a.at, upd: a.upd, d: a.d, symbol: a.symbol, name: a.name, kind: a.kind, pct: a.pct, price: a.price, market: a.market, msg: a.msg, url: a.url ?? null })) });
+        // σ moves from 2.5σ, the line for everyone (sigma.ts; a device may choose 2σ for its own notifications)
+        const { data } = await db.from("alerts").select("id,at,upd,d,symbol,name,kind,pct,price,market,msg,url,sigma,note").or(LISTED_ALERTS).order("at", { ascending: false }).order("id", { ascending: false }).limit(Math.min(50, Number(q("n") ?? 20)));
+        return json(req, { rows: (data ?? []).map((a) => ({ id: a.id, at: a.at, upd: a.upd, d: a.d, symbol: a.symbol, name: a.name, kind: a.kind, pct: a.pct, price: a.price, market: a.market, msg: a.msg, url: a.url ?? null, sigma: a.sigma ?? null, note: a.note ?? null })) });
       }
       case "policy_history": {
         const { data, error } = await db.rpc("fn_policy_steps");
@@ -478,7 +480,7 @@ async function watchFeed(userId: string) {
   if (!wl.length) return { alerts: [], news: [], research: [] };
   const syms = wl.map((w) => w.symbol);
   const [{ data: al }, { data: nw }, { data: nt }, { data: rp }] = await Promise.all([
-    db.from("alerts").select("id,at,d,symbol,name,kind,pct,market,msg,url").in("symbol", syms).order("at", { ascending: false }).limit(40),
+    db.from("alerts").select("id,at,d,symbol,name,kind,pct,market,msg,url,sigma,note").in("symbol", syms).or(LISTED_ALERTS).order("at", { ascending: false }).limit(40),
     db.from("news_items").select("id,published_at,source,title,url,category,tickers").overlaps("tickers", syms).order("published_at", { ascending: false }).limit(60),
     db.from("notes").select("d,title,kind,sections,generated_at").order("d", { ascending: false }).limit(40),
     db.from("reports").select("id,title,kind,md,published_at").order("published_at", { ascending: false }).limit(40),
@@ -490,7 +492,7 @@ async function watchFeed(userId: string) {
   for (const r of rp ?? []) { const hit = tagged(r.md ?? ""); if (hit.length) research.push({ key: "report:" + r.id, d: r.published_at, kind: r.kind, title: r.title, symbols: hit }); }
   research.sort((a, b) => b.d.localeCompare(a.d));
   return {
-    alerts: (al ?? []).map((a) => ({ id: a.id, at: a.at, d: a.d, symbol: a.symbol, name: a.name, kind: a.kind, pct: a.pct, market: a.market, msg: a.msg, url: a.url ?? null })),
+    alerts: (al ?? []).map((a) => ({ id: a.id, at: a.at, d: a.d, symbol: a.symbol, name: a.name, kind: a.kind, pct: a.pct, market: a.market, msg: a.msg, url: a.url ?? null, sigma: a.sigma ?? null, note: a.note ?? null })),
     news: (nw ?? []).map((r) => ({ id: r.id, publishedAt: r.published_at, source: r.source, title: r.title, url: r.url, category: r.category, tickers: named(r.tickers, names) })),
     research,
   };

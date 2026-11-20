@@ -42,7 +42,7 @@ const D = /^\d{1,2} [A-Z][a-z]{2} \d{4}$/, STAMP = /^\d{1,2} [A-Z][a-z]{2} \d\d:
     await go(p, MOCK, "#market", "table.mkt tbody tr:not(.cls)");
     const m = await p.evaluate(() => { const rows = [...document.querySelectorAll("table.mkt tbody tr")]; const cell = (name) => { const tr = rows.find((r) => r.children[0]?.childNodes[0]?.textContent.trim() === name); const td = tr?.children[1]; return td ? { t: td.textContent.trim(), whole: td.scrollWidth <= td.clientWidth } : null; };
       let cls = null; const yields = []; for (const r of rows) { if (r.classList.contains("cls")) { cls = r.textContent.trim(); continue; } if (cls === "Rates") yields.push(r.children[1].textContent.trim()); }
-      return { usdjpy: cell("USD/JPY"), eurusd: cell("EUR/USD"), n225: cell("Nikkei 225"), bars: rows.filter((r) => r.classList.contains("cls")).map((r) => r.textContent.trim()), yields, aux: document.querySelector('.panel[data-no="01"] .aux').textContent }; });
+      return { usdjpy: cell("USD/JPY"), eurusd: cell("EUR/USD"), n225: cell("Nikkei 225"), bars: rows.filter((r) => r.classList.contains("cls")).map((r) => r.textContent.trim()), yields, aux: document.querySelector('.panel[data-k="mkt"] .aux').textContent }; });
     seen["MARKETS (computer)"] = m.usdjpy?.t;
     ck(`MARKETS: USD/JPY ${m.usdjpy?.t}, EUR/USD ${m.eurusd?.t}, the Nikkei ${m.n225?.t}: each its instrument's decimals, whole (it was 158.4 and 57,000.0)`, decs(m.usdjpy?.t) === 3 && decs(m.eurusd?.t) === 4 && decs(m.n225?.t) === 2 && [m.usdjpy, m.eurusd, m.n225].every((c) => c?.whole), m);
     ck(`MARKETS: every yield's level ends in "%" (${m.yields.join(" ")})`, m.yields.length >= 3 && m.yields.every((y) => /^\d+\.\d{3}%$/.test(y)), m.yields);

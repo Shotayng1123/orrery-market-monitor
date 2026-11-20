@@ -17,6 +17,8 @@ import { AFTER_CLOSE_MIN, closeMove, quoteMove, scanDue, sessionMove, stockLine,
 import { CCY, MIN_MCAP_USD } from "./newsalerts.ts";
 import { quotes, spark, type QuoteRow } from "./yahoo.ts";
 import type { TableRow } from "./table.ts";
+import { sigmaCandidate, sigmaWrites, type SigmaCand } from "./sigma.ts";
+import { publisher } from "./instrstats.ts";
 
 export const INDEX_PCT = 3;
 const r1 = (x: number) => Math.round(x * 10) / 10;
@@ -48,6 +50,20 @@ export async function scanIndexAlerts(rows: TableRow[], now: Date): Promise<numb
   const old = new Map(((have ?? []) as Array<{ symbol: string; d: string; pct: number; msg: string }>).map((x) => [`${x.symbol}|${x.d}`, x]));
   const out = cand.filter((c) => { const o = old.get(`${c.symbol}|${c.d}`); return !o || Math.abs(o.pct - c.pct) >= 0.005 || o.msg !== c.msg; });
   return upsertAlerts(out);
+}
+
+/** σ alerts (I-6, B-03 (1)): every currency, yield, commodity, volatility index, future and coin whose day in σ (the table's
+ *  1D in σ: its change over the σ of its daily changes in the 63 sessions before it) reaches 2σ, the lowest line a
+ *  device can choose; the lists everyone reads show them from 2.5σ (sigma.ts). One row per instrument and session,
+ *  updated while the move grows. A future not read this minute (`read`, tick.ts readFutures) raises none: its roll could
+ *  not be told from a move (B-27). Written only when new or grown, so `upd` says when it last grew. */
+export async function scanSigmaAlerts(rows: TableRow[], now: Date, read: ReadonlySet<string>): Promise<number> {
+  const cand = rows.map((r) => sigmaCandidate(r, read, (x) => publisher(x.source, x.symbol))).filter((c): c is SigmaCand => !!c);
+  if (!cand.length) return 0;
+  const { data: have, error } = await db.from("alerts").select("symbol,d,sigma").eq("kind", "sigma").in("symbol", cand.map((c) => c.symbol)).gte("d", cand.map((c) => c.d).sort()[0]);
+  if (error) throw new Error("alerts: " + error.message);
+  const old = new Map(((have ?? []) as Array<{ symbol: string; d: string; sigma: number | null }>).map((x) => [`${x.symbol}|${x.d}`, x]));
+  return upsertAlerts(sigmaWrites(cand, old).map((c) => ({ ...c, upd: now.toISOString() })));
 }
 
 type Cand = Record<string, unknown> & { symbol: string; d: string; pct: number; msg: string };

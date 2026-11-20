@@ -11,9 +11,13 @@ import { fmtPct, fmtSigma, fmtStampSafe, isYield, signCls } from "./shared";
 import { PERIODS, type PeriodKey, type TableRow } from "../lib/types";
 import { marketById } from "../lib/sessions";
 import { shortName } from "../lib/short";
-import { cellBp, cellPct, CurvePanel, levelOf, RANGE_52W, RANGE_52W_TIP, SIGMA_1M, SIGMA_1M_TIP } from "./Market";
+import { cellBp, cellPct, CurvePanel, levelOf, RANGE_52W, RANGE_52W_TIP, rollTip, SIGMA_1D_TIP, SIGMA_1M, SIGMA_1M_TIP } from "./Market";
 import { fmtDate, rowAsOfTitle } from "../lib/time";
-import { classLabel, delayed, PERIOD, TAB, VS_200D } from "../lib/labels";
+import { classLabel, delayed, MOVERS_SIGMA, PERIOD, SIGMA_1D, TAB, VS_200D } from "../lib/labels";
+import { commonWindow, moveLine, moversInSigma, sigmaTip, SIGMA_LINE, SIGMA_QUIET } from "../lib/movers";
+import { pageHash } from "../lib/indices";
+import { Sig } from "../components/Sig";
+import { InstallHint } from "../components/InstallHint";
 
 /** MARKET for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026). The same rows and figures as the desktop table,
  *  laid out for a phone instead of shrunk to fit one: a list by asset class with the name, the last level and one
@@ -40,6 +44,7 @@ function Status({ r }: { r: TableRow }) {
   return (
     <span className="mp-st">
       {r.live ? (m && m.delayMin > 0 ? <span className="delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>{delayed(m.delayMin)}</span> : <span className="live">Live</span>) : <span>Closed</span>}
+      {r.roll && <span className="roll" title={rollTip(r)}>Roll</span>}
       {r.proxyFor && <span title={`${r.name} stands in for ${r.proxyFor}`}>via {r.symbol}</span>}
     </span>
   );
@@ -60,7 +65,8 @@ function Detail({ r, period, tick, sigmaWindow, head = false }: { r: TableRow; p
       <div className="mp-grid">
         {PERIODS.map((p) => { const v = move(r, p.key); return <div key={p.key} className={p.label === period ? "cur" : undefined}><span className="k">{p.label}</span><span className={`v ${moveCls(r, v)}`}>{fmtMove(r, v)}</span></div>; })}
       </div>
-      <div className="mp-grid">
+      <div className="mp-grid two">
+        <div title={`${SIGMA_1D_TIP.split(". Click")[0]}. ${sigmaTip(r)}`}><span className="k">{SIGMA_1D}</span><span className={`v ${signCls(r.z1d, 1)}`}>{fmtSigma(r.z1d)}</span></div>
         <div title={SIGMA_1M_TIP}><span className="k">{SIGMA_1M}</span><span className={`v ${signCls(r.z1m, 1)}`}>{fmtSigma(r.z1m)}</span></div>
         <div title={RANGE_52W_TIP}><span className="k">{RANGE_52W}</span><span className="v">{r.pos52 == null ? "–" : `${Math.round(r.pos52)}%`}</span>{r.pos52 != null && <span className="bar"><i style={{ left: `${Math.max(0, Math.min(100, r.pos52))}%` }} /></span>}</div>
         <div title="Last print against the 200-day average (% for prices, bp for yields)"><span className="k">{VS_200D}</span><span className={`v ${signCls(rate && r.vs200 != null ? r.vs200 * 100 : r.vs200, 1)}`}>{r.vs200 == null ? "–" : rate ? cellBp(r.vs200) : fmtPct(r.vs200, 1)}</span></div>
@@ -86,6 +92,32 @@ export function InstrumentRow({ r, period, tick, open, onToggle, fixed = false, 
 
 const NOTE_FRESH_MS = 36 * 3600e3;
 
+/** Movers in σ on a phone (the designer's I-6 note): the first section, one row of cards that moves sideways and stops on
+ *  a card, the third card cut at the edge so the row reads as "more to the right"; each card opens its page. The
+ *  screen's as-of is in its head. */
+function SigmaCards({ rows, asOf }: { rows: TableRow[]; asOf: string | null }) {
+  const top = moversInSigma(rows), win = commonWindow(top);
+  if (!top.length) return null;
+  return (
+    <section className="mp-sec" id="mk-sigma">
+      <h2><span><Sig>{MOVERS_SIGMA}</Sig></span>{asOf && <span className="aux">as of {fmtStampSafe(asOf)}</span>}</h2>
+      <div className="mp-sgrow" role="list">
+        {top.map((r) => {
+          const z = r.z1d!;
+          return (
+            <a key={r.symbol} role="listitem" className={`mp-sgcard${Math.abs(z) >= SIGMA_LINE ? " hot" : ""}${Math.abs(z) < SIGMA_QUIET ? " quiet" : ""}`} href={`#${pageHash(r.symbol)}`} title={sigmaTip(r)}>
+              <span className="nm">{shortName(r.symbol, r.name)}</span>
+              <span className={`z ${signCls(z, 1)}`}>{fmtSigma(z)}</span>
+              <span className="mv">{moveLine(r).split(" · ")[0]}</span>
+            </a>
+          );
+        })}
+      </div>
+      <p className="mp-note" id="mk-sigma-note">The day's change ÷ σ of its daily changes, 63 sessions. † Worked out by the Monitor from the daily closes{win ? `, mostly ${fmtDate(win.from)} – ${fmtDate(win.to)}` : ""}.</p>
+    </section>
+  );
+}
+
 export function MarketPhone({ tick }: { tick: number }) {
   const table = useApi<{ rows: TableRow[]; asOf: string }>("table", undefined, tick);
   // The newest morning note, as one line above the list (19 Nov 2026): the table says what moved, the note says
@@ -98,10 +130,12 @@ export function MarketPhone({ tick }: { tick: number }) {
   const rows = (table.data?.rows ?? []).filter((r) => r.marketTab !== false).sort((a, b) => a.order - b.order);   // the curated table set
   const groups = new Map<string, TableRow[]>();
   for (const r of rows) groups.set(r.cls, [...(groups.get(r.cls) ?? []), r]);
+  const strip = moversInSigma(rows).length > 0;   // the screen's as-of then moves into the strip's head
   return (
     <Screen title={TAB.market}
-      sub={<>{table.data ? <>as of {fmtStampSafe(table.data.asOf)}</> : table.error ? <span className="warn">{table.error}</span> : "loading…"}{DEV_MOCK && <span className="badge est">MOCK</span>}</>}
+      sub={<>{table.data ? (strip ? null : <>as of {fmtStampSafe(table.data.asOf)}</>) : table.error ? <span className="warn">{table.error}</span> : "loading…"}{DEV_MOCK && <span className="badge est">MOCK</span>}</>}
       right={<Pick label={PERIOD} value={period} options={CHART_PERIODS} onChange={setPeriod} title="The change shown on every line: from the close at the start of this period to the last print (bp for yields)" />}>
+      <SigmaCards rows={rows} asOf={table.data?.asOf ?? null} />
       {note && (
         <a className="mp-today" id="mk-note" href={`#research/${encodeURIComponent(`note:${note.d}`)}`}>
           <span className="k">Morning note · {fmtDate(note.d)}</span>
@@ -109,6 +143,7 @@ export function MarketPhone({ tick }: { tick: number }) {
           <span className="go" aria-hidden="true">&rsaquo;</span>
         </a>
       )}
+      <InstallHint home />
       {rows.length ? [...groups.entries()].map(([cls, rs]) => (
         <section key={cls} className="mp-sec">
           <h2>{classLabel(cls)}</h2>

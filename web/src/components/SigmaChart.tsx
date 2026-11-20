@@ -28,7 +28,8 @@ const AXIS = SHARED_AXIS;
  *  why. Daily charts only. An item that comes in parts (`word`, `fig`, `rest`: lib/stock.ts moveParts) is written
  *  with its figure in the colour of the figure's sign and the rest muted; the circle keeps its own colour (the
  *  designer's D-27). */
-export interface ChartMark { t: number; dir: 1 | -1; small?: boolean; title: string; items: Array<{ text: string; why: string; pct?: number; word?: string | null; fig?: string; rest?: string }> }
+export interface ChartMark { t: number; dir: 1 | -1; small?: boolean; roll?: boolean /* a future's change of contract (B-27): a hollow grey diamond, not a move */; title: string; items: Array<{ text: string; why: string; pct?: number; word?: string | null; fig?: string; rest?: string }> }
+const ROLL = "#c6c2b7";   // --txt2: a roll is no rise or fall, so neither green nor red
 const MARK_R = 4.5, MARK_R_SMALL = 3.4;   // a circle's radius in CSS pixels; the smaller one is a smaller peak or bottom
 const RING_MS = 2000, RING = "#e8e5de";   // a mark opened from the list (A-25) is ringed for two seconds
 
@@ -163,8 +164,15 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
           for (const { m, i } of placed) {
             const xv = xsAll[i]; if (xv < x0 || xv > x1) continue;
             const cx = u.valToPos(xv, "x", true), cy = u.valToPos(data[1][i] as number, "y", true), r = (m.small ? MARK_R_SMALL : MARK_R) * pr;
-            g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2);
-            g.fillStyle = m.dir > 0 ? UP : DN; g.fill(); g.lineWidth = (m.small ? 1 : 1.5) * pr; g.strokeStyle = "#0b0b0c"; g.stroke();
+            if (m.roll) {
+              // a change of contract: a hollow diamond on the bar of the roll day, in the muted text colour
+              const d = r * 1.25;
+              g.beginPath(); g.moveTo(cx, cy - d); g.lineTo(cx + d, cy); g.lineTo(cx, cy + d); g.lineTo(cx - d, cy); g.closePath();
+              g.fillStyle = "#0b0b0c"; g.fill(); g.lineWidth = 1.6 * pr; g.strokeStyle = ROLL; g.stroke();
+            } else {
+              g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2);
+              g.fillStyle = m.dir > 0 ? UP : DN; g.fill(); g.lineWidth = (m.small ? 1 : 1.5) * pr; g.strokeStyle = "#0b0b0c"; g.stroke();
+            }
             if (ring != null && Math.floor(m.t / 86400) === ring) { g.beginPath(); g.arc(cx, cy, r + 5 * pr, 0, Math.PI * 2); g.lineWidth = 2 * pr; g.strokeStyle = RING; g.stroke(); }
           }
           g.restore();
@@ -215,7 +223,7 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
       const el = (tag: string, cls: string, text?: string) => { const d = document.createElement(tag); d.className = cls; if (text != null) d.textContent = text; return d; };
       const add = (cls: string, text: string) => card.appendChild(el("div", cls, text));
       // the day, after a dot in the turn's colour (the circle's own); the figures in their sign's colour, the words muted
-      const head = el("div", "t"); head.append(el("span", `dot ${x.m.dir > 0 ? "up" : "dn"}${x.m.small ? " sm" : ""}`), x.m.title); card.appendChild(head);
+      const head = el("div", "t"); head.append(el("span", `dot ${x.m.roll ? "roll" : x.m.dir > 0 ? "up" : "dn"}${x.m.small ? " sm" : ""}`), x.m.title); card.appendChild(head);
       for (const it of x.m.items) {
         if (it.fig == null) add("l", it.text);
         else { const l = el("div", "l"); if (it.word) l.append(el("span", "mvw", it.word), " "); l.append(el("span", `mvf ${it.pct != null && it.pct > 0 ? "up" : it.pct != null && it.pct < 0 ? "dn" : ""}`.trim(), it.fig), " ", el("span", "mvr", it.rest ?? "")); card.appendChild(l); }

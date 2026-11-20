@@ -24,7 +24,7 @@ const pills = (scope) => scope.evaluateAll((els) => els.map((e) => { const f = e
 // the cells of MARKETS' UST 10Y row and of the watchlist's ^TNX row, read in one page (both come from the same table)
 async function tnxBoth(p) {
   await p.evaluate(() => { location.hash = "market"; }); await p.waitForSelector("table.mkt tbody tr:not(.cls)");
-  const m = await p.evaluate(() => { const tr = [...document.querySelectorAll("table.mkt tbody tr:not(.cls)")].find((r) => r.children[0].textContent.startsWith("UST 10Y")); const c = [...tr.children].map((x) => x.textContent); return { last: c[1], d1: c[2], w1: c[3], m1: c[4], m3: c[5], m12: c[6], vs200: c[10] }; });
+  const m = await p.evaluate(() => { const tr = [...document.querySelectorAll("table.mkt tbody tr:not(.cls)")].find((r) => r.children[0].textContent.startsWith("UST 10Y")); const c = [...tr.children].map((x) => x.textContent); return { last: c[1], d1: c[2], w1: c[4], m1: c[5], m3: c[6], m12: c[7], vs200: c[11] }; });   // 1D IN σ follows 1D (I-6)
   await p.evaluate(() => { location.hash = "watch"; }); await p.waitForSelector('.panel[data-k="wl"] tbody tr');
   const w = await p.evaluate(() => { const heads = [...document.querySelectorAll('.panel[data-k="wl"] thead th')].map((x) => x.textContent); const tr = [...document.querySelectorAll('.panel[data-k="wl"] tbody tr')].find((r) => r.querySelector("td.nm .mut").textContent === "^TNX"); const c = [...tr.children].map((x) => x.textContent), at = (h) => c[heads.indexOf(h)]; return { last: at("Last"), d1: at("1D"), w1: at("1W"), m1: at("1M"), m3: at("3M"), m12: at("12M"), vs200: at("vs 200D"), vs50: at("vs 50D") }; });
   return { m, w };
@@ -89,7 +89,7 @@ async function tnxBoth(p) {
     ck(`Period -> 1W: every pill now says "1W"; UST 10Y's in bp (${ust})`, ps.every((x) => x.w === "1W") && /bp$/.test(ust), ps.filter((x) => x.w !== "1W").slice(0, 3));
     await p.locator(".mp-row", { hasText: "UST 10Y" }).first().tap(); await p.waitForSelector(".mp-item.open .mp-grid");
     const tiles = await p.evaluate(() => [...document.querySelectorAll(".mp-item.open .mp-grid")].pop().innerText.split("\n").filter(Boolean));
-    ck(`the opened line's statistics: ${tiles.join(" · ")}`, tiles[0] === "σ vs 1M avg" && /^[+-]?\d+\.\dσ$|^–$/.test(tiles[1]) && tiles[2] === "52W range" && /^\d{1,3}%$/.test(tiles[3]) && /bp$/.test(tiles[5]), tiles);
+    ck(`the opened line's statistics, 1D in σ first (I-6): ${tiles.join(" · ")}`, tiles[0] === "1D in σ" && /^[+-]?\d+\.\dσ$|^–$/.test(tiles[1]) && tiles[2] === "σ vs 1M avg" && /^[+-]?\d+\.\dσ$|^–$/.test(tiles[3]) && tiles[4] === "52W range" && /^\d{1,3}%$/.test(tiles[5]) && tiles[6] === "vs 200D" && /bp$/.test(tiles[7]), tiles);
     await p.evaluate(() => { location.hash = "rates"; }); await p.waitForSelector(".mp-sec .mp-row"); await p.waitForTimeout(300);
     await p.locator(".mp-head .pick select").selectOption("3M"); await p.waitForTimeout(300); ps = await pills(p.locator(".mp-chg"));
     ck(`RATES & FX: Period -> 3M, all ${ps.length} pills say "3M"`, ps.length >= 6 && ps.every((x) => x.w === "3M" && !x.cut), ps.filter((x) => x.w !== "3M").slice(0, 3));

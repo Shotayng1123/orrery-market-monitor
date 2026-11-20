@@ -13,7 +13,7 @@
 //     on it or around it, is a clipped figure;
 //   - no chart label is cut: no ink at a chart canvas's edge inside its y-axis band (labels are drawn on the canvas);
 //   - nothing scrolls sideways: not the page, not a panel (a phone's statements table and wide phone tables scroll
-//     by design, with their names fixed);
+//     by design, with their names fixed, and so does MARKETS' row of σ cards);
 //   - on a phone, every tap target is 44 x 44 px or more, measured on the element that takes the tap: a drop-down's
 //     <select> (its frame plus 10 px), a toggle's or a chip's ::before (the designer's I-2 note (h)). The targets the
 //     designer listed as really under 44 px are printed and pass until the increment named beside them;
@@ -54,8 +54,9 @@ const SIZES = [
   // D-51's other windows, on a stock's page only: its right column is 380 to 430 CSS px there
   ...[[1366, 768, "L"], [1536, 864, "L"], [1680, 1050, "XL"]].map(([w, h, size]) => ({ code: `${w}${size}`, label: `${w}x${h}, text ${size}`, ctx: { viewport: { width: w, height: h } }, prefs: { size, compact: false, v: 2 }, screens: ["asset/7203.T", "asset/NVDA"] })),
 ];
-// what scrolls sideways by design on a phone: the statements under their fixed line names, and the wide phone tables
-const SIDEWAYS_OK = [".finbox", ".mp-xs"];
+// what scrolls sideways by design on a phone: the statements under their fixed line names, the wide phone tables, and
+// MARKETS' row of σ cards (the designer's I-6 note: one row that moves sideways with snap, the third card cut at the edge)
+const SIDEWAYS_OK = [".finbox", ".mp-xs", ".mp-sgrow"];
 // where the statements are walked: the two phones above and the designer's two wider ones (the verdict on D-03), and a
 // computer whose statements are wider than their panel today: 1100x800 at text XL, a zoom of 1.35, where a period's
 // edge falls between screen pixels unless the widths are worked out in them

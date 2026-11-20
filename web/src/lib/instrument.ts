@@ -5,10 +5,12 @@
 // Units. A yield's figures come in points of its level and are written in basis points, as MARKETS writes them; a
 // price's in per cent. The page never shows a yield's change as a per cent of its level (B's defect 1).
 import { cellBp, cellPct, fmtPct, signCls } from "./fmt";
-import { fmtDate, fmtStamp } from "./time";
+import { fmtDate, fmtStamp, partsIn, SGT } from "./time";
 import { ASSET_PERIODS, type ChartPeriod } from "./periods";
 import type { EconEvent, TableRow } from "./types";
 import type { StockPage } from "./stock";
+import { codeOf, monthOf, rollWords } from "./futures";
+import type { ChartMark } from "../components/SigmaChart";
 
 export type Units = "yield" | "price";
 /** Realised volatility over a window: `day` and `ann` in points for a yield (bp a day, bp a year on the page), in per
@@ -36,7 +38,16 @@ export interface InstrumentInfo {
   history: { from: string | null; to: string | null; n: number; source: string };
   events: { ccys: string[]; from: string; to: string; rows: EconEvent[]; error?: string } | null;
   matched: string[];     // the words its headlines were matched by
+  futures?: FuturesInfo; // a Monitor future (B-27, 20 Nov 2026): its contract and its changes of contract
+  rollsOut?: number;     // the changes of contract its volatility and largest moves leave out
 }
+/** A roll as the page shows it: its day (the first session on the new contract), the contracts and their months, the
+ *  change of contract in per cent (null where it was not measured), and where it was read. */
+export interface RollView { d: string; from: string | null; to: string; fromMonth: string | null; toMonth: string; step: number | null; source: string }
+/** A Monitor future's record (supabase/functions/_shared/instrstats.ts futuresInfo): the named contract its last price is
+ *  from, as Yahoo's quote names it, its month and expiry, the session and time it was read, from when the record runs,
+ *  and every roll in it. */
+export interface FuturesInfo { contract: string | null; month: string | null; expires: string | null; seen: string | null; seenAt: string | null; knownFrom: string | null; rolls: RollView[]; lastRoll: RollView | null; source: string }
 export type InstrumentPage = StockPage & { instrument: InstrumentInfo };
 /** An answer for an instrument's page (a server from before 20 Nov 2026 sends a stock's answer for every name). */
 export const isInstrumentPage = (d: StockPage | null | undefined): d is InstrumentPage => !!d && !!(d as Partial<InstrumentPage>).instrument;
@@ -127,3 +138,36 @@ export function workedLine(i: Pick<InstrumentInfo, "official" | "monitor" | "sou
 export const calSource = (rows: Array<Pick<EconEvent, "source">>): string => (rows[0]?.source === "fxstreet" ? "FXStreet" : rows.length ? "ForexFactory" : "");
 /** What an empty calendar says. */
 export const noEvents = (ccys: string[], imp: ImpactPick): string => `No ${imp === "high" ? "High-impact " : imp === "hm" ? "High or Medium " : ""}${ccyWords(ccys) || "currency"} events from five days back to eight days ahead${imp === "all" ? "" : ": Impact All shows the rest"}.`;
+
+
+// ---- a future's contract and its rolls (B-27, 20 Nov 2026) ----
+/** "Feb 2027 (GCG27) · expires 24 Feb 2027"; "–" before the Monitor has read the contract. */
+export function contractLine(f: FuturesInfo | undefined, today: string = partsIn(SGT).ymd): string {
+  if (!f?.contract) return "–";
+  // "expired" once its day has passed (Singapore's date): a stale quote can name a contract long gone (TIO=F's, 2021)
+  const past = !!f.expires && f.expires < today;
+  return `${f.month ?? f.contract} (${codeOf(f.contract)})${f.expires ? ` · ${past ? "expired" : "expires"} ${fmtDate(f.expires)}` : ""}`;
+}
+/** "20 Nov 2026 · from Dec 2026, +3.00% change of contract"; "none since <date>" when the record holds none. */
+export function lastRollLine(f: FuturesInfo | undefined): string {
+  const r = f?.lastRoll;
+  if (!r) return f?.knownFrom ? `none recorded since ${fmtDate(f.knownFrom)}` : "–";
+  return `${fmtDate(r.d)} · ${r.fromMonth ? `from ${r.fromMonth}` : "from a contract no longer listed"}${r.step != null ? `, ${fmtPct(r.step, 2)} change of contract` : ", change of contract not measured"}`;
+}
+/** What the series is (B's line): said under KEY DATA on both layouts. */
+export const SERIES_LINE = "A front-month series (Yahoo's =F): on a roll day it moves to the next contract, and that step is not a move.";
+/** Which figures leave the rolls out, and from when the Monitor knows them (B-27). */
+export function rollsOutLine(i: Pick<InstrumentInfo, "futures" | "rollsOut">): string {
+  const f = i.futures;
+  if (!f) return "";
+  const from = f.knownFrom ? fmtDate(f.knownFrom) : null;
+  return `Rolls left out of realised vol and its percentile, σ vs 1M avg, the largest rise and fall and the 1D in σ: ${i.rollsOut ?? f.rolls.length}${from ? ` since ${from}` : ""}.${from ? ` Changes of contract before ${from} are not known to the Monitor (Yahoo keeps no expired contract) and stay in figures over windows that reach back before then.` : ""} The 52W range, vs 200D and the changes over 1W to 36M are the series' own.`;
+}
+/** Each roll as a mark on the daily chart (B: "roll from Dec to Jan: x% is a change of contract"). */
+export function rollMarks(f: FuturesInfo | undefined): ChartMark[] {
+  return (f?.rolls ?? []).map((r) => ({
+    t: Date.parse(r.d + "T12:00:00Z") / 1000, dir: (r.step ?? 0) >= 0 ? 1 : -1, roll: true, title: `${fmtDate(r.d)} · change of contract`,
+    items: [{ text: r.step != null ? `${rollWords(r.from, r.to)}: ${fmtPct(r.step, 2)} is a change of contract` : `${rollWords(r.from, r.to)}: the change of contract was not measured`,
+      why: `Yahoo's front-month series moved ${r.from ? `from ${monthOf(r.from)} (${codeOf(r.from)}) ` : ""}to ${monthOf(r.to)} (${codeOf(r.to)}) on this day. The step is not a move: it is left out of the volatility, σ and the largest moves here, and raises no alert. Source: ${r.source}.` }],
+  }));
+}

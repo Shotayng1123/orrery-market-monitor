@@ -389,6 +389,7 @@
   },
   "alerts": [
     {"id":9,"at":"{h:-0.05}","d":"{h:-0.05|day}","symbol":"285A.T","name":"KIOXIA HOLDINGS CORP.","kind":"stock","pct":-11.2,"price":2840,"market":"TSE","msg":"KIOXIA HOLDINGS CORP. down 11.2% intraday","url":null},
+    {"id":10,"at":"{h:-0.4}","d":"{h:-0.4|day}","symbol":"USDJPY=X","name":"USD/JPY","kind":"sigma","pct":1.57,"price":158.4,"market":"FX","msg":"USD/JPY +1.6% · 2.7σ · 158.400","url":null,"sigma":2.7,"note":"σ of 63 daily changes to the last close · Yahoo Finance (stand-in)"},
     {"id":8,"at":"{h:-0.7}","d":"{h:-0.7|day}","symbol":"^SOX","name":"PHLX Semiconductor (SOX)","kind":"index","pct":-4.11,"price":9390.25,"market":"NYSE","msg":"PHLX Semiconductor (SOX) down 4.11%","url":null},
     {"id":7,"at":"{h:-1.6}","d":"{h:-1.6|day}","symbol":"MU","name":"Micron Technology","kind":"stock","pct":-9.8,"price":795.23,"market":"NYSE","msg":"Micron Technology down 9.8% intraday","url":null},
     {"id":6,"at":"{h:-3}","d":"{h:-3|day}","symbol":"7203.T","name":"Toyota Motor Corp","kind":"buyback","pct":null,"price":null,"market":"Nikkei Asia","msg":"Buyback: Toyota to buy back up to ¥1.2tn of its own shares (stand-in)","url":"https://example.com/alert/buyback"},

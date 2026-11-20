@@ -27,7 +27,7 @@ const measure = async (p, taps) => { await p.evaluate(() => { document.querySele
       ck(`${nfx} pairs with a % change, ${nyl} yields with a change in bp and a level in %`, nfx >= 3 && nyl >= 3 && /%$/.test(u0.fx) && /bp$/.test(u0.y) && /%$/.test(u0.lvl), u0);
       await fx.locator(".mp-row").first().tap(); await p.waitForTimeout(1000);
       const det = await p.evaluate(() => { const it = document.querySelector(".mp-item.open"); return { chart: it.querySelectorAll("canvas").length, cells: it.querySelectorAll(".mp-grid > div").length, cur: it.querySelector(".mp-grid .cur .k")?.textContent, more: it.querySelector(".mp-more")?.textContent }; });
-      ck("tap a pair: its chart, six periods, three statistics and the way to its page", det.chart >= 1 && det.cells === 9 && det.cur === "1D" && /page/.test(det.more ?? ""), det);
+      ck("tap a pair: its chart, six periods, four statistics (1D in σ first, I-6) and the way to its page", det.chart >= 1 && det.cells === 10 && det.cur === "1D" && /page/.test(det.more ?? ""), det);
       await pick(p, "Period").locator("select").selectOption("3M"); await p.waitForTimeout(900);
       const c3 = await p.evaluate(() => ({ cur: document.querySelector(".mp-item.open .mp-grid .cur .k")?.textContent, th: [...document.querySelectorAll(".mp-sec table.mp-t th")].map((t) => t.textContent), stat: [...document.querySelectorAll(".mp-sec .mp-grid.in .k")].map((k) => k.textContent) }));
       ck("Period -> 3M: the lines, the open chart and the curve comparison follow", c3.cur === "3M" && c3.th.join() === "Tenor,Today,3M ago,Change" && c3.stat.includes("2s10s vs 3M ago"), c3);
