@@ -6,7 +6,7 @@ import { accountFor, adminSet, adminUsers, authInfo, changePassword, login, mail
 import { corsHeaders, json, timingSafeEqual } from "../_shared/http.ts";
 import { computeTable } from "../_shared/table.ts";
 import { CURVE_LABELS } from "../_shared/curves.ts";
-import { homeIndex, quoteFor, relativeLine, statementsFor, yahooSeries } from "../_shared/assets.ts";
+import { historyDays, homeIndex, quoteFor, RANGES, relativeLine, statementsFor, yahooSeries } from "../_shared/assets.ts";
 import { fetchText } from "../_shared/http.ts";
 import { CCY, loadUniverse } from "../_shared/newsalerts.ts";
 import { quotes } from "../_shared/yahoo.ts";
@@ -18,8 +18,6 @@ import { localDate, type Holidays } from "../_shared/sessions.ts";
 import { feedState } from "../_shared/feedhealth.ts";
 import { beatFresh, type Reading, type RelayNote } from "../_shared/relay.ts";
 
-const RANGES: Record<string, number> = { "1W": 7, "1M": 31, "3M": 93, "12M": 366, "36M": 1096 };
-const SIGMA_LOOKBACK_DAYS = 1120;   // 756 trading days ≈ 1,100 calendar days, so the 36M band is defined from the first point shown
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(req) });
@@ -235,7 +233,7 @@ async function seriesDb(symbol: string, range: string) {
     return { symbol, res: "1h", points: rows.map((r) => ({ t: Date.parse(r.t) / 1000, v: r.close })), asOf: rows.length ? rows[rows.length - 1].t : null };
   }
   const days = RANGES[range] ?? RANGES["12M"];
-  const from = new Date(Date.now() - (days * 2 + SIGMA_LOOKBACK_DAYS) * 86400e3).toISOString().slice(0, 10);   // one extra window of history to pan into
+  const from = new Date(Date.now() - historyDays(days) * 86400e3).toISOString().slice(0, 10);   // one extra window of history to pan into (not for 5Y and 10Y)
   const rows = await selectAll<{ d: string; close: number }>(() => db.from("prices_daily").select("d,close").eq("symbol", symbol).gte("d", from).order("d"));
   return { symbol, res: "1d", shownFrom: new Date(Date.now() - days * 86400e3).toISOString().slice(0, 10), points: rows.map((r) => ({ t: Date.parse(r.d + "T00:00:00Z") / 1000, v: r.close })), asOf: rows.length ? rows[rows.length - 1].d : null };
 }

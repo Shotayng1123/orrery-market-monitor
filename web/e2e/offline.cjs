@@ -39,7 +39,7 @@ const keptCount = (p) => p.evaluate(() => new Promise((res) => { const r = index
   const l2 = await level(p), b2 = await bars(p); await p.screenshot({ path: "off-phone.png" });
   ck("the app opens without a connection (the page comes from the device)", (await p.locator("#pnav a").count()) === 6 && (await p.evaluate(() => document.body.classList.contains("pv2"))));
   ck("Markets shows the last data it received", l2 != null && l2 === before, { before, l2, first: await first(p) });
-  ck("a bar says so, with the time of that data", !!b2.net && /^No connection\. Data from \d\d\/\d\d \d\d:\d\d SGT\.$/.test(b2.net) && b2.cls === "off", b2);
+  ck("a bar says so, with the time of that data", !!b2.net && /^No connection\. Data from \d{1,2} [A-Z][a-z]{2} \d\d:\d\d SGT\.$/.test(b2.net) && b2.cls === "off", b2);
   const pos = await p.evaluate(() => { const r = document.querySelector("#footbars").getBoundingClientRect(), n = document.querySelector("#pnav").getBoundingClientRect(); return { left: Math.round(r.left), right: Math.round(r.right), bottom: Math.round(r.bottom), navTop: Math.round(n.top), vw: innerWidth, font: parseFloat(getComputedStyle(document.querySelector("#netbar")).fontSize), overflowX: document.documentElement.scrollWidth - innerWidth }; });
   ck("the bar sits above the tab bar, inside the screen", pos.left >= 0 && pos.right <= pos.vw && pos.bottom <= pos.navTop - 4 && pos.font >= 13 && pos.overflowX <= 0, pos);
   await p.locator("#pnav a", { hasText: "News" }).tap(); await p.waitForTimeout(900); ck("News shows its last headlines", (await p.locator(".nw-row").count()) === heads && heads > 0, { now: await p.locator(".nw-row").count(), heads });

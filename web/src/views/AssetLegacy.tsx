@@ -9,7 +9,8 @@ import { Star } from "../components/Star";
 import type { TableRow } from "../lib/types";
 import type { MarketId } from "../lib/sessions";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
-import { fmtStamp } from "../lib/time";
+import { fmtDate, fmtStamp } from "../lib/time";
+import { MKT_CAP } from "../lib/labels";
 
 export interface AssetFull extends AssetLite { adv10d: number | null; series: unknown }
 
@@ -61,35 +62,35 @@ export function AssetViewLegacy({ symbol, tick }: { symbol: string; tick: number
       <Panel no="02" title="QUOTE" span={4} aux={d.asOf ? `as of ${fmtStamp(d.asOf)}` : ""}>
         <div className="krow">
           <span><span className="k">Last</span><span className="v">{fmtNum(d.price, row.decimals)}</span></span>
-          <span><span className="k">Day</span><span className={`v ${signCls(d.pct)}`}>{fmtPct(d.pct, 2)}</span></span>
-          <span><span className="k">Market cap</span><span className="v">{money(d.mcap, d.currency)}</span></span>
+          <span><span className="k">Day</span><span className={`v ${signCls(d.pct, 2)}`}>{fmtPct(d.pct, 2)}</span></span>
+          <span><span className="k">{MKT_CAP}</span><span className="v">{money(d.mcap, d.currency)}</span></span>
         </div>
         <table className="secT"><tbody>
           <tr><td className="l">Previous close</td><td className="num">{fmtNum(d.prevClose, row.decimals)}</td></tr>
           <tr><td className="l">Volume</td><td className="num">{d.volume == null ? "–" : fmtNum(d.volume, 0)}</td></tr>
-          <tr><td className="l">ADTV 3M</td><td className="num">{d.adv3m == null ? "–" : fmtNum(d.adv3m, 0)}</td></tr>
-          <tr><td className="l">ADTV 10D</td><td className="num">{d.adv10d == null ? "–" : fmtNum(d.adv10d, 0)}</td></tr>
-          <tr><td className="l">Volume / ADTV 3M</td><td className="num">{d.volume != null && d.adv3m ? `${Math.round((d.volume / d.adv3m) * 100)}%` : "–"}</td></tr>
+          <tr><td className="l">Avg daily volume (3M)</td><td className="num">{d.adv3m == null ? "–" : fmtNum(d.adv3m, 0)}</td></tr>
+          <tr><td className="l">Avg daily volume (10d)</td><td className="num">{d.adv10d == null ? "–" : fmtNum(d.adv10d, 0)}</td></tr>
+          <tr><td className="l">Volume vs avg (3M)</td><td className="num">{d.volume != null && d.adv3m ? `${Math.round((d.volume / d.adv3m) * 100)}%` : "–"}</td></tr>
           <tr><td className="l">Turnover (day)</td><td className="num">{d.volume != null && d.price != null ? money(d.volume * d.price, d.currency) : "–"}</td></tr>
         </tbody></table>
         <div className="minih" style={{ marginTop: 8 }}>Short data</div>
         {d.short ? d.short.kind === "finra" ? (
-          <table className="secT"><tbody><tr><td className="l">FINRA short-volume share · {d.short.d}</td><td className="num">{(d.short.ratio * 100).toFixed(0)}%</td></tr></tbody></table>
+          <table className="secT"><tbody><tr><td className="l">FINRA short-volume share · {fmtDate(d.short.d)}</td><td className="num">{(d.short.ratio * 100).toFixed(0)}%</td></tr></tbody></table>
         ) : (
           <table className="secT"><tbody>
-            <tr><td className="l"><b>Reported short positions (≥0.5%) · {d.short.d}</b></td><td className="num"><b>{(d.short.ratio * 100).toFixed(2)}%</b></td></tr>
-            {d.short.holders.slice(0, 8).map((h) => <tr key={h.holder}><td className="l mut">{h.holder}<span className="mut"> · {h.d}</span></td><td className="num">{(h.ratio * 100).toFixed(2)}%</td></tr>)}
+            <tr><td className="l"><b>Reported short positions (≥0.5%) · {fmtDate(d.short.d)}</b></td><td className="num"><b>{(d.short.ratio * 100).toFixed(2)}%</b></td></tr>
+            {d.short.holders.slice(0, 8).map((h) => <tr key={h.holder}><td className="l mut">{h.holder}<span className="mut"> · {fmtDate(h.d)}</span></td><td className="num">{(h.ratio * 100).toFixed(2)}%</td></tr>)}
           </tbody></table>
         ) : <div className="mut" style={{ fontSize: 10.5 }}>no short data reported for this name</div>}
       </Panel>
-      <Panel no="03" title="STATEMENTS" span={12} aux={st?.source ? <>{st.source === "edinetdb" ? "EDINET DB (有価証券報告書 · 決算短信)" : "Yahoo Finance fundamentals"}{st.asOf ? ` · fetched ${st.asOf}` : ""}</> : ""}>
+      <Panel no="03" title="STATEMENTS" span={12} aux={st?.source ? <>{st.source === "edinetdb" ? "EDINET DB (有価証券報告書 · 決算短信)" : "Yahoo Finance fundamentals"}{st.asOf ? ` · fetched ${fmtDate(st.asOf)}` : ""}</> : ""}>
         {st && (st.annual.length || st.quarterly.length) ? (
           <div className="msg2">
             <div>
               <StatementTable rows={st.annual} title="Annual" ccy={st.currency} />
               {f && (
                 <>
-                  <div className="minih" style={{ marginTop: 8 }}>Company guidance · FY ending {f.fiscalYearEnd ?? "–"}{f.disclosed ? ` · disclosed ${f.disclosed}` : ""}</div>
+                  <div className="minih" style={{ marginTop: 8 }}>Company guidance · year to {fmtDate(f.fiscalYearEnd)}{f.disclosed ? ` · disclosed ${fmtDate(f.disclosed)}` : ""}</div>
                   <table className="secT"><tbody>
                     <tr><td className="l">Revenue</td><td className="num">{money(f.revenue)}</td><td className="l">Operating income</td><td className="num">{money(f.op)}</td></tr>
                     <tr><td className="l">Net income</td><td className="num">{money(f.ni)}</td><td className="l">EPS / DPS</td><td className="num">{f.eps == null ? "–" : fmtNum(f.eps, 2)} / {f.dps == null ? "–" : fmtNum(f.dps, 2)}</td></tr>

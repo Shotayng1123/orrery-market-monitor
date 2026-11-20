@@ -2,6 +2,11 @@
 // sends. Nothing here is a real figure. A Tokyo symbol gets ten years, guidance and twelve quarters with every
 // line (as EDINET DB gives a JP GAAP filer); any other symbol gets four years and five quarters with the lines
 // Yahoo has, so the page is seen both full and sparse.
+// The documents behind the columns (A-01) are stand-in addresses on example.org and example.com, never a real
+// site's. 7203.T has them where EDINET DB gave Toyota's on 20 Nov 2026 (C/probes/edinetdb_toyota_links.md): every
+// year's 有価証券報告書, but no 決算短信 PDF for the newest quarter (2Q 3/27), so none for the guidance either, nor for
+// 2Q and 1Q 3/26. Another Tokyo symbol has the newest quarter's and the guidance's, and lacks only 2Q and 1Q 3/26.
+// A symbol elsewhere has none, as Yahoo gives none.
 import type { Fin, FinLayout, FinLine, FinPeriod, FinSet, MoveRow, RatioId, StockPage } from "./stock";
 
 function rng(seed: number): () => number { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
@@ -71,11 +76,15 @@ export function mockStock(symbol: string, last?: number, pts: Array<{ t: number;
   const price = last ?? drawn;
   const scale = jp ? 2.4e12 * (0.5 + r()) : 3.2e11 * (0.5 + r());   // yearly revenue
   const sharesOut = Math.round((scale * 0.07 * 16) / price);   // sized so the mock earnings give a P/E in the teens
-  const P = (end: string, label: string, kind: FinPeriod["kind"], months: number, std: string | null): FinPeriod => ({ key: `${kind}:${end}`, end, label, kind, months, std, doc: null, url: null, note: null });
+  const P = (end: string, label: string, kind: FinPeriod["kind"], months: number, std: string | null, doc: { doc?: string | null; url: string | null; filed: string | null; gone?: string } = { url: null, filed: null }): FinPeriod => ({ key: `${kind}:${end}`, end, label, kind, months, std, doc: doc.doc ?? null, url: doc.url, note: null, filed: doc.filed, ...(doc.gone ? { docGone: doc.gone } : {}) });
+  const toyota = symbol === "7203.T", ir = `https://example.com/mock-ir/${symbol.replace(/\W/g, "")}`;
 
   // ---- annual
   const years = jp ? 10 : 4, lastFy = jp ? 2026 : 2025, fyM = jp ? 3 : 12;
-  const aP: FinPeriod[] = Array.from({ length: years }, (_, i) => { const y = lastFy - (years - 1 - i); return P(`${y}-${String(fyM).padStart(2, "0")}-${fyM === 3 ? 31 : 31}`, `FY${fyM}/${two(y)}`, "FY", 12, jp ? "JP" : null); });
+  // another Tokyo symbol's oldest year is one EDINET DB flags as no longer on EDINET (its ~10-year retention; the
+  // reviewer's R2B-04): no address, and the reason in its tip, as the server sends it (finsrc.ts filingLink)
+  const aged = (y: number) => !toyota && y === lastFy - (years - 1);
+  const aP: FinPeriod[] = Array.from({ length: years }, (_, i) => { const y = lastFy - (years - 1 - i); return P(`${y}-${String(fyM).padStart(2, "0")}-${fyM === 3 ? 31 : 31}`, `FY${fyM}/${two(y)}`, "FY", 12, jp ? "JP" : null, jp ? { doc: `S100MK${two(y)}`, url: aged(y) ? null : `https://example.org/mock-edinet/S100MK${two(y)}`, filed: `${y}-06-${18 + (y % 5)}`, gone: aged(y) ? `document S100MK${two(y)} no longer on EDINET, per EDINET DB (stand-in flag)` : undefined } : undefined); });
   const g = (i: number, base: number, drift: number, noise: number) => base * (1 + drift) ** i * (1 + (r() - 0.5) * noise);
   const rev = aP.map((_, i) => g(i, scale * 0.62, 0.055, 0.08));
   const cogs = rev.map((v) => v * (0.71 + (r() - 0.5) * 0.03)), gross = rev.map((v, i) => v - cogs[i]);
@@ -94,7 +103,7 @@ export function mockStock(symbol: string, last?: number, pts: Array<{ t: number;
         eps, dps: eps.map((v) => Math.round(v * 22) / 100), unusual: exi.map((v, i) => v - exl[i]), cash, cashSti: cash.map((v) => v * 1.8), stDebt: st, ltDebt: lt, assets, liabilities: liab, equity,
         ocf, icf, fincf, capex, buyback: ni.map((v) => v * 0.5), divPaid: ni.map((v) => v * 0.22), sbc: rev.map((v) => v * 0.02) } };
   if (jp) {   // the company's guidance for the year in progress: six lines only
-    annual.periods.push(P("2027-03-31", "FY3/27", "FC", 12, "JP"));
+    annual.periods.push(P("2027-03-31", "FY3/27", "FC", 12, "JP", toyota ? { url: null, filed: "2026-11-05" } : { url: `${ir}/2027_2q_summary.pdf`, filed: "2026-11-05" }));
     const add = (id: FinLine, v: number | null) => { (annual.lines[id] as Array<number | null>).push(v); };
     for (const id of Object.keys(annual.lines) as FinLine[]) if (!["revenue", "op", "ordinary", "ni", "eps", "dps"].includes(id)) add(id, null);
     add("revenue", rev[9] * 1.06); add("op", op[9] * 1.09); add("ordinary", ord[9] * 1.08); add("ni", ni[9] * 1.1); add("eps", eps[9] * 1.1); add("dps", dps[9] + 10);
@@ -106,7 +115,10 @@ export function mockStock(symbol: string, last?: number, pts: Array<{ t: number;
     const d = new Date(Date.UTC(lastQ.getUTCFullYear(), lastQ.getUTCMonth() + 1 - 3 * (nq - 1 - i), 0)), end = iso(d);
     if (!jp) return P(end, `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][d.getUTCMonth()]} ${two(d.getUTCFullYear())}`, "Q", 3, null);
     const fyEnd = d.getUTCMonth() <= 2 ? d.getUTCFullYear() : d.getUTCFullYear() + 1, q = ((d.getUTCMonth() + 10) % 12) / 3 || 4;   // Jun 1Q, Sep 2Q, Dec 3Q, Mar 4Q
-    return P(end, `${q}Q 3/${two(fyEnd)}`, "Q", 3, "JP");
+    // the 決算短信 of the quarter: disclosed about five weeks after it ends (Toyota's own dates for its six newest)
+    const label = `${q}Q 3/${two(fyEnd)}`, real: Record<string, string> = { "2Q 3/27": "2026-11-05", "1Q 3/27": "2026-08-04", "4Q 3/26": "2026-05-08", "3Q 3/26": "2026-02-06", "2Q 3/26": "2025-11-05", "1Q 3/26": "2025-08-07" };
+    const filed = real[label] ?? iso(new Date(d.getTime() + 37 * 86400e3)), none = toyota ? ["2Q 3/27", "2Q 3/26", "1Q 3/26"] : ["2Q 3/26", "1Q 3/26"];
+    return P(end, label, "Q", 3, "JP", none.includes(label) ? { url: null, filed: null } : { url: `${ir}/${fyEnd}_${q}q_summary.pdf`, filed });
   });
   const season = [0.92, 1.0, 1.02, 1.06];
   const qRev = qP.map((_, i) => (scale / 4) * (1 + 0.055 / 4) ** (i - nq) * season[i % 4] * (1 + (r() - 0.5) * 0.05));

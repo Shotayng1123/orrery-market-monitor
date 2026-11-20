@@ -4,6 +4,19 @@ import { termMode, zoomNow } from "./prefs";
 // Shared chart text and cursor settings.
 export const AXIS_FONT = "12px 'IBM Plex Mono', ui-monospace, monospace";
 export const AXIS = { stroke: "#a39f94", grid: { stroke: "#141518", width: 1 }, ticks: { stroke: "#26272b", width: 1 }, font: AXIS_FONT };
+/** The date labels of a time axis, in the Monitor's one date format (the designer's D-16; I-5, 20 Nov 2026): days as
+ *  "19 Nov", months as "Nov", years as "2026", with the year under the first label of each year. uPlot's own labels
+ *  were "11/19". A row is [the tick step from which it applies, in seconds; its label; the label where a year, month,
+ *  day, hour, minute or second turns over; 1 = that label is added under the first]. */
+const D = 86400, NL = "\n";
+export const TIME_VALUES: uPlot.Axis.TimeValuesConfig = [
+  [365 * D, "{YYYY}", null, null, null, null, null, null, 1],
+  [28 * D, "{MMM}", NL + "{YYYY}", null, null, null, null, null, 1],
+  [D, "{D} {MMM}", NL + "{YYYY}", null, null, null, null, null, 1],
+  [3600, "{HH}:{mm}", NL + "{D} {MMM} {YYYY}", null, NL + "{D} {MMM}", null, null, null, 1],
+  [60, "{HH}:{mm}", NL + "{D} {MMM} {YYYY}", null, NL + "{D} {MMM}", null, null, null, 1],
+  [1, ":{ss}", NL + "{D} {MMM} {YYYY} {HH}:{mm}", null, NL + "{D} {MMM} {HH}:{mm}", null, NL + "{HH}:{mm}", null, 1],
+];
 
 /** Where the pointer is inside an element, in the element's own layout pixels (the pixels a chart is laid out
  *  in). The page is scaled with the CSS `zoom` property (lib/prefs.ts: 0.9 to 1.8 by the window's width, or the

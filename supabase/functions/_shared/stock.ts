@@ -4,8 +4,9 @@
 // (all three checked in sim/logic.test.ts); this file only fetches, caches and puts the parts together.
 import { db } from "./db.ts";
 import { fetchText } from "./http.ts";
-import { keyStats, type KeyStats } from "./yahoo.ts";
+import { keyStats, quotes, type KeyStats } from "./yahoo.ts";
 import { benchmarksFor, dailyBars, quoteFor } from "./assets.ts";
+import { FEED_DAYS, feedFor, pageOrQuote, type StockFeed } from "./pagefeed.ts";
 import { avgTurnover, betaCorr, maxDrawdown, perfRows, range52w, realisedVol, type Bar } from "./stockstats.ts";
 import { justReported, resultsDateToWatch, valuation, type Fin, type FinLine } from "./fin.ts";
 import { yahooFin, yahooFinTypes } from "./finsrc.ts";
@@ -115,16 +116,25 @@ async function movesFor(symbol: string, q: { name: string | null; exchange: stri
   return { eligible: true, rule, ...(rule === "swings" ? { sizes: { day: SWING_D1, large: SWING_PCT, small: SWING_PCT_2 } } : {}), rows };
 }
 
+// ---- the page's NEWS panel and an instrument's own page: pagefeed.ts (the reads, with the client handed in, so the
+// checks and live-check run them too; the reviewer's R2B-03) ----
+export { FEED_ALERTS, FEED_DAYS, FEED_NEWS, type StockFeed } from "./pagefeed.ts";
+
 export async function stockPage(symbol: string) {
   if (!symbol) throw new Error("symbol required");
-  const q = await quoteFor(symbol);
+  // a Monitor instrument has its own page (a yield read from an official curve has no quote to ask for), and so does
+  // a plain quote that is not a stock: an index, a pair, a future, a coin (pagefeed.ts pageOrQuote)
+  const first = await pageOrQuote({ db, dailyBars, quote: (s: string) => quotes([s]).then((x) => x[s] ?? null), quoteFor }, symbol);
+  if ("instrument" in first) return first.instrument;
+  const q = first.stock;
   const benchmarks = benchmarksFor(symbol), jp = /\.T$/.test(symbol), equity = q.quoteType === "EQUITY";
-  const [{ data: con }, own, benches, fin, ks] = await Promise.all([
+  const [{ data: con }, own, benches, fin, ks, feed] = await Promise.all([
     db.from("constituents").select("idx,sector,gics_industry,gics_source").eq("symbol", symbol).limit(5),
     soft(dailyBars(symbol), [] as Bar[], "price history"),
     Promise.all(benchmarks.map((b) => soft(dailyBars(b.symbol), [] as Bar[], `${b.name} history`))),
     equity ? finFor(symbol, q.currency, jp ? edinetStatements : undefined, q.earningsAt) : Promise.resolve({ fin: null, note: "Statements are available for equities only." }),
     equity ? soft(keyStats(symbol), null as KeyStats | null, "key statistics") : Promise.resolve(null),
+    soft(feedFor(db, symbol), { days: FEED_DAYS, news: [], alerts: [], error: "the headlines and alerts could not be read" } as StockFeed, "news and alerts"),
   ]);
   const member = (con ?? []).find((c) => c.sector) ?? (con ?? [])[0] ?? null;
   const d20 = avgTurnover(own, 20), d60 = avgTurnover(own, 60);
@@ -183,5 +193,6 @@ export async function stockPage(symbol: string) {
     shares, short, moves,
     earningsAt: q.earningsAt ? new Date(q.earningsAt * 1000).toISOString() : null, earningsEst: q.earningsEst ?? null,
     val, fin: f, finNote: fin.note,
+    feed,   // since 20 Nov 2026; a page from before ignores it, and the page shows no NEWS panel without it
   };
 }

@@ -44,12 +44,12 @@ const choose = async (p, label, value) => { await pick(p, label).locator("select
     ck("Type, Impact, Countries, Category present", (await Promise.all(["Type", "Impact", "Countries", "Category"].map((l) => pick(p, l).count()))).every((n) => n === 1));
     await choose(p, "Impact", "all"); ck("Impact -> All", (await val(p, "Impact")) === "All");
     await choose(p, "Countries", "all"); ck("Countries -> All", (await val(p, "Countries")) === "All");
-    await choose(p, "Category", "Currency"); ck("Category -> Currency", (await val(p, "Category")) === "Currency");
+    await choose(p, "Category", "Currency"); ck("Category -> Currency, shown as FX (the glossary's word)", (await val(p, "Category")) === "FX");
     await choose(p, "Type", "earnings");
     const t = await p.locator('.panel[data-no="01"] .phead .t').textContent();
-    ck("Type -> Earnings: panel becomes EARNINGS CALENDAR, Impact/Countries give way to Region/Size", t === "EARNINGS CALENDAR" && (await pick(p, "Impact").count()) === 0 && (await pick(p, "Region").count()) === 1 && (await pick(p, "Market cap").count()) === 1, t);
-    await choose(p, "Region", "Japan"); await choose(p, "Market cap", "all");
-    ck("Region -> Japan, Market cap -> All", (await val(p, "Region")) === "Japan" && (await val(p, "Market cap")) === "All");
+    ck("Type -> Results: panel becomes RESULTS CALENDAR (the glossary's word), Impact/Countries give way to Region/Mkt cap", t === "RESULTS CALENDAR" && (await pick(p, "Impact").count()) === 0 && (await pick(p, "Region").count()) === 1 && (await pick(p, "Mkt cap").count()) === 1, t);
+    await choose(p, "Region", "Japan"); await choose(p, "Mkt cap", "all");
+    ck("Region -> Japan, Mkt cap -> All", (await val(p, "Region")) === "Japan" && (await val(p, "Mkt cap")) === "All");
     await choose(p, "Type", "macro"); ck("Type -> Macro: Impact keeps its last choice", (await val(p, "Impact")) === "All");
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
   { console.log("\n[top bar Size, 1440x900]");

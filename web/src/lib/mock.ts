@@ -9,6 +9,7 @@
 //   om_mock_bare = "a,b"              those actions answered as one the mock does not know ({ rows: [] })
 //   om_mock_stale = "1", om_mock_live = "1"   a stopped price feed; EQUITIES while its market is open (below)
 import { mockStock } from "./mockStock";
+import { mockInstrument, rowFromBars } from "./mockInstr";
 import standin from "./standin.json";
 import { isYield } from "./fmt";
 import type { TableRow, Health, Curve, Series, Alert, EconEvent, NewsItem, Note, Report, PeriodKey } from "./types";
@@ -17,6 +18,7 @@ import type { EarningsRow } from "../components/Earnings";
 import type { PolicyRow } from "../views/RatesFx";
 import type { PolicyStep } from "../components/PolicyChart";
 import type { Hit } from "./candidates";
+import type { StockFeed } from "./stock";
 
 const MASTER: Array<Pick<TableRow, "symbol" | "name" | "cls" | "group" | "market" | "currency" | "decimals" | "order"> & { base: number; vol: number; proxyFor?: string }> = [
   { symbol: "^N225", name: "Nikkei 225", cls: "Equities", group: "equity", market: "TSE", currency: "JPY", decimals: 2, order: 1, base: 57000, vol: 0.013 },
@@ -39,6 +41,25 @@ const MASTER: Array<Pick<TableRow, "symbol" | "name" | "cls" | "group" | "market
   { symbol: "GC=F", name: "Gold", cls: "Commodities", group: "cmdty", market: "CME", currency: "USD", decimals: 2, order: 38, base: 4074.9, vol: 0.011 },
 ];
 
+/** Instruments the mock knows that its MARKETS table does not show (the live table carries them): an index without an
+ *  EQUITIES page, and the yields read from official curves, published once a day. Their pages and charts use them. */
+const EXTRA: typeof MASTER = [
+  { symbol: "^STOXX50E", name: "Euro Stoxx 50", cls: "Equities", group: "equity", market: "XETRA", currency: "EUR", decimals: 2, order: 14, base: 5612, vol: 0.011 },
+  { symbol: "UST3M", name: "UST 3M bill yield", cls: "Fixed income", group: "rates", market: "NYSE", currency: "USD", decimals: 3, order: 75, base: 4.19, vol: 0.004 },
+  { symbol: "JGB2Y", name: "JGB 2Y yield", cls: "Fixed income", group: "rates", market: "TSE", currency: "JPY", decimals: 3, order: 76, base: 1.88, vol: 0.01 },
+  { symbol: "JGB30Y", name: "JGB 30Y yield", cls: "Fixed income", group: "rates", market: "TSE", currency: "JPY", decimals: 3, order: 77, base: 3.94, vol: 0.009 },
+  { symbol: "DE2Y", name: "Bund 2Y yield", cls: "Fixed income", group: "rates", market: "XETRA", currency: "EUR", decimals: 3, order: 78, base: 2.29, vol: 0.012 },
+  { symbol: "DE10Y", name: "Bund 10Y yield", cls: "Fixed income", group: "rates", market: "XETRA", currency: "EUR", decimals: 3, order: 79, base: 2.66, vol: 0.011 },
+  { symbol: "GB10Y", name: "Gilt 10Y yield", cls: "Fixed income", group: "rates", market: "LSE", currency: "GBP", decimals: 3, order: 80, base: 4.45, vol: 0.01 },
+  { symbol: "EA10Y", name: "Euro area AAA 10Y yield", cls: "Fixed income", group: "rates", market: "XETRA", currency: "EUR", decimals: 3, order: 81, base: 2.78, vol: 0.011 },
+  { symbol: "CA10Y", name: "Canada 10Y yield", cls: "Fixed income", group: "rates", market: "NYSE", currency: "CAD", decimals: 3, order: 82, base: 3.67, vol: 0.01 },
+];
+/** The publisher of each yield the server reads from an official curve (instrstats.ts publisher). */
+const PUBLISHED: Record<string, string> = { UST2Y: "US Treasury", UST3M: "US Treasury", JGB10Y: "Japan MOF", JGB2Y: "Japan MOF", JGB30Y: "Japan MOF", DE2Y: "Bundesbank", DE10Y: "Bundesbank", GB10Y: "Bank of England", EA10Y: "ECB", CA10Y: "Bank of Canada" };
+/** The instruments table's provider of each, as the market table sends it in `source` (the seeds: UST2Y "treasury",
+ *  JGB10Y "mof", the rest of the official yields "curve"; every other instrument "yahoo"). */
+const providerOf = (symbol: string): string => (symbol === "UST2Y" ? "treasury" : symbol === "JGB10Y" ? "mof" : PUBLISHED[symbol] ? "curve" : "yahoo");
+
 function rng(seed: number): () => number {
   let s = seed >>> 0 || 1;
   return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return (s % 100000) / 100000; };
@@ -47,7 +68,7 @@ function rng(seed: number): () => number {
 const gauss = (r: () => number) => { let x = 0; for (let i = 0; i < 12; i++) x += r(); return x - 6; };
 const seedOf = (s: string) => Array.from(s).reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
 const DAY = 86400;
-const master = (symbol: string) => MASTER.find((x) => x.symbol === symbol) ?? MASTER[0];
+const master = (symbol: string) => MASTER.find((x) => x.symbol === symbol) ?? EXTRA.find((x) => x.symbol === symbol) ?? MASTER[0];
 
 /** A letter code that tells apart the stand-in companies sharing a base name ("Toyota Motor B", "Sony Group AB"):
  *  real names carry no counter, and a number in a name would read as a figure to the layout guard. */
@@ -97,8 +118,11 @@ export function mockTable(): { rows: TableRow[]; asOf: string } {
     // σ 1M, 52-week position and distance to the 200-day average from the same synthetic closes, so those columns are not blank in the preview
     const tail = (n: number) => s.slice(-n).map((p) => p.v), mean = (xs: number[]) => xs.reduce((x, y) => x + y, 0) / xs.length;
     const m21 = tail(21), mu = mean(m21), sd = Math.sqrt(mean(m21.map((v) => (v - mu) ** 2))), y = tail(252), lo = Math.min(...y, last), hi = Math.max(...y, last), m200 = mean(tail(200));
-    const rate = m.group === "rates" && !m.symbol.endsWith("=F");
-    return { ...m, proxyFor: m.proxyFor, last, lastAt: new Date().toISOString(), live: m.market === "FX" || m.market === "CME", closes, closeDates, pct,
+    const rate = m.group === "rates" && !m.symbol.endsWith("=F"), source = providerOf(m.symbol);
+    // as the server's table (table.ts): a print's own time; an official yield, which has no quote, stamped with the
+    // date it was published for at midnight UTC ("<date>T00:00:00Z": a date, no time of day; the reviewer's R2B-01)
+    const lastAt = source === "yahoo" ? new Date().toISOString() : `${new Date(s[s.length - 1].t * 1000).toISOString().slice(0, 10)}T00:00:00Z`;
+    return { ...m, proxyFor: m.proxyFor, last, lastAt, source, live: source === "yahoo" && (m.market === "FX" || m.market === "CME"), closes, closeDates, pct,
       z1m: sd > 0 ? (last - mu) / sd : null, pos52: hi > lo ? ((last - lo) / (hi - lo)) * 100 : null, vs200: rate ? last - m200 : (last / m200 - 1) * 100 };
   });
   return { rows, asOf: new Date().toISOString() };
@@ -115,8 +139,10 @@ export function mockSeries(symbol: string, range: string): Series {
   if (range === "1D") return { symbol, res: "1m", points: withVolume(symbol, intradaySeries(symbol), 6e4), asOf: new Date().toISOString() };
   if (range === "1W") return { symbol, res: "15m", points: withVolume(symbol, hourlySeries(symbol, 14, 4), 9e5), asOf: new Date().toISOString() };
   if (range === "1M") return { symbol, res: "1h", points: withVolume(symbol, hourlySeries(symbol, 62), 3.5e6), asOf: new Date().toISOString() };
-  const days: Record<string, number> = { "3M": 93, "12M": 366, "36M": 1096 };
-  const n = Math.round(((days[range] ?? 366) * 2 + 1120) * 0.69);
+  // as the server: one more window to pan into and the σ window's history before it; 5Y and 10Y without the extra
+  // window, and never more than the ten years Yahoo keeps of a stock (supabase/functions/_shared/assets.ts)
+  const days: Record<string, number> = { "3M": 93, "12M": 366, "36M": 1096, "5Y": 1827, "10Y": 3653 }, d = days[range] ?? 366;
+  const n = Math.min(Math.round(((d >= 1827 ? d : d * 2) + 1120) * 0.69), 2615);
   const pts = withVolume(symbol, dailySeries(symbol, n), 2e7);
   return { symbol, res: "1d", points: pts, asOf: new Date(pts[pts.length - 1].t * 1000).toISOString().slice(0, 10) };
 }
@@ -129,7 +155,9 @@ export function mockCurve(country: string, ago: string | null): { country: strin
   const ca: Array<[string, number, number]> = [["2Y", 2, 3.17], ["3Y", 3, 3.26], ["5Y", 5, 3.39], ["7Y", 7, 3.48], ["10Y", 10, 3.67], ["30Y", 30, 4.02]];
   const src = country === "JP" ? jp : country === "DE" ? de : country === "EA" || country === "EB" ? de.filter(([, y]) => [1, 2, 3, 5, 7, 10, 15, 20, 30].includes(y)).map(([t, y, v]) => [t, y, v + (country === "EB" ? 0.35 : 0)] as [string, number, number]) : country === "GB" ? gb : country === "CA" ? ca : us;
   const mk = (shift: number, d: string): Curve => ({ country, date: d, source: country === "JP" ? "MOF (mock)" : "treasury.gov (mock)", points: src.map(([tenor, years, y]) => ({ tenor, years, yield: y + shift * (1 - years / 40) })) });
-  return { country, current: mk(0, new Date().toISOString().slice(0, 10)), ghost: ago ? mk(ago === "36M" ? -0.9 : ago === "12M" ? -0.35 : 0.12, "earlier") : null };
+  // the earlier curve is dated as the server dates it: the curve of that many months before today
+  const back = (months: number) => { const d = new Date(); d.setUTCMonth(d.getUTCMonth() - months); return d.toISOString().slice(0, 10); };
+  return { country, current: mk(0, new Date().toISOString().slice(0, 10)), ghost: ago ? mk(ago === "36M" ? -0.9 : ago === "12M" ? -0.35 : 0.12, back(({ "1M": 1, "3M": 3, "12M": 12, "36M": 36 } as Record<string, number>)[ago] ?? 1)) : null };
 }
 
 // ---- the stand-in rows (./standin.json, shared with web/e2e/standin.cjs) ----
@@ -206,7 +234,8 @@ function tableWatchRow(t: TableRow): WatchRow {
     asOf: pub ? (t.lastAt ?? "").slice(0, 10) || null : t.lastAt, asOfKind: pub ? "published" : "print", source: pub ?? "Yahoo Finance",
     pct1d: pc("d1"), pct1w: pc("w1"), pct1m: pc("m1"), pct3m: pc("m3"), pct12m: pc("m12"),
     chg1d: lvl("d1"), chg1w: lvl("w1"), chg1m: lvl("m1"), chg3m: lvl("m3"), chg12m: lvl("m12"),
-    vs50: null, vs200: y ? null : t.vs200 ?? null, vs200chg: y ? t.vs200 ?? null : null, pos52: t.pos52 ?? null, mcap: null, earningsAt: null, earningsEst: null, isYield: y };
+    vs50: null, vs200: y ? null : t.vs200 ?? null, vs200chg: y ? t.vs200 ?? null : null, pos52: t.pos52 ?? null, mcap: null, earningsAt: null, earningsEst: null, isYield: y,
+    decimals: t.decimals };   // the instrument's own, as the server sends since 20 Nov 2026 (I-5)
 }
 /** The server's rule for a quote that is a yield (supabase/functions/_shared/watchrow.ts isYieldQuote; a search hit
  *  carries no quote type, so the name alone stands for an index's). */
@@ -236,6 +265,38 @@ function watchFeed(): Feed {
   if (!syms.size) return { alerts: [], news: [], research: [] };
   return { alerts: f.alerts.filter((a) => syms.has(a.symbol)), news: f.news.filter((n) => n.tickers.some((t) => syms.has(t.s))),
     research: f.research.map((r) => ({ ...r, symbols: r.symbols.filter((s) => syms.has(s)) })).filter((r) => r.symbols.length > 0) } as unknown as Feed;
+}
+
+/** A stock's NEWS as the server's `stock` sends it (supabase/functions/_shared/stock.ts, feedFor): the stand-in
+ *  headlines that name it (those of NEWS and of WATCHLIST) and the stand-in alerts on it (WATCHLIST's, and the moves
+ *  of the header's list), newest first, at most 60 and 40, over 90 days. With ?mock=empty, none. */
+function stockFeed(symbol: string): StockFeed {
+  if (emptyMode()) return { days: 90, news: [], alerts: [] };
+  const S = SI(), since = Date.now() - 90 * 86400e3, t = (x: string) => Date.parse(x);
+  type N = { id: number; publishedAt: string; source: string; title: string; url: string; category: string | null; tickers: Array<{ s: string }> };
+  type A = { id: number; at: string; symbol: string; kind: string; pct: number | null; market: string; msg: string; url: string | null };
+  const news = [...(S.news as unknown as N[]).map((n) => ({ ...n })), ...(S.watch.feed.news as unknown as N[]).map((n) => ({ ...n, id: n.id + 1000 }))]
+    .filter((n) => n.tickers.some((x) => x.s === symbol) && t(n.publishedAt) >= since).sort((a, b) => t(b.publishedAt) - t(a.publishedAt)).slice(0, 60)
+    .map((n) => ({ id: n.id, publishedAt: n.publishedAt, source: n.source, title: n.title, url: n.url, category: n.category ?? null }));
+  const alerts = [...(S.watch.feed.alerts as unknown as A[]).map((a) => ({ ...a, id: a.id + 1000 })), ...(S.alerts as unknown as A[]).filter((a) => a.kind === "stock" || a.kind === "index")]
+    .filter((a) => a.symbol === symbol && t(a.at) >= since).sort((a, b) => t(b.at) - t(a.at)).slice(0, 40)
+    .map((a) => ({ id: a.id, at: a.at, kind: a.kind, pct: a.pct, market: a.market, msg: a.msg, url: a.url ?? null }));
+  return { days: 90, news, alerts };
+}
+
+/** An instrument's page (I-4): a Monitor instrument of the stand-in table or of EXTRA, or any symbol Yahoo writes for
+ *  an index, a pair, a future or a coin ("^…", "…=X", "…=F", "…-USD"), which the server reads from its quote. */
+const isInstrumentSymbol = (sym: string): boolean => MASTER.some((m) => m.symbol === sym) || EXTRA.some((m) => m.symbol === sym) || /^\^|=X$|=F$|-USD$/.test(sym);
+function instrumentAnswer(sym: string): unknown {
+  const S = SI(), known = MASTER.find((m) => m.symbol === sym) ?? EXTRA.find((m) => m.symbol === sym);
+  const def = known ?? { symbol: sym, name: sym, cls: /=X$/.test(sym) ? "Currency" : /=F$/.test(sym) ? "Futures" : /-USD$/.test(sym) ? "Crypto" : "Equities", group: /=X$|-USD$/.test(sym) ? "fx" : /=F$/.test(sym) ? "cmdty" : "equity", market: /=X$/.test(sym) ? "FX" : "NYSE", currency: "USD", decimals: 2, order: 0, base: 57000, vol: 0.013 } as (typeof MASTER)[number];
+  const pts = dailySeries(sym, 1300), bars = pts.map((p) => ({ t: p.t, c: p.v })), pub = PUBLISHED[sym] ?? null;
+  const tableRow = MASTER.some((m) => m.symbol === sym) ? mockTable().rows.find((r) => r.symbol === sym) ?? null : null;
+  const lastAt = pub ? `${new Date(pts[pts.length - 1].t * 1000).toISOString().slice(0, 10)}T00:00:00Z` : new Date().toISOString();
+  // the table's own row (as the server sends it, so the page, its chart and MARKETS agree), or one made the table's way;
+  // an official yield's figure is its last published close
+  const row = tableRow ?? rowFromBars(def, bars.slice(0, -1), def.base, lastAt);   // the walk's last point is the print
+  return mockInstrument({ ...row, lastAt: pub ? lastAt : row.lastAt, live: pub ? false : row.live, source: providerOf(sym) }, bars, { official: pub, monitor: !!known, calendar: S.calendar as unknown as EconEvent[], news: S.news as unknown as NewsItem[], alerts: [...(S.watch.feed.alerts as unknown as Alert[]).map((a) => ({ ...a, id: a.id + 1000 })), ...(S.alerts as unknown as Alert[])], now: Date.now() });
 }
 
 /** `?mock=empty`: what the server sends for each action when its tables hold nothing. */
@@ -309,7 +370,11 @@ export function mockAction(action: string, params: Record<string, string | numbe
       const term = String(params?.q ?? "").trim().toLowerCase();
       return { rows: term ? (S.watch.search as Hit[]).filter((x) => x.symbol.toLowerCase().includes(term) || x.name.toLowerCase().includes(term)) : [] };
     }
-    case "stock": { const sym = String(params?.symbol ?? "7203.T"), pts = dailySeries(sym, 300); return mockStock(sym, pts[pts.length - 1].v, pts); }   // the price the mock chart ends at, and its days for the marks
+    case "stock": {
+      const sym = String(params?.symbol ?? "7203.T");
+      if (isInstrumentSymbol(sym)) return instrumentAnswer(sym);   // a currency, a yield, a commodity, a future or an index (I-4)
+      const pts = dailySeries(sym, 300); return { ...mockStock(sym, pts[pts.length - 1].v, pts), feed: stockFeed(sym) };   // the price the mock chart ends at, and its days for the marks
+    }
     case "asset": {
       const symbol = String(params?.symbol ?? "7203.T"); const r = rng(seedOf(symbol)); const jp = /\.T$/.test(symbol);
       const price = jp ? 1000 + r() * 5000 : 50 + r() * 400; const pct = (r() - 0.5) * 6;

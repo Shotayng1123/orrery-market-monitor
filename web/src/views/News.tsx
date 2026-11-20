@@ -5,18 +5,22 @@ import type { EconEvent, NewsItem } from "../lib/types";
 import { fmtClock, SGT } from "../lib/time";
 import { zoomNow } from "../lib/prefs";
 import { fmtStampSafe } from "./shared";
+import { categoryLabel, CURRENCY, HEADLINES, RESULTS, RESULTS_CALENDAR } from "../lib/labels";
 import { EarningsCalendar } from "../components/Earnings";
 import { HeadlineList } from "../components/Headlines";
 import { Pick, type PickOption } from "../components/Pick";
 import { useRowCap } from "../lib/useRowCap";
 
 export const NEWS_CATEGORIES = ["All", "US Equities", "JP Equities", "Asia Equities", "DM Rates", "EM Rates", "Currency", "Macro", "Commodities"] as const;
-export const CAL_MODES: PickOption<"macro" | "earnings">[] = [{ value: "macro", label: "Macro" }, { value: "earnings", label: "Earnings" }];
+/** The categories as the picker shows them: the server's value, in the glossary's word ("Currency" reads FX). */
+export const CATEGORY_OPTIONS: PickOption<(typeof NEWS_CATEGORIES)[number]>[] = NEWS_CATEGORIES.map((c) => ({ value: c, label: categoryLabel(c) }));
+export const CAL_MODES: PickOption<"macro" | "earnings">[] = [{ value: "macro", label: "Macro" }, { value: "earnings", label: RESULTS }];
 export const IMPACTS: PickOption<"high" | "hm" | "all">[] = [{ value: "high", label: "High" }, { value: "hm", label: "High + Medium" }, { value: "all", label: "All" }];
 export const SCOPES: PickOption<"major" | "all">[] = [{ value: "major", label: "Major" }, { value: "all", label: "All" }];
 export const dayOf = (t: string) => new Date(t).toLocaleDateString("en-CA", { timeZone: SGT });
 export const dayLabel = (t: string) => new Date(t).toLocaleDateString("en-GB", { timeZone: SGT, weekday: "long", day: "numeric", month: "short" });
-export const MAJOR = new Set(["US", "JP", "EUR", "DE", "FR", "UK", "CN", "HK", "KR", "TW", "AU", "CA", "CH", "IN", "SG"]);   // major markets only (Shota); everything else behind the All chip
+export { CCY_ORDER, MAJOR, calendarRows, currencyOptions, eventCcy } from "../lib/calendar";
+import { calendarRows } from "../lib/calendar";
 
 export { decodeEntities } from "../components/Headlines";
 
@@ -26,8 +30,9 @@ export function NewsView({ tick }: { tick: number }) {
   const [imp, setImp] = useState<"high" | "hm" | "all">("high");   // high-impact events only to start with (Shota, 16 Nov); Medium and Low are one pick away
   const [scope, setScope] = useState<"major" | "all">("major");
   const [calMode, setCalMode] = useState<"macro" | "earnings">("macro");
+  const [ccyPick, setCcy] = useState("All");
   const news = useApi<{ rows: NewsItem[] }>("news", { category: cat === "All" ? undefined : cat, n: 150 }, Math.floor(tick / 5));
-  const events = useMemo(() => (cal.data?.rows ?? []).filter((e) => (imp === "all" || e.impact === "High" || (imp === "hm" && e.impact === "Medium")) && (scope === "all" || MAJOR.has(e.country))), [cal.data, imp, scope]);
+  const { events, ccy, ccys } = useMemo(() => calendarRows(cal.data?.rows ?? [], imp, scope, ccyPick), [cal.data, imp, scope, ccyPick]);
   const upcoming = events.some((e) => Date.parse(e.at) > Date.now());
   // The list starts five days back; open it at the next event (the last few results stay in view above it).
   const nextIdx = events.findIndex((e) => Date.parse(e.at) > Date.now());
@@ -35,7 +40,7 @@ export function NewsView({ tick }: { tick: number }) {
   useRowCap(calBox, 10, "tr.ecrow", "tr.cls", [events.length > 0, calMode]);   // phone: ten events at a time, the rest by scrolling inside the panel
   useEffect(() => {
     const row = nextRow.current, box = calBox.current;
-    const key = `${calMode}|${imp}|${scope}|${events.length}`;   // coming back from the earnings calendar places the list again
+    const key = `${calMode}|${imp}|${scope}|${ccy}|${events.length}`;   // coming back from the earnings calendar places the list again
     if (!row || !box) { if (calMode !== "macro") placed.current = ""; return; }
     if (placed.current === key) return;
     placed.current = key;
@@ -60,10 +65,10 @@ export function NewsView({ tick }: { tick: number }) {
     const ro = table && typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => { if (!scroller || Math.abs(scroller.scrollTop - given) < 2) place(); }) : null;
     if (ro && table) ro.observe(table);
     return () => ro?.disconnect();
-  }, [events.length, imp, scope, nextIdx, calMode]);
+  }, [events.length, imp, scope, ccy, nextIdx, calMode]);
   return (
     <>
-      <Panel no="01" title={calMode === "macro" ? "ECONOMIC CALENDAR" : "EARNINGS CALENDAR"} span={6} aux={<span className="chips" style={{ margin: 0 }}><Pick label="Type" value={calMode} options={CAL_MODES} onChange={setCalMode} />{calMode === "macro" && <><Pick label="Impact" value={imp} options={IMPACTS} onChange={setImp} /><Pick label="Countries" value={scope} options={SCOPES} onChange={setScope} /><span className="mut" style={{ marginLeft: 4 }}>times in SGT{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""}</span></>}</span>}>
+      <Panel no="01" title={calMode === "macro" ? "ECONOMIC CALENDAR" : RESULTS_CALENDAR.toUpperCase()} span={6} aux={<span className="chips" style={{ margin: 0 }}><Pick label="Type" value={calMode} options={CAL_MODES} onChange={setCalMode} />{calMode === "macro" && <><Pick label="Impact" value={imp} options={IMPACTS} onChange={setImp} /><Pick label="Countries" value={scope} options={SCOPES} onChange={setScope} /><Pick label={CURRENCY} id="cal-ccy" value={ccy} options={ccys} onChange={setCcy} title="Only the events of one currency (JPY: Japan's)" /><span className="mut" style={{ marginLeft: 4 }}>times in SGT{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""}</span></>}</span>}>
         {calMode === "earnings" ? <EarningsCalendar tick={tick} /> : events.length ? (
           <div className="calwrap" ref={calBox}><table className="mini calT">
             <colgroup><col className="tm" /><col className="cy" /><col /><col className="dot" /><col className="nv" /><col className="nv" /><col className="nv" /></colgroup>
@@ -84,7 +89,7 @@ export function NewsView({ tick }: { tick: number }) {
         ) : <Empty title="No calendar loaded">{cal.error ?? "The calendar sync runs every hour."}</Empty>}
       </Panel>
       {/* "Headlines" (the designer's glossary, §3.1): the publishers' items, one wording on both layouts */}
-      <Panel no="02" title="HEADLINES" span={6} k="headlines" aux={<span className="chips" style={{ margin: 0 }}><Pick label="Category" value={cat} options={NEWS_CATEGORIES} onChange={setCat} /><span className="mut" style={{ marginLeft: 4 }}>times in SGT</span></span>}>
+      <Panel no="02" title={HEADLINES.toUpperCase()} span={6} k="headlines" aux={<span className="chips" style={{ margin: 0 }}><Pick label="Category" value={cat} options={CATEGORY_OPTIONS} onChange={setCat} /><span className="mut" style={{ marginLeft: 4 }}>times in SGT</span></span>}>
         {news.data?.rows.length ? <HeadlineList rows={news.data.rows} /> : <Empty title="No headlines">{news.error ?? "The news job runs every ten minutes."}</Empty>}
       </Panel>
     </>

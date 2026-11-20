@@ -31,8 +31,8 @@ export function Section({ title, aux, children, card = true, pad = false }: { ti
 /** The change as a tinted pill: green up, red down, grey flat or unknown. `w` is the window the figure covers ("1D",
  *  "12M"), or the measure a list is sorted by ("MKT CAP"), on a line of its own under the figure: a pill never shows
  *  a figure without saying what it is (the designer's D-02, 19 Nov 2026). */
-export function Move({ v, children, w, small = false }: { v: number | null | undefined; children: ReactNode; w: ReactNode; small?: boolean }) {
-  return <span className={`mp-chg ${signCls(v)}${small ? " sm" : ""}`}><span className="fig">{children}</span><span className="w">{w}</span></span>;
+export function Move({ v, children, w, small = false, cls }: { v: number | null | undefined; children: ReactNode; w: ReactNode; small?: boolean; cls?: string /* the colour, where the figure's own precision decides it (a "0.0%" is grey) */ }) {
+  return <span className={`mp-chg ${cls ?? signCls(v)}${small ? " sm" : ""}`}><span className="fig">{children}</span><span className="w">{w}</span></span>;
 }
 
 /** One cell of a statistics grid (`.mp-grid`): a small label over a figure. */

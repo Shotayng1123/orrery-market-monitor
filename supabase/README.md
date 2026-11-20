@@ -110,7 +110,9 @@ How it works: the tick offers every alert not yet marked (`alerts.pushed_at`) to
 minute of the alert being written, whichever job wrote it. A device set to "My watchlist only" gets alerts on its
 account's watchlist names; more than four alerts at once arrive as one notification. A move carries a green (up) or
 red (down) round mark in front of its line: a phone draws notification text in its own colour, so that is how the
-colour gets there; headline alerts have no mark. Addresses the push service
+colour gets there; headline alerts have no mark. Under the line: the alert's kind and its time in Singapore, written
+as the page writes times ("Stock move · 18 Nov 10:05 SGT"; "11/18 10:05 SGT" until 20 Nov 2026, a day and month a
+reader in Japan or Singapore can read the wrong way round). Addresses the push service
 reports gone are deleted. The encryption and signing are in `functions/_shared/webpush.ts`, checked against the
 example of RFC 8291 in `sim/logic.test.ts`. On an iPhone, notifications exist only in the app added to the Home Screen
 (iOS 16.4 or later).
@@ -231,7 +233,10 @@ with `only` = `counts` says how many accounts have had it.
 
 `api?action=stock&symbol=…` answers the whole page in one go (`_shared/stock.ts`): the quote, the change over each
 horizon against the benchmark(s), the figures worked out from the price history, share counts, short interest,
-valuation, the big moves with their reasons, and the statements. The arithmetic is in `_shared/stockstats.ts`,
+valuation, the big moves with their reasons, the statements, and (since 20 Nov 2026) `feed`, the page's NEWS: the
+Monitor's own headlines whose `tickers` name the stock (at most 60) and its own alerts on it (at most 40), over the
+last 90 days, read from `news_items` and `alerts` alone, so no source is asked. A page from before ignores `feed`;
+the page shows no NEWS panel without it. The arithmetic is in `_shared/stockstats.ts`,
 `_shared/bigmoves.ts` and `_shared/fin.ts`; what each source sends is read in `_shared/finsrc.ts`. All four are
 checked in `sim/logic.test.ts` (sections L to P).
 
@@ -258,6 +263,13 @@ checked in `sim/logic.test.ts` (sections L to P).
     and leaves empty what it could not check against the filings; nothing is derived again here.
   - the company is found by its exact securities code: the provider's search also returns codes that merely
     contain the one asked for.
+  - the document behind each column (since 20 Nov 2026), only as the provider gives its address and only an http(s)
+    one, never made up: a year's `edinetFilingUrl` (its `docID` beside it, and the filing date where the answer has
+    `submitDateTime`); the guidance column's `pdfUrl` from the 決算短信 its figures were read from; a year known only
+    from its 決算短信, that row's `pdfUrl`; a quarter, the `pdfUrl` of a stored 決算短信 row with the same fiscal year
+    end and quarter (consolidated rows first, the newest that carries one). Only some rows carry `pdfUrl`: on 20 Nov
+    2026 Toyota's newest (the second quarter of FY3/27, 5 Nov 2026) had none, so that quarter and the guidance column
+    have no document link. The rows are those already stored: no request is added.
 - **EDINET DB allows a hundred requests a day** on its free plan (the day is Japan's; `EDINETDB_DAILY_BUDGET`,
   default 90, is this server's share). A Tokyo name takes one request to find its EDINET code (kept a year) and
   three for its statements, each stored on its own (`_shared/edinet.ts`): the 決算短信 for a week, and daily once
@@ -272,6 +284,43 @@ checked in `sim/logic.test.ts` (sections L to P).
   the earlier page.
 - **Benchmarks**: Tokyo names are set against the Nikkei 225 and TOPIX, others against their home index
   (`benchmarksFor` in `_shared/assets.ts`). TOPIX is read from the `1306.T` fund.
+
+## An instrument's page (added 2026-11-20)
+
+`api?action=stock&symbol=…` answers a currency, a yield, a commodity, a future or an index with an instrument's page
+(`pageOrQuote` and `instrumentPage` in `_shared/pagefeed.ts`, called by `stockPage` in `_shared/stock.ts`): a symbol of
+the `instruments` table always, and a symbol Yahoo quotes as an INDEX, CURRENCY, FUTURE or CRYPTOCURRENCY. A share, an
+ETF or a fund keeps a stock's page. The arithmetic is in `_shared/instrstats.ts` and the calendar's and headlines'
+rules in `_shared/instrfeed.ts`, both pure and checked in `sim/logic.test.ts` (section U). The reads (the instruments
+row, the market table's row, the stored closes, the calendar, the headlines and alerts, and a stock's NEWS, `feedFor`)
+take the database client as a parameter (since 2026-11-20): `sim/logic.test.ts` section V runs them against a stand-in
+that records each query, `sim/sql/words.test.cjs` runs the headline pattern on PGlite, and Actions › live-check with
+`only` = `stock` runs them against the live tables (below).
+
+- **What it reads.** A Monitor instrument: its row of the market table (the `snapshots` row MARKETS reads, so the page's
+  last print, its changes over 1D to 36M, σ vs 1M avg, the 52W position and vs 200D are MARKETS' own) and five years of
+  its stored daily closes (`prices_daily`), from which realised volatility over 21, 63 and 252 sessions, its percentile
+  among the daily readings of the last 36 months, the 52-week high and low with their dates and the largest rise and fall
+  of 12 months are worked out. A yield read from an official curve (`provider` treasury, mof or curve: UST2Y, UST3M,
+  JGB2Y/10Y/30Y, DE2Y/10Y, GB10Y, EA10Y, CA10Y) asks no quote: no session figures, the publisher named, its as-of the day
+  it was published for. Any other Monitor instrument asks one Yahoo quote for the session's open, high and low (a failed
+  quote leaves them as dashes). A name found by search: its Yahoo quote and the same ten years of daily bars a stock's
+  page reads, with the market table's rules for the anchors and the statistics (today's bar, still moving, left out).
+- **Units.** A yield's figures are sent in points of its level (the page writes bp), a price's in per cent; `units` says
+  which. Nothing for a yield is a per cent of its level.
+- **Events** (`instrument.events`): the `econ_events` rows of its currencies from five days back to eight ahead (a pair's
+  two, the dollar index's dollar, otherwise the currency it is quoted in; CNH is read as CNY).
+- **News** (`feed`, as on a stock's page, over 30 days): the `news_items` whose title holds one of the instrument's words
+  as a whole word, any case (`instrument.matched`, which the page shows): asked of the database as one pattern
+  (PostgREST's `imatch` with PostgreSQL's word edges `[[:<:]]` and `[[:>:]]`) and checked again in the function; and the
+  `alerts` on the symbol.
+- **Asked of no source but the ones above.** EDINET DB is never asked for an instrument, no statements are read and no
+  big-move look-up is queued (those cost money).
+- **A page from before 20 Nov 2026** shows every name as a stock. The answer keeps every field a stock's answer has
+  (`legacyStockFields`: the changes, the range, the volatility and the largest fall worked out as for a stock from the
+  same closes; no shares, statements, short interest or big moves) and adds `instrument`, which that page ignores. It
+  draws an instrument as it did before; JGB 10Y and the other official yields, which gave "no quote for …", now draw
+  too. A newer page given an older server's answer (no `instrument`) shows the stock's page, as before.
 
 ## Big moves and why (added 2026-11-18)
 
@@ -361,6 +410,12 @@ Browsers already signed in stay signed in (tokens are signed with `MONITOR_TOKEN
   failing, when the market table's own quotes last printed against when they were pulled, each EQUITIES list's
   booked closes and today's quotes, the alerts of the last 48 hours, the reasons for big moves and their cost,
   and the EDINET DB allowance used. Market data and counts only: no email address, no watchlist.
+  With `only` = `stock` (added 2026-11-20; deploy-server runs it after each deploy, read-only, a failure a warning) it runs the server's own reads for an
+  instrument's page and a stock's NEWS (`_shared/pagefeed.ts`) against the live tables, for USDJPY=X, ^TNX, JGB10Y and
+  7203.T: whether `instrument` is there, its units, source and as-of, whether the market table has the row, the
+  stored closes, and the counts of events, headlines, alerts and feed rows, and whether the database takes the headline
+  pattern (the route falls back to plain parts of the title if not). It asks for no quote and no statements: EDINET DB
+  is never asked from it.
 - `api?action=health` (with a sign-in token) → `tick.ageMin` ≤ 3 during a session, `daily.ok` true, `feed.ok` true,
   `sources` without errors.
 
@@ -456,7 +511,7 @@ What the Monitor does about it:
 
 ## Added 2026-11-07 evening
 
-- Chart frequencies: `tick` now stores one-minute bars (`bars_intraday`, three-day retention) from per-symbol chart calls (a few in parallel, spark as fallback); `daily?job=hourly` keeps `bars_hourly` (three months fetched, sixty days kept) for the 1W and 1M charts; 3M and longer use daily closes. `api?action=series` returns extra history behind each window so the page can pan.
+- Chart frequencies: `tick` now stores one-minute bars (`bars_intraday`, three-day retention) from per-symbol chart calls (a few in parallel, spark as fallback); `daily?job=hourly` keeps `bars_hourly` (three months fetched, sixty days kept) for the 1W and 1M charts; 3M and longer use daily closes. `api?action=series` returns extra history behind each window so the page can pan; 5Y and 10Y (a stock's page, since 20 Nov 2026) return up to ten years and the σ window's history, without a second window (`historyDays` in `_shared/assets.ts`).
 - Alerts: `alerts` table and `api?action=alerts`. Indices beyond ±3% are recorded by the tick every minute. Single stocks beyond their line at any point of the session (`_shared/moves.ts`; the figure is the session's largest move). The line is ±5% for a large company (1tn yen and above, or 10bn US dollars and above, from the market value the flow job last stored) and ±7% for the rest and for a company whose size is not known (`stockLine`; 7% for all until 19 Nov 2026): every fifth minute the tick reads one-minute bars (spark, one request per 20 names) for Nikkei 225 and S&P 500 members and every stock on a watchlist, while the market is open and until the delayed closing prices are in; the flow job (`daily?job=flow&idx=…`) raises the same alert from the day range of its quotes for the other companies of TOPIX, Nasdaq-100, KOSPI 200, Hang Seng and SSE 180 worth USD 5bn or more. In the minutes after a market closes the official closing price of each covered name is measured as well (`closeMove`): a closing auction prints after the last one-minute bar. One row per symbol, session date and kind, written only when the figure changes. `daily?job=constituents` refreshes the S&P 500 (Wikipedia) and Nikkei 225 (Nikkei CSV) lists into `constituents`.
 - WATCHLIST rows (19 Nov 2026): `api?action=watch_list` reads a market instrument from the market table as MARKETS
   shows it (`_shared/watchrow.ts`). A yield's per-cent fields are null and its changes go out as the change of its
@@ -470,5 +525,9 @@ What the Monitor does about it:
   among them (the Cboe's ^IRX, ^FVX, ^TNX, ^TYX, or an index Yahoo names as a Treasury yield or bill; ^IRX, the 13-week
   bill, is the one the table lacks) is sent as a yield: `isYield`, no per-cent change, `chg1d` = last − previous
   close in points. A page older than the yield rows shows its 1D as a dash.
+  Since 20 Nov 2026 a market instrument's row also carries `decimals` (the instruments table's own), so the watchlist
+  writes its level as every other screen does (USD/JPY 158.400, not 158.21: the designer's D-05). A stock's row and a
+  plain quote's carry none: the page writes a stock with two decimals under 1,000 and none from 1,000, a yield with
+  three, as before. A page older than this ignores the field.
 - EQUITIES while a market is open (19 Nov 2026): the flow job keeps each constituent's quote price, its previous close and the time it printed (`constituent_stats.q_price`, `q_prev`, `q_time`). `api?action=index_stats` reads a row at its quote when the quote is from a later session than the row's booked close (`_shared/intraday.ts`), for the whole list or not at all: at least half the names must have such a quote. The 1D figures (movers, breadth, sectors, heat map) are then today's moves so far, at most ten to twenty minutes old, and the answer carries `live: { asOf, n }`; changes over longer periods stay measured to the last close, and the page says so.
 - Closing levels are held until the next session's first print: the quote is used only while its exchange-local date is newer than the last booked close.

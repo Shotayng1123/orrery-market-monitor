@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import uPlot from "uplot";
 import { boxHeight, zoomMove } from "../lib/chart";
+import { axisDecimals } from "../lib/fmt";
 import type { Curve } from "../lib/types";
 
 const AXIS = { stroke: "#b3afa4", grid: { stroke: "#1a1b1e", width: 1 }, ticks: { stroke: "#26272b", width: 1 }, font: "12px 'IBM Plex Mono', ui-monospace, monospace" };
@@ -29,7 +30,8 @@ export function CurveChart({ current, ghost, height = 190 }: { current: Curve; g
       scales: { x: { time: false, distr: 2 }, y: { range: (_u, min, max) => [min - (max - min) * 0.08, max + (max - min) * 0.08] } },
       axes: [
         { show: false },
-        { ...AXIS, size: Y_AXIS_PX, values: (_u, vals) => vals.map((v) => v.toFixed(2)) },
+        // a yield in %: the fewest decimals the ticks need, never more than a yield's three (the designer's D-05 note on axes)
+        { ...AXIS, size: Y_AXIS_PX, values: (_u, vals, _i, _sp, incr) => vals.map((v) => v.toFixed(axisDecimals(incr, 3))) },
       ],
       series: [
         { value: (_u, v) => (v == null ? "" : tenorOf(v)) },

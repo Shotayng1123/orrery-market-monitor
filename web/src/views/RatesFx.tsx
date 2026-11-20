@@ -8,18 +8,24 @@ import { CurveChart, shortTenor, spread } from "../components/CurveChart";
 import { PolicyChart, type PolicyStep } from "../components/PolicyChart";
 import { useApi } from "../lib/useApi";
 import type { Curve, TableRow } from "../lib/types";
-import { fmtChg, fmtNum, fmtPct, fmtStampSafe, signCls } from "./shared";
+import { fmtChg, fmtLevel, fmtPct, fmtStampSafe, signCls } from "./shared";
+import { datesIn, fmtDate } from "../lib/time";
+import { bankName, dottedLine, FX, FX_CHARTS, YIELD_CHARTS } from "../lib/labels";
+import { levelOf } from "./Market";
 import { PERIODS } from "../lib/types";
 import { filterCurve, type TenorSet } from "../lib/curveTenors";
+import { pageHash } from "../lib/indices";
+import { openAsset } from "../components/CompanyCard";
 
 
 export interface PolicyRow { bank: string; name: string; rateLabel: string; rate: number | null; asOf: string | null; lastChange: string | null; nextMeeting: string | null; sourceUrl: string | null; sourceNote: string | null }
 
+/** Every pair opens its own page (the designer's D-15, B-23): the name a teal link, the whole row a pointer. */
 function FxTable({ rows }: { rows: TableRow[] }) {
   return (
     <table className="mini">
       <thead><tr><th className="l">Pair</th><th>Last</th>{PERIODS.map((p) => <th key={p.key}>{p.label} %</th>)}</tr></thead>
-      <tbody>{rows.map((r) => <tr key={r.symbol}><td className="l">{r.name}</td><td className="num"><b>{fmtNum(r.last, r.decimals)}</b></td>{PERIODS.map((p) => <td key={p.key} className={`num ${signCls(r.pct[p.key])}`}>{fmtPct(r.pct[p.key])}</td>)}</tr>)}</tbody>
+      <tbody>{rows.map((r) => <tr key={r.symbol} className="click" title={`${r.name} (${r.symbol}): open its page`} onClick={(e) => { if (!(e.target as HTMLElement).closest("a")) openAsset(r.symbol); }}><td className="l"><a className="lnk" href={`#${pageHash(r.symbol)}`}>{r.name}</a></td><td className="num"><b>{levelOf(r, r.last)}</b></td>{PERIODS.map((p) => <td key={p.key} className={`num ${signCls(r.pct[p.key], 2)}`}>{fmtPct(r.pct[p.key])}</td>)}</tr>)}</tbody>
     </table>
   );
 }
@@ -51,16 +57,17 @@ function CurveBlock({ country, label, ago, tick, no, span, ts, set = "std" }: { 
   const a = ago === "1D" || ago === "1W" ? "1M" : ago;
   const d = useApi<{ current: Curve | null; ghost: Curve | null }>("curve", { country, ago: a }, Math.floor(tick / 30));
   const c = filterCurve(d.data?.current ?? null, set), g = filterCurve(d.data?.ghost ?? null, set);
-  const row = (t: string, v: number | null, gv: number | null) => <tr key={t}><td className="l" title={t}>{shortTenor(t)}</td><td className="num">{v == null ? "–" : v.toFixed(3)}</td><td className="num mut">{gv == null ? "–" : gv.toFixed(3)}</td><td className={`num ${signCls(v != null && gv != null ? v - gv : null)}`}>{v != null && gv != null ? fmtChg(v - gv, 1, true) : "–"}</td></tr>;
+  // a yield's level ends in "%" (the designer's D-05), its change is in bp
+  const row = (t: string, v: number | null, gv: number | null) => <tr key={t}><td className="l" title={t}>{shortTenor(t)}</td><td className="num">{fmtLevel(v, 3, true)}</td><td className="num mut">{fmtLevel(gv, 3, true)}</td><td className={`num ${signCls(v != null && gv != null ? (v - gv) * 100 : null, 1)}`}>{v != null && gv != null ? fmtChg(v - gv, 1, true) : "–"}</td></tr>;
   return (
-    <Panel no={no} title={label} span={span} k="curve" ts={ts} aux={c ? <>{c.date} · ghost {g?.date ?? "–"} ({a} ago) · {c.source}</> : d.error ? <span className="warn">{d.error}</span> : ""}>
+    <Panel no={no} title={label} span={span} k="curve" ts={ts} aux={c ? <>{fmtDate(c.date)} · {dottedLine(fmtDate(g?.date), a)} · {c.source}</> : d.error ? <span className="warn">{d.error}</span> : ""}>
       {c ? (
         <div className="curvebody">
           <div className="curvechart">
           <CurveChart current={c} ghost={g} height={230} />
           {set === "std" && <div className="krow" style={{ marginTop: 6 }}>
-            <span><span className="k">2s10s</span><span className={`v ${signCls(spread(c, 2, 10))}`}>{fmtChg(spread(c, 2, 10), 0)}bp</span></span>
-            <span><span className="k">10s30s</span><span className={`v ${signCls(spread(c, 10, 30))}`}>{fmtChg(spread(c, 10, 30), 0)}bp</span></span>
+            <span><span className="k">2s10s</span><span className={`v ${signCls(spread(c, 2, 10), 0)}`}>{fmtChg(spread(c, 2, 10), 0)}bp</span></span>
+            <span><span className="k">10s30s</span><span className={`v ${signCls(spread(c, 10, 30), 0)}`}>{fmtChg(spread(c, 10, 30), 0)}bp</span></span>
             {g && <span><span className="k">2s10s vs {a} ago</span><span className="v">{fmtChg((spread(c, 2, 10) ?? 0) - (spread(g, 2, 10) ?? 0), 0)}bp</span></span>}
           </div>}
           </div>
@@ -84,7 +91,7 @@ function PolicyTable({ tick }: { tick: number }) {
       {rows.length ? (
         <table className="mini">
           <thead><tr><th className="l">Central bank</th><th className="l">Rate</th><th>Level</th><th className="l">As of</th><th className="l">Last change</th>{anyNext && <th className="l">Next meeting</th>}<th className="l src">Source</th></tr></thead>
-          <tbody>{rows.map((r) => <tr key={r.bank}><td className="l" title={r.name}><b>{r.bank}</b> <span className="mut bnm">{r.name}</span></td><td className="l">{r.rateLabel}</td><td className="num">{r.rate == null ? "–" : r.bank === "FED" ? `${(r.rate - 0.25).toFixed(2)}–${r.rate.toFixed(2)}%` : `${r.rate.toFixed(2)}%`}</td><td className="l">{r.asOf ?? "–"}</td><td className="l">{r.lastChange ?? "–"}</td>{anyNext && <td className="l">{r.nextMeeting ?? "–"}</td>}<td className="l">{r.sourceUrl ? <a href={r.sourceUrl} target="_blank" rel="noreferrer">{new URL(r.sourceUrl).hostname}</a> : "–"}{r.sourceNote && <span className="mut"> · {r.sourceNote}</span>}</td></tr>)}</tbody>
+          <tbody>{rows.map((r) => <tr key={r.bank}><td className="l" title={r.name}><b>{bankName(r.bank)}</b> <span className="mut bnm">{r.name}</span></td><td className="l">{r.rateLabel}</td><td className="num">{r.rate == null ? "–" : r.bank === "FED" ? `${(r.rate - 0.25).toFixed(2)}–${r.rate.toFixed(2)}%` : `${r.rate.toFixed(2)}%`}</td><td className="l">{fmtDate(r.asOf)}</td><td className="l">{r.lastChange ? datesIn(r.lastChange) : "–"}</td>{anyNext && <td className="l">{r.nextMeeting ? datesIn(r.nextMeeting) : "–"}</td>}<td className="l">{r.sourceUrl ? <a href={r.sourceUrl} target="_blank" rel="noreferrer">{new URL(r.sourceUrl).hostname}</a> : "–"}{r.sourceNote && <span className="mut"> · {r.sourceNote}</span>}</td></tr>)}</tbody>
         </table>
       ) : <Empty title="No policy rates loaded">{p.error ?? "Fed from FRED; the others follow."}</Empty>}
     </Panel>
@@ -100,16 +107,16 @@ export function RatesFxView({ tick }: { sub: string; onSub: (s: string) => void;
   return (
     <>
       <div className="c12"><PeriodBar period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} /></div>
-      <Panel no="01" title="FOREX" span={12} k="fx" aux={table.data ? <>as of {fmtStampSafe(table.data.asOf)} · Yahoo Finance</> : ""}>
+      <Panel no="01" title={FX.toUpperCase()} span={12} k="fx" aux={table.data ? <>as of {fmtStampSafe(table.data.asOf)} · Yahoo Finance</> : ""}>
         {fx.length ? <FxTable rows={fx} /> : <Empty title="Awaiting the data feed">{table.error ?? "Pairs load with the market table."}</Empty>}
       </Panel>
-      <Panel no="02" title="PAIRS" span={12} k="pairs" aux={`${fx.length} panels · ${period}`}>
-        {fx.length ? <TileGrid n={fx.length}>{fx.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} />)}</TileGrid> : <Empty title="No pairs yet" />}
+      <Panel no="02" title={FX_CHARTS.toUpperCase()} span={12} k="pairs" aux={`${fx.length} panels · ${period}`}>
+        {fx.length ? <TileGrid n={fx.length}>{fx.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} link />)}</TileGrid> : <Empty title="No pairs yet" />}
       </Panel>
       <CurvesGrid ago={period} tick={tick} />
       <PolicyTable tick={tick} />
-      <Panel no="12" title="YIELDS" span={12} k="yields" aux={`${rates.length} panels · ${period}`}>
-        {rates.length ? <TileGrid n={rates.length}>{rates.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} />)}</TileGrid> : <Empty title="No yields yet" />}
+      <Panel no="12" title={YIELD_CHARTS.toUpperCase()} span={12} k="yields" aux={`${rates.length} panels · ${period}`}>
+        {rates.length ? <TileGrid n={rates.length}>{rates.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} link />)}</TileGrid> : <Empty title="No yields yet" />}
       </Panel>
     </>
   );

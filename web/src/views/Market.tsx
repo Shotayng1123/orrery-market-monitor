@@ -6,7 +6,12 @@ import { TileGrid } from "../components/TileGrid";
 import type { SigmaWindow } from "../components/SigmaChart";
 import { CurveChart, spread } from "../components/CurveChart";
 import { useApi, DEV_MOCK } from "../lib/useApi";
-import { fmtNum, fmtPct, fmtChg, fmtStampSafe, isYield, signCls } from "./shared";
+import { fmtPct, fmtChg, fmtLevel, fmtSigma, fmtStampSafe, isYield, signCls } from "./shared";
+import { cellBp, cellPct } from "../lib/fmt";
+import { pageHash } from "../lib/indices";
+import { openAsset } from "../components/CompanyCard";
+import { fmtDate, rowAsOfTitle } from "../lib/time";
+import { classLabel, delayed, dottedLine, FX, RANGE_52W as RANGE_WORD, RATES, SIGMA_1M as SIGMA_WORD, VS_200D } from "../lib/labels";
 import { Flash } from "../components/Flash";
 import { PERIODS, type Curve, type TableRow } from "../lib/types";
 import { marketById } from "../lib/sessions";
@@ -14,9 +19,10 @@ import { filterCurve } from "../lib/curveTenors";
 import { shortName } from "../lib/short";
 import { Sig } from "../components/Sig";
 
-/** The words of the table's statistics, the same on every screen that shows them (the designer's D-11, 19 Nov 2026):
- *  "σ vs 1M avg" (upper-cased, a σ would read as the sum sign Σ, so the glyph keeps its case) and "52W range" in %. */
-export const SIGMA_1M = "σ vs 1M avg", RANGE_52W = "52W range";
+/** The words of the table's statistics, the same on every screen that shows them (the designer's D-11, 19 Nov 2026;
+ *  the glossary, lib/labels.ts): "σ vs 1M avg" (upper-cased, a σ would read as the sum sign Σ, so the glyph keeps its
+ *  case) and "52W range" in %. */
+export const SIGMA_1M = SIGMA_WORD, RANGE_52W = RANGE_WORD;
 export const SIGMA_1M_TIP = "Distance of the last print from its 21-session average, in standard deviations of those 21 closes (the 1M corridor on the charts)";
 export const RANGE_52W_TIP = "Where the last print sits in its 52-week range: 0% is the low, 100% the high";
 
@@ -25,19 +31,20 @@ function Badges({ r }: { r: TableRow }) {
   return (
     <>
       {r.proxyFor && <span className="badge proxy" title={`${r.name} stands in for ${r.proxyFor}; table closes use the official index value when available`}>PROXY</span>}
-      {r.live && m && m.delayMin > 0 && <span className="badge delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>DELAYED ~{m.delayMin}m</span>}
+      {r.live && m && m.delayMin > 0 && <span className="badge delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>{delayed(m.delayMin, true)}</span>}
       {r.live && m && m.delayMin === 0 && <span className="badge live">LIVE</span>}
     </>
   );
 }
 
-/** Levels in the table: one decimal from 100 up, two between 10 and 100, the instrument's own below 10 (FX crosses). */
-export const lvlDec = (v: number | null | undefined, d: number) => (v == null ? d : Math.abs(v) >= 100 ? Math.min(d, 1) : Math.abs(v) >= 10 ? Math.min(d, 2) : d);
+/** A level as every screen writes it: the instrument's own decimals (the instruments table), "%" after a yield
+ *  (the designer's D-05 and D-44, I-5): USD/JPY "158.400", the Nikkei "57,000.00", UST 2Y "4.510%". The table used
+ *  to cut a level to one decimal from 100 and to two from 10, so USD/JPY read 158.4 here and 158.400 on RATES & FX. */
+export const levelOf = (r: Pick<TableRow, "decimals" | "group" | "symbol">, v: number | null | undefined): string => fmtLevel(v, r.decimals, isYield(r));
 
 /** Table cells are narrow: moves of 100% or 100bp and more drop one decimal so the figure is never cut off
- *  (the base level stays in the cell's tooltip). */
-export const cellPct = (v: number | null | undefined) => (v != null && Math.abs(v) >= 100 ? fmtPct(v, 1) : fmtPct(v));
-export const cellBp = (v: number | null | undefined) => (v != null && Math.abs(v) >= 1 ? `${v > 0 ? "+" : ""}${Math.round(v * 100)}bp` : fmtChg(v, 3, true));
+ *  (the base level stays in the cell's tooltip). Written once in lib/fmt.ts, for an instrument's page too. */
+export { cellBp, cellPct };
 
 /** One table (Shota): the level only as of now, every window as a % change (bp for a yield), then σ vs 1M avg, the
  *  52W range in % and the distance to the 200-day average. The asset class is the section bar, not a column. */
@@ -54,7 +61,7 @@ function OneTable({ rows }: { rows: TableRow[] }) {
         <tr>
           <th className="l">Name</th><th>Last</th>
           {PERIODS.map((p) => <th key={p.key} className={p.key === "d1" ? "grp" : ""} title={`Change from the close at the start of the ${p.label} window to the last print (bp for yields)`}>{p.label}</th>)}
-          <th className="grp wrap" title={SIGMA_1M_TIP}><Sig>{SIGMA_1M}</Sig></th><th className="wrap" title={RANGE_52W_TIP}>{RANGE_52W}</th><th title="Last print against the 200-day average (% for prices, bp for yields)">vs 200d</th>
+          <th className="grp wrap" title={SIGMA_1M_TIP}><Sig>{SIGMA_1M}</Sig></th><th className="wrap" title={RANGE_52W_TIP}>{RANGE_52W}</th><th title="Last print against the 200-day average (% for prices, bp for yields)">{VS_200D}</th>
         </tr>
       </thead>
       <tbody>{[...groups.entries()].map(([cls, rs]) => <GroupRows key={cls} cls={cls} rs={rs} />)}</tbody>
@@ -83,21 +90,22 @@ export function changeShade(v: number | null | undefined, full: number): string 
 function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
   return (
     <>
-      <tr className="cls"><td colSpan={5 + PERIODS.length}><span>{cls}</span></td></tr>
+      <tr className="cls"><td colSpan={5 + PERIODS.length}><span>{classLabel(cls)}</span></td></tr>
       {rs.map((r) => {
         const isRate = isYield(r);
+        // every row opens its instrument's page (the designer's D-15, B-23): the name a teal link, the row a pointer
         return (
-          <tr key={r.symbol} className={r.live ? "live" : undefined} title={`${r.symbol} · last ${fmtStampSafe(r.lastAt)}${r.live ? " · market open" : ""}`}>
-            <td className="l" title={`${r.name} (${r.symbol})`}>{shortName(r.symbol, r.name)}<Badges r={r} /></td>
-            <td className="num"><Flash value={r.last}><b>{fmtNum(r.last, lvlDec(r.last, r.decimals))}</b></Flash></td>
+          <tr key={r.symbol} className={`click${r.live ? " live" : ""}`} title={`${r.symbol} · ${rowAsOfTitle(r)}${r.live ? " · market open" : ""} · open its page`} onClick={(e) => { if (!(e.target as HTMLElement).closest("a")) openAsset(r.symbol); }}>
+            <td className="l" title={`${r.name} (${r.symbol})`}><a className="lnk" href={`#${pageHash(r.symbol)}`}>{shortName(r.symbol, r.name)}</a><Badges r={r} /></td>
+            <td className="num"><Flash value={r.last}><b>{levelOf(r, r.last)}</b></Flash></td>
             {PERIODS.map((p) => {
               const c = r.closes[p.key];
               const v = isRate ? (c != null && r.last != null ? r.last - c : null) : r.pct[p.key];
-              return <td key={p.key} className={`num ${signCls(v)}${p.key === "d1" ? " grp" : ""}`} style={{ background: changeShade(v, isRate ? 0.5 : 10) }} title={c != null ? `from ${fmtNum(c, lvlDec(c, r.decimals))} on ${r.closeDates[p.key] ?? ""}` : ""}>{isRate ? cellBp(v) : cellPct(v)}</td>;
+              return <td key={p.key} className={`num ${signCls(isRate && v != null ? v * 100 : v, isRate ? 1 : 2)}${p.key === "d1" ? " grp" : ""}`} style={{ background: changeShade(v, isRate ? 0.5 : 10) }} title={c != null ? `from ${levelOf(r, c)} on ${fmtDate(r.closeDates[p.key])}` : ""}>{isRate ? cellBp(v) : cellPct(v)}</td>;
             })}
-            <td className={`num grp ${signCls(r.z1m)}`} style={{ background: changeShade(r.z1m ?? null, 3) }}>{r.z1m == null ? "–" : `${r.z1m > 0 ? "+" : ""}${r.z1m.toFixed(1)}σ`}</td>
+            <td className={`num grp ${signCls(r.z1m, 1)}`} style={{ background: changeShade(r.z1m ?? null, 3) }}>{fmtSigma(r.z1m)}</td>
             <td className="num" style={{ background: r.pos52 == null ? undefined : levelShade(r.pos52, 0, 100) }}>{r.pos52 == null ? "–" : `${Math.round(r.pos52)}%`}</td>
-            <td className={`num ${signCls(r.vs200)}`} style={{ background: changeShade(r.vs200 ?? null, isRate ? 0.75 : 15) }}>{r.vs200 == null ? "–" : isRate ? cellBp(r.vs200) : fmtPct(r.vs200, 1)}</td>
+            <td className={`num ${signCls(isRate && r.vs200 != null ? r.vs200 * 100 : r.vs200, 1)}`} style={{ background: changeShade(r.vs200 ?? null, isRate ? 0.75 : 15) }}>{r.vs200 == null ? "–" : isRate ? cellBp(r.vs200) : fmtPct(r.vs200, 1)}</td>
           </tr>
         );
       })}
@@ -109,7 +117,7 @@ function ChartGroup({ no, title, rows, period, tick, sigmaWindow, show, children
   return (
     <Panel no={no} title={title} span={12} aux={`${rows.length} panels · ${period}`}>
       {children}
-      {rows.length ? <TileGrid n={rows.length} rows={show} group="market">{rows.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} />)}</TileGrid> : <Empty title="No instruments in this group yet" />}
+      {rows.length ? <TileGrid n={rows.length} rows={show} group="market">{rows.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} link />)}</TileGrid> : <Empty title="No instruments in this group yet" />}
     </Panel>
   );
 }
@@ -122,7 +130,7 @@ export function CurvePanel({ period, tick }: { period: ChartPeriod; tick: number
     const d = raw ? { current: filterCurve(raw.current, "std"), ghost: filterCurve(raw.ghost, "std") } : null;
     return (
     <div className="mtile cp">
-      <div className="lb"><span className="lbtxt">{label}</span><span className="asof">{d?.current ? `${d.current.date} · ghost ${d.ghost?.date ?? "–"} (${ago} ago)` : ""}</span></div>
+      <div className="lb"><span className="lbtxt">{label}</span><span className="asof">{d?.current ? `${fmtDate(d.current.date)} · ${dottedLine(fmtDate(d.ghost?.date), ago)}` : ""}</span></div>
       {d?.current ? (
         <>
           <CurveChart current={d.current} ghost={d.ghost} />
@@ -155,14 +163,14 @@ export function MarketView({ tick }: { tick: number }) {
       </Panel>
       <div className="c12">{selector}</div>
       <ChartGroup no="02" title="EQUITIES" show={2} rows={by("equity")} period={period} tick={tick} sigmaWindow={sigmaWindow} />
-      <ChartGroup no="03" title="RATES" show={2} rows={by("rates")} period={period} tick={tick} sigmaWindow={sigmaWindow}>
+      <ChartGroup no="03" title={RATES.toUpperCase()} show={2} rows={by("rates")} period={period} tick={tick} sigmaWindow={sigmaWindow}>
         <div className="mkt-curves">
           <div className="minih">Yield curves · today vs {period === "1D" || period === "1W" ? "1M" : period} ago</div>
           <CurvePanel period={period} tick={tick} />
           <div className="minih" style={{ marginTop: 8 }}>Yields</div>
         </div>
       </ChartGroup>
-      <ChartGroup no="04" title="CURRENCY" show={1} rows={by("fx")} period={period} tick={tick} sigmaWindow={sigmaWindow} />
+      <ChartGroup no="04" title={FX.toUpperCase()} show={1} rows={by("fx")} period={period} tick={tick} sigmaWindow={sigmaWindow} />
       <ChartGroup no="05" title="COMMODITIES" show={1} rows={by("cmdty")} period={period} tick={tick} sigmaWindow={sigmaWindow} />
     </>
   );

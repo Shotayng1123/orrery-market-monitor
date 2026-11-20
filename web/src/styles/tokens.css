@@ -721,8 +721,8 @@ table.repT th:nth-child(1){width:4.2em}
 table.repT th:nth-child(2){width:9em}
 table.repT td{white-space:normal;overflow-wrap:anywhere}
 
-/* RESEARCH list (Shota, 15 Nov): date as 15-Nov-26 on one line, the kind as a chip, daily notes and weekly reports together */
-table.repT col.dt{width:6.6em} table.repT col.kd{width:6.4em}
+/* RESEARCH list (Shota, 15 Nov): the date on one line ("16 Nov 2026" since I-5), the kind as a chip, daily notes and weekly reports together */
+table.repT col.dt{width:8.4em} table.repT col.kd{width:6.4em}   /* "16 Nov 2026" (I-5; was "16-Nov-26" in 6.6em) */
 table.repT th:nth-child(1),table.repT th:nth-child(2){width:auto}
 table.repT td.dt{white-space:nowrap;overflow-wrap:normal}
 .kchip{display:inline-block;border:1px solid var(--bord2);border-radius:3px;padding:0 6px;font-size:9.5px;letter-spacing:.06em;line-height:1.6;white-space:nowrap}
@@ -939,7 +939,10 @@ button.go.ghost:hover{color:var(--txt);border-color:var(--amber)}
 /* a stock's own page (Shota, 18 Nov 2026): key data, performance against the benchmark, the statements table */
 .mvtip{position:absolute;z-index:6;pointer-events:none;min-width:150px;padding:7px 9px;border:1px solid var(--bord2);border-radius:4px;background:rgba(17,18,20,.97);box-shadow:0 4px 14px rgba(0,0,0,.5);font-family:var(--sans);font-size:11px;line-height:1.4;color:var(--txt);white-space:normal}
 .mvtip .t{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.04em;margin-bottom:2px}
-.mvtip .t.up{color:var(--up)} .mvtip .t.dn{color:var(--dn)}
+.mvtip .t{color:var(--txt)}
+.mvtip .t .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:0}
+.mvtip .t .dot.sm{width:5px;height:5px;margin:0 7px 1px 2px}
+.mvtip .t .dot.up{background:var(--up)} .mvtip .t .dot.dn{background:var(--dn)}
 .mvtip .l{font-family:var(--mono);font-size:10.5px;color:var(--txt2)}
 .mvtip .l{margin-top:5px;padding-top:5px;border-top:1px solid var(--bord2)}
 .mvtip .w{margin-top:2px}
@@ -958,7 +961,7 @@ button.go.ghost:hover{color:var(--txt);border-color:var(--amber)}
 .mvT .dot.up{background:var(--up)} .mvT .dot.dn{background:var(--dn)}
 /* a smaller peak or bottom (the rule on trial, 19 Nov 2026): a smaller dot, as its circle on the chart is smaller */
 .mvT .dot.sm{width:5px;height:5px;margin:0 7px 1px 2px}
-.kvT td.l{color:var(--txt2)}
+.kvT td.l{color:var(--txt2);white-space:normal}   /* a label wraps rather than push its figures out of the panel (the designer's §3.2: labels may wrap); "12M †" stays together */
 .kvT td.num{white-space:nowrap}
 .rng{display:inline-flex;align-items:center;gap:7px}
 .rng .bar{position:relative;display:inline-block;width:54px;height:3px;border-radius:2px;background:var(--bord2)}
@@ -988,6 +991,8 @@ table.fin thead th:not(.l){scroll-snap-align:start;min-width:var(--fin-col,0px)}
 .finprev::before{content:"";position:absolute;inset:-15px -6px}   /* 44 px for a finger */
 table.fin{width:100%;border-collapse:separate;border-spacing:0;font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums}
 table.fin th{position:static;padding:6px 10px;text-align:right;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:none;white-space:nowrap;color:var(--txt2);background:#17181b;border-bottom:1px solid var(--bord2)}
+table.fin th .fy{display:block;font-weight:500;color:var(--mut)}   /* a quarter's fiscal year under its number: "2Q" over "FY3/27" (I-5) */
+table.fin th.doc .fy{color:inherit}
 table.fin th.fc{color:var(--amber)}
 table.fin th i{font-style:normal;font-size:8.5px;margin-left:2px;vertical-align:super}
 table.fin td{padding:4px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--bord)}
@@ -1360,9 +1365,7 @@ body.pv2 .mvtip .t,body.pv2 .mvtip .l{font-size:12px}
 .mp-moves li{padding:11px 2px;border-bottom:1px solid var(--bord)}
 .mp-moves li:last-child{border-bottom:0}
 .mp-moves .h{display:flex;align-items:baseline;gap:8px;font-family:var(--mono);font-size:13px}
-.mp-moves .h b{font-weight:700}
-.mp-moves .h b{min-width:0}
-.mp-moves .h .d{flex:none;margin-left:auto;color:var(--mut);font-size:12px;white-space:nowrap}
+.mp-moves .h .mvx{min-width:0}
 .mp-moves .dot{flex:none;width:9px;height:9px;border-radius:50%;align-self:center}
 .mp-moves .dot.sm{width:6px;height:6px;margin:0 1.5px}
 .mp-moves .dot.up{background:var(--up)} .mp-moves .dot.dn{background:var(--dn)}
@@ -1518,6 +1521,10 @@ body.cmp #grid{--gap:7px}
 .pcol.w8{flex:0 0 calc((100% - 11 * var(--gap)) / 12 * 8 + 7 * var(--gap))}
 .pcol.w4{flex:0 0 calc((100% - 11 * var(--gap)) / 12 * 4 + 3 * var(--gap))}
 .pcol>.panel{width:100%}
+/* the two columns end together (the reviewer's R2B-02): the stock page's NEWS starts with the rows that sit beside the
+   left column, and the shorter column's last panel takes the few pixels left (less than a row; StockNews says when) */
+.pcols[data-even]{align-items:stretch}
+.pcols[data-even]>.pcol>.panel:last-child{flex-grow:1}
 body.term .pcols,body.term .pcol{display:contents}
 @container wrap (max-width:1100px){
   .pcols,.pcol{display:contents}
@@ -1561,3 +1568,145 @@ body.term #search input{padding-right:18px}
 @media (max-width:720px){#search .skey{display:none}}
 /* curves (D-28): the line of spreads and the source under a curve wraps instead of losing its end ("treasury.gov (m…") */
 .mtile.cp .rdout.crv{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.35}
+/* ---- I-3 (20 Nov 2026): a stock's page ---- */
+/* a big move in words (D-27): the turn a small muted word, the figure in its sign's colour, the rest muted; the dot
+   and the circle keep the turn's colour */
+.mvx .mvw{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--txt2)}
+.mvx .mvf{font-weight:700;white-space:nowrap}
+.mvx .mvr{font-weight:400;color:var(--txt2)}
+.mvT td.m{white-space:normal;font-weight:400;line-height:1.45}
+.mvT th:nth-child(2),.mvT td.m{width:34%}
+.mvtip .l .mvw{font-size:9.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--txt2)}
+.mvtip .l .mvf{font-weight:700;white-space:nowrap}
+.mvtip .l .mvf.up{color:var(--up)} .mvtip .l .mvf.dn{color:var(--dn)}
+.mvtip .l .mvr{color:var(--txt2)}
+/* the phone's list of big moves: each move a row to tap (A-25); the date on a line of its own with "On the chart ›"
+   at its right; a reason's sources a finger's height */
+.mp-moves li{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.mp-moves li:active{background:var(--panel2)}
+.mp-moves .mvx{font-size:13px}
+.mp-moves .mvx .mvw{font-size:11px}
+.mp-moves .dl{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-top:5px;font-family:var(--mono);font-size:12px;color:var(--mut)}
+.mp-moves .dl .d{white-space:nowrap}
+.mp-moves .dl .go{flex:none;font-family:var(--sans);font-size:13px;color:var(--cyan);white-space:nowrap}
+.mp-moves .s a{display:inline-flex;align-items:center;min-height:44px}
+/* NEWS on a stock's page (components/StockNews.tsx): line 1 muted (time · kind · where from), line 2 the headline or
+   the alert, wrapping; fifteen rows, then SHOW 15 MORE: the panel grows, nothing scrolls inside it */
+.snlist{margin-top:2px}
+.snrow{padding:6px 2px 7px;border-bottom:1px solid #1a1b1e}
+.snrow:last-child{border-bottom:0}
+.snm{font-size:10.5px;line-height:1.4;color:var(--mut)}
+.snk{font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.snk.headline{color:var(--txt2)}
+.snk.alert{color:var(--amber)}
+.snt{margin-top:2px;font-size:12px;line-height:1.45;color:var(--txt);overflow-wrap:break-word}
+.snt a{color:var(--txt);text-decoration:none}
+.snt a:hover{color:var(--cyan);text-decoration:underline}
+.showmore{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:10.5px}
+.showmore .chip-sm{margin-left:0}
+.finnote.warn,.mp-note.warn{color:var(--warn)}
+body.term .snrow{padding:2px 1px 3px}
+body.term .snm{font-size:9px}
+body.term .snt{font-size:10.5px;line-height:1.3}
+body.term .showmore{margin-top:3px}
+.nw-meta .snk{font-size:11.5px}
+#st-news .nw-meta{flex-wrap:wrap;white-space:normal;row-gap:2px}
+.nw-row.plain{cursor:default}
+.nw-row.plain:active{background:none}
+/* FINANCIALS: a header with a document is a link, teal, the whole header cell taking the click or the tap (A-01);
+   on a phone the header cells are 13 px deeper each way, so a tap is at least 44 px */
+table.fin th.doc{position:relative}
+table.fin th.doc a{color:var(--cyan);text-decoration:none}
+table.fin th.doc a:hover{text-decoration:underline}
+table.fin th.doc a::after{content:"";position:absolute;inset:0}
+body.pv2 table.fin th{padding-top:13px;padding-bottom:13px}
+/* KEY DATA and the like: a label above its value when the column is under 380 CSS px (the designer's §3.6) */
+.kvwrap{container-type:inline-size}
+@container (max-width:380px){
+  .kvwrap table.kvT tr{display:flex;flex-direction:column}
+  .kvwrap table.kvT td.l{padding-bottom:0;white-space:normal;border-bottom:0}
+  .kvwrap table.kvT td.num{text-align:left;padding-top:0}
+}
+/* WATCHLIST at the feed's lengths (D-48): no list scrolls inside its panel; ten alerts and fifteen headlines, then
+   SHOW n MORE */
+.nwlist.free{max-height:none;overflow:visible}
+.nwlist.free .nwday{position:static}   /* in a list with no box of its own a day bar would stick under the page's header */
+/* taps a finger can hit (44 px): the stock page's annual-report link reaches past its line, as "‹ earlier years" does;
+   the NEWS toggles are at least 44 px wide ("All") */
+body.pv2 #st-yuho{position:relative}
+body.pv2 #st-yuho::before{content:"";position:absolute;inset:-13px -8px}
+#st-news-f .mp-tog{min-width:44px}
+/* ---- I-4 (20 Nov 2026): an instrument's page; every instrument name opens it ---- */
+/* MARKETS and RATES & FX (the designer's D-15, B-23): the name is a teal link, the whole row a pointer, and hovering
+   the row underlines its name */
+tr.click:hover .lnk{text-decoration:underline}
+/* KEY DATA: realised volatility's second line (bp a year for a yield, the three-year percentiles) under the first */
+.kvT td.num .vl1{white-space:nowrap}
+.kvT td.num .vl2{display:block;margin-top:1px;font-size:10px;line-height:1.35;color:var(--mut);white-space:normal}
+/* EVENTS in the right column: the calendar's table with room for its figures (none is ever cut), the impact as a dot
+   before the event, and the event's name wrapping */
+table.calT.inev col.nv{width:16%}
+table.calT.inev td{text-overflow:clip}
+table.calT.inev td.ev{white-space:normal;overflow:visible;overflow-wrap:break-word;line-height:1.35}
+table.calT.inev td.ev .imp{margin-right:6px;vertical-align:1px}
+table.calT.inev td.num,table.calT.inev td:nth-child(n+4){white-space:nowrap;overflow:visible}
+/* the phone's first block: labels may wrap; a figure's note on a line of its own under it */
+.mp-first .mp-grid{margin-top:0}
+.mp-first .mp-grid .k{white-space:normal;line-height:1.2}
+.mp-first .mp-grid .v small{display:block;margin-top:3px;font-family:var(--sans);font-size:11px;font-weight:400;line-height:1.25;color:var(--mut);white-space:normal}
+/* the phone's events: the whole name and the consensus line, wrapped rather than cut */
+#in-events .ev-n.wrap{white-space:normal;overflow:visible}
+#in-events .ev-s{white-space:normal;overflow:visible}
+/* the phone EVENTS impact toggles: "All" at least 44 px wide, as the NEWS toggles */
+#in-imp .mp-tog{min-width:44px}
+/* EVENTS' first line on a computer until the Monitor keeps the banks' calendars (I-7): Next meeting, a dash, and why,
+   as the phone's first block says it (B-04 (b), 20 Nov 2026) */
+.evmeet{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;padding:2px 2px 6px;margin-bottom:4px;border-bottom:1px solid #1a1b1e;font-size:11.5px}
+.evmeet .k{color:var(--mut);text-transform:uppercase;font-size:9.5px;letter-spacing:.08em}
+.evmeet b{font-weight:600}
+.evmeet .mut{font-size:10.5px;line-height:1.4}
+body.term .evmeet{padding:1px 1px 2px;margin-bottom:2px;gap:1px 6px;font-size:10px}
+body.term .evmeet .k{font-size:8px}
+body.term .evmeet .mut{font-size:9px;line-height:1.25}
+/* SHORT INTEREST in the right column (D-51, 20 Nov 2026): a label wraps, its date kept whole, so the figures beside it
+   stay whole at text L and XL, where the column is 380 to 430 CSS px; it never scrolls sideways */
+table#st-short td.l{white-space:normal;overflow-wrap:break-word}
+table#st-short td.num{white-space:nowrap}
+/* ---- the one-screen layout's screens on a stock's and an instrument's page (20 Nov 2026; the designer's §3.4 section
+   bar, its compact half, and the screens of §4.6 and §4.7 with the panels that exist today) ---- */
+/* GO TO at the right of the selector strip (components/ScreenChips.tsx) */
+.scrbar{flex-wrap:nowrap}
+.scrbar .lbl{margin-right:4px}
+#grid>.c12:not(.panel)>.chips:has(>.scrbar){flex:1 1 auto}
+body.term #grid>.c12:not(.panel) .chips.scrbar{margin-left:auto!important}
+/* a label wraps rather than lose its end ("Against Nikkei 225, pp", a report's date): the compact rule for sector
+   tables would cut it at 112 px */
+body.term #grid[data-view="asset"]:has(>.pcols[data-page]) table.secT td.l{max-width:none;overflow:visible;text-overflow:clip;white-space:normal}
+/* KEY DATA beside the chart: its rows share the panel's height, so no empty block is left under them */
+body.term .pcols[data-screen="overview"] .panel:is([data-k="st-key"],[data-k="in-key"])>.pbody>.kvwrap{flex:1 1 auto;min-height:0}
+body.term .pcols[data-page="stock"][data-screen="overview"] .panel[data-k="st-key"] table.kvT{height:100%}
+/* a stock: Overview (the chart beside KEY DATA, PERFORMANCE across under them), News (NEWS across; BIG MOVES beside
+   SHORT INTEREST under it, as §4.6's second screen until RESULTS takes NEWS's right), Financials (the whole screen) */
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"]){grid-template-rows:auto minmax(0,1fr) auto}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="overview"]) .panel[data-k="st-chart"]{grid-column:1 / span 8;grid-row:2}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="overview"]) .panel[data-k="st-key"]{grid-column:9 / span 4;grid-row:2}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="overview"]) .panel[data-k="st-perf"]{grid-column:1 / -1;grid-row:3}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="news"]) .panel[data-k="st-news"]{grid-column:1 / -1;grid-row:2}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="news"]) .panel[data-k="st-moves"]{grid-column:1 / span 8;grid-row:3}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="news"]) .panel[data-k="st-short"]{grid-column:9 / span 4;grid-row:3}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="news"]):not(:has(.panel[data-k="st-moves"])) .panel[data-k="st-short"]{grid-column:1 / -1}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="news"]):not(:has(.panel[data-k="st-news"])) .panel[data-k="st-moves"]{grid-row:2 / span 2}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="news"]):not(:has(.panel[data-k="st-news"])) .panel[data-k="st-short"]{grid-row:2 / span 2}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="fin"]) .panel[data-k="st-fin"]{grid-column:1 / -1;grid-row:2 / span 2}
+/* an instrument: Overview (the chart and PERFORMANCE at the left, KEY DATA and EVENTS at the right: KEY DATA and
+   PERFORMANCE take their own height, the chart and EVENTS the rest), News (NEWS across until DRIVERS takes its left
+   with I-12). A page with nothing for a second screen keeps NEWS under EVENTS on the one. */
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]){grid-template-rows:auto auto minmax(0,1fr) auto}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]) .panel[data-k="in-chart"]{grid-column:1 / span 8;grid-row:2 / span 2}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]) .panel[data-k="in-key"]{grid-column:9 / span 4;grid-row:2}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]) .panel[data-k="in-perf"]{grid-column:1 / span 8;grid-row:4}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]) .panel[data-k="in-events"]{grid-column:9 / span 4;grid-row:3 / span 2}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]):not(:has(.panel[data-k="in-events"])) .panel[data-k="in-key"]{grid-row:2 / span 3}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]:not([data-screen])) .panel[data-k="in-news"]{grid-column:9 / span 4;grid-row:4}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"][data-screen="news"]){grid-template-rows:auto minmax(0,1fr)}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"][data-screen="news"]) .panel[data-k="in-news"]{grid-column:1 / -1;grid-row:2}

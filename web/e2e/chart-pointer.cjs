@@ -73,7 +73,11 @@ const hover = async (p, x, y) => { await p.mouse.move(x, y, { steps: 3 }); await
     await p.goto(MOCK + "#asset/NVDA", { waitUntil: "networkidle" }); await p.waitForSelector(".bigwrap .u-over"); await p.waitForTimeout(700);
     await p.addStyleTag({ content: "#mockbar{display:none!important}" }); await p.waitForTimeout(200);
     const box = await p.locator(".bigwrap .u-over").boundingBox(), y = box.y + box.height * 0.45;
-    const tipAt = async (x) => { await hover(p, x, y); return (await p.locator(".bigwrap .ctip").textContent()).slice(0, 10); };
+    // the day under the pointer, from the tip's "31 Jul 2026  182.44 …" (the Monitor's one date format, I-5), as
+    // "2026-07-31" so that days compare as text and Date.parse reads them
+    const MONS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const isoOf = (t) => { const m = /^(\d{1,2}) ([A-Z][a-z]{2}) (\d{4})\b/.exec(t ?? ""); return m && MONS.includes(m[2]) ? `${m[3]}-${String(MONS.indexOf(m[2]) + 1).padStart(2, "0")}-${m[1].padStart(2, "0")}` : `unread: ${t}`; };
+    const tipAt = async (x) => { await hover(p, x, y); return isoOf(await p.locator(".bigwrap .ctip").textContent()); };
     const label = async () => (await p.locator(".bigwrap .rdout").textContent()) ?? "";
     const drag = async (x0, x1) => { await p.mouse.move(x0, y); await p.mouse.down(); await p.mouse.move((x0 + x1) / 2, y, { steps: 4 }); await p.mouse.move(x1, y, { steps: 4 }); await p.mouse.up(); await p.waitForTimeout(200); };
     const x0 = box.x + box.width * 0.35, grabbed = await tipAt(x0), last0 = await tipAt(box.x + box.width - 3);

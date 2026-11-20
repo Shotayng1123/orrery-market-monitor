@@ -6,7 +6,7 @@ import { Overnight, WeeklyTables, type Pack, type WeeklyPack } from "../componen
 import { useApi } from "../lib/useApi";
 import { usePhone } from "../lib/phone";
 import type { Note, Report } from "../lib/types";
-import { SGT } from "../lib/time";
+import { fmtDate } from "../lib/time";
 import { fmtStampSafe } from "./shared";
 
 /** Kinds of research (Shota, 15 Nov). Daily = the morning note, Weekly = Emma's Friday strategy report.
@@ -16,9 +16,9 @@ export type Kind = (typeof KINDS)[number];
 export const kindOf = (k: string | undefined): Kind => { const s = (k ?? "").toLowerCase(); return s.startsWith("week") ? "Weekly" : s.startsWith("alpha") ? "Alpha" : s.startsWith("deep") ? "Deep-dive" : "Daily"; };
 /** The daily note's opening summary (yesterday in brief, then today's view): shown under the title, above the tables. */
 const IN_BRIEF = /^in brief/i;
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-/** 15-Nov-26, from a date (YYYY-MM-DD) or a timestamp read in Singapore time. */
-export const ddMmmYy = (t: string): string => { const d = /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : new Date(t).toLocaleDateString("en-CA", { timeZone: SGT }); const [y, m, day] = d.split("-"); return `${day}-${MONTHS[Number(m) - 1] ?? m}-${y.slice(2)}`; };
+/** A piece's date as every date on the Monitor (the designer's D-16; I-5): "15 Nov 2026", from a date (YYYY-MM-DD,
+ *  as written) or a timestamp read in Singapore time. The list used to write "15-Nov-26". */
+export const pieceDate = (t: string): string => fmtDate(t);
 
 export interface Item { key: string; src: "note" | "report"; id: number; d: string; sort: string; kind: Kind; title: string }
 
@@ -40,7 +40,7 @@ export function ResearchView({ tick, sub, onSub }: { tick: number; sub?: string;
     return [...a, ...b].sort((x, y) => y.sort.localeCompare(x.sort));
   }, [notes.data, reports.data]);
   const words = find.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const shown = items.filter((i) => (filter === "All" || i.kind === filter) && (!words.length || words.every((w) => `${i.title} ${ddMmmYy(i.d)} ${i.kind}`.toLowerCase().includes(w))));
+  const shown = items.filter((i) => (filter === "All" || i.kind === filter) && (!words.length || words.every((w) => `${i.title} ${pieceDate(i.d)} ${i.kind}`.toLowerCase().includes(w))));
   useEffect(() => { if ((open == null || !shown.some((i) => i.key === open)) && shown.length) setOpen(shown[0].key); }, [shown.map((i) => i.key).join("|"), open]);
   // a link from elsewhere (#research/report:1, #research/note:2026-11-14) opens that piece once the list is in
   // (the search and the kind filter are cleared only when they would hide the linked piece: a tap in the list keeps them)
@@ -70,12 +70,12 @@ export function ResearchView({ tick, sub, onSub }: { tick: number; sub?: string;
   return (
     <>
       {(!phone || !reading) && <Panel no="01" title="RESEARCH" span={4} k="replist" aux={<span className="chips" style={{ margin: 0 }}><Pick<Kind | "All"> label="Kind" value={filter} options={[{ value: "All" }, ...KINDS.map((k) => ({ value: k, label: has(k) ? k : `${k} (to be added)`, disabled: !has(k) }))]} onChange={setFilter} /></span>}>
-        <div className="searchrow"><input type="text" placeholder="search titles, e.g. nvidia or nov-26" value={find} onChange={(e) => setFind(e.target.value)} /><span className="cnt">{shown.length} of {items.length}</span></div>
+        <div className="searchrow"><input type="text" placeholder="search titles, e.g. nvidia or 14 nov" value={find} onChange={(e) => setFind(e.target.value)} /><span className="cnt">{shown.length} of {items.length}</span></div>
         <div className="reprows">{shown.length ? (
           <table className="mini repT">
             <colgroup><col className="dt" /><col className="kd" /><col /></colgroup>
             <thead><tr><th className="l">Date</th><th className="l">Kind</th><th className="l">Title</th></tr></thead>
-            <tbody>{shown.map((x) => <tr key={x.key} className={`click${(phone ? last : open) === x.key ? " sel" : ""}`} onClick={() => openRow(x.key)}><td className="l num dt">{ddMmmYy(x.d)}</td><td className="l"><span className={`kchip k-${x.kind.toLowerCase()}`}>{x.kind}</span></td><td className="l">{x.title}</td></tr>)}</tbody>
+            <tbody>{shown.map((x) => <tr key={x.key} className={`click${(phone ? last : open) === x.key ? " sel" : ""}`} onClick={() => openRow(x.key)}><td className="l num dt">{pieceDate(x.d)}</td><td className="l"><span className={`kchip k-${x.kind.toLowerCase()}`}>{x.kind}</span></td><td className="l">{x.title}</td></tr>)}</tbody>
           </table>
         ) : <Empty title={items.length ? "Nothing matches" : "Nothing published yet"}>{items.length ? "Clear the search box or pick another kind." : err ?? "Daily notes arrive around 07:00 SGT, the weekly strategy report on Fridays at 15:00 SGT."}</Empty>}</div>
       </Panel>}

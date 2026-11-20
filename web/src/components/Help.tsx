@@ -3,20 +3,23 @@ import { useEffect, useState } from "react";
 /** The legend behind the "?" in the header: what every column, colour and badge on the Monitor means, in one
  *  place and readable on a phone (the same explanations otherwise sit in hover tooltips, which a phone lacks). */
 const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
-  { title: "Market table", rows: [
+  { title: "Markets table", rows: [
     ["1D to 36M", "Change from the close at the start of that window to the last print. Per cent for prices, basis points (bp) for yields."],
     ["σ vs 1M avg", "How far the last print sits from its 21-session average, in standard deviations of those 21 closes (the 1M corridor on the charts). Beyond ±2 is an unusual level for the past month."],
     ["52W range", "Where the last print sits in its 52-week range: 0% is the low, 100% the high."],
-    ["vs 200d", "Distance from the 200-day average. Per cent for prices, bp for yields."],
+    ["vs 200D", "Distance from the 200-day average (vs 50D: the 50-day). Per cent for prices, bp for yields."],
+    ["Levels", "Each instrument is written with one precision on every screen, the chart and the notes: USD/JPY 158.400, EUR/USD 1.1143, the Nikkei 57,000.00, a stock 182.44 (under 1,000) or 3,121. A yield's level ends in %: UST 2Y 4.510%."],
     ["On a phone", "Every coloured change says what it covers on a line under the figure: its window (1D, 1W … 12M), or the measure a list is sorted by (MKT CAP, 52W RANGE …)."],
     ["Shaded cells", "Green for a rise, red for a fall; the stronger the colour, the larger the move. Shaded cells are lettered in white."],
     ["PROXY", "An instrument that stands in for another, for example the 1306.T ETF for TOPIX during the session."],
-    ["LIVE / CLOSED / ~15m", "Whether the instrument's market is open, and how delayed its feed is."],
+    ["LIVE / CLOSED / DELAYED ~15m", "Whether the instrument's market is open, and how delayed its feed is."],
   ] },
   { title: "Charts", rows: [
     ["Lines", "Grey is the rolling mean, blue the ±1σ band, amber the ±2σ band, over the σ window chosen at the top."],
-    ["PERIOD", "1D uses one-minute bars, 1W fifteen-minute bars, 1M hourly bars, 3M and longer daily closes."],
+    ["Axes", "A daily chart's dates read 19 Nov, Nov or 2026, with the year under the first label of each year; an intraday chart's times are in SGT. The level axis uses as many decimals as its steps need, never more than the instrument's own."],
+    ["PERIOD", "1D uses one-minute bars, 1W fifteen-minute bars, 1M hourly bars, 3M and longer daily closes. A stock's page also has 5Y and 10Y. Where the history starts later than the period, the change says \"since\" its first day and the line under the chart says where the history starts."],
     ["Moving back", "Drag a chart to the right to move back in time (the chart follows your hand), to the left to come forward again; double-click to return to the latest."],
+    ["On a phone", "A tap on a chart puts its crosshair on that day, and the line under the chart gives the date, the level and the σ distance. It stays until the next tap; a sideways drag moves the chart as before."],
   ] },
   { title: "Equities", rows: [
     ["Drivers", "Four related markets shown beside the index, each with its own chart. Depending on the index: an index future, other stock indices, a currency or the dollar index, a government bond yield, the VIX, or copper. They are there to compare with: the Monitor does not measure how much any of them moves the index."],
@@ -33,17 +36,31 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
   ] },
   { title: "Single-name page", rows: [
     ["Performance", "Price change against the benchmark over each window, dividends not included. A Tokyo name is set against both the Nikkei 225 and TOPIX."],
-    ["Big moves", "For companies of 1tn yen and above, or 10bn US dollars and above: a day that closed 10% or more from the previous close, and the peaks and bottoms of the closes. A large circle is a turn of 15% or more (a peak only when it was a 12-month high), a small circle a turn of 10%. Each is a circle on the 3M, 12M and 36M charts; tap or click it for the move and its reason."],
-    ["Their colour", "A peak is red and a bottom green, whatever the move into it: the colour is the turn the stock took there. A day's move is green for a rise and red for a fall. A peak or a bottom appears once the price has turned that far from it, so the stretch still running has none yet."],
+    ["News", "The Monitor's own headlines that name the company (from the publishers' feeds on NEWS) and its own alerts on it, over the last 90 days, newest first; All, Headlines or Alerts. On a computer the list starts with the rows that sit beside the left column (three at least), so the page has no empty block above FINANCIALS; on a phone, and where the page is one column, with fifteen. SHOW 15 MORE adds the next fifteen. Times in SGT."],
+    ["Big moves", "For companies of 1tn yen and above, or 10bn US dollars and above: a day that closed 10% or more from the previous close, and the peaks and bottoms of the closes. A large circle is a turn of 15% or more (a peak only when it was a 12-month high), a small circle a turn of 10%. Each is a circle on the daily charts (3M to 10Y) for the last three years; tap or click it for the move and its reason. On a phone, a move tapped in the list opens on the chart: the period that holds it, its card open and its circle ringed for a moment."],
+    ["Their colour", "The circles and dots keep the turn's colour: a peak red, a bottom green. The figures are coloured by their sign, as everywhere else. A peak or a bottom appears once the price has turned that far from it, so the stretch still running has none yet."],
     ["The reason", "Looked up by web search for marks of the last twelve months: for a peak or a bottom, what ended the rise or the fall there. Shown only with the reports it rests on, which are linked. Otherwise the page says that no reliable report was found, or that the look-up is still under way."],
     ["Financials", "Tokyo-listed companies: EDINET DB (有価証券報告書 and 決算短信). Other companies: Yahoo Finance fundamentals; a line the source has no figure for in any period (R&D or buybacks, for example) is left out. The source and the date fetched are at the top of the panel."],
+    ["Column headers", "A header in teal opens the document behind that column, at the address the source gives: a year's 有価証券報告書 on EDINET (its document ID is in the tip), the 決算短信 PDF of the guidance or of a quarter. A plain header has no document address from the source, or one EDINET DB says is no longer on EDINET (filings age out of it after about ten years: the tip says so); none is ever made up. A year is named by the month and year it ends (FY3/26); a quarter by its number over its fiscal year (2Q, FY3/27), or by the month it ends (Sep, 2026)."],
+    ["Fiscal year end · annual report", "Tokyo-listed companies: the month the fiscal year ends, the accounting standard and the latest 有価証券報告書, from EDINET DB's answer."],
     ["Earlier years", "Where the periods are wider than the screen they move under the line names, which stay put. They share the width equally and always come to rest whole, beside the names and at the right edge, so no part of a figure is left showing. It opens at the latest; ‹ earlier years, under the unit, goes back a screen."],
     ["Short interest", "Tokyo: JPX short-position reports. United States: exchange-reported short interest, and FINRA's short-volume share of a day's trading, which is not short interest."],
-    ["Next earnings (est.)", "A date estimated by Yahoo Finance, not confirmed by the company."],
+    ["Next results (est.)", "A date estimated by Yahoo Finance, not confirmed by the company."],
+    ["COMPACT", "The one-screen layout shows a stock's page as three screens: Overview (the chart, KEY DATA and PERFORMANCE), News (NEWS, BIG MOVES and SHORT INTEREST) and Financials; an instrument's page as two: Overview (the chart, KEY DATA, PERFORMANCE and EVENTS) and News. GO TO, at the top right, shows the screen that holds a section; its lit chips are the screen on view. The scrolling layout keeps every panel on one page."],
+  ] },
+  { title: "Instrument page", rows: [
+    ["Which page", "A currency, a yield, a commodity, a future or an index has a page of its own: open it from search, from a name or a chart's title on MARKETS and RATES & FX (on a computer the name is in teal and the whole row opens it), or with Open … page on a phone. An index with a page on EQUITIES (the Nikkei 225, TOPIX, the S&P 500 …) opens there."],
+    ["What it shows", "The chart; KEY DATA; PERFORMANCE over 1D to 36M; EVENTS, the calendar of its currencies; NEWS, its headlines and alerts. Nothing that belongs to a company: no market cap, shares, valuation, results, short interest, big moves or statements."],
+    ["Units", "A yield's changes, its distance from the 52-week high and low and from the 200-day average, its realised volatility and its largest moves are in basis points (bp) of its level, as on MARKETS; its level ends in %. A price's are in per cent."],
+    ["Key data", "Last, the day's change and the day's range, the previous close; the 52W range with its bar; σ vs 1M avg and vs 200D, as on MARKETS; realised volatility over 1M, 3M and 12M (a yield in bp a day and bp a year, a price in % a year); 3Y pctl, where today's volatility stands among its daily readings of the last three years (0% the calmest, 100% the most volatile; a dash where the history is shorter); the largest rise and the largest fall of the last 12 months, each with the day it ended (both days on hover). A † after a label marks what the Monitor works out itself from the daily closes (the 52-week high and low, realised volatility, the largest moves; σ vs 1M avg and vs 200D too for a name MARKETS does not carry): the line under the panel says from which closes and over which dates."],
+    ["Official yields", "A yield the Monitor reads from its publisher's daily file (US Treasury, Japan MOF, Bundesbank, ECB, Bank of England, Bank of Canada) is published once a day: no day's range and no charts within the day; its as-of is the day it was published for."],
+    ["Events", "The economic calendar of the instrument's currencies, five days back and eight ahead, High impact to start, as on NEWS: both of a pair's; an index future's, its index's currency first and then the one it is quoted in (the Nikkei 225 future on the CME: JPY and USD); the quoting currency of anything else. The central banks' next meetings join it once the Monitor keeps their calendars; until then Next meeting is a dash, at the top of EVENTS on a computer and in the first block on a phone."],
+    ["News", "The headlines of the last 30 days that name the instrument, matched by whole words shown at the top of the panel (for USD/JPY: yen, JPY, BoJ, Bank of Japan), and the Monitor's own alerts on it. Fifteen at a time."],
   ] },
   { title: "Watchlist", rows: [
     ["Adding a name", "Type part of a company's name or of its ticker and choose from the candidates; or use the star beside a name on its page."],
-    ["What it adds", "Its earnings dates, its headlines, the research that mentions it, and alerts on it read from one-minute prices."],
+    ["What it adds", "Its results dates, its headlines, the research that mentions it, and alerts on it read from one-minute prices."],
+    ["Long lists", "On a computer, results ahead come first; then the ten newest alerts and the fifteen newest headlines, and SHOW n MORE adds the next. The page grows; no list scrolls inside its panel."],
     ["As of", "What each line's figures are as of, in SGT: a stock at its last close (the date), a market instrument at its last print (the time today, otherwise the date and time), an official yield at the date it was published for. The sources are named at the top of the list on a computer, in a note under it on a phone."],
     ["Yields", "A yield's changes are in basis points (bp), the same figures as on MARKETS; its level ends in %. A Treasury yield index that is not on MARKETS (the 13-week bill's, ^IRX) is read the same way."],
   ] },
@@ -58,6 +75,7 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
   ] },
   { title: "News", rows: [
     ["Headlines", "Under a bar for each day: the time, the category and the headline (the whole of it on hover if it runs past three lines), then the publisher and the companies it names; a company opens its page. Times are in SGT, as the panel says."],
+    ["Currency", "The calendar's Currency picker keeps one currency's events (JPY: Japan's). It offers the currencies the Countries choice leaves."],
   ] },
   { title: "Research", rows: [
     ["Daily", "The morning note, Monday to Saturday around 07:00 SGT: the news behind the overnight moves."],
@@ -74,6 +92,9 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
     ["No new prices", "A red bar at the foot of the screen, and DATA ✕, when no market that is open has had a new price for more than twenty minutes beyond its feed's usual delay. The source has stopped sending; the figures on screen are as of the time the bar gives."],
     ["DATA ! · second path", "When the source stops answering the Monitor's server, a second machine (a job on GitHub) pulls the same prices and writes them until the server's own answers are current again. Prices stay current; the chip turns amber and its detail says since when."],
     ["The opening", "Five seconds while the data loads behind it. In the app on a phone's home screen, every time it is opened; in a browser tab and on a computer, once a day. A click, a tap or Esc ends it. Not shown while you are creating your account, or if your device is set to reduce motion."],
+    ["Dates and times", "A date is written 19 Nov 2026. A time is 19 Nov 23:18 SGT, or 23:18 alone for today in a panel that says its times are in SGT. Lists that span days carry a bar for each day. A chart's stamp gives its time with the zone (LIVE 13:35 SGT); a figure that has a date and no time of day gives the date: PUBLISHED 19 Nov 2026 for an official yield, CLOSED 19 Nov 2026 for a close booked when there is no newer print."],
+    ["\u2020", "Worked out by the Monitor from figures a source gives, not given by the source itself: on an instrument's page the 52-week high and low with their dates, realised volatility and its percentile, the largest rise and fall. The line under the panel says from which figures and over which dates."],
+    ["Zero", "A change that rounds to zero at the precision shown is written without a sign and in grey (0.0%, 0.0bp), never as −0.0%."],
     ["Keys", "1 to 6 switch tabs; / jumps to search; Esc leaves full screen."],
   ] },
 ];

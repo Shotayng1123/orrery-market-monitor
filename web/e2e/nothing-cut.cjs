@@ -7,6 +7,8 @@
 //   D-09  a headline of 120 characters naming three companies shows all its words (with D-47: SGT once, in the head)
 //   D-10  phone search: rows a finger can hit, under the field, whole names (with D-37: the placeholder)
 //   D-25  WATCHLIST: alert and research texts whole, on the two-column page (the designer's §3.4)
+//   D-48  WATCHLIST at the feed's real lengths (40 alerts, 60 headlines): RESULTS AHEAD first in the left column,
+//         ten alerts and fifteen headlines with "SHOW n MORE", no box that scrolls inside the page (20 Nov 2026)
 //   D-28  every curve's lowest yield label whole; the phone curve's source line wraps
 // and the header's alert line, whose time was cut on every screen (the layout guard's first finding): its figure says
 // what it is (intraday, at close, 1D), and a news alert that names no company shows its headline and its publisher.
@@ -81,7 +83,7 @@ const finState = (p) => p.evaluate(() => {
     ck("no page errors", errs.length === 0, errs); await ctx.close();
   }
 
-  console.log("\n[D-25 · WATCHLIST on the two-column page, 1440x900; one column in reading order at text XL (1,067 CSS px)]");
+  console.log("\n[D-25 and D-48 · WATCHLIST on the two-column page, 1440x900; one column in reading order at text XL (1,067 CSS px)]");
   { const { ctx, p, errs } = await page(b, DESK.C1, AUTO);
     await go(p, "#watch", '.panel[data-k="wl-alerts"] tbody tr');
     const w = await p.evaluate(() => { const box = (k) => document.querySelector(`.panel[data-k="${k}"]`).getBoundingClientRect(); const pn = (k) => document.querySelector(`.panel[data-k="${k}"]`);
@@ -89,10 +91,26 @@ const finState = (p) => p.evaluate(() => {
       const texts = (k, sel) => [...pn(k).querySelectorAll(sel)].map((e) => { const r = e.getBoundingClientRect(), b = pn(k).querySelector(".pbody").getBoundingClientRect(); return r.right <= b.right + 1 && r.left >= b.left - 1; });
       const [wl, al, ea, nw, rs] = ["wl", "wl-alerts", "wl-earn", "wl-news", "wl-research"].map(box);
       return { cutA: cut("wl-alerts"), cutR: cut("wl-research"), alertsIn: texts("wl-alerts", "td.wrap a, td.wrap .lnk"), researchIn: texts("wl-research", "td.wrap .lnk"), left: { al: Math.round(al.left), ea: Math.round(ea.left) }, right: { nw: Math.round(nw.left), rs: Math.round(rs.left) },
-        gapL: Math.round(ea.top - al.bottom), gapR: Math.round(rs.top - nw.bottom), wl: Math.round(wl.width), w4: Math.round(al.width), w8: Math.round(nw.width), top: { al: Math.round(al.top), nw: Math.round(nw.top) } }; });
-    ck(`every alert and research title is whole: ${w.alertsIn.length} alerts and ${w.researchIn.length} pieces wrap inside their panels, nothing cut or scrolling sideways`, w.cutA === 0 && w.cutR === 0 && w.alertsIn.length === S.watch.feed.alerts.length && w.alertsIn.every(Boolean) && w.researchIn.every(Boolean), w);
-    ck(`two columns: ALERTS with EARNINGS AHEAD right under it (${w.gapL}px) on the left, ${w.w4}px wide; HEADLINES with IN RESEARCH under it (${w.gapR}px) on the right, ${w.w8}px; no hole under ALERTS`, w.left.al === w.left.ea && w.right.nw === w.right.rs && w.right.nw > w.left.al + w.w4 && w.gapL >= 0 && w.gapL <= 12 && w.gapR >= 0 && w.gapR <= 12 && w.top.al === w.top.nw && Math.abs(w.w4 / w.wl - 4 / 12) < 0.03 && Math.abs(w.w8 / w.wl - 8 / 12) < 0.03, w);
+        gapL: Math.round(al.top - ea.bottom), gapR: Math.round(rs.top - nw.bottom), wl: Math.round(wl.width), w4: Math.round(al.width), w8: Math.round(nw.width), top: { ea: Math.round(ea.top), nw: Math.round(nw.top) } }; });
+    ck(`every alert and research title is whole: the first ${w.alertsIn.length} alerts and ${w.researchIn.length} pieces wrap inside their panels, nothing cut or scrolling sideways`, w.cutA === 0 && w.cutR === 0 && w.alertsIn.length === 10 && w.alertsIn.every(Boolean) && w.researchIn.every(Boolean), w);
+    ck(`two columns: RESULTS AHEAD with ALERTS right under it (${w.gapL}px) on the left, ${w.w4}px wide; HEADLINES with IN RESEARCH under it (${w.gapR}px) on the right, ${w.w8}px; no hole between them`, w.left.al === w.left.ea && w.right.nw === w.right.rs && w.right.nw > w.left.al + w.w4 && w.gapL >= 0 && w.gapL <= 12 && w.gapR >= 0 && w.gapR <= 12 && w.top.ea === w.top.nw && Math.abs(w.w4 / w.wl - 4 / 12) < 0.03 && Math.abs(w.w8 / w.wl - 8 / 12) < 0.03, w);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+  // D-48: at the feed's lengths the results dates stay on the first screen, the long lists are cut with "SHOW n MORE",
+  // and every row is reached by scrolling the page, never a box inside it
+  for (const code of ["C1", "C2"]) {
+    const { ctx, p, errs } = await page(b, DESK[code], AUTO), vh = DESK[code].viewport.height;
+    await go(p, "#watch", '.panel[data-k="wl-alerts"] tbody tr');
+    const state = () => p.evaluate(() => ({ top: Math.round(document.querySelector('.panel[data-k="wl-earn"]').getBoundingClientRect().top), title: document.querySelector('.panel[data-k="wl-earn"] .phead .t').textContent, al: document.querySelectorAll('.panel[data-k="wl-alerts"] tbody tr').length, nw: document.querySelectorAll('.panel[data-k="wl-news"] .nwrow').length,
+      moreA: document.querySelector("#wl-alerts-more")?.innerText.replace(/\s+/g, " ").trim() ?? null, moreN: document.querySelector("#wl-news-more")?.innerText.replace(/\s+/g, " ").trim() ?? null,
+      boxes: [...document.querySelectorAll("#grid *")].filter((e) => e.scrollHeight > e.clientHeight + 1 && ["auto", "scroll"].includes(getComputedStyle(e).overflowY)).map((e) => e.className) }));
+    const r0 = await state();
+    ck(`${code}: with the feed's 40 alerts and 60 headlines, ${r0.title} starts at y ${r0.top}, on the first screen (above ${vh}); ALERTS shows 10 ("${r0.moreA}") and HEADLINES 15 ("${r0.moreN}"); no box scrolls inside the page`, S.watch.feed.alerts.length === 40 && S.watch.feed.news.length === 60 && r0.title === "RESULTS AHEAD" && r0.top < vh && r0.al === 10 && r0.nw === 15 && r0.moreA === "SHOW 10 MORE 10 of 40" && r0.moreN === "SHOW 15 MORE 15 of 60" && r0.boxes.length === 0, r0);
+    for (let i = 0; i < 8 && (await p.locator("#wl-alerts-more .chip-sm").count()); i++) { await p.locator("#wl-alerts-more .chip-sm").click(); await p.waitForTimeout(120); }
+    for (let i = 0; i < 8 && (await p.locator("#wl-news-more .chip-sm").count()); i++) { await p.locator("#wl-news-more .chip-sm").click(); await p.waitForTimeout(120); }
+    const r1 = await state();
+    const reach = await p.evaluate(() => [document.querySelector('.panel[data-k="wl-alerts"] tbody tr:last-child'), [...document.querySelectorAll('.panel[data-k="wl-news"] .nwrow')].pop()].map((e) => { e.scrollIntoView({ block: "end" }); const r = e.getBoundingClientRect(); return { inView: r.top >= 0 && r.bottom <= innerHeight + 1, pageY: Math.round(scrollY) }; }));
+    ck(`${code}: after SHOW MORE all ${r1.al} alerts and ${r1.nw} headlines are on the page, the last of each reached by scrolling the page itself (to y ${reach.map((x) => x.pageY).join(" and ")}); still no box scrolls inside it`, r1.al === 40 && r1.nw === 60 && r1.moreA === null && r1.moreN === null && r1.boxes.length === 0 && reach.every((x) => x.inView && x.pageY > 0), { r1, reach });
+    ck(`${code}: no page errors`, errs.length === 0, errs); await ctx.close(); }
   { const { ctx, p, errs } = await page(b, DESK.C1, XL);
     await go(p, "#watch", '.panel[data-k="wl-alerts"] tbody tr');
     const o = await p.evaluate(() => [...document.querySelectorAll("#grid .panel")].map((x) => ({ no: x.dataset.no, top: Math.round(x.getBoundingClientRect().top), left: Math.round(x.getBoundingClientRect().left), w: Math.round(x.getBoundingClientRect().width) })).sort((a, c) => a.top - c.top));
@@ -113,7 +131,7 @@ const finState = (p) => p.evaluate(() => {
     ck(`three columns side by side: the market's share with its chart, the largest positions, the share by sector with the margin balances`, s.cols.length === 3 && s.cols.every((c) => c.top === s.cols[0].top) && s.cols[0].left < s.cols[1].left && s.cols[1].left < s.cols[2].left, s.cols);
     ck(`the positions are headed ${s.heads.join(" · ")}; the sector column is ${s.secEm} em wide (9 or more), names in English cut at a word ("${s.sectors.find((x) => /…$/.test(x)) ?? s.sectors[0]}"); no cell narrower than its first character`, s.heads.join("|") === "Name|Sector|Holders|% of shares|Date" && s.secEm >= 9 && s.narrow.length === 0 && s.sectors.every((x) => /^[A-Za-z]/.test(x)) && s.sectors.every((x) => !/…$/.test(x) || !/\s…$/.test(x)), { heads: s.heads, secEm: s.secEm, narrow: s.narrow, sectors: s.sectors });
     ck(`the sources in English first, Japanese in brackets ("${s.aux}")`, /^JPX short-selling ratio \(空売り集計\) · short-position reports \(空売り残高報告\) · margin balances \(信用取引現在高\)$/.test(s.aux), s.aux);
-    ck(`the bar chart has its scale (${s.ys.join(" to ")}) and its first and last dates (${s.ax.join(" … ")})`, s.ys.length === 2 && s.ys.every((x) => /^\d+\.\d%$/.test(x)) && parseFloat(s.ys[0]) > parseFloat(s.ys[1]) && /^\d{4}-\d\d-\d\d$/.test(s.ax[0]) && /on \d{4}-\d\d-\d\d$/.test(s.ax[1]), { ys: s.ys, ax: s.ax });
+    ck(`the bar chart has its scale (${s.ys.join(" to ")}) and its first and last dates (${s.ax.join(" … ")})`, s.ys.length === 2 && s.ys.every((x) => /^\d+\.\d%$/.test(x)) && parseFloat(s.ys[0]) > parseFloat(s.ys[1]) && /^\d{1,2} [A-Z][a-z]{2} \d{4}$/.test(s.ax[0]) && /on \d{1,2} [A-Z][a-z]{2} \d{4}$/.test(s.ax[1]), { ys: s.ys, ax: s.ax });
     // D-46: the sector drawer's short column, Tokyo and US
     await p.locator(".panel[data-k='eq-sectors'] .lnk").first().click(); await p.waitForSelector(".drawer thead"); const jpHead = await p.evaluate(() => [...document.querySelectorAll(".drawer thead th")].pop().textContent); await p.keyboard.press("Escape");
     await go(p, "#equities/spx", ".panel[data-k='eq-sectors'] .lnk"); await p.locator(".panel[data-k='eq-sectors'] .lnk").first().click(); await p.waitForSelector(".drawer thead");
@@ -216,7 +234,7 @@ const finState = (p) => p.evaluate(() => {
     const { ctx, p, errs } = await page(b, opts, AUTO);
     await go(p, "#watch", "#alerts .alrt .one");
     const a = await lineParts(p);
-    ck(`${name}: "${said(a)}": the figure says what it is (the session's largest move, "intraday"), whole, as is the time; the whole message on hover ("${a.tip}")`, a.k?.whole && a.fig?.whole && a.q?.whole && a.q.t === "intraday" && a.t?.whole && /^\d\d\/\d\d \d\d:\d\d$/.test(a.t.t) && /^[+−-]?\d+\.\d%$/.test(a.fig.t) && !a.msgShown && /down 11\.2% intraday/.test(a.tip), a);
+    ck(`${name}: "${said(a)}": the figure says what it is (the session's largest move, "intraday"), whole, as is the time; the whole message on hover ("${a.tip}")`, a.k?.whole && a.fig?.whole && a.q?.whole && a.q.t === "intraday" && a.t?.whole && /^(\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d$/.test(a.t.t) && /^[+−-]?\d+\.\d%$/.test(a.fig.t) && !a.msgShown && /down 11\.2% intraday/.test(a.tip), a);
     ck("no page errors", errs.length === 0, errs); await ctx.close();
   }
   // every kind of latest alert, as the server words it, from the alerts list the stand-in server answers here
@@ -226,7 +244,7 @@ const finState = (p) => p.evaluate(() => {
       { what: "an index while its market is not trading: its 1D", sizes: [DESK.C1], row: mv({ symbol: "^N225", name: "Nikkei 225", kind: "index", pct: -3.4, market: "TSE", msg: "Nikkei 225 down 3.4%" }), ok: (a) => a.fig?.t === "-3.4%" && a.q?.t === "1D" && a.q.whole && !a.src },
       { what: "a stock measured at its official close: at close", sizes: [DESK.C1], row: mv({ symbol: "INTU", name: "Intuit Inc.", kind: "stock", pct: -7.2, market: "NYSE", msg: "Intuit Inc. down 7.2%" }), ok: (a) => a.fig?.t === "-7.2%" && a.q?.t === "at close" && a.q.whole && !a.src },
       { what: "a deal with a company: its kind and the company, no figure", sizes: [DESK.C1], row: company, ok: (a) => a.kd?.t === "M&A" && a.nm?.t === company.name && !a.fig && !a.q && !a.src },
-      { what: "a deal that names no company here: the headline's first words where the name goes, and the publisher it came from", sizes: [DESK.C1, DESK.C2], row: orphan, ok: (a) => a.kd?.t === "M&A" && a.nm?.t === orphan.msg.replace(/^M&A: /, "") && a.src?.t === `via ${orphan.market}` && a.src.whole && !a.fig && a.tip.endsWith(`(${orphan.market}) · ${a.t?.t} SGT`) },
+      { what: "a deal that names no company here: the headline's first words where the name goes, and the publisher it came from", sizes: [DESK.C1, DESK.C2], row: orphan, ok: (a) => a.kd?.t === "M&A" && a.nm?.t === orphan.msg.replace(/^M&A: /, "") && a.src?.t === `via ${orphan.market}` && a.src.whole && !a.fig && a.tip.includes(`(${orphan.market}) · `) && /· \d{1,2} [A-Z][a-z]{2} \d\d:\d\d SGT$/.test(a.tip) && a.tip.endsWith(` ${a.t?.t} SGT`) },   // the line's time ("02:09" today, "19 Nov 02:09" before) ends the tip's whole stamp ("20 Nov 02:09 SGT"; I-5)
     ];
     for (const c of CASES) for (const opts of c.sizes) {
       const { ctx, p, errs } = await page(b, opts, AUTO); await routes(p);

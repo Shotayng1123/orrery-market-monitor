@@ -1,4 +1,4 @@
-// The phone layout: MARKET, the header, the bottom tab bar and the layout switch.
+// The phone layout: MARKETS, the header, the bottom tab bar and the layout switch.
 // Run from web/:  node e2e/run.cjs phone-market   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
 const MOCK = "http://localhost:5179/orrery-market-monitor/";
@@ -18,12 +18,12 @@ const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
     const s0 = await state(p); ck("default on a phone (since 18 Nov): the phone layout at true size, the list, six bottom tabs", s0.pv2 && s0.zoom === "1" && s0.nav === 6 && s0.table === 0 && s0.list > 0, s0);
     await p.goto(MOCK + "?phone=new#market", { waitUntil: "networkidle" }); await p.waitForSelector(".mp-row"); await p.waitForTimeout(600);
     const s1 = await state(p); ck("?phone=new: preview on at true size, six bottom tabs, the switch gone from the address", s1.pv2 && s1.zoom === "1" && s1.nav === 6 && s1.table === 0 && s1.list > 0 && !s1.url.includes("phone="), s1);
-    const rows = await p.evaluate(() => [...document.querySelectorAll(".mp-row")].map((r) => ({ name: r.querySelector(".n").textContent.trim(), last: r.querySelector(".mp-px").textContent.trim().replace(/%$/, ""), chg: r.querySelector(".mp-chg .fig").textContent.trim() })));
+    const rows = await p.evaluate(() => [...document.querySelectorAll(".mp-row")].map((r) => ({ name: r.querySelector(".n").textContent.trim(), last: r.querySelector(".mp-px").textContent.trim(), chg: r.querySelector(".mp-chg .fig").textContent.trim() })));
     const bad = rows.filter((r) => !classic[r.name] || classic[r.name].last !== r.last || classic[r.name].d1 !== r.chg);
-    ck(`all ${rows.length} lines carry the desktop table's name, level and 1D change`, rows.length === Object.keys(classic).length && bad.length === 0, bad.slice(0, 3));
+    ck(`all ${rows.length} lines carry the desktop table's name, level (the same decimals, a yield's "%") and 1D change`, rows.length === Object.keys(classic).length && bad.length === 0, bad.slice(0, 3));
     await p.locator(".mp-head .pick select").selectOption("1W"); await p.waitForTimeout(400);
     const w = await p.evaluate(() => [...document.querySelectorAll(".mp-row")].map((r) => ({ name: r.querySelector(".n").textContent.trim(), chg: r.querySelector(".mp-chg .fig").textContent.trim() })));
-    ck("Change -> 1W: every line shows the table's 1W figure", w.every((r) => classic[r.name]?.w1 === r.chg), w.filter((r) => classic[r.name]?.w1 !== r.chg).slice(0, 3));
+    ck("Period -> 1W: every line shows the table's 1W figure", w.every((r) => classic[r.name]?.w1 === r.chg), w.filter((r) => classic[r.name]?.w1 !== r.chg).slice(0, 3));
     await p.locator(".mp-head .pick select").selectOption("1D"); await p.waitForTimeout(300);
     await p.evaluate(() => { document.querySelector("#mockbar")?.style.setProperty("display", "none"); window.__tapH = (el) => { el.scrollIntoView({ block: "center" }); const r = el.getBoundingClientRect(), x = r.left + r.width / 2; let n = 0; for (let y = Math.floor(r.top) - 8; y <= Math.ceil(r.bottom) + 8; y++) { const hit = document.elementFromPoint(x, y); if (hit && (hit === el || el.contains(hit))) n++; } return n; }; }); 
     const m = await p.evaluate(() => { const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; }; const fs = []; const w = document.createTreeWalker(document.querySelector(".mp"), NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) { if (n.textContent.trim() && vis(n.parentElement) && !n.parentElement.closest(".mtile, .badge")) fs.push(parseFloat(getComputedStyle(n.parentElement).fontSize)); }

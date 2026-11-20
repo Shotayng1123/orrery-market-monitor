@@ -35,7 +35,7 @@ const sec = (p, startsWith) => p.locator(".mp-sec", { has: p.locator(`h2 > span:
     const mc = await sc.locator(".mp-row .mp-chg .fig").first().textContent(); ck("Sort by -> Market cap: the figure on each line becomes the market cap", /\d(tn|bn|m)$/.test(mc.trim()), mc);
     await pick(p, "Sort by").locator("select").selectOption("pct1d"); await pick(p, "Order").locator("select").selectOption("a"); await p.waitForTimeout(300);
     const asc = (await sc.locator(".mp-row .mp-chg .fig").allTextContents()).map(parseFloat); ck("Order -> Low to high: worst 1D first", asc.every((x, i) => i === 0 || x >= asc[i - 1]) && asc[0] < 0, asc.slice(0, 4));
-    await sc.locator(".mp-tog", { hasText: "Above 200-day" }).tap(); await p.waitForTimeout(300); const filt = await sc.locator(".mp-note").textContent(); ck("Above 200-day narrows the list and lights the switch", parseInt(filt) < 225 && (await sc.locator(".mp-tog.on").count()) === 1, filt);
+    await sc.locator(".mp-tog", { hasText: "Above 200D" }).tap(); await p.waitForTimeout(300); const filt = await sc.locator(".mp-note").textContent(); ck("Above 200D narrows the list and lights the switch", parseInt(filt) < 225 && (await sc.locator(".mp-tog.on").count()) === 1, filt);
     await sc.locator(".mp-tog.on").tap(); await sc.locator(".mp-more").tap(); await p.waitForTimeout(300); ck("Show more: sixty names", (await sc.locator(".mp-row").count()) === 60);
     await p.evaluate(() => scrollTo(0, 0)); await pick(p, "Go to").locator("select").selectOption("Movers · 1D"); await p.waitForTimeout(500);
     const j = await p.evaluate(() => { const h = [...document.querySelectorAll(".mp-sec > h2")].find((e) => e.textContent.startsWith("Movers")).getBoundingClientRect().top, head = document.querySelector(".mp-head").getBoundingClientRect().bottom; return { gap: Math.round(h - head), y: Math.round(scrollY), label: document.querySelector(".mp-picks.top .pick:last-child .val").textContent }; });
@@ -57,16 +57,16 @@ const sec = (p, startsWith) => p.locator(".mp-sec", { has: p.locator(`h2 > span:
   { const ctx = await b.newContext({ ...devices["iPhone 13"] }); await ctx.addInitScript(() => { try { localStorage.setItem("om_mock_live", "1"); } catch {} }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
     await p.goto(MOCK + "?phone=new#equities/spx", { waitUntil: "networkidle" }); await p.waitForSelector(".mp-asof"); await p.waitForSelector("#eq-live"); await p.waitForTimeout(600);
     const h = await p.evaluate(() => { const a = document.querySelector(".mp-asof"), b = document.querySelector("#eq-live"); return { text: a.textContent, badge: b.textContent, px: parseFloat(getComputedStyle(b).fontSize), tip: b.title, ox: document.documentElement.scrollWidth - innerWidth }; });
-    ck(`phone: the header says the figures are today's and of what time (INTRADAY, ${h.px}px), not "closes of"`, h.badge === "INTRADAY" && /SP500 names · 1D at \d\d\/\d\d \d\d:\d\d/.test(h.text) && !/closes of/.test(h.text) && /Longer periods are measured to the close of \d{4}-\d\d-\d\d/.test(h.tip) && h.px >= 11 && h.ox <= 0, h);
+    ck(`phone: the header says the figures are today's and of what time (INTRADAY, ${h.px}px), not "closes of"`, h.badge === "INTRADAY" && /SP500 names · 1D at \d{1,2} [A-Z][a-z]{2} \d\d:\d\d/.test(h.text) && !/closes of/.test(h.text) && /Longer periods are measured to the close of \d{1,2} [A-Z][a-z]{2} \d{4}/.test(h.tip) && h.px >= 11 && h.ox <= 0, h);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
   { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); await ctx.addInitScript(() => { try { localStorage.setItem("om_mock_live", "1"); } catch {} }); const p = await ctx.newPage();
     await p.goto(MOCK + "#equities/spx", { waitUntil: "networkidle" }); await p.waitForSelector("#eq-live"); await p.waitForTimeout(500);
     const d = await p.evaluate(() => [...document.querySelectorAll(".panel .aux")].map((e) => e.textContent).filter((t) => /INTRADAY/.test(t)));
-    ck("desktop: the panels that rest on the 1D figures say so, with the time of the quotes and the close the longer periods are measured to", d.length >= 2 && d.every((t) => /INTRADAY ?SP500 constituents · 1D at .* · longer periods at the close of \d{4}-\d\d-\d\d/.test(t)), d);
+    ck("desktop: the panels that rest on the 1D figures say so, with the time of the quotes and the close the longer periods are measured to", d.length >= 2 && d.every((t) => /INTRADAY ?SP500 constituents · 1D at .* · longer periods at the close of \d{1,2} [A-Z][a-z]{2} \d{4}/.test(t)), d);
     await ctx.close(); }
   { const ctx = await b.newContext({ ...devices["iPhone 13"] }); const p = await ctx.newPage();
     await p.goto(MOCK + "?phone=new#equities/spx", { waitUntil: "networkidle" }); await p.waitForSelector(".mp-asof"); await p.waitForTimeout(600);
     const t = await p.locator(".mp-asof").textContent();
-    ck("with the market closed the header reads \"closes of\" as before, with no INTRADAY mark", /^SP500 names · closes of \d{4}-\d\d-\d\d/.test(t) && (await p.locator("#eq-live").count()) === 0, t);
+    ck("with the market closed the header reads \"closes of\" as before, with no INTRADAY mark", /^SP500 names · closes of \d{1,2} [A-Z][a-z]{2} \d{4}/.test(t) && (await p.locator("#eq-live").count()) === 0, t);
     await ctx.close(); }
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0); })();

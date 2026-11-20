@@ -22,7 +22,8 @@ export interface Instrument {
 
 export interface TableRow extends Instrument {
   last: number | null;
-  lastAt: string | null;   // ISO, source time of the last print
+  lastAt: string | null;   // ISO, source time of the last print; "<date>T00:00:00Z" for a booked close or an official yield (a date, no time of day)
+  source?: string | null;  // the instruments table's provider: "yahoo", or "treasury", "mof", "curve" for a yield an official publisher puts out once a day (lib/time.ts rowSource)
   live: boolean;           // the market is open and the print is fresh
   closes: Partial<Record<PeriodKey, number | null>>;   // absolute close at each period's start
   closeDates: Partial<Record<PeriodKey, string | null>>;

@@ -2,8 +2,10 @@ import { pageHash } from "../lib/indices";
 import { zoomNow } from "../lib/prefs";
 import { useEffect, useRef, useState } from "react";
 import { useApi } from "../lib/useApi";
-import { fmtNum, fmtPct, signCls } from "../lib/fmt";
-import { fmtStamp } from "../lib/time";
+import { fmtNum, fmtPct, signCls, stockDecimals } from "../lib/fmt";
+import { fmtDate, fmtStamp } from "../lib/time";
+import { MKT_CAP } from "../lib/labels";
+import { fyName } from "../lib/stock";
 
 // Company overview card shown on hover (heat map tiles, names in tables). One card layer lives in the app;
 // anything can ask for it with showCard(symbol, event) / hideCard(). The card loads the asset summary once
@@ -60,7 +62,7 @@ export function StatementSummary({ st, ccy }: { st: Statements | null; ccy: stri
   const cell = (v: number | null | undefined) => <td className="num">{money(v)}</td>;
   return (
     <table className="secT stm">
-      <thead><tr><th className="l">{ccy ?? ""}</th>{rows.map((r) => <th key={r.period}>{r.label.replace(/^FY /, "")}</th>)}{f && <th title={`Company guidance for FY ending ${f.fiscalYearEnd ?? ""}, disclosed ${f.disclosed ?? ""}`}>Fcst{f.fiscalYearEnd ? ` ${f.fiscalYearEnd.slice(0, 7)}` : ""}</th>}</tr></thead>
+      <thead><tr><th className="l">{ccy ?? ""}</th>{rows.map((r) => <th key={r.period}>{/^\d{4}-\d{2}/.test(r.period) ? fyName(r.period) : r.label.replace(/^FY /, "")}</th>)}{f && <th title={`Company guidance for the year to ${fmtDate(f.fiscalYearEnd)}, disclosed ${fmtDate(f.disclosed)}`}>{f.fiscalYearEnd ? fyName(f.fiscalYearEnd) : "Guidance"}<i>E</i></th>}</tr></thead>
       <tbody>
         <tr><td className="l">Revenue</td>{rows.map((r) => <td key={r.period} className="num">{money(r.revenue)}</td>)}{f && cell(f.revenue)}</tr>
         <tr><td className="l">Operating income</td>{rows.map((r) => <td key={r.period} className="num">{money(r.op)}</td>)}{f && cell(f.op)}</tr>
@@ -83,11 +85,11 @@ function CardBody({ symbol }: { symbol: string }) {
       <div className="ccard-h">
         <div><b>{d.name}</b><span className="mut"> {d.symbol}{d.exchange ? ` · ${d.exchange}` : ""}</span></div>
         {(d.sector || d.industry) && <div className="mut" style={{ fontSize: 10 }}>{[d.sector, d.industry].filter(Boolean).join(" · ")}</div>}
-        <div className="ccard-px"><b>{fmtNum(d.price, d.price != null && d.price >= 1000 ? 0 : 2)}</b> <span className={signCls(d.pct)}>{fmtPct(d.pct, 2)}</span>{d.asOf && <span className="mut"> · {fmtStamp(d.asOf)}</span>}</div>
+        <div className="ccard-px"><b>{fmtNum(d.price, stockDecimals(d.price))}</b> <span className={signCls(d.pct, 2)}>{fmtPct(d.pct, 2)}</span>{d.asOf && <span className="mut"> · {fmtStamp(d.asOf)}</span>}</div>
       </div>
       <div className="krow" style={{ padding: "2px 0 4px" }}>
-        <span><span className="k">Market cap</span><span className="v" style={{ fontSize: 13 }}>{money(d.mcap, d.currency)}</span></span>
-        <span><span className="k">Volume / ADTV</span><span className="v" style={{ fontSize: 13 }}>{d.volume != null && d.adv3m ? `${Math.round((d.volume / d.adv3m) * 100)}%` : "–"}</span></span>
+        <span><span className="k">{MKT_CAP}</span><span className="v" style={{ fontSize: 13 }}>{money(d.mcap, d.currency)}</span></span>
+        <span><span className="k" title="Today's volume against the average daily volume of three months">Volume vs avg (3M)</span><span className="v" style={{ fontSize: 13 }}>{d.volume != null && d.adv3m ? `${Math.round((d.volume / d.adv3m) * 100)}%` : "–"}</span></span>
         {d.short && <span><span className="k">{d.short.kind === "finra" ? "Short vol share" : "Short positions"}</span><span className="v" style={{ fontSize: 13 }}>{(d.short.ratio * 100).toFixed(d.short.kind === "finra" ? 0 : 2)}%</span></span>}
       </div>
       <div className="minih">12M vs {d.home.name} (rebased 100)</div>

@@ -11,8 +11,12 @@ import { legacyStatements } from "./finsrc.ts";
 
 export interface SeriesOut { symbol: string; res: "1m" | "15m" | "1h" | "1d"; points: Array<{ t: number; v: number; q?: number | null }>; asOf: string | null; shownFrom?: string; source?: string }
 type Pt = { t: number; v: number; q: number | null };
-const RANGES: Record<string, number> = { "1W": 7, "1M": 31, "3M": 93, "12M": 366, "36M": 1096 };
-const SIGMA_LOOKBACK_DAYS = 1120;
+/** The days each chart PERIOD shows (3M and longer are daily closes); 5Y and 10Y since 20 Nov 2026, on a stock's page. */
+export const RANGES: Record<string, number> = { "1W": 7, "1M": 31, "3M": 93, "12M": 366, "36M": 1096, "5Y": 1827, "10Y": 3653 };
+export const SIGMA_LOOKBACK_DAYS = 1120;   // 756 trading days ≈ 1,100 calendar days, so the 36M band is defined from the first point shown
+/** How far back a daily series reaches for a PERIOD of `days`: one more window to pan into, then the σ window's
+ *  history before it. 5Y and 10Y get no second window: a stock's daily history from Yahoo is ten years in all. */
+export const historyDays = (days: number): number => (days >= RANGES["5Y"] ? days : days * 2) + SIGMA_LOOKBACK_DAYS;
 
 // ---- a small cache per isolate for series (minutes); statements are kept in the asset_cache table ----
 const mem = new Map<string, { at: number; v: unknown }>();
@@ -45,7 +49,7 @@ export async function yahooSeries(symbol: string, range: string): Promise<Series
   });
   const days = RANGES[range] ?? RANGES["12M"];
   const daily = (await dailyBars(symbol)).map((b) => ({ t: b.t, v: b.c, q: b.v ?? null }));
-  const from = Math.floor((Date.now() - (days * 2 + SIGMA_LOOKBACK_DAYS) * 86400e3) / 1000);
+  const from = Math.floor((Date.now() - historyDays(days) * 86400e3) / 1000);
   const points = daily.filter((p) => p.t >= from);
   return { symbol, res: "1d", shownFrom: new Date(Date.now() - days * 86400e3).toISOString().slice(0, 10), points, asOf: points.length ? new Date(points[points.length - 1].t * 1000).toISOString().slice(0, 10) : null, source: "yahoo" };
 }
