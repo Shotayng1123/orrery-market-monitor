@@ -6,7 +6,7 @@ import { fmtClock, SGT } from "../lib/time";
 import { zoomNow } from "../lib/prefs";
 import { fmtStampSafe } from "./shared";
 import { EarningsCalendar } from "../components/Earnings";
-import { openAsset } from "../components/CompanyCard";
+import { HeadlineList } from "../components/Headlines";
 import { Pick, type PickOption } from "../components/Pick";
 import { useRowCap } from "../lib/useRowCap";
 
@@ -18,9 +18,7 @@ export const dayOf = (t: string) => new Date(t).toLocaleDateString("en-CA", { ti
 export const dayLabel = (t: string) => new Date(t).toLocaleDateString("en-GB", { timeZone: SGT, weekday: "long", day: "numeric", month: "short" });
 export const MAJOR = new Set(["US", "JP", "EUR", "DE", "FR", "UK", "CN", "HK", "KR", "TW", "AU", "CA", "CH", "IN", "SG"]);   // major markets only (Shota); everything else behind the All chip
 
-/** Some feeds send headlines with HTML entities left in ("Anthropic&#x2019;s"); shown as the characters they stand for. */
-const NAMED: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
-export const decodeEntities = (t: string): string => t.replace(/&amp;/g, "&").replace(/&#x([0-9a-f]+);/gi, (_m, h: string) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_m, d: string) => String.fromCodePoint(Number(d))).replace(/&(lt|gt|quot|apos|nbsp);/g, (_m, n: string) => NAMED[n]);
+export { decodeEntities } from "../components/Headlines";
 
 export function NewsView({ tick }: { tick: number }) {
   const cal = useApi<{ rows: EconEvent[] }>("calendar", undefined, Math.floor(tick / 5));   // the calendar syncs hourly, the headlines every ten minutes
@@ -85,16 +83,9 @@ export function NewsView({ tick }: { tick: number }) {
           </table></div>
         ) : <Empty title="No calendar loaded">{cal.error ?? "The calendar sync runs every hour."}</Empty>}
       </Panel>
-      <Panel no="02" title="NEWS" span={6} aux={<span className="chips" style={{ margin: 0 }}><Pick label="Category" value={cat} options={NEWS_CATEGORIES} onChange={setCat} /></span>}>
-        {news.data?.rows.length ? <div className="nwlist">{news.data.rows.map((it) => (
-          <div className="nwrow" key={it.id}>
-            <span className="nwt">{fmtStampSafe(it.publishedAt)}</span>
-            <span className="nwc cat">{it.category}</span>
-            <span className="nwh"><a href={it.url} target="_blank" rel="noreferrer">{decodeEntities(it.title)}</a></span>
-            {it.tickers?.length > 0 && <span className="nwtk">{it.tickers.slice(0, 3).map((t) => <span key={t.s} className="tk" title={`Open ${t.n} (${t.s})`} onClick={() => openAsset(t.s)}>{t.n}</span>)}</span>}
-            <span className="nwsrc">{it.source}</span>
-          </div>
-        ))}</div> : <Empty title="No headlines">{news.error ?? "The news job runs every ten minutes."}</Empty>}
+      {/* "Headlines" (the designer's glossary, §3.1): the publishers' items, one wording on both layouts */}
+      <Panel no="02" title="HEADLINES" span={6} k="headlines" aux={<span className="chips" style={{ margin: 0 }}><Pick label="Category" value={cat} options={NEWS_CATEGORIES} onChange={setCat} /><span className="mut" style={{ marginLeft: 4 }}>times in SGT</span></span>}>
+        {news.data?.rows.length ? <HeadlineList rows={news.data.rows} /> : <Empty title="No headlines">{news.error ?? "The news job runs every ten minutes."}</Empty>}
       </Panel>
     </>
   );

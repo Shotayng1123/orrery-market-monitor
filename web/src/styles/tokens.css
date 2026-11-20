@@ -380,6 +380,14 @@ table.secT tr.sep td{border-top:1px solid var(--bord2)}
 table.stm th{font-size:8.5px}
 table.mvT{table-layout:fixed;width:100%}
 table.mvT td.nm{max-width:none;overflow:hidden;text-overflow:ellipsis}
+/* EQUITIES MOVERS, headed (the designer's D-04, 19 Nov 2026). The header cells set the widths; when a list is
+   narrower than 560 CSS px (XL text, compact) its SECTOR column goes first. */
+.mvwrap{container-type:inline-size}
+table.mvT.eqmv th.c-nm{width:40%} table.mvT.eqmv th.c-sec{width:26%} table.mvT.eqmv th.c-px{width:13%} table.mvT.eqmv th.c-ch{width:10.5%}
+@container (max-width:560px){table.mvT.eqmv .c-sec{display:none}}
+/* a σ keeps its case where the rest is upper-cased: as a capital it is Σ, the sum sign (D-11) */
+.sig{text-transform:none}
+table.mkt th.wrap{white-space:normal}   /* "σ VS 1M AVG", "52W RANGE": a header may wrap; a figure never does */
 .barsbox{width:100%}
 .barsbox svg{display:block}
 .barsax{display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px 12px;color:var(--mut);font-size:10.5px;margin-top:3px;font-variant-numeric:tabular-nums}
@@ -403,7 +411,6 @@ body.term .bigwrap{height:100%}
 body.term .sqgrid{height:100%;grid-template-rows:repeat(2,minmax(0,1fr))}
 body.term .cgrid{grid-auto-rows:minmax(0,1fr);height:100%}
 body.term .cgrid .mtile.cp{aspect-ratio:auto;height:100%;min-height:0}
-body.term #grid[data-view="equities"] .panel[data-no="01"],body.term #grid[data-view="equities"] .panel[data-no="02"],body.term #grid[data-view="equities"] .panel[data-no="07"]{grid-row:span 2}
 body.term #grid[data-view="market"] .panel[data-no="01"]{grid-row:span 2}
 body.term #grid[data-view="news"] .panel[data-no="01"]{grid-row:span 2}
 body.term #grid[data-view="asset"] .panel[data-no="01"],body.term #grid[data-view="asset"] .panel[data-no="02"]{grid-row:span 2}
@@ -461,13 +468,19 @@ body.term .brnar{font-size:10.5px;line-height:1.3}
 body.term .brnar h4{margin:4px 0 1px;font-size:9px}
 body.term .bbar{height:6px}
 body.term .tleaf b{font-size:9px!important}
-/* per-tab placement: columns and row spans chosen so each tab fills one screen */
-body.term #grid[data-view="equities"] .panel[data-no="01"]{grid-column:span 5;grid-row:span 2}
-body.term #grid[data-view="equities"] .panel[data-no="02"]{grid-column:span 3;grid-row:span 2}
-body.term #grid[data-view="equities"] .panel[data-no="03"],body.term #grid[data-view="equities"] .panel[data-no="04"],body.term #grid[data-view="equities"] .panel[data-no="05"],body.term #grid[data-view="equities"] .panel[data-no="06"]{grid-column:span 4;grid-row:span 1}
-body.term #grid[data-view="equities"] .panel[data-no="07"]{grid-column:span 4;grid-row:span 2}
-body.term #grid[data-view="equities"] .panel[data-no="08"]{grid-column:span 8;grid-row:span 1}
-body.term #grid[data-view="equities"] .panel[data-no="09"]{grid-column:span 12;grid-row:span 1}
+/* per-tab placement: columns and row spans chosen so each tab fills one screen. EQUITIES keys on the panels' kind,
+   not their number (the designer's §3.4: numbers shift as panels are added), and names each cell, so the order the
+   panels take on the scrolling page (19 Nov 2026) leaves the one screen as it was: the index and its drivers with
+   breadth and flow beside them; sectors, short interest and the heat map; movers; the screener. */
+body.term #grid[data-view="equities"]>.panel[data-k="eq-index"]{grid-column:1 / span 5;grid-row:2 / span 2}
+body.term #grid[data-view="equities"]>.panel[data-k="eq-drivers"]{grid-column:6 / span 3;grid-row:2 / span 2}
+body.term #grid[data-view="equities"]>.panel[data-k="eq-breadth"]{grid-column:9 / span 4;grid-row:2}
+body.term #grid[data-view="equities"]>.panel[data-k="eq-flow"]{grid-column:9 / span 4;grid-row:3}
+body.term #grid[data-view="equities"]>.panel[data-k="eq-sectors"]{grid-column:1 / span 4;grid-row:4}
+body.term #grid[data-view="equities"]>.panel[data-k="eq-short"]{grid-column:5 / span 4;grid-row:4}
+body.term #grid[data-view="equities"]>.panel[data-k="eq-heat"]{grid-column:9 / span 4;grid-row:4 / span 2}
+body.term #grid[data-view="equities"]>.panel[data-k="eq-movers"]{grid-column:1 / span 8;grid-row:5}
+body.term #grid[data-view="equities"]>.panel[data-k="eq-screener"]{grid-column:1 / -1;grid-row:6}
 body.term #grid[data-view="market"] .panel[data-no="01"]{grid-column:span 6;grid-row:span 3}
 body.term #grid[data-view="market"] .panel[data-no="02"],body.term #grid[data-view="market"] .panel[data-no="03"]{grid-column:span 6;grid-row:span 1}
 body.term #grid[data-view="market"] .panel[data-no="04"],body.term #grid[data-view="market"] .panel[data-no="05"]{grid-column:span 3;grid-row:span 1}
@@ -632,11 +645,8 @@ body.term table.brT td.l{max-width:100px}
    does not fit keeps that size and scrolls inside its panel (TileGrid sets --c and, when scrolling, --rh). */
 body.term .cgrid.fit.scroll{align-content:flex-start;overflow-x:hidden;overflow-y:auto}
 body.term .cgrid.fit.scroll>.mtile.cp{flex:0 0 calc(100% / var(--c) - 3px);height:var(--rh);min-height:0}
-/* EQUITIES, scrolling layout: SHORT INTEREST takes the height of SECTOR PERFORMANCE beside it and scrolls inside */
-@media (min-width:1101px){
-  body:not(.term) #grid[data-view="equities"] .panel[data-no="06"]{contain:size;min-height:220px}
-  body:not(.term) #grid[data-view="equities"] .panel[data-no="06"]>.pbody{flex:1 1 0;min-height:0;overflow:auto}
-}
+/* EQUITIES, scrolling layout: SHORT INTEREST used to take the height of SECTOR PERFORMANCE beside it and scroll
+   inside, two thirds of it hidden (D-07); since 19 Nov 2026 it spans the page at its natural height */
 body.term .cgrid.fit:not(.scroll){align-content:flex-start;overflow:hidden}
 body.term .cgrid.fit:not(.scroll)>.mtile.cp{height:var(--rh);min-height:0}
 /* conditional formatting (Shota, 15 Nov): a cell that carries a shade is lettered in white; the shade and the
@@ -825,11 +835,16 @@ body.pv2 .helpsec dl>div{grid-template-columns:104px minmax(0,1fr);gap:10px;padd
 table.ernT col.tm{width:6.4em} table.ernT col.st{width:1.6em} table.ernT col.ix{width:24%} table.ernT col.mc{width:6.5em}
 table.wlT td.nm{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 table.wlT th,table.wlT td{white-space:nowrap}
-body.term #grid[data-view="watch"]{grid-template-rows:minmax(0,1fr) minmax(0,1fr) minmax(0,1.1fr)}
-body.term #grid[data-view="watch"] .panel[data-k="wl"]{grid-column:span 8;grid-row:span 2}
-body.term #grid[data-view="watch"] .panel[data-k="wl-earn"],body.term #grid[data-view="watch"] .panel[data-k="wl-alerts"]{grid-column:span 4;grid-row:span 1}
-body.term #grid[data-view="watch"] .panel[data-k="wl-news"]{grid-column:span 8}
-body.term #grid[data-view="watch"] .panel[data-k="wl-research"]{grid-column:span 4}
+/* WATCHLIST in one screen (the designer's plan review §4.5, 19 Nov 2026): MY NAMES across, then alerts, headlines,
+   and results ahead over research. MY NAMES spans the width since it gained the AS OF column. */
+body.term #grid[data-view="watch"]{grid-template-rows:minmax(0,.7fr) minmax(0,.7fr) minmax(0,.5fr) minmax(0,.5fr)}
+body.term #grid[data-view="watch"] .panel[data-k="wl"]{grid-column:1 / -1;grid-row:1 / span 2}
+body.term #grid[data-view="watch"] .panel[data-k="wl-alerts"]{grid-column:1 / span 4;grid-row:3 / span 2}
+body.term #grid[data-view="watch"] .panel[data-k="wl-news"]{grid-column:5 / span 5;grid-row:3 / span 2}
+body.term #grid[data-view="watch"] .panel[data-k="wl-earn"]{grid-column:10 / span 3;grid-row:3}
+body.term #grid[data-view="watch"] .panel[data-k="wl-research"]{grid-column:10 / span 3;grid-row:4}
+table.wlT td.asof{white-space:nowrap}
+table.wlT th.asof,table.wlT td.asof{padding-left:12px}   /* apart from LAST, so "3,121" and "19 Nov" do not read as one */
 body.term .nwtk .tk{font-size:8.5px;padding:0 4px}
 @media (max-width:720px){.nwtk{display:none}}
 table.wlT td.nm{max-width:210px}
@@ -957,12 +972,26 @@ button.go.ghost:hover{color:var(--txt);border-color:var(--amber)}
 .finguide b{color:var(--amber);font-weight:600}
 .finnote{font-size:10.5px;line-height:1.5;margin-top:7px}
 .finbox{overflow-x:auto;border:1px solid var(--bord);border-radius:3px;-webkit-overflow-scrolling:touch}
+/* the periods land on whole columns against the line names (D-03): each period snaps to the names' right edge
+   (--stick, set by FinTable), and a spacer after the last column (--fin-pad) lets the box rest with the latest
+   periods whole. At the right edge too: every period column takes the same width (--fin-col), the room beside the
+   names divided by as many periods as fit, and the names the pixels left over (--fin-names, below), so wherever the
+   box rests nothing of a period shows past the edge (the designer's verdict on D-03). A minimum, since a table
+   narrower than its periods gives each column its minimum. A table that fits its box does not scroll, and none of
+   this shows. */
+.finbox{display:flex;scroll-snap-type:x mandatory;scroll-padding-left:var(--stick,0px)}
+.finbox>table.fin{flex:none}
+.finbox::after{content:"";flex:0 0 var(--fin-pad,0px)}
+table.fin thead th:not(.l){scroll-snap-align:start;min-width:var(--fin-col,0px)}
+.finprev{position:relative;display:block;margin:5px 0 0;padding:0;border:0;background:none;color:var(--cyan);font:inherit;font-size:11px;font-weight:500;letter-spacing:.02em;text-transform:none;cursor:pointer;white-space:nowrap}
+.finprev:hover{text-decoration:underline}
+.finprev::before{content:"";position:absolute;inset:-15px -6px}   /* 44 px for a finger */
 table.fin{width:100%;border-collapse:separate;border-spacing:0;font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums}
 table.fin th{position:static;padding:6px 10px;text-align:right;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:none;white-space:nowrap;color:var(--txt2);background:#17181b;border-bottom:1px solid var(--bord2)}
 table.fin th.fc{color:var(--amber)}
 table.fin th i{font-style:normal;font-size:8.5px;margin-left:2px;vertical-align:super}
 table.fin td{padding:4px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--bord)}
-table.fin th.l,table.fin td.l{position:sticky;left:0;z-index:2;min-width:170px;text-align:left}
+table.fin th.l,table.fin td.l{position:sticky;left:0;z-index:2;min-width:var(--fin-names,170px);text-align:left}
 table.fin th.l{position:sticky;z-index:3;color:var(--amber);letter-spacing:.06em}
 table.fin th.l .u{font-size:11.5px;font-weight:700}
 table.fin th.l small{margin-left:8px;font-size:9.5px;font-weight:400;letter-spacing:.02em;color:var(--mut)}
@@ -1083,10 +1112,12 @@ body.pv2 .pick select{font-size:17px;top:-5px;bottom:auto;height:calc(100% + 10p
 .mp-st .live::before,.mp-st .delay::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;vertical-align:1px;background:var(--up)}
 .mp-st .delay::before{background:var(--warn)}
 .mp-px{font-family:var(--mono);font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
-.mp-chg{font-family:var(--mono);font-size:14.5px;font-weight:600;font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap;padding:5px 4px;border-radius:7px;background:rgba(179,175,164,.12);color:var(--txt2)}
+.mp-chg{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:38px;font-family:var(--mono);font-size:14.5px;font-weight:600;line-height:1.15;font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap;padding:4px 4px;border-radius:7px;background:rgba(179,175,164,.12);color:var(--txt2)}
 .mp-chg.up{background:rgba(63,208,126,.16);color:var(--up)}
 .mp-chg.dn{background:rgba(255,77,66,.17);color:var(--dn)}
-.mp-chg.sm{font-size:13px;padding:4px 6px;min-width:64px;display:inline-block}
+.mp-chg.sm{font-size:13px;padding:4px 6px;min-width:64px;display:inline-flex}
+/* every pill says what it covers (the designer's D-02, 19 Nov 2026): the window, or the measure a list is sorted by */
+.mp-chg>.w{font-size:11px;font-weight:500;letter-spacing:.06em;line-height:1.1;margin-top:1px;opacity:.8}
 /* an opened row */
 .mp-det{padding:2px 12px 14px 15px;background:var(--panel2)}
 .mp-full{margin:0 0 8px;color:var(--mut);font-family:var(--mono);font-size:12px;line-height:1.4}
@@ -1171,6 +1202,7 @@ body.pv2 .pick select{font-size:17px;top:-5px;bottom:auto;height:calc(100% + 10p
 .mp-doc .ntabs table.secT{font-size:13px}
 .mp-doc .ntabs table.secT td{padding:5px 6px}
 .mp-doc .ntabs .minih{font-size:11.5px;margin:10px 0 4px}
+.mp-doc .ntabs table.nmaj tr.ncls td{font-size:11px}
 .mp-doc .ntabs .mut{font-size:11.5px!important;line-height:1.4}
 .mp-doc .ntabs .msg2{grid-template-columns:minmax(0,1fr);gap:4px}
 .mp-doc .src{margin:22px 0 0;padding-top:12px;border-top:1px solid var(--bord2);color:var(--mut);font-size:13px;line-height:1.45}
@@ -1215,6 +1247,7 @@ table.mp-t.left td:first-child{font-family:var(--sans);font-size:14.5px;white-sp
 .fl-row .b{display:flex;flex-direction:column;align-items:flex-end;gap:3px;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 .fl-row .b .v{font-size:14.5px;font-weight:600}
 .fl-row .b .p{font-size:12.5px}
+.fl-row .b small{font-family:var(--sans);font-size:11px;font-weight:400;letter-spacing:.02em;color:var(--mut)}   /* what each figure is (D-30) */
 /* on/off filters */
 .mp-tog{position:relative;min-height:36px;padding:0 11px;border:1px solid var(--bord2);border-radius:8px;background:transparent;color:var(--txt2);font-family:var(--sans);font-size:13px;cursor:pointer}
 .mp-tog::before,.mp-legacy .chips .chip-sm::before{content:"";position:absolute;inset:-5px -1px}   /* as the drop-downs: 36px to the eye, 44px to the finger */
@@ -1232,7 +1265,8 @@ table.mp-t.left td:first-child{font-family:var(--sans);font-size:14.5px;white-sp
 .mp-legacy table.secT td{padding:7px 5px;white-space:normal}
 .mp-legacy table.secT td.num{white-space:nowrap}
 .mp-legacy table.secT td:first-child{position:static;box-shadow:none;background:transparent;padding-left:2px}
-.mp-legacy table.secT td.mut.nm{display:none}   /* the sector beside a name: no room for it on a phone */
+.mp-legacy table.secT td.mut.nm,.mp-legacy table.secT th.sec{display:none}   /* the sector beside a name: no room for it on a phone */
+.mp-legacy table.secT th{position:static;padding:6px 5px;font-size:11px;letter-spacing:.02em;text-transform:none;background:transparent;border-bottom:1px solid var(--bord2)}   /* headed like the phone's own tables (D-30) */
 .mp-legacy .barsax{font-size:11px}
 .mp-legacy .mut{font-size:12px}
 
@@ -1340,7 +1374,7 @@ body.pv2 .finbox{border:0;border-radius:0;margin:10px -10px 0}
 body.pv2 table.fin{font-size:13px}
 body.pv2 table.fin th{padding:9px 9px;font-size:11.5px}
 body.pv2 table.fin td{padding:8px 9px}
-body.pv2 table.fin th.l,body.pv2 table.fin td.l{min-width:128px;max-width:142px;white-space:normal;line-height:1.25;padding-left:10px}
+body.pv2 table.fin th.l,body.pv2 table.fin td.l{min-width:var(--fin-names,128px);max-width:var(--fin-names,142px);white-space:normal;line-height:1.25;padding-left:10px}
 body.pv2 table.fin td.l{font-family:var(--sans);font-size:13px}
 body.pv2 table.fin tr.band td{padding:14px 9px 6px;font-size:11px}
 body.pv2 table.fin th.l .u{font-size:13px}
@@ -1417,3 +1451,113 @@ body.pv2 .modal.ntf button.go+button.go{margin-top:10px}
 #opening canvas{display:block;width:100%;height:100%}
 #opening .skip{position:absolute;right:max(14px,env(safe-area-inset-right));bottom:max(14px,env(safe-area-inset-bottom));box-sizing:border-box;min-width:48px;height:44px;padding:0 12px;background:transparent;border:0;color:#8a8780;font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;cursor:pointer;opacity:.75}
 #opening .skip:hover,#opening .skip:focus-visible{color:#e8e5de;opacity:1}
+
+/* ===== Nothing cut, nothing hidden (the designer's I-2 notes, 19 Nov 2026; e2e/layout-guard.cjs keeps it so) ===== */
+/* chart tiles (D-08): the name alone on its line, wrapping to two lines, never cut to a few letters; the badges and
+   the session stamp at the right of the price, under it when the tile is narrow; the price itself is never cut */
+.mtile.cp>.lb>.lbtxt{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;white-space:normal;overflow:hidden;text-overflow:clip;line-height:1.3;overflow-wrap:break-word}
+.mtile.cp>.vl{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:6px;row-gap:1px;white-space:normal;overflow:visible}
+.mtile.cp>.vl>.px{flex:none;white-space:nowrap}
+.mtile.cp>.vl>.tags{margin-left:auto;display:inline-flex;flex-wrap:wrap;justify-content:flex-end;align-items:baseline;gap:2px 4px;font-weight:400;line-height:1.25}
+.mtile.cp>.vl>.tags .badge{margin-left:0}
+.mtile.cp>.vl>.tags .asof .st{margin-right:3px}
+body.term .mtile.cp>.vl>.tags{display:none}
+/* the stock page's hero on a phone keeps its stamp line above the big price */
+.mp-hero .mtile.cp>.lb{display:none}
+.mp-hero .mtile.cp>.vl{flex-direction:column-reverse;align-items:flex-start}
+.mp-hero .mtile.cp>.vl>.tags{margin:0 0 6px;justify-content:flex-start;gap:4px 6px}
+.mp-hero .mtile.cp>.vl>.tags .badge{margin:0}
+/* SHORT INTEREST (D-07): three columns at natural height (two for FINRA), one when the panel is narrow or on a phone */
+.msg3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:12px 18px;align-items:start}
+.msg3>div{min-width:0}
+.msg3 .minih{margin-top:0}
+table.secT.shpos th.sec,table.secT.shpos td.sec{min-width:9em}
+table.secT .sec{white-space:nowrap}
+.mp-legacy .msg3{grid-template-columns:minmax(0,1fr);gap:4px}
+.mp-legacy table.secT.shpos .sec,.mp-legacy table.secT.shpos .dt{display:none}   /* a phone: name, holders, % of shares */
+/* the bar chart's scale at its left (D-07): its high at the top, its foot at the bottom */
+.barsplot{display:flex;align-items:stretch;gap:6px}
+.barsplot>svg{flex:1 1 auto;min-width:0}
+.barsy{flex:none;display:flex;flex-direction:column;justify-content:space-between;color:var(--mut);font-size:10.5px;line-height:1.1;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+body.term .barsy{font-size:8.5px}
+.mp-legacy .barsy{font-size:11px}
+/* MARKET BREADTH across the page: the table, and beside it the three-year chart (the one-screen layout: table only) */
+.brwrap{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr));gap:12px 18px;align-items:start}
+.brwrap>div{min-width:0}
+.brnote{margin-top:6px;font-size:10px;line-height:1.4}   /* what the start-of-window rows and the 3-year chart count (R2A-04) */
+body.term .brnote{margin-top:2px;font-size:8.5px;line-height:1.3}
+body.term .brwrap{display:block}
+body.term .brwrap .brchart{display:none}
+table.secT td.wrap{white-space:normal}   /* a label or a sentence in a table cell wraps instead of running past the panel */
+/* headlines (D-09, D-47; components/Headlines.tsx): a bar for each day, the time alone in a 44-px column, the headline
+   wrapping to three lines at most, the publisher and the companies it names on a muted line under it */
+.nwrow{display:grid;grid-template-columns:44px minmax(0,1fr);column-gap:8px;align-items:start;white-space:normal;overflow:visible;padding:5px 6px}
+.nwrow .nwt{width:auto;font-size:10.5px;line-height:1.5}
+.nwb{min-width:0}
+.nwh{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;text-overflow:clip;line-height:1.45;overflow-wrap:break-word}
+.nwh .nwc{margin-right:6px;vertical-align:1px}
+.nwm{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;margin-top:2px;font-size:10.5px;color:var(--mut)}
+.nwm .nwsrc{font-size:10.5px}
+.nwm .nwtk{max-width:none;flex-wrap:wrap;overflow:visible}
+.nwday{position:sticky;top:0;z-index:1;padding:4px 8px;color:var(--amber);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;background:linear-gradient(180deg,#1b1c20,#141518);border-top:1px solid var(--bord);border-bottom:1px solid var(--bord)}
+.nwday:first-child{border-top:0}
+body.term .nwrow{grid-template-columns:36px minmax(0,1fr);column-gap:6px;padding:1px 4px}
+body.term .nwrow .nwt{font-size:9.5px}
+body.term .nwday{padding:1px 6px;font-size:8.5px}
+body.term .nwm{font-size:9px;margin-top:0}
+/* the two-column page (the designer's §3.4; first used by WATCHLIST, then the stock and instrument pages and RATES &
+   FX): two flex columns, 8 and 4 grid columns wide (either side), whose panels stack each on its own, so a short panel
+   leaves no hole beside a tall one. Under 1,100 CSS px of layout the columns dissolve and the panels follow each
+   other in their numbered (reading) order across the full width. That width is the page's own, read by a container
+   query on #wrap: the text size works by zoom, so a window media query would see 1,440 px where XL lays out 1,067. */
+#wrap{container:wrap / inline-size}
+#grid{--gap:10px}
+body.cmp #grid{--gap:7px}
+.pcols{grid-column:1 / -1;display:flex;align-items:flex-start;gap:var(--gap);min-width:0}
+.pcol{display:flex;flex-direction:column;gap:var(--gap);min-width:0}
+.pcol.w8{flex:0 0 calc((100% - 11 * var(--gap)) / 12 * 8 + 7 * var(--gap))}
+.pcol.w4{flex:0 0 calc((100% - 11 * var(--gap)) / 12 * 4 + 3 * var(--gap))}
+.pcol>.panel{width:100%}
+body.term .pcols,body.term .pcol{display:contents}
+@container wrap (max-width:1100px){
+  .pcols,.pcol{display:contents}
+  .pcol>.panel{grid-column:span 12}
+  #grid:has(>.pcols) .panel[data-no="01"]{order:1} #grid:has(>.pcols) .panel[data-no="02"]{order:2} #grid:has(>.pcols) .panel[data-no="03"]{order:3}
+  #grid:has(>.pcols) .panel[data-no="04"]{order:4} #grid:has(>.pcols) .panel[data-no="05"]{order:5} #grid:has(>.pcols) .panel[data-no="06"]{order:6}
+  #grid:has(>.pcols) .panel[data-no="07"]{order:7} #grid:has(>.pcols) .panel[data-no="08"]{order:8} #grid:has(>.pcols) .panel[data-no="09"]{order:9}
+  #grid:has(>.pcols) .panel[data-no="10"]{order:10} #grid:has(>.pcols) .panel[data-no="11"]{order:11} #grid:has(>.pcols) .panel[data-no="12"]{order:12}
+}
+/* WATCHLIST (D-25): a long name wraps under itself and keeps its symbol, instead of losing both to an ellipsis */
+table.wlT td.nm{white-space:normal;overflow:visible;text-overflow:clip;max-width:240px;overflow-wrap:break-word}
+table.wlT td.nm .mut{white-space:nowrap}
+/* the alert line in the header, on a computer: label · name · figure · time, and only the name is ever cut (the
+   designer's I-9 note); a phone's header shows the whole message under the label instead */
+#alerts .alrt .msg{display:none}
+#alerts .alrt .one{display:inline-flex;align-items:baseline;gap:6px;min-width:0;flex:0 1 auto;overflow:hidden}
+#alerts .alrt .one .kd{flex:none;color:var(--amber);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase}
+#alerts .alrt .one .nm{flex:0 1 auto;min-width:3em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#alerts .alrt .one .fig{flex:none;font-weight:600}
+#alerts .alrt .one .q,#alerts .alrt .one .src{flex:none;color:var(--mut)}   /* what the figure is; a news alert's publisher */
+#alerts .alrt.new .one .q,#alerts .alrt.new .one .src{color:rgba(255,255,255,.75)}
+#alerts .alrt>.k,#alerts .alrt>.t{flex:none}
+body.pv2 #alerts .alrt .msg{display:inline}
+body.pv2 #alerts .alrt .one{display:none}
+/* search (D-10, D-37): "/" as a key cap at the box's right on a computer; on a phone, rows of 52 px or more under the
+   field, the whole name on the first line and "7203.T · Equity · NK225" under it */
+#search .skey{position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:0 4px;border:1px solid var(--bord2);border-radius:3px;color:var(--mut);font:inherit;font-size:10px;line-height:1.35;pointer-events:none}
+#search input{padding-right:22px}
+body.term #search .skey{font-size:8.5px;right:4px}
+body.pv2 #search .skey{display:none}
+body.pv2 #search input{padding-right:12px}
+body.pv2 .sres{left:0;right:0;top:calc(100% + 6px);width:auto;max-height:min(62vh,440px);border-radius:12px}
+body.pv2 .sitem{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"nm nm" "sym kd";column-gap:8px;row-gap:3px;align-items:baseline;min-height:52px;padding:8px 14px;font-family:var(--sans)}
+body.pv2 .sitem .nm{grid-area:nm;white-space:normal;overflow:visible;font-size:15px;line-height:1.3;color:var(--txt)}
+body.pv2 .sitem b{grid-area:sym;min-width:0;font-family:var(--mono);font-size:12px;font-weight:600}
+body.pv2 .sitem .mut{grid-area:kd;min-width:0;font-size:12px;line-height:1.3;white-space:normal;overflow-wrap:anywhere}
+body.pv2 .sitem .mut::before{content:"· "}
+body.pv2 .sitem.mut{display:flex;align-items:center;font-size:14px}
+body.pv2 .sitem.mut::before{content:none}
+body.term #search input{padding-right:18px}
+@media (max-width:720px){#search .skey{display:none}}
+/* curves (D-28): the line of spreads and the source under a curve wraps instead of losing its end ("treasury.gov (m…") */
+.mtile.cp .rdout.crv{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.35}

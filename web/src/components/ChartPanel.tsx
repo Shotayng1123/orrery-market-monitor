@@ -24,8 +24,10 @@ function sessionWindow(points: Array<{ t: number }>): number {
   return Math.max(30 * 60, points[points.length - 1].t - points[i].t + 5 * 60);
 }
 
-/** One instrument in the Analytics tile grammar: name row with the session tag and stamp, the price under
- *  the name, the period change under the price, then the chart. `shape` sets the tile proportions. */
+/** One instrument in the Analytics tile grammar: the name on its own line (wrapping to two lines, never cut), the
+ *  price under it with the badges and the session stamp at its right (they go under the price when the tile is
+ *  narrow), the period change, then the chart. `shape` sets the tile proportions. The badges and the stamp used to
+ *  share the name's line and cut it to a few letters ("Nikkei 2…": the designer's D-08, 19 Nov 2026). */
 const WIN_LABEL: Record<SigmaWindow, string> = { m1: "1M", m12: "12M", m36: "36M" };
 export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wide", axes = false, volume = false, marks, chartHeight = 150 }: { row: TableRow; period: ChartPeriod; tick: number; sigmaWindow?: SigmaWindow; shape?: "wide" | "square" | "large"; axes?: boolean; volume?: boolean; marks?: ChartMark[]; chartHeight?: number /* the "wide" shape's chart, in px */ }) {
   // The tile's price and change come from the table row, refreshed every minute. The line itself is refetched
@@ -69,13 +71,17 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
   return (
     <div ref={box} className={`mtile cp ${shape}${row.live ? " live" : ""}`}>
       <div className="lb">
-        <span className="lbtxt" title={row.symbol}>{row.name}</span>
-        {row.proxyFor && <span className="badge proxy" title={`${row.name} stands in for ${row.proxyFor}`}>PROXY</span>}
-        {row.live && m && m.delayMin > 0 && <span className="badge delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>~{m.delayMin}m</span>}
-        {DEV_MOCK && <span className="badge est">MOCK</span>}
-        <span className="asof" title="Source time of the last print, Singapore time"><span className={`st${row.live ? " live" : ""}`}>{row.live ? "LIVE" : "CLOSED"}</span> {stamp}</span>
+        <span className="lbtxt" title={`${row.name} (${row.symbol})`}>{row.name}</span>
       </div>
-      <div className="vl"><Flash value={row.last}>{fmtNum(row.last, row.decimals)}{isRate && row.last != null ? "%" : ""}</Flash></div>
+      <div className="vl">
+        <span className="px"><Flash value={row.last}>{fmtNum(row.last, row.decimals)}{isRate && row.last != null ? "%" : ""}</Flash></span>
+        <span className="tags">
+          {row.proxyFor && <span className="badge proxy" title={`${row.name} stands in for ${row.proxyFor}`}>PROXY</span>}
+          {row.live && m && m.delayMin > 0 && <span className="badge delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>~{m.delayMin}m</span>}
+          {DEV_MOCK && <span className="badge est">MOCK</span>}
+          <span className="asof" title="Source time of the last print, Singapore time"><span className={`st${row.live ? " live" : ""}`}>{row.live ? "LIVE" : "CLOSED"}</span> {stamp}</span>
+        </span>
+      </div>
       <div className={`ch ${signCls(chg)}`}>{isRate ? fmtChg(chg, 3, true) : fmtPct(chg)} <span className="mut">{period}{anchor != null ? ` · from ${fmtNum(anchor, row.decimals)}` : ""}</span></div>
       {points.length
         ? <SigmaChart points={points} windowSec={windowSec} intraday={intraday} decimals={row.decimals} sigmaWindow={sigmaWindow} onReadout={setRd} onPan={setPan} color={color} fill={shape !== "wide"} height={shape === "wide" ? chartHeight : undefined} axes={axes} volume={volume} marks={marks} />

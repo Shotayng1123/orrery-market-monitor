@@ -1,6 +1,7 @@
 // The phone layout: NEWS and RESEARCH.
 // Run from web/:  node e2e/run.cjs phone-news-research   (the runner starts the servers this needs; see e2e/run.cjs)
-const { chromium, devices } = require("playwright"); const { routes, note } = require("./harness.cjs");
+const { chromium, devices } = require("playwright"); const { routes, note, S } = require("./harness.cjs");
+const [D1, D2] = [S.notes[3].d, S.notes[6].d];   // two notes in the stand-in list (dated from today, so any day the check runs)
 const LIVE = "http://localhost:5181/orrery-market-monitor/";
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d)}`); };
 const pick = (p, label) => p.locator(".pick", { has: p.locator(`.lbl:text-is("${label}")`) });
@@ -39,15 +40,27 @@ const sizes = (p) => p.evaluate(() => { const vis = (el) => { const r = el.getBo
     await p.goto(LIVE + "#research", { waitUntil: "networkidle" }); await p.waitForSelector(".rs-row"); await p.waitForTimeout(500);
     const calls = []; p.on("request", (r) => { const u = r.url(); if (u.includes("fakeapi")) calls.push(new URL(u).searchParams.get("action")); });
     ck("opens on the titles (45), no piece shown", (await p.locator(".rs-row").count()) === 45 && (await p.locator(".mp-doc").count()) === 0);
-    await p.evaluate(() => scrollTo(0, 900)); await p.waitForTimeout(200); const y0 = await p.evaluate(() => Math.round(scrollY));
+    // The list is left where it stands when a title is tapped. A tap first scrolls a row it cannot reach (partly under
+    // the screen's edge or a bar) into view, so that place depends on the fonts' widths: on GitHub's machines row 12
+    // ended 9 px under the screen at 900 px down, the tap moved the list to 1194, and the list rightly came back to
+    // 1194. So the page notes where it stood at each tap (before the Monitor's own handler runs), and the checks
+    // compare with that.
+    await p.evaluate(() => addEventListener("click", (e) => { if (e.target instanceof Element && e.target.closest(".rs-row")) window.__tapY = Math.round(scrollY); }, true));
+    await p.evaluate(() => scrollTo(0, 900)); await p.waitForTimeout(200);
     const row = p.locator(".rs-row").nth(10); const title = (await row.locator(".t").textContent()).trim(); await row.tap(); await p.waitForSelector(".mp-doc h1"); await p.waitForTimeout(500);
+    const y0 = await p.evaluate(() => window.__tapY ?? null);
     const d = await p.evaluate(() => ({ h1: document.querySelector(".mp-doc h1").textContent, y: Math.round(scrollY), hash: location.hash, list: document.querySelectorAll(".rs-row").length, back: document.querySelectorAll(".mp-back, .mp-doc .mp-more").length, tables: document.querySelectorAll(".mp-doc table").length }));
     ck("tap a title: that piece alone, from its top, named in the address, back buttons above and below", d.h1 === title && d.y === 0 && /^#research\/(note|report):/.test(d.hash) && d.list === 0 && d.back === 2, { ...d, title });
     const s2 = await sizes(p); ck(`piece: text ≥ 11px (smallest ${s2.minFont}px), tables included, nothing overflows sideways`, s2.minFont >= 11 && s2.overflowX <= 0, s2);
     await p.locator(".mp-back").tap(); await p.waitForSelector(".rs-row"); await p.waitForTimeout(400);
-    const l = await p.evaluate(() => ({ y: Math.round(scrollY), hash: location.hash, read: document.querySelector(".rs-row.read .t")?.textContent?.trim() })); ck("All titles: the list where it was left, the piece just read marked", Math.abs(l.y - y0) <= 2 && l.hash === "#research" && l.read === title, { ...l, y0 });
-    await p.locator(".rs-row").nth(12).tap(); await p.waitForSelector(".mp-doc h1"); await p.waitForTimeout(300); await p.goBack(); await p.waitForSelector(".rs-row"); await p.waitForTimeout(400);
-    ck("the phone's own Back returns to the list at the same place", Math.abs((await p.evaluate(() => Math.round(scrollY))) - y0) <= 2);
+    const l = await p.evaluate(() => ({ y: Math.round(scrollY), hash: location.hash, read: document.querySelector(".rs-row.read .t")?.textContent?.trim() })); ck("All titles: the list where it was left, the piece just read marked", y0 > 0 && Math.abs(l.y - y0) <= 2 && l.hash === "#research" && l.read === title, { ...l, y0 });
+    // where the list stood before and at the tap, where the row was, and where the list came back to (printed if this fails)
+    const pre = await p.evaluate(() => { const r = document.querySelectorAll(".rs-row")[12].getBoundingClientRect(); return { yBefore: Math.round(scrollY), row12: [Math.round(r.top), Math.round(r.bottom)], vh: innerHeight }; });
+    await p.locator(".rs-row").nth(12).tap(); await p.waitForSelector(".mp-doc h1"); await p.waitForTimeout(300);
+    const read = await p.evaluate(() => ({ yTap: window.__tapY ?? null, yReading: Math.round(scrollY), docH: document.documentElement.scrollHeight, opened: location.hash, hist: history.length }));
+    await p.goBack(); await p.waitForSelector(".rs-row"); const yAtList = await p.evaluate(() => Math.round(scrollY)); await p.waitForTimeout(400);
+    const gb = await p.evaluate(() => ({ y: Math.round(scrollY), hash: location.hash, listH: document.documentElement.scrollHeight, histAfter: history.length }));
+    ck("the phone's own Back returns to the list at the same place", read.yTap > 0 && Math.abs(gb.y - read.yTap) <= 2, { dev, y0, ...pre, ...read, yAtList, ...gb });
     await p.locator(".mp-find").fill("weekly"); await p.waitForTimeout(300); const nf = await p.locator(".rs-row").count(); await p.locator(".rs-row").nth(1).tap(); await p.waitForSelector(".mp-doc h1"); await p.waitForTimeout(300);
     ck("a weekly report opens with its standfirst and sources", (await p.locator(".mp-doc .stand").count()) === 1 && (await p.locator(".mp-doc .src li").count()) > 5);
     await p.goBack(); await p.waitForSelector(".rs-row"); await p.waitForTimeout(300); ck(`search kept after reading (${nf} matches)`, (await p.locator(".mp-find").inputValue()) === "weekly" && (await p.locator(".rs-row").count()) === nf && nf === 6);
@@ -78,10 +91,10 @@ const sizes = (p) => p.evaluate(() => { const vis = (el) => { const r = el.getBo
       let warn = true;
       await p.route("**/fakeapi?*", (r) => { const q = new URL(r.request().url()).searchParams; if (q.get("action") !== "note") return r.fallback(); const n = note(q.get("d"));
         r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ note: { ...n, pack: warn ? { ...n.pack, warnings: [WARN] } : n.pack } }) }); });
-      await p.goto(LIVE + "#research/note:2026-11-16", { waitUntil: "networkidle" }); await p.waitForSelector(".ntabs .nsec"); await p.waitForTimeout(400);
+      await p.goto(LIVE + `#research/note:${D1}`, { waitUntil: "networkidle" }); await p.waitForSelector(".ntabs .nsec"); await p.waitForTimeout(400);
       const v = await p.evaluate(() => { const w = document.querySelector(".ntabs .nwarn"), first = document.querySelector(".ntabs .nsec"); if (!w) return null; const r = w.getBoundingClientRect();
         return { text: w.textContent, above: r.bottom <= first.getBoundingClientRect().top + 1, left: Math.round(r.left), right: Math.round(r.right), vw: innerWidth, px: parseFloat(getComputedStyle(w).fontSize), over: document.documentElement.scrollWidth - innerWidth }; });
       ck(`${name}: the note's tables open with the warning, in full, above the first table (${v?.px}px type)`, !!v && v.text === WARN && v.above && v.left >= 0 && v.right <= v.vw && v.over <= 0 && v.px >= (name === "phone" ? 14 : 11.5), v);
-      warn = false; await p.goto(LIVE + "#research/note:2026-11-13"); await p.reload({ waitUntil: "networkidle" }); await p.waitForSelector(".ntabs .nsec"); await p.waitForTimeout(300);
+      warn = false; await p.goto(LIVE + `#research/note:${D2}`); await p.reload({ waitUntil: "networkidle" }); await p.waitForSelector(".ntabs .nsec"); await p.waitForTimeout(300);
       ck(`${name}: a note without one shows none; no page errors`, (await p.locator(".ntabs .nwarn").count()) === 0 && errs.length === 0, errs); await ctx.close(); } }
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0); })();

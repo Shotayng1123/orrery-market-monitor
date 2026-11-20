@@ -21,6 +21,11 @@ import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabas
 import { ALERTS, COMPANY, FIRST, PHILOSOPHY, PHONE, TABS, WELCOME_SUBJECT, welcomeMail } from "../supabase/functions/_shared/welcome.ts";
 import { FEED_LATE_MIN, OWN_SHORT_MIN, barDayEnd, barSettled, feedState, fxTrading, silence, stoppedBeforeClose, type Print } from "../supabase/functions/_shared/feedhealth.ts";
 import { OWN_FRESH_MIN, RELAY_BEAT_MAX_S, RELAY_CRON, RELAY_JOBS, RELAY_LATE_MIN, RELAY_OK_RUN, RELAY_WAIT_MIN, beatFresh, cronDue, current, newerOnly, reading, relayAct, relayJobsDue, usable, type RelayView } from "../supabase/functions/_shared/relay.ts";
+import { CBOE_YIELDS, closeDay, isYieldQuote, isYieldRow, sourceName, watchRowFromQuote, watchRowFromTable, type QuoteLike } from "../supabase/functions/_shared/watchrow.ts";
+import { alertFigWord, alertHeadline } from "../web/src/lib/alertline.ts";
+import { asOfCell, asOfLine, asOfOf, asOfTitle } from "../web/src/lib/time.ts";
+import { finBack, finFit, finRest } from "../web/src/lib/finscroll.ts";
+import { sectorShort } from "../web/src/lib/sectors.ts";
 import { readFileSync as readText, readdirSync as listDir } from "node:fs";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
@@ -890,6 +895,100 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const missing = wanted.filter((l) => !RELAY_CRON.some((r) => key(r) === key(l))).map(key), extra = RELAY_CRON.filter((r) => !wanted.some((l) => key(l) === key(r))).map(key);
     ck(`the relay's timetable is the database's own (${newest}): every flow, statistics and history line, the same minutes, none more (${wanted.length} lines)`, lines.length > 40 && wanted.length === 24 && missing.length === 0 && extra.length === 0, { missing, extra });
     ck("the server's `daily` function stands down for exactly the jobs the relay runs, and the tick asks for the relay through the database, also when its pull fails outright (asked first, the failure reported after)", /RELAY_JOBS\.includes\(job as RelayJob\)/.test(readText(new URL("../supabase/functions/daily/index.ts", import.meta.url), "utf8")) && RELAY_JOBS.join() === "flow,mflow,stats,history" && /db\.rpc\("feed_relay_kick"\)/.test(readText(new URL("../supabase/functions/tick/index.ts", import.meta.url), "utf8")) && /pullErr = e;[\s\S]*feed_relay_kick[\s\S]*if \(pullErr\) throw/.test(readText(new URL("../supabase/functions/tick/index.ts", import.meta.url), "utf8")) && /YAHOO_RETRIES/.test(readText(new URL("../.github/workflows/feed-relay.yml", import.meta.url), "utf8")));
+  }
+
+  console.log("\n[the watchlist: a yield's changes in bp as on MARKETS, and what each row is as of, and from whom]");
+  {
+    // made-up market-table rows in computeTable's shape (table.ts): a print carries the database's "+00:00" time,
+    // a booked close is stamped "<date>T00:00:00Z"
+    const tnx = { symbol: "^TNX", name: "UST 10Y yield", cls: "Fixed income", group: "rates", currency: "USD", source: "yahoo", last: 4.859, lastAt: "2026-11-19T15:18:00+00:00",
+      pct: { d1: -0.98, w1: 0.43, m1: -1.88, m3: 3.45, m12: 8.33, m36: 52 }, chg: { d1: -0.048, w1: 0.021, m1: -0.093, m3: 0.162, m12: 0.374, m36: 1.66 }, pos52: 54, vs200: 0.112 };
+    const y = watchRowFromTable(tnx);
+    ck("a yield on the watchlist carries the market table's change of its level for each window, exactly as MARKETS has it (which prints it in bp), and no per cent of its level", y.isYield && y.chg1d === -0.048 && y.chg1w === 0.021 && y.chg1m === -0.093 && y.chg3m === 0.162 && y.chg12m === 0.374 && [y.pct1d, y.pct1w, y.pct1m, y.pct3m, y.pct12m].every((v) => v === null), y);
+    ck("its distance from the 200-day average goes out in points (vs200chg), never in the per-cent field an older page prints with a %", y.vs200 === null && y.vs200chg === 0.112 && y.vs50 === null && y.pos52 === 54, y);
+    ck("a print is as of its own time; the source is named", y.asOfKind === "print" && y.asOf === "2026-11-19T15:18:00+00:00" && y.source === "Yahoo Finance", y);
+    const fx = watchRowFromTable({ ...tnx, symbol: "USDJPY=X", name: "USD/JPY", cls: "Currency", group: "fx", currency: "JPY", last: 158.42, lastAt: "2026-11-18T00:00:00Z", pct: { d1: 0.26 }, chg: { d1: 0.41 }, vs200: 2.3 });
+    ck("a price keeps its per-cent changes and its % from the 200-day average; a booked close is as of its session's date", !fx.isYield && fx.pct1d === 0.26 && fx.chg1d === 0.41 && fx.vs200 === 2.3 && fx.vs200chg === null && fx.asOfKind === "close" && fx.asOf === "2026-11-18", fx);
+    const zn = watchRowFromTable({ ...tnx, symbol: "ZN=F", name: "10Y T-Note future", vs200: -0.8 });
+    ck("a bond future sits in the rates group but is a price: per cent, as the table measures it", !zn.isYield && zn.pct1d === -0.98 && zn.vs200 === -0.8 && zn.vs200chg === null, zn);
+    const cv = (symbol: string, source: string) => watchRowFromTable({ ...tnx, symbol, source, lastAt: "2026-11-18T00:00:00Z" });
+    const official = [cv("UST2Y", "treasury"), cv("JGB10Y", "mof"), cv("UST3M", "curve"), cv("JGB2Y", "curve"), cv("DE10Y", "curve"), cv("GB10Y", "curve"), cv("EA10Y", "curve"), cv("CA10Y", "curve")];
+    ck("a yield read from an official curve is that publisher's figure for its date, and the publisher is named", official.every((r) => r.asOfKind === "published" && r.asOf === "2026-11-18" && r.isYield) && official.map((r) => r.source).join("|") === "US Treasury|Japan MOF|US Treasury|Japan MOF|Bundesbank|Bank of England|ECB|Bank of Canada", official.map((r) => [r.symbol, r.source, r.asOfKind, r.asOf]));
+    ck("a booked close's stamp is told from a print's time, also a print at midnight", closeDay("2026-11-18T00:00:00Z") === "2026-11-18" && closeDay("2026-11-18T00:00:00+00:00") === null && closeDay("2026-11-18T14:30:00Z") === null && closeDay(null) === null && sourceName("yahoo", "^TNX") === "Yahoo Finance" && isYieldRow({ group: "rates", symbol: "^TNX" }) && !isYieldRow({ group: "rates", symbol: "ZN=F" }));
+    ck("the route builds a market instrument's row with this mapping", /if \(t\) return \{ \.\.\.watchRowFromTable\(t\), symbol: w\.symbol \}/.test(readText(new URL("../supabase/functions/api/index.ts", import.meta.url), "utf8")));
+
+    // the page's reading of it (web/src/lib/time.ts), in Singapore time
+    const now = at("2026-11-19T15:30:00Z");   // 23:30 SGT on 19 Nov
+    const close = asOfOf("2026-11-19", "close", now), pub = asOfOf("2026-11-18", "published", now), today = asOfOf("2026-11-19T15:18:00+00:00", "print", now), earlier = asOfOf("2026-11-18T09:05:00Z", "print", now);
+    ck("a close by its date (\"close 19 Nov\" on a phone), a published yield by its date, today's print by its time, an earlier print by date and time", asOfCell(close) === "19 Nov" && asOfLine(close) === "close 19 Nov" && asOfCell(pub) === "18 Nov" && asOfLine(pub) === "18 Nov" && asOfCell(today) === "23:18" && asOfLine(today) === "23:18" && asOfCell(earlier) === "18 Nov 17:05", [close, pub, today, earlier].map(asOfCell));
+    ck("a session's date is its own: a US close of 18 Nov stays 18 Nov in Singapore", asOfCell(asOfOf("2026-11-18", "close", at("2026-11-19T05:00:00Z"))) === "18 Nov");
+    ck("today is Singapore's day: a print at 23:59 SGT read two minutes after midnight SGT carries its date", asOfCell(asOfOf("2026-11-19T15:59:00Z", "print", at("2026-11-19T16:01:00Z"))) === "19 Nov 23:59" && asOfCell(asOfOf("2026-11-19T16:00:00Z", "print", at("2026-11-19T16:01:00Z"))) === "00:00");
+    ck("an older server sends no kind: a date, or a stamp at midnight UTC, is a close; any other time a print", asOfOf("2026-11-18T00:00:00Z", undefined, now)?.kind === "close" && asOfCell(asOfOf("2026-11-18T00:00:00Z", undefined, now)) === "18 Nov" && asOfOf("2026-11-19", null, now)?.kind === "close" && asOfOf("2026-11-19T15:18:00Z", undefined, now)?.kind === "print");
+    ck("no as-of gives a dash, never a guessed date; the tooltip names the source", asOfCell(asOfOf(null, "close", now)) === "–" && asOfCell(asOfOf("not a time", "print", now)) === "–" && asOfTitle(close, "Yahoo Finance") === "Yahoo Finance · close of 19 Nov 2026" && asOfTitle(pub, "Japan MOF") === "Japan MOF · published for 18 Nov 2026" && asOfTitle(today, "Yahoo Finance") === "Yahoo Finance · last print 19 Nov 2026 23:18 SGT");
+
+    // a name that is neither on MARKETS nor in an index comes as a plain quote (the reviewer's R2A-06): a Treasury
+    // yield index the table lacks must not move in per cent of its level either. Made-up quotes in yahoo.ts's shape.
+    const quote = (o: Partial<QuoteLike>): QuoteLike => ({ name: null, quoteType: null, currency: "USD", price: null, prevClose: null, time: null, marketCap: null, earningsAt: null, earningsEst: null, ...o });
+    const irx = watchRowFromQuote("^IRX", "13 WEEK TREASURY BILL", quote({ name: "13 WEEK TREASURY BILL", quoteType: "INDEX", price: 3.852, prevClose: 3.871, time: Date.parse("2026-11-19T15:18:00Z") / 1000 }));
+    ck("the 13-week bill's yield index (^IRX, not on MARKETS) is a yield: its 1D is the change of its level in points (bp on the page), never a per cent of it; a print with its time, from Yahoo Finance", irx.isYield && Math.abs(irx.chg1d! + 0.019) < 1e-9 && irx.pct1d === null && irx.kind === "Fixed income" && irx.last === 3.852 && irx.asOfKind === "print" && irx.asOf === "2026-11-19T15:18:00.000Z" && irx.source === "Yahoo Finance" && irx.mcap === null && irx.earningsAt === null, irx);
+    const named = watchRowFromQuote("^XYZ", null, quote({ name: "Treasury Yield 7 Years", quoteType: "INDEX", price: 4.1, prevClose: 4.05 }));
+    const fund = watchRowFromQuote("TBIL", null, quote({ name: "US Treasury 3 Month Bill ETF", quoteType: "ETF", price: 49.9, prevClose: 49.88 }));
+    const billFund = watchRowFromQuote("XBIL", null, quote({ name: "Treasury Bill ETF", quoteType: "ETF", price: 50, prevClose: 49.9 }));
+    const stock = watchRowFromQuote("9999.T", "Stand-in KK", quote({ name: "Stand-in KK", quoteType: "EQUITY", currency: "JPY", price: 1100, prevClose: 1000, marketCap: 5e10, earningsAt: Date.parse("2026-12-01T06:00:00Z") / 1000, earningsEst: true }));
+    ck("an index Yahoo names as a Treasury yield is one too; a fund of bills and a stock are prices with a per-cent 1D, as before", named.isYield && Math.abs(named.chg1d! - 0.05) < 1e-9 && named.pct1d === null && !fund.isYield && !billFund.isYield && Math.abs(fund.pct1d! - (49.9 / 49.88 - 1) * 100) < 1e-9 && fund.chg1d === null && !stock.isYield && Math.abs(stock.pct1d! - 10) < 1e-9 && stock.chg1d === null && stock.mcap === 5e10 && stock.kind === "EQUITY" && stock.earningsAt === "2026-12-01T06:00:00.000Z" && stock.earningsEst === true, { named, fund, stock });
+    const bare = watchRowFromQuote("ZZZZ", "Typed in", undefined), half = watchRowFromQuote("^IRX", null, quote({ quoteType: "INDEX", price: 3.85 }));
+    ck("^FVX, ^TNX and ^TYX are the same yields when they come as quotes; a yield with no previous close has no 1D; no quote leaves the name and dashes", CBOE_YIELDS.every((x) => isYieldQuote(x, null, null)) && !isYieldQuote("SHV", "iShares Short Treasury Bond ETF", "ETF") && half.isYield && half.chg1d === null && half.pct1d === null && bare.name === "Typed in" && bare.last === null && bare.pct1d === null && bare.chg1d === null && bare.asOfKind === null && bare.source === null && !bare.isYield, { half, bare });
+    ck("the route builds a plain quote's row with this mapping", /return watchRowFromQuote\(w\.symbol, w\.name, q\);/.test(readText(new URL("../supabase/functions/api/index.ts", import.meta.url), "utf8")));
+  }
+
+  console.log("\n[the header's alert line: what its figure is, from the server's own words (the reviewer's R2A-05)]");
+  {
+    // the server's wording (supabase/functions/_shared/alerts.ts, which needs the database and cannot load here)
+    const src = readText(new URL("../supabase/functions/_shared/alerts.ts", import.meta.url), "utf8");
+    ck("the server still words a move \"<name> up|down <n>%\", with \" intraday\" when measured in the session", src.includes('export const alertMsg = (name: string, pct: number, intraday: boolean) => `${name} ${pct >= 0 ? "up" : "down"} ${fmtPct(pct)}${intraday ? " intraday" : ""}`;') && /const fmtPct = \(p: number\) => `\$\{Math\.abs\(p\) >= 10 \? Math\.round\(Math\.abs\(p\)\) : r1\(Math\.abs\(p\)\)\}%`;/.test(src));
+    const w = (kind: string, msg: string) => alertFigWord({ kind, msg });
+    ck("a stock measured in the session reads intraday (its largest move, kept after it comes back); measured at its official close, at close", w("stock", "KIOXIA HOLDINGS CORP. down 11% intraday") === "intraday" && w("stock", "Toyota Motor up 7.4% intraday") === "intraday" && w("stock", "Intuit Inc. down 7.2%") === "at close");
+    ck("an index while its market trades reads intraday; otherwise (a lunch break, the close) its 1D, never a guessed \"at close\"", w("index", "Nikkei 225 down 3.4% intraday") === "intraday" && w("index", "Nikkei 225 down 3.4%") === "1D" && w("index", "PHLX Semiconductor (SOX) down 4.11%") === "1D");
+    ck("a news alert has no figure word, nor a message in other words", w("mna", "M&A: Two lenders agree to merge") === null && w("buyback", "Buyback: Toyota to buy back shares") === null && w("stock", "NVIDIA Corporation fell 7.4% on the day, beyond its 5% line") === null && w("stock", "") === null);
+    ck("a news alert that names no company shows its headline without its kind", alertHeadline("M&A: Two regional lenders agree to merge in a USD 2.1bn deal") === "Two regional lenders agree to merge in a USD 2.1bn deal" && alertHeadline("Buyback: X buys back") === "X buys back" && alertHeadline("Guidance: Y raises") === "Y raises" && alertHeadline("No kind here") === "No kind here");
+  }
+
+  console.log("\n[a statements table wider than its box: where it rests, one screen back, and short-interest sector names (the designer's D-03, D-07)]");
+  {
+    // an iPhone SE: line names 128 px wide in a 357-px box, eleven periods of 72 px (the table 920 px)
+    const starts = Array.from({ length: 11 }, (_, i) => 128 + i * 72), tableW = 128 + 11 * 72;
+    const r = finRest(128, 357, starts, tableW);
+    ck("it rests with the latest periods whole and the first of them against the names: as many as fit (three of 72 px in 229), and a spacer gives the 13 px left after the last", r.k === 8 && r.left === starts[8] - 128 && r.pad === 13, r);
+    ck("at that place the scroll reaches exactly (the spacer makes the table end there) and nothing of the period before shows beside the names", tableW + r.pad - 357 === r.left && starts[7] + 72 - r.left === 128, { r, end: tableW + r.pad - 357 });
+    const uneven = [128, 200, 290, 362, 450], q = finRest(128, 357, uneven, 530);
+    ck("periods of different widths: the first from which the rest fit (362 to 530 in 229 px), 61 px of spacer", q.k === 3 && q.left === 234 && q.pad === 61, q);
+    ck("a table that fits rests at its start", finRest(128, 1200, starts, tableW).left === 0 && finRest(128, 1200, starts, tableW).k === 0);
+    ck("a single period wider than the room for periods rests at the start, with no spacer", JSON.stringify(finRest(128, 357, [128], 500)) === JSON.stringify({ k: 0, left: 0, pad: 0 }) && JSON.stringify(finRest(128, 357, [], 128)) === JSON.stringify({ k: 0, left: 0, pad: 0 }));
+    const steps = [r.left]; for (let i = 0; i < 6 && steps[steps.length - 1] > 0; i++) steps.push(finBack(128, 357, starts, steps[steps.length - 1]));
+    ck(`"earlier years" goes back a screen at a time, each time to a period's edge, the one before the screen's first period ending against the names: ${steps.join(" → ")}`, steps.join() === "576,360,144,0" && steps.every((x) => (x + 128 - 128) % 72 === 0), steps);
+    ck("from a place between two edges it goes back to an edge; at the start it stays", finBack(128, 357, starts, 600) === 432 && finBack(128, 357, starts, 0) === 0 && finBack(128, 357, [128], 0) === 0);
+    // the right edge (the designer's verdict on D-03, 20 Nov 2026): periods of 72.6 px left 11 to 66 px of the next
+    // one showing at the box's right edge after a press or a swipe; each period now takes room ÷ n
+    const PHONES: Array<[string, number, number, number]> = [["iPhone SE", 357, 76, 129], ["iPhone 13", 372, 81, 129], ["Pixel 7", 394, 88, 130], ["iPhone 14 Pro Max", 412, 94, 130]];
+    for (const [phone, boxW, col, names] of PHONES) {
+      const f = finFit(boxW, 128, 72.609375, 11);
+      // every place the box can rest: a period's edge against the names, from the start to where it rests
+      const st = Array.from({ length: 11 }, (_, i) => (f?.names ?? 0) + i * (f?.col ?? 0)), tw = (f?.names ?? 0) + 11 * (f?.col ?? 0), rest = f && finRest(f.names, boxW, st, tw);
+      const stops = rest ? Array.from({ length: rest.k + 1 }, (_, k) => k * f!.col) : [];
+      // at the k-th place: period k against the names, period k + 2 ending at the box's right edge, period k + 3 (if
+      // any) starting there
+      const clean = stops.every((s, k) => st[k] - s === f!.names && st[k + 2] + f!.col - s === boxW && (k + 3 >= st.length || st[k + 3] - s >= boxW));
+      ck(`${phone} (a ${boxW}-px box, names 128 px, eleven periods of 72.6 px): three periods of ${f?.col} px, the names ${f?.names} px; at each of its ${stops.length} resting places the third period ends exactly at the box's right edge and the next starts there`, !!f && f.n === 3 && f.col === col && f.names === names && f.names + 3 * f.col === boxW && !!rest && rest.pad === 0 && rest.left === 8 * col && clean, { f, rest, stops });
+    }
+    const back = [PHONES[1]].map(([, boxW]) => { const f = finFit(boxW, 128, 72.609375, 11)!, st = Array.from({ length: 11 }, (_, i) => f.names + i * f.col), out = [finRest(f.names, boxW, st, f.names + 11 * f.col).left]; for (let i = 0; i < 6 && out[out.length - 1] > 0; i++) out.push(finBack(f.names, boxW, st, out[out.length - 1])); return out; })[0];
+    ck(`iPhone 13: "earlier years" goes back exactly three periods at a time (${back.join(" → ")}), the last screen the first three`, back.join() === "648,405,162,0", back);
+    ck("a layout width already whole is not rounded up (73 px stays 73); 1/64 px more is (74)", finFit(372, 128, 73, 11)?.col === 81 && finFit(300, 80, 73, 11)?.n === 3 && finFit(300, 80, 73 + 1 / 64, 11)?.n === 2 && finFit(300, 80, 73 + 1 / 64, 11)?.col === 110);
+    ck("nothing to fit: every period fits beside the names, one period is wider than the room, or there are none", finFit(1200, 270, 72.6, 11) === null && finFit(357, 128, 240, 11) === null && finFit(357, 128, 0, 0) === null && finFit(357, 128, 72.6, 3) === null);
+    const pc = finFit(1019.5, 270.25, 90.3, 12);
+    ck(`a computer's box with fractions (1,019.5 px, names 270.25): ${pc?.n} periods of ${pc?.col} px, the names ${pc?.names} px, filling the box exactly and never narrower than before`, !!pc && pc.n === 8 && pc.col === 93 && pc.names === 275.5 && pc.names + pc.n * pc.col === 1019.5 && pc.names >= 270.25, pc);
+    const tr = sectorShort("輸送用機器", 25), ws = sectorShort("倉庫・運輸関連業", 25), gics = sectorShort("Consumer Discretionary", 25), none = sectorShort(null);
+    ck(`a JPX sector is named in English, whole up to 25 characters ("${tr.text}"), cut at a word beyond ("${ws.text}"), with the English and the Japanese on hover ("${ws.full}")`, tr.text === "Transportation Equipment" && ws.text === "Warehousing & Harbor…" && ws.full === "Warehousing & Harbor Transportation Services (倉庫・運輸関連業)" && tr.full === "Transportation Equipment (輸送用機器)", { tr, ws });
+    ck("a sector the map does not know (the server's GICS names) is kept as it is; none gives an empty cell; without a limit nothing is cut", gics.text === "Consumer Discretionary" && gics.full === "Consumer Discretionary" && none.text === "" && sectorShort("倉庫・運輸関連業").text === "Warehousing & Harbor Transportation Services");
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

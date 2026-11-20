@@ -10,12 +10,15 @@ import { Treemap, type TreeGroup } from "../components/Treemap";
 import { hideCard, money, openAsset, showCard } from "../components/CompanyCard";
 import { SectorDrawer } from "../components/SectorDrawer";
 import { Bars } from "../components/Bars";
+import { BreadthChart } from "../components/BreadthChart";
 import { Star } from "../components/Star";
 import { useApi } from "../lib/useApi";
 import type { TableRow } from "../lib/types";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtStamp } from "../lib/time";
 import { mergeClasses } from "../lib/classes";
+import { RANGE_52W } from "./Market";
+import { sectorShort } from "../lib/sectors";
 
 export { INDICES, type IndexId } from "../lib/indices";
 
@@ -84,15 +87,20 @@ function BreadthTable({ s, hist }: { s: IndexStats; hist: BreadthRow[] }) {
           <tr><td className="l">Names down</td>{cols.map((c) => <td key={c.label} className="num dn">{pc(c.down, c.n)}</td>)}</tr>
           <tr><td className="l">Median move</td>{cols.map((c) => <td key={c.label} className={`num ${signCls(c.median)}`}>{fmtPct(c.median, 1)}</td>)}</tr>
           <tr><td className="l">Average move</td>{cols.map((c) => <td key={c.label} className={`num ${signCls(c.mean)}`}>{fmtPct(c.mean, 1)}</td>)}</tr>
-          <tr className="sep"><td className="l" title="Share of names above their 50-day average at the start of the window (1D = latest session)">Above 50d, window start</td>{cols.map((c) => <td key={c.label} className="num">{c.then ? pc(c.then.above50, c.then.n) : "–"}</td>)}</tr>
-          <tr><td className="l" title="Share of names above their 200-day average at the start of the window">Above 200d, window start</td>{cols.map((c) => <td key={c.label} className="num">{c.then ? pc(c.then.above200, c.then.n) : "–"}</td>)}</tr>
+          <tr className="sep"><td className="l" title={`Share of today's ${b.n} members above their 50-day average at the start of the window (1D = latest session)`}>Above 50d, window start</td>{cols.map((c) => <td key={c.label} className="num">{c.then ? pc(c.then.above50, c.then.n) : "–"}</td>)}</tr>
+          <tr><td className="l" title={`Share of today's ${b.n} members above their 200-day average at the start of the window`}>Above 200d, window start</td>{cols.map((c) => <td key={c.label} className="num">{c.then ? pc(c.then.above200, c.then.n) : "–"}</td>)}</tr>
           <tr><td className="l">52w highs / lows, window start</td>{cols.map((c) => <td key={c.label} className="num mut">{c.then ? `${c.then.new_hi} / ${c.then.new_lo}` : "–"}</td>)}</tr>
           <tr><td className="l mut">Session</td>{cols.map((c) => <td key={c.label} className="num mut" style={{ fontSize: 9.5 }}>{c.then?.d ?? "–"}</td>)}</tr>
         </tbody>
       </table>
+      <div className="brnote mut" id="br-members">{PAST_MEMBERS(b.n, true)}</div>
     </>
   );
 }
+/** What the start-of-window figures and the three-year chart count. The server's breadth_history is recomputed each
+ *  day for every past date over the index's members as of that day's run, so the past is today's members: a company
+ *  that has left the index is missing, and one that joined later counts from before it joined. Said where they show. */
+export const PAST_MEMBERS = (n: number, chart: boolean) => `${chart ? "Window start and the three-year chart" : "Start of each window"}: today's ${n} members on each past day; a company that has left the index is not in ${chart ? "them" : "it"}.`;
 
 // ---- flow by sector: turnover against the three-month pattern, plus the day's net money flow ----
 function SectorFlow({ s, onSector }: { s: IndexStats; onSector: (sector: string) => void }) {
@@ -142,12 +150,23 @@ function Sectors({ s, onSector }: { s: IndexStats; onSector: (sector: string) =>
   );
 }
 
-function Movers({ rows, title }: { rows: StatRow[]; title: string }) {
+/** One list of MOVERS, headed NAME · SECTOR · LAST · 1D · 1W (the designer's D-04, 19 Nov 2026: the fifth column was
+ *  the 1W change and nothing said so). The sector goes first when the list is narrow (tokens.css, `.mvwrap`). */
+function Movers({ rows, title, s }: { rows: StatRow[]; title: string; s: IndexStats }) {
+  const live = s.live ? `today's quotes of ${fmtStamp(s.live.asOf)}` : null;
   return (
-    <>
+    <div className="mvwrap">
       <div className="minih">{title}</div>
-      <table className="secT mvT"><colgroup><col style={{ width: "40%" }} /><col style={{ width: "26%" }} /><col style={{ width: "13%" }} /><col style={{ width: "10.5%" }} /><col style={{ width: "10.5%" }} /></colgroup><tbody>{rows.map((r) => <tr key={r.symbol}><td className="l nm" title={`${r.name} (${r.symbol})`}><Name r={r} /></td><td className="l mut nm" title={r.sector ?? ""}>{r.sector ?? ""}</td><td className="num">{fmtNum(r.close, r.close >= 1000 ? 0 : 2)}</td><td className={`num ${signCls(r.pct1d)}`}>{fmtPct(r.pct1d, 1)}</td><td className={`num ${signCls(r.pct1w)}`}>{fmtPct(r.pct1w, 1)}</td></tr>)}</tbody></table>
-    </>
+      <table className="secT mvT eqmv">
+        <thead><tr>
+          <th className="l c-nm">Name</th><th className="l c-sec">Sector</th>
+          <th className="c-px" title={live ? `Price: ${live}` : `Close of ${s.asOf ?? "–"}`}>Last</th>
+          <th className="c-ch" title={live ? `INTRADAY: today's move so far, from ${live}` : `Change from the previous close to the close of ${s.asOf ?? "–"}`}>1D</th>
+          <th className="c-ch" title={`Change over one week, to the close of ${s.asOf ?? "–"}`}>1W</th>
+        </tr></thead>
+        <tbody>{rows.map((r) => <tr key={r.symbol}><td className="l nm c-nm" title={`${r.name} (${r.symbol})`}><Name r={r} /></td><td className="l mut nm c-sec" title={r.sector ?? ""}>{r.sector ?? ""}</td><td className="num c-px">{fmtNum(r.close, r.close >= 1000 ? 0 : 2)}</td><td className={`num c-ch ${signCls(r.pct1d)}`}>{fmtPct(r.pct1d, 1)}</td><td className={`num c-ch ${signCls(r.pct1w)}`}>{fmtPct(r.pct1w, 1)}</td></tr>)}</tbody>
+      </table>
+    </div>
   );
 }
 
@@ -165,16 +184,9 @@ export function HeatMap({ s, rows, height }: { s: IndexStats; rows: StatRow[]; h
 }
 
 // ---- Japan short selling (JPX) ----
-// JPX reports the short-selling share by its 33 industry groups, in Japanese; English names as JPX publishes them.
-const TSE33: Record<string, string> = {
-  "水産・農林業": "Fishery, Agriculture & Forestry", "鉱業": "Mining", "建設業": "Construction", "食料品": "Foods", "繊維製品": "Textiles & Apparels",
-  "パルプ・紙": "Pulp & Paper", "化学": "Chemicals", "医薬品": "Pharmaceutical", "石油・石炭製品": "Oil & Coal Products", "ゴム製品": "Rubber Products",
-  "ガラス・土石製品": "Glass & Ceramics Products", "鉄鋼": "Iron & Steel", "非鉄金属": "Nonferrous Metals", "金属製品": "Metal Products", "機械": "Machinery",
-  "電気機器": "Electric Appliances", "輸送用機器": "Transportation Equipment", "精密機器": "Precision Instruments", "その他製品": "Other Products",
-  "電気・ガス業": "Electric Power & Gas", "陸運業": "Land Transportation", "海運業": "Marine Transportation", "空運業": "Air Transportation",
-  "倉庫・運輸関連業": "Warehousing & Harbor Transportation Services", "情報・通信業": "Information & Communication", "卸売業": "Wholesale Trade", "小売業": "Retail Trade",
-  "銀行業": "Banks", "証券、商品先物取引業": "Securities & Commodity Futures", "保険業": "Insurance", "その他金融業": "Other Financing Business", "不動産業": "Real Estate", "サービス業": "Services",
-};
+/** SHORT INTEREST for a Tokyo list (JPX): three columns at natural height, nothing in a box of its own (D-07; the
+ *  panel was a 188-px box over 538 px of content): the market's short-selling share with its chart; the largest
+ *  reported positions, headed; the share by sector, then the margin balances. One column on a phone. */
 export function JpShortPanel({ idx }: { idx: string }) {
   const j = useApi<JpShorts>("jp_shorts", { idx }, 0);
   const d = j.data;
@@ -184,35 +196,37 @@ export function JpShortPanel({ idx }: { idx: string }) {
   const mg0 = d.margin[0], mg1 = d.margin[1];
   const wow = (a: number | null | undefined, b: number | null | undefined) => (a != null && b ? `${a - b > 0 ? "+" : ""}${(((a - b) / b) * 100).toFixed(1)}%` : "–");
   return (
-    <>
-      <div className="krow">
-        <span><span className="k">Short selling share · {last?.d ?? "–"}</span><span className="v">{last?.ratio == null ? "–" : `${last.ratio.toFixed(1)}%`}</span></span>
-        <span><span className="k">5-day / 20-day avg</span><span className="v" style={{ fontSize: 13 }}>{avg(5)?.toFixed(1) ?? "–"}% / {avg(20)?.toFixed(1) ?? "–"}%</span></span>
-        <span><span className="k">Reported positions ≥0.5% · {d.positions.asOf ?? "–"}</span><span className="v" style={{ fontSize: 13 }}>{d.positions.names} of {d.positions.covered} names</span></span>
-      </div>
-      <div className="minih">Short-selling share of TSE turnover, daily · 12 months</div>
-      <Bars data={d.market.map((m) => ({ d: m.d, v: m.ratio }))} fmt={(v) => `${v.toFixed(1)}%`} baseline={avg(20)} height={120} />
-      <div className="msg2">
-        <div>
-          <div className="minih">Largest reported short positions (sum of holders ≥0.5%)</div>
-          <table className="secT"><tbody>{d.positions.top.slice(0, 12).map((p) => <tr key={p.symbol}><td className="l nm"><Name r={p} /></td><td className="l mut nm">{p.sector ?? ""}</td><td className="num mut">{p.holders}</td><td className="num">{(p.ratio * 100).toFixed(2)}%</td></tr>)}</tbody></table>
+    <div className="msg3" id="eq-short">
+      <div>
+        <div className="minih">TSE short-selling share</div>
+        <div className="krow">
+          <span><span className="k">Short-selling share · <span className="nb">{last?.d ?? "–"}</span></span><span className="v">{last?.ratio == null ? "–" : `${last.ratio.toFixed(1)}%`}</span></span>
+          <span><span className="k">5-day / 20-day avg</span><span className="v" style={{ fontSize: 13 }}>{avg(5)?.toFixed(1) ?? "–"}% / {avg(20)?.toFixed(1) ?? "–"}%</span></span>
+          <span><span className="k">Reported positions ≥0.5% · <span className="nb">{d.positions.asOf ?? "–"}</span></span><span className="v" style={{ fontSize: 13 }}>{d.positions.names} of {d.positions.covered} names</span></span>
         </div>
-        <div>
-          <div className="minih">Short selling share by sector · {d.sectorsAsOf ?? "–"}</div>
-          <table className="secT"><tbody>{[...d.sectors.slice(0, 6), ...d.sectors.slice(-4)].map((x, i) => <tr key={x.sector + i}><td className="l" title={x.sector}>{TSE33[x.sector] ?? x.sector}</td><td className="num mut">{money(x.total == null ? null : x.total * 1e6)}</td><td className="num" style={{ background: shade((x.ratio ?? 0) - (last?.ratio ?? 0), 15) }}>{x.ratio == null ? "–" : `${x.ratio.toFixed(1)}%`}</td></tr>)}</tbody></table>
-          {mg0 && (
-            <>
-              <div className="minih" style={{ marginTop: 8 }}>Margin balances, market total · week to {mg0.d}</div>
-              <table className="secT"><tbody>
-                <tr><td className="l">Shares sold short (売残)</td><td className="num">{money((mg0.sellValue ?? 0) * 1e6)} JPY</td><td className={`num ${signCls(mg0.sellValue != null && mg1?.sellValue ? mg0.sellValue - mg1.sellValue : null)}`}>{wow(mg0.sellValue, mg1?.sellValue)}</td></tr>
-                <tr><td className="l">Bought on margin (買残)</td><td className="num">{money((mg0.buyValue ?? 0) * 1e6)} JPY</td><td className={`num ${signCls(mg0.buyValue != null && mg1?.buyValue ? mg0.buyValue - mg1.buyValue : null)}`}>{wow(mg0.buyValue, mg1?.buyValue)}</td></tr>
-                <tr><td className="l">Buy / sell ratio (倍率)</td><td className="num">{mg0.buyShares && mg0.sellShares ? (mg0.buyShares / mg0.sellShares).toFixed(2) : "–"}×</td><td className="num mut">{mg1?.buyShares && mg1.sellShares ? `${(mg1.buyShares / mg1.sellShares).toFixed(2)}× prior` : ""}</td></tr>
-              </tbody></table>
-            </>
-          )}
-        </div>
+        <div className="minih">Share of TSE turnover sold short, daily · 12 months</div>
+        <Bars data={d.market.map((m) => ({ d: m.d, v: m.ratio }))} fmt={(v) => `${v.toFixed(1)}%`} baseline={avg(20)} height={120} />
       </div>
-    </>
+      <div>
+        <div className="minih">Largest reported positions (holders ≥ 0.5%) · <span className="nb">{d.positions.asOf ?? "–"}</span></div>
+        <table className="secT shpos"><thead><tr><th className="l">Name</th><th className="l sec">Sector</th><th title="Holders reporting a short position of 0.5% or more">Holders</th><th title="Their short positions together, as a share of the shares outstanding">% of shares</th><th className="dt" title="The latest report among them">Date</th></tr></thead>
+          <tbody>{d.positions.top.slice(0, 12).map((p) => { const sc = sectorShort(p.sector, 25); return <tr key={p.symbol}><td className="l nm"><Name r={p} /></td><td className="l mut sec" title={sc.full}>{sc.text}</td><td className="num mut">{p.holders}</td><td className="num">{(p.ratio * 100).toFixed(2)}%</td><td className="num mut dt">{p.d}</td></tr>; })}</tbody></table>
+      </div>
+      <div>
+        <div className="minih">Short-selling share by sector · <span className="nb">{d.sectorsAsOf ?? "–"}</span></div>
+        <table className="secT"><thead><tr><th className="l">Sector</th><th title="The sector's TSE turnover that day, JPY">Turnover</th><th title="Short selling's share of that turnover">Short %</th></tr></thead><tbody>{[...d.sectors.slice(0, 6), ...d.sectors.slice(-4)].map((x, i) => { const sc = sectorShort(x.sector); return <tr key={x.sector + i}><td className="l wrap" title={sc.full}>{sc.text}</td><td className="num mut">{money(x.total == null ? null : x.total * 1e6)}</td><td className="num" style={{ background: shade((x.ratio ?? 0) - (last?.ratio ?? 0), 15) }}>{x.ratio == null ? "–" : `${x.ratio.toFixed(1)}%`}</td></tr>; })}</tbody></table>
+        {mg0 && (
+          <>
+            <div className="minih" style={{ marginTop: 8 }}>Margin balances, market total · week to <span className="nb">{mg0.d}</span></div>
+            <table className="secT"><tbody>
+              <tr><td className="l">Shares sold short (売残)</td><td className="num">{money((mg0.sellValue ?? 0) * 1e6)} JPY</td><td className={`num ${signCls(mg0.sellValue != null && mg1?.sellValue ? mg0.sellValue - mg1.sellValue : null)}`}>{wow(mg0.sellValue, mg1?.sellValue)}</td></tr>
+              <tr><td className="l">Bought on margin (買残)</td><td className="num">{money((mg0.buyValue ?? 0) * 1e6)} JPY</td><td className={`num ${signCls(mg0.buyValue != null && mg1?.buyValue ? mg0.buyValue - mg1.buyValue : null)}`}>{wow(mg0.buyValue, mg1?.buyValue)}</td></tr>
+              <tr><td className="l">Buy / sell ratio (倍率)</td><td className="num">{mg0.buyShares && mg0.sellShares ? (mg0.buyShares / mg0.sellShares).toFixed(2) : "–"}×</td><td className="num mut">{mg1?.buyShares && mg1.sellShares ? `${(mg1.buyShares / mg1.sellShares).toFixed(2)}× prior` : ""}</td></tr>
+            </tbody></table>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -248,7 +262,7 @@ function Screener({ s }: { s: IndexStats }) {
       </div>
       <div style={{ maxHeight: 520, overflow: "auto" }}>
         <table className="secT">
-          <thead><tr>{th("symbol", "Symbol", true)}{th("name", "Name", true)}{th("sector", "Sector", true)}{th("close", "Last")}{th("pct1d", "1D")}{th("pct1w", "1W")}{th("pct1m", "1M")}{th("pct3m", "3M")}{th("pct12m", "12M")}{th("vs50", "vs 50d")}{th("vs200", "vs 200d")}{th("pos52", "52w pos")}{hasM && th("mcap", "Mcap")}{hasT && th("turnover", "Turnover")}{hasT && th("volRel", "Vol / 3M avg")}{hasF && th("mf_net", "Net flow 1D")}{hasShort && th("shortRatio", jp ? "Short pos %" : "Short vol %")}</tr></thead>
+          <thead><tr>{th("symbol", "Symbol", true)}{th("name", "Name", true)}{th("sector", "Sector", true)}{th("close", "Last")}{th("pct1d", "1D")}{th("pct1w", "1W")}{th("pct1m", "1M")}{th("pct3m", "3M")}{th("pct12m", "12M")}{th("vs50", "vs 50d")}{th("vs200", "vs 200d")}{th("pos52", RANGE_52W)}{hasM && th("mcap", "Mcap")}{hasT && th("turnover", "Turnover")}{hasT && th("volRel", "Vol / 3M avg")}{hasF && th("mf_net", "Net flow 1D")}{hasShort && th("shortRatio", jp ? "Short pos %" : "Short vol %")}</tr></thead>
           <tbody>{rows.map((r) => <tr key={r.symbol}><td className="l"><Star symbol={r.symbol} name={r.name} /> <b className="lnk" onMouseEnter={(e) => showCard(r.symbol, e)} onMouseLeave={hideCard} onClick={() => openAsset(r.symbol)}>{r.symbol}</b></td><td className="l nm"><Name r={r} /></td><td className="l mut" title={r.industry ?? ""}>{r.sector ?? ""}{r.industry ? <span className="mut"> · {r.industry}</span> : null}</td><td className="num">{fmtNum(r.close, r.close >= 1000 ? 0 : 2)}</td>{cell(r.pct1d, 4)}{cell(r.pct1w, 8)}{cell(r.pct1m, 12)}{cell(r.pct3m, 20)}{cell(r.pct12m, 50)}{cell(vs(r.close, r.dma50), 10)}{cell(vs(r.close, r.dma200), 20)}<td className="num mut">{pos52(r) == null ? "–" : `${Math.round(pos52(r)!)}%`}</td>{hasM && <td className="num mut">{money(r.mcap)}</td>}{hasT && <td className="num mut">{money(r.turnover)}</td>}{hasT && <td className="num" style={{ background: flowShade(volRel(r) == null ? null : (volRel(r)! - 100) / 50, 3) }}>{volRel(r) == null ? "–" : `${Math.round(volRel(r)!)}%`}</td>}{hasF && <td className={`num ${signCls(r.mf_net)}`}>{signed(r.mf_net)}</td>}{hasShort && <td className="num mut">{r.shortRatio == null ? "–" : `${(r.shortRatio * 100).toFixed(jp ? 2 : 0)}%`}</td>}</tr>)}</tbody>
         </table>
       </div>
@@ -284,33 +298,43 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
   const merged = useMemo(() => (s ? mergeClasses(s.rows) : []), [s]);
   const movers = useMemo(() => { const xs = merged.filter((r) => r.pct1d != null).sort((a, b) => b.pct1d! - a.pct1d!); return { top: xs.slice(0, 15), bottom: xs.slice(-15).reverse() }; }, [merged]);
   const drawerRows = s && drawer ? merged.filter((r) => (r.sector ?? "Other") === drawer) : [];
+  // The panels in the designer's order (plan review §4.3, 19 Nov 2026): the index and its drivers; the two sector
+  // tables side by side; movers; breadth with its three-year chart; short interest at natural height; the heat
+  // map; the screener. The one-screen layout places them by `k` (tokens.css), never by number.
   return (
     <>
       <div className="c12">{toggle}<PeriodBar period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} /></div>
-      <Panel no="01" title={ix.label} span={8} aux={<>{ix.symbol}{main?.proxyFor && <span className="badge proxy" title="1306.T ETF stands in for the index intraday; official JPX close for daily figures">PROXY</span>}</>}>
+      <Panel no="01" title={ix.label} span={8} k="eq-index" aux={<>{ix.symbol}{main?.proxyFor && <span className="badge proxy" title="1306.T ETF stands in for the index intraday; official JPX close for daily figures">PROXY</span>}</>}>
         {main ? <div className="bigwrap"><ChartPanel row={main} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes /></div> : <Empty title="Awaiting the data feed">{table.error ?? "The index chart loads with the market table."}</Empty>}
       </Panel>
-      <Panel no="02" title="SUPPORTING" span={4} aux={`${support.length} of 4`}>
-        {support.length ? <div className="sqgrid">{support.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="square" />)}</div> : <Empty title="Supporting charts">Futures, FX, rates and volatility that drive this index.</Empty>}
+      <Panel no="02" title="DRIVERS" span={4} k="eq-drivers" aux={`${support.length} of 4`}>
+        {support.length ? <div className="sqgrid">{support.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="square" />)}</div> : <Empty title="Drivers">Four related markets shown beside the index (an index future, other indices, a currency, a yield, the VIX or copper) load with the market table.</Empty>}
       </Panel>
-      <Panel no="03" title="MARKET BREADTH" span={6} aux={statsAux}>{s ? <BreadthTable s={s} hist={bh.data?.rows ?? []} /> : noStats}</Panel>
-      <Panel no="04" title="1D FLOW BY SECTOR" span={6} aux={s ? <>{s.idx} · {ccy}{s.quoteAt ? ` · turnover ${fmtStamp(s.quoteAt)}` : ""}{s.mfD ? ` · net flow ${s.mfD}` : ""}{standIn}</> : ""}>{s ? <SectorFlow s={s} onSector={setDrawer} /> : noStats}</Panel>
-      <Panel no="05" title="SECTOR PERFORMANCE" span={6} aux={<>{statsAux} · <span title={(ix.stats === "SP500" ? "Official GICS sectors from the S&P 500 constituent list. " : "GICS sector names; classification from Yahoo Finance (official GICS where the name is in the S&P 500). ") + "Sector moves are weighted by the published index weight where there is one, otherwise by market cap."}>GICS sectors · cap-weighted</span></>}>{s ? <Sectors s={s} onSector={setDrawer} /> : noStats}</Panel>
-      <Panel no="06" title="SHORT INTEREST" span={6} aux={jp ? "JPX 空売り集計 · 空売り残高報告 · 信用取引現在高" : s?.shorts ? <>FINRA consolidated short-sale volume · {s.shorts.d}</> : ""}>
+      <Panel no="03" title="SECTOR PERFORMANCE" span={6} k="eq-sectors" aux={<>{statsAux} · <span title={(ix.stats === "SP500" ? "Official GICS sectors from the S&P 500 constituent list. " : "GICS sector names; classification from Yahoo Finance (official GICS where the name is in the S&P 500). ") + "Sector moves are weighted by the published index weight where there is one, otherwise by market cap."}>GICS sectors · cap-weighted</span></>}>{s ? <Sectors s={s} onSector={setDrawer} /> : noStats}</Panel>
+      <Panel no="04" title="FLOW BY SECTOR · 1D" span={6} k="eq-flow" aux={s ? <>{s.idx} · {ccy}{s.quoteAt ? ` · turnover ${fmtStamp(s.quoteAt)}` : ""}{s.mfD ? ` · net flow ${s.mfD}` : ""}{standIn}</> : ""}>{s ? <SectorFlow s={s} onSector={setDrawer} /> : noStats}</Panel>
+      <Panel no="05" title="MOVERS" span={12} k="eq-movers" aux={statsAux}>{s ? <div className="msg2"><Movers rows={movers.top} title="Top 15 by 1D" s={s} /><Movers rows={movers.bottom} title="Bottom 15 by 1D" s={s} /></div> : noStats}</Panel>
+      <Panel no="06" title="MARKET BREADTH" span={12} k="eq-breadth" aux={statsAux}>
+        {s ? <div className="brwrap"><div><BreadthTable s={s} hist={bh.data?.rows ?? []} /></div><div className="brchart"><div className="minih" id="br-caption" title="Each day counted over the index's members as of today: a company that has left the index is not in the line, and one that joined later counts from before it joined">Breadth over three years, daily · today's {s.breadth?.n ?? s.rows.length} members</div><BreadthChart rows={bh.data?.rows ?? []} height={210} /></div></div> : noStats}
+      </Panel>
+      <Panel no="07" title="SHORT INTEREST" span={12} k="eq-short" aux={jp ? "JPX short-selling ratio (空売り集計) · short-position reports (空売り残高報告) · margin balances (信用取引現在高)" : s?.shorts ? <>FINRA consolidated short-sale volume · {s.shorts.d}</> : ""}>
         {jp ? <JpShortPanel idx={ix.stats} /> : s?.shorts ? (
-          <>
-            <div className="krow"><span><span className="k">Avg short-volume share</span><span className="v">{(s.shorts.avgRatio * 100).toFixed(1)}%</span></span><span><span className="k">Names</span><span className="v">{s.rows.filter((r) => r.shortRatio != null).length}</span></span></div>
-            <div className="minih">Average short-volume share, daily · 12 months</div>
-            <Bars data={(s.shorts.history ?? []).map((h) => ({ d: h.d, v: h.v == null ? null : h.v * 100 }))} fmt={(v) => `${v.toFixed(1)}%`} height={120} />
-            <div className="minih" style={{ marginTop: 8 }}>Highest short-volume share</div>
-            <table className="secT"><tbody>{s.shorts.top.slice(0, 10).map((x) => <tr key={x.symbol}><td className="l"><Name r={x} /></td><td className="num">{(x.ratio * 100).toFixed(0)}%</td></tr>)}</tbody></table>
-          </>
+          <div className="msg3" id="eq-short">
+            <div>
+              <div className="minih">Short-sale share of volume, all names</div>
+              <div className="krow"><span><span className="k">Avg short-volume share</span><span className="v">{(s.shorts.avgRatio * 100).toFixed(1)}%</span></span><span><span className="k">Names</span><span className="v">{s.rows.filter((r) => r.shortRatio != null).length}</span></span></div>
+              <div className="minih">Average short-volume share, daily · 12 months</div>
+              <Bars data={(s.shorts.history ?? []).map((h) => ({ d: h.d, v: h.v == null ? null : h.v * 100 }))} fmt={(v) => `${v.toFixed(1)}%`} height={120} />
+            </div>
+            <div>
+              <div className="minih">Highest short-volume share · <span className="nb">{s.shorts.d}</span></div>
+              <table className="secT"><thead><tr><th className="l">Name</th><th title="Short-sale volume as a share of the day's volume (FINRA)">Short vol %</th></tr></thead><tbody>{s.shorts.top.slice(0, 10).map((x) => <tr key={x.symbol}><td className="l"><Name r={x} /></td><td className="num">{(x.ratio * 100).toFixed(0)}%</td></tr>)}</tbody></table>
+            </div>
+          </div>
         ) : <Empty title={us ? "No short-volume data" : "No short data for this market"}>{us ? "The FINRA job runs after the US close." : "Public per-name short data is not available for this exchange."}</Empty>}
       </Panel>
-      <Panel no="07" title="HEAT MAP" span={12} aux={s ? <>{statsAux} · GICS sectors · colour = 1D % · size = {hasMcap ? "market cap" : s.rows.some((r) => r.weight != null) ? "index weight" : "equal"}</> : ""}>{s ? <HeatMap s={s} rows={merged} /> : noStats}</Panel>
-      <Panel no="08" title="MOVERS" span={12} aux={statsAux}>{s ? <div className="msg2"><div><Movers rows={movers.top} title="Top 15 · 1D" /></div><div><Movers rows={movers.bottom} title="Bottom 15 · 1D" /></div></div> : noStats}</Panel>
-      <Panel no="09" title="SCREENER" span={12} aux={statsAux}>{s ? <Screener s={s} /> : noStats}</Panel>
-      {drawer && s && <SectorDrawer title={ix.label} sector={drawer} rows={drawerRows} ccy={ccy} onClose={() => setDrawer(null)} />}
+      <Panel no="08" title="HEAT MAP" span={12} k="eq-heat" aux={s ? <>{statsAux} · GICS sectors · colour = 1D % · size = {hasMcap ? "market cap" : s.rows.some((r) => r.weight != null) ? "index weight" : "equal"}</> : ""}>{s ? <HeatMap s={s} rows={merged} /> : noStats}</Panel>
+      <Panel no="09" title="SCREENER" span={12} k="eq-screener" aux={statsAux}>{s ? <Screener s={s} /> : noStats}</Panel>
+      {drawer && s && <SectorDrawer title={ix.label} sector={drawer} rows={drawerRows} ccy={ccy} jp={jp} onClose={() => setDrawer(null)} />}
     </>
   );
 }

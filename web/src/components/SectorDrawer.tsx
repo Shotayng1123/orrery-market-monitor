@@ -7,8 +7,10 @@ type Key = "name" | "industry" | "close" | "pct1d" | "pct1w" | "pct1m" | "pct3m"
 const UP_RGB = "63,208,126", DN_RGB = "255,77,66";
 const shade = (v: number | null | undefined, full = 6) => (v == null || v === 0 ? undefined : `rgba(${v > 0 ? UP_RGB : DN_RGB},${(Math.min(1, Math.abs(v) / full) * 0.55).toFixed(3)})`);
 
-/** Overlay listing one sector's companies with the overview columns; hover a name for the card, click to open it. */
-export function SectorDrawer({ title, sector, rows, ccy, onClose }: { title: string; sector: string; rows: DrawerRow[]; ccy: string; onClose: () => void }) {
+/** Overlay listing one sector's companies with the overview columns; hover a name for the card, click to open it.
+ *  The short column says which short figure it is: reported positions in Tokyo, FINRA's short-volume share in the
+ *  US (the designer's D-46: "SHORT" meant two things). */
+export function SectorDrawer({ title, sector, rows, ccy, jp, onClose }: { title: string; sector: string; rows: DrawerRow[]; ccy: string; jp: boolean; onClose: () => void }) {
   const [sort, setSort] = useState<{ k: Key; dir: 1 | -1 }>({ k: "mcap", dir: -1 });
   useEffect(() => { const key = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", key); return () => window.removeEventListener("keydown", key); }, [onClose]);
   const val = (r: DrawerRow, k: Key): number | string | null => k === "flow" ? (r.turnover != null && r.adv_turnover ? r.turnover / r.adv_turnover : null) : k === "shortRatio" ? (r.shortRatio ?? null) : k === "industry" ? (r.industry ?? null) : (r[k] as number | string | null);
@@ -23,7 +25,7 @@ export function SectorDrawer({ title, sector, rows, ccy, onClose }: { title: str
         <div className="phead"><span className="pno">{title}</span><span className="ptitle">{sector}</span><span className="paux">{rows.length} names{hasM ? ` · market cap ${money(totM, ccy)}` : ""}{hasT ? ` · turnover ${money(totT, ccy)}` : ""}{hasF ? ` · net flow ${totF >= 0 ? "+" : ""}${money(totF)}` : ""}</span><span className="chip-sm" onClick={onClose}>CLOSE  ESC</span></div>
         <div className="drawer-body">
           <table className="secT">
-            <thead><tr>{th("name", "Name", true)}{th("industry", "Industry", true)}{th("close", "Last")}{th("pct1d", "1D")}{th("pct1w", "1W")}{th("pct1m", "1M")}{th("pct3m", "3M")}{th("pct12m", "12M")}{hasM && th("mcap", `Mcap`)}{hasT && th("turnover", "Turnover")}{hasT && th("flow", "Day / avg")}{hasF && th("mf_net", "Net flow")}{hasS && th("shortRatio", "Short")}</tr></thead>
+            <thead><tr>{th("name", "Name", true)}{th("industry", "Industry", true)}{th("close", "Last")}{th("pct1d", "1D")}{th("pct1w", "1W")}{th("pct1m", "1M")}{th("pct3m", "3M")}{th("pct12m", "12M")}{hasM && th("mcap", `Mcap`)}{hasT && th("turnover", "Turnover")}{hasT && th("flow", "Day / avg")}{hasF && th("mf_net", "Net flow")}{hasS && th("shortRatio", jp ? "Short pos %" : "Short vol %")}</tr></thead>
             <tbody>
               {list.map((r) => (
                 <tr key={r.symbol}>

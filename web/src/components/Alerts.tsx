@@ -5,6 +5,7 @@ import { fmtStamp } from "../lib/time";
 import { fmtPct, signCls } from "../lib/fmt";
 import { openAsset } from "./CompanyCard";
 import { openNotify } from "../lib/push";
+import { alertFigWord, alertHeadline } from "../lib/alertline";
 
 const SEEN_KEY = "om_alert_seen";
 const NEW_FOR_MS = 30 * 60e3;   // an alert nobody has opened stays lit for half an hour after it was raised
@@ -39,11 +40,30 @@ export function Alerts({ tick }: { tick: number }) {
     if (!open && newest > seen) { setSeen(newest); try { localStorage.setItem(SEEN_KEY, String(newest)); } catch { /* ignore */ } }
     setOpen(!open);
   };
+  const RULES = "Excessive moves (stock beyond ±5% intraday for a large company, ±7% for the rest; index beyond ±3%) and news: buybacks and guidance revisions at companies of USD 5bn+, M&A of USD 1bn+. Click for the last twenty";
+  // On a computer the line is the label, the name, the figure and the time, and only the name is ever cut (the
+  // designer's I-9 note; the layout guard found the time cut off on every screen, 19 Nov 2026). The figure says what
+  // it is ("intraday", "at close", "1D": lib/alertline.ts), from the server's own words. A news alert shows its kind
+  // and its company; one that names no company with a page here shows the first words of its headline in the name's
+  // place and the publisher it came from, so a publisher never reads as a party to the news (R2A-05). The sentence is
+  // in the tooltip and the list. The phone's header shows the whole message under the label (tokens.css, body.pv2),
+  // so it keeps it as the second item.
+  const word = latest ? alertFigWord(latest) : null, orphan = !!latest && isNews(latest) && !hasPage(latest);
   return (
     <div id="alerts" ref={box}>
-      <span className={`alrt${latest ? (lit ? " new" : fresh ? " fresh" : "") : " none"}`} onClick={toggle} title="Excessive moves (stock beyond ±5% intraday for a large company, ±7% for the rest; index beyond ±3%) and news: buybacks and guidance revisions at companies of USD 5bn+, M&A of USD 1bn+. Click for the last twenty">
+      <span className={`alrt${latest ? (lit ? " new" : fresh ? " fresh" : "") : " none"}`} onClick={toggle} title={latest ? `${latest.msg}${isNews(latest) && latest.market ? ` (${latest.market})` : ""} · ${fmtStamp(latest.at)}\n\n${RULES}` : RULES}>
         <span className="k">{lit ? "NEW ALERT" : "ALERT"}</span>
-        {latest ? <><span className={signCls(latest.pct)}>{latest.msg}</span><span className="t">{fmtStamp(latest.at).replace(" SGT", "")}</span></> : <span className="mut">{a.error ? "unavailable" : "no excessive moves"}</span>}
+        {latest ? <>
+          <span className={`msg ${signCls(latest.pct)}`}>{latest.msg}</span>
+          <span className="one">
+            {isNews(latest) && <span className="kd">{KIND_LABEL[latest.kind]}</span>}
+            <span className="nm">{orphan ? alertHeadline(latest.msg) : latest.name}</span>
+            {!isNews(latest) && latest.pct != null && <span className={`fig ${signCls(latest.pct)}`}>{fmtPct(latest.pct, 1)}</span>}
+            {!isNews(latest) && latest.pct != null && word && <span className="q">{word}</span>}
+            {orphan && latest.market && <span className="src">via {latest.market}</span>}
+          </span>
+          <span className="t">{fmtStamp(latest.at).replace(" SGT", "")}</span>
+        </> : <span className="mut">{a.error ? "unavailable" : "no excessive moves"}</span>}
       </span>
       {open && (
         <div className="aldrop">

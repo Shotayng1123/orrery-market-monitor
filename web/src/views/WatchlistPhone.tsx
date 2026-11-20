@@ -8,15 +8,23 @@ import { Move, Screen, Section } from "../components/PhoneKit";
 import { NotifyNudge } from "../components/Notify";
 import { useApi } from "../lib/useApi";
 import { useWatch } from "../lib/watch";
-import { fmtNum, fmtPct, signCls } from "../lib/fmt";
-import { fmtClock, fmtStamp, SGT } from "../lib/time";
+import { fmtPct, signCls } from "../lib/fmt";
+import { asOfLine, asOfOf, asOfTitle, fmtClock, fmtStamp, SGT } from "../lib/time";
 import { dayLabel, dayOf } from "./News";
-import { day, decode, type Feed, type WatchRow } from "./Watchlist";
+import { cellBp } from "./Market";
+import { day, decode, lastOf, sourcesOf, WINDOWS, type Feed, type WatchRow } from "./Watchlist";
 
 /** WATCHLIST for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026): the user's own names as lines with one
- *  change (the period is picked at the top), then their earnings dates, alerts, headlines and research mentions. */
-type Key = "pct1d" | "pct1w" | "pct1m" | "pct3m" | "pct12m";
-const KEYS: PickOption<Key>[] = [{ value: "pct1d", label: "1D" }, { value: "pct1w", label: "1W" }, { value: "pct1m", label: "1M" }, { value: "pct3m", label: "3M" }, { value: "pct12m", label: "12M" }];
+ *  change (the period is picked at the top), then their earnings dates, alerts, headlines and research mentions.
+ *  Each line says what it is as of under the name, and its change says its window (19 Nov 2026). */
+type Key = (typeof WINDOWS)[number][0];
+const KEYS: PickOption<Key>[] = WINDOWS.map(([value, , label]) => ({ value, label }));
+/** The change a line shows: a yield's in bp (the change of its level), anything else's in per cent. */
+const change = (r: WatchRow, k: Key): { v: number | null; text: string } => {
+  if (!r.isYield) return { v: r[k], text: fmtPct(r[k], 1) };
+  const v = r[WINDOWS.find((x) => x[0] === k)![1]] ?? null;
+  return { v, text: cellBp(v) };
+};
 
 export function WatchlistPhone({ tick }: { tick: number }) {
   const w = useWatch();
@@ -24,7 +32,7 @@ export function WatchlistPhone({ tick }: { tick: number }) {
   const feed = useApi<Feed>("watch_feed", { v: w.version }, Math.floor(tick / 5));
   const [k, setK] = useState<Key>("pct1d");
   const box = useAddBox(w.has);
-  const rows = list.data?.rows ?? [];
+  const rows = list.data?.rows ?? [], src = sourcesOf(rows);
   const alerts = feed.data?.alerts ?? [], news = feed.data?.news ?? [], research = feed.data?.research ?? [];
   const ahead = rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3).sort((a, b) => a.earningsAt!.localeCompare(b.earningsAt!));
   const name = (s: string) => rows.find((r) => r.symbol === s)?.name ?? s;
@@ -46,15 +54,21 @@ export function WatchlistPhone({ tick }: { tick: number }) {
           ))}
         </div>
       )}
-      <Section title="My names" aux="stocks at the last close">
-        {rows.length ? rows.map((r) => (
-          <div className="mp-row tap starred" key={r.symbol} role="button" tabIndex={0} title={`${r.name} (${r.symbol})${r.asOf ? ` · as of ${r.asOf.length > 10 ? fmtStamp(r.asOf) : r.asOf}` : ""}`} onClick={() => openAsset(r.symbol)}>
-            <Star symbol={r.symbol} name={r.name} />
-            <span className="mp-nm"><span className="n">{r.name}</span><span className="mp-st one">{r.symbol} · {r.sector ?? r.kind}</span></span>
-            <span className="mp-px">{fmtNum(r.last, r.last != null && r.last >= 1000 ? 0 : r.isYield ? 3 : 2)}</span>
-            <Move v={r[k]}>{fmtPct(r[k], 1)}</Move>
-          </div>
-        )) : <Empty title={w.ready && list.data ? "Your watchlist is empty" : "Loading your watchlist"}>{list.error ?? (w.ready && list.data ? "Press the star beside a name on its page, in the screener or in the earnings calendar, or type part of a name or of a symbol above and choose from the list." : "")}</Empty>}
+      <Section title="My names" aux="times in SGT" card={false}>
+        <div className="mp-card">
+          {rows.length ? rows.map((r) => {
+            const a = asOfOf(r.asOf, r.asOfKind), c = change(r, k);
+            return (
+              <div className="mp-row tap starred" key={r.symbol} role="button" tabIndex={0} title={`${r.name} (${r.symbol}) · ${asOfTitle(a, r.source)}`} onClick={() => openAsset(r.symbol)}>
+                <Star symbol={r.symbol} name={r.name} />
+                <span className="mp-nm"><span className="n">{r.name}</span><span className="mp-st one">{r.symbol} · <span className="nb">{asOfLine(a)}</span></span></span>
+                <span className="mp-px">{lastOf(r)}</span>
+                <Move v={c.v} w={KEYS.find((x) => x.value === k)?.label}>{c.text}</Move>
+              </div>
+            );
+          }) : <Empty title={w.ready && list.data ? "Your watchlist is empty" : "Loading your watchlist"}>{list.error ?? (w.ready && list.data ? "Press the star beside a name on its page, in the screener or in the earnings calendar, or type part of a name or of a symbol above and choose from the list." : "")}</Empty>}
+        </div>
+        {rows.length > 0 && <p className="mp-note" id="wl-src">{src ? `${/[,;]/.test(src) ? "Sources" : "Source"}: ${src}. ` : ""}A stock is at its last close, a market instrument at its last print; a yield's changes are in bp.</p>}
       </Section>
       <Section title="Earnings ahead" aux="times in SGT">
         {ahead.length ? ahead.map((r, i, arr) => (

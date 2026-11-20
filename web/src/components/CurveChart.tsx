@@ -4,7 +4,9 @@ import { boxHeight, zoomMove } from "../lib/chart";
 import type { Curve } from "../lib/types";
 
 const AXIS = { stroke: "#b3afa4", grid: { stroke: "#1a1b1e", width: 1 }, ticks: { stroke: "#26272b", width: 1 }, font: "12px 'IBM Plex Mono', ui-monospace, monospace" };
-const Y_AXIS_PX = 52, PAD_RIGHT = 10, LABEL_PX = 30;
+// PAD_FOOT: room under the plot for half of the lowest yield label, which sits on its line (the designer's D-28,
+// 19 Nov 2026: "4.25" was cut in half by the foot of the chart, above the tenor row)
+const Y_AXIS_PX = 52, PAD_RIGHT = 10, LABEL_PX = 30, PAD_FOOT = 14;
 const MAJOR = [1 / 12, 0.25, 0.5, 1, 2, 5, 10, 20, 30, 40];
 export const shortTenor = (t: string) => t.replace(/\s*(Mo|Month)$/i, "M").replace(/\s*Yr$/i, "Y");
 
@@ -23,7 +25,7 @@ export function CurveChart({ current, ghost, height = 190 }: { current: Curve; g
     const tenorOf = (v: number) => { let best = pts[0]; for (const p of pts) if (Math.abs(p.years - v) < Math.abs(best.years - v)) best = p; return shortTenor(best.tenor); };
     const opts: uPlot.Options = {
       width: el.current.clientWidth || 300, height: boxHeight(el.current, height - 16, 40),
-      padding: [8, PAD_RIGHT, 0, 0],
+      padding: [8, PAD_RIGHT, PAD_FOOT, 0],
       scales: { x: { time: false, distr: 2 }, y: { range: (_u, min, max) => [min - (max - min) * 0.08, max + (max - min) * 0.08] } },
       axes: [
         { show: false },
