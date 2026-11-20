@@ -83,7 +83,9 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   while it is drawn (it says so in its own space; the header and the other tabs stay), the welcome email as its
   reader sees it, a price feed that has stopped (the bar and the DATA chip say so), and the opening.
   The **layout guard** (`layout-guard`) opens all eight screens at five computer sizes (1280×720 to 2560×1440, and
-  1440×900 with small text) and on two phones, and fails a publish if a figure is cut, unit and all (past the edge of
+  1440×900 with small text), at 1440×900 with large text (every screen but EQUITIES, which joins once it is fixed
+  there) and on two phones, and a stock's two pages at three more windows (1366×768 and 1536×864 at text L,
+  1680×1050 at XL), and fails a publish if a figure is cut, unit and all (past the edge of
   a box that hides its overflow, behind an ellipsis, or half outside it at the top or foot: "-4.8bp" showing as
   "-4.8" is a cut figure), a figure is painted over by another element or clipped by a clip-path (each figure is
   hit-tested where it stands, the page moved down a screen at a time), a chart's axis label runs off its canvas,
@@ -167,7 +169,7 @@ opens it (the name a teal link, the whole row a pointer, a chart tile's title a 
 | Last, the day's change, previous close, the change over 1D to 36M, σ vs 1M avg, 52W range, vs 200D | A Monitor instrument: MARKETS' own figures, from the same market table, so the page and MARKETS agree. A name found by search: its Yahoo quote and daily closes, with the table's rules |
 | The day's range | The Yahoo quote's session high and low; none for an official yield |
 | Realised volatility 1M / 3M / 12M and its percentile among three years of daily readings; the 52-week high and low with their dates; the largest rise and fall of 12 months | Worked out from the stored daily closes (`_shared/instrstats.ts`), marked † on both layouts with a line under KEY DATA naming the closes and their dates. A yield in bp of its level (bp a day, bp a year), a price in per cent |
-| Events | The economic calendar the Monitor stores (FXStreet, ForexFactory as the fallback): the events of its currencies, five days back and eight ahead |
+| Events | The economic calendar the Monitor stores (FXStreet, ForexFactory as the fallback): the events of its currencies, five days back and eight ahead. A pair's two currencies; an index future's index's currency first, then the one it is quoted in where that differs (the CME's Nikkei 225 future: JPY and USD); otherwise the currency it is quoted in (`_shared/instrfeed.ts`). The banks' next meetings: a dash, "not kept yet", on both layouts until the Monitor keeps their calendars |
 | News | The Monitor's own headlines of the last 30 days whose title holds one of the instrument's words (USD/JPY: yen, JPY, BoJ, Bank of Japan; the page names them, `_shared/instrfeed.ts`), and its own alerts on it |
 
 A yield's every change, distance and volatility is in basis points of its level, never a per cent of it. A yield read

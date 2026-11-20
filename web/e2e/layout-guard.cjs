@@ -27,6 +27,10 @@
 // unit cut off whole digits, on a computer and in a phone's pills, a clip-path, a box laid over figures, and the
 // statements' periods held at their own widths, as before 20 Nov), the guard must report them, and with the style
 // removed it must report nothing again.
+// Text L joins at 1440x900 (the designer's D-51, 20 Nov 2026: a Tokyo stock's SHORT INTEREST cut its figures to "1."
+// at L, where the right column is about 400 CSS px) on every screen but EQUITIES, and a stock's two pages are guarded
+// at the other windows D-51 named: 1366x768 and 1536x864 at L, 1680x1050 at XL. EQUITIES joins at L with I-9: there
+// its breadth chart is laid over its table's figures and FLOW BY SECTOR and SCREENER scroll sideways (C/backlog.md).
 // XL text and the one-screen (COMPACT) layout join when increment I-9 fixes them (the designer's D-06 and D-21).
 // Run from web/:  node e2e/run.cjs layout-guard   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
@@ -44,15 +48,20 @@ const SIZES = [
   { code: "C6", label: "1920x1080", ctx: { viewport: { width: 1920, height: 1080 } }, prefs: { size: "AUTO", compact: false, v: 2 } },
   { code: "C7", label: "2560x1440", ctx: { viewport: { width: 2560, height: 1440 } }, prefs: { size: "AUTO", compact: false, v: 2 } },
   { code: "C8", label: "1440x900, text S", ctx: { viewport: { width: 1440, height: 900 } }, prefs: { size: "S", compact: false, v: 2 } },
+  { code: "CL", label: "1440x900, text L", ctx: { viewport: { width: 1440, height: 900 } }, prefs: { size: "L", compact: false, v: 2 }, skip: ["equities"] },
   { code: "P1", label: "iPhone SE", ctx: { ...devices["iPhone SE (3rd gen)"] }, phone: true },
   { code: "P2", label: "iPhone 13", ctx: { ...devices["iPhone 13"] }, phone: true },
+  // D-51's other windows, on a stock's page only: its right column is 380 to 430 CSS px there
+  ...[[1366, 768, "L"], [1536, 864, "L"], [1680, 1050, "XL"]].map(([w, h, size]) => ({ code: `${w}${size}`, label: `${w}x${h}, text ${size}`, ctx: { viewport: { width: w, height: h } }, prefs: { size, compact: false, v: 2 }, screens: ["asset/7203.T", "asset/NVDA"] })),
 ];
 // what scrolls sideways by design on a phone: the statements under their fixed line names, and the wide phone tables
 const SIDEWAYS_OK = [".finbox", ".mp-xs"];
 // where the statements are walked: the two phones above and the designer's two wider ones (the verdict on D-03), and a
 // computer whose statements are wider than their panel today: 1100x800 at text XL, a zoom of 1.35, where a period's
 // edge falls between screen pixels unless the widths are worked out in them
-const FIN_WALKS = [...[SIZES[5], SIZES[6], { code: "PX7", label: "Pixel 7", ctx: { ...devices["Pixel 7"] }, phone: true }, { code: "PM", label: "iPhone 14 Pro Max", ctx: { ...devices["iPhone 14 Pro Max"] }, phone: true }].map((s) => ({ ...s, syms: ["7203.T", "NVDA"] })),
+// a size by its code (the proofs below and the walks name the phones; the list above grows)
+const SIZE = (code) => SIZES.find((s) => s.code === code);
+const FIN_WALKS = [...[SIZE("P1"), SIZE("P2"), { code: "PX7", label: "Pixel 7", ctx: { ...devices["Pixel 7"] }, phone: true }, { code: "PM", label: "iPhone 14 Pro Max", ctx: { ...devices["iPhone 14 Pro Max"] }, phone: true }].map((s) => ({ ...s, syms: ["7203.T", "NVDA"] })),
   { code: "CX", label: "1100x800, text XL", ctx: { viewport: { width: 1100, height: 800 } }, prefs: { size: "XL", compact: false, v: 2 }, syms: ["7203.T"] }];
 // tap targets the designer measured as really under 44 px (plan review, I-22 "What is really under 44 px"), each with
 // the increment that brings it to 44; a target not on this list fails
@@ -274,9 +283,12 @@ const span = (s) => (s.shown.length ? `${s.shown[0]}–${s.shown[s.shown.length 
 (async () => { const b = await chromium.launch();
   const knownSeen = new Map();
   for (const s of SIZES) {
+    // a size kept for some screens (D-51's windows: a stock's page) is left out of a run of other screens
+    const screens = (s.screens ? SCREENS.filter((h) => s.screens.includes(h)) : SCREENS).filter((h) => !(s.skip ?? []).includes(h));
+    if (!screens.length) continue;
     console.log(`\n[${s.code} ${s.label}${s.phone ? ", the phone layout" : ", the scrolling layout"}]`);
     const { ctx, p, errs } = await open(b, s);
-    for (const h of SCREENS) {
+    for (const h of screens) {
       await p.goto(MOCK + "#" + h, { waitUntil: "networkidle" }); await settle(p);
       const m = await measure(p, !!s.phone), oc = await occlusion(p), x = problems(m, !!s.phone, oc);
       const allowed = m.scrollX.filter((q) => s.phone && q.ok).map((q) => q.el.replace(/ @.*/, ""));
@@ -357,7 +369,7 @@ const span = (s) => (s.shown.length ? `${s.shown[0]}–${s.shown[s.shown.length 
     await p.evaluate(() => document.getElementById("canary-cover")?.remove()); await settle(p); after = await occlusion(p);
     ck(`a box laid over a quarter of MY NAMES' columns: ${over.length} figures reported painted over (e.g. "${over[0]?.figure}" under ${over[0]?.by}); without it, none`, over.length >= 10 && after.covered.length === 0, { over: over.length, first: over.slice(0, 2), after: after.covered.slice(0, 3) });
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
-  { const { ctx, p, errs } = await open(b, SIZES[6]);
+  { const { ctx, p, errs } = await open(b, SIZE("P2"));
     await p.goto(MOCK + "#watch", { waitUntil: "networkidle" }); await settle(p);
     const n = await cutUnits(p, ".mp-chg > .fig"); await settle(p);
     const u = unitsOnly(await measure(p, true));
@@ -379,7 +391,7 @@ const span = (s) => (s.shown.length ? `${s.shown[0]}–${s.shown[s.shown.length 
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
   // the statements with their periods held at their own widths, as before 20 Nov: they open whole, but after a press
   // or a swipe the right edge falls inside a period (the designer's verdict on D-03), and the walk must say so
-  { const { ctx, p, errs } = await open(b, SIZES[6]);
+  { const { ctx, p, errs } = await open(b, SIZE("P2"));
     await p.goto(MOCK + "#asset/7203.T", { waitUntil: "networkidle" }); await settle(p);
     await p.addStyleTag({ content: ".finbox{--fin-col:0px!important;--fin-names:128px!important}" });
     await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
@@ -387,7 +399,7 @@ const span = (s) => (s.shown.length ? `${s.shown[0]}–${s.shown[s.shown.length 
     await p.reload({ waitUntil: "networkidle" }); await settle(p); const back = await walkFin(p);
     ck(`iPhone 13 · 7203.T with the periods at their own widths (before 20 Nov): ${right.length} of ${w.states.length} places reported with a period cut at the right edge (e.g. after ${right[0]?.what}, "${right[0]?.part[0]}"); as built, none of ${back.states.length}`, w.rest.part.length === 0 && right.length >= 2 && back.bad.length === 0, { rest: w.rest.part, right: right.slice(0, 3).map((x) => ({ what: x.what, part: x.part })), back: back.bad.slice(0, 3).map((x) => ({ what: x.what, part: x.part })) });
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
-  { const { ctx, p, errs } = await open(b, SIZES[6]);
+  { const { ctx, p, errs } = await open(b, SIZE("P2"));
     await p.goto(MOCK + "#equities", { waitUntil: "networkidle" }); await settle(p);
     let r = await canary(p, "body.pv2 .pick select{top:0!important;height:100%!important}", true);
     const picks = r.m.taps.filter((t) => t.known < 0 && /^select/.test(t.el));

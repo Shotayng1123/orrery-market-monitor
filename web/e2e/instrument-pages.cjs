@@ -7,12 +7,16 @@
 //   - A yield's changes, distances, volatility and largest moves are in bp, on the page and on its chart tile (B's defect
 //     1); its level ends in %. JGB 10Y, which Yahoo does not carry, opens (defect 2) and names Japan MOF and its date.
 //   - USD/JPY's EVENTS are the stand-in USD and JPY events; its NEWS the stand-in headlines matched by yen, JPY, BoJ and
-//     Bank of Japan, and says so.
+//     Bank of Japan, and says so. The Nikkei 225 future (NKD=F, quoted in dollars on the CME) lists Japan's events and
+//     then the dollar's (B-04 (b), B's verdict of 20 Nov 2026), on both layouts; on a computer EVENTS starts with the
+//     banks' next meeting as a dash, "not kept yet", as the phone's first block has it.
 //   - On a computer every instrument name on MARKETS and RATES & FX is a teal link and its row opens the page (D-15, B-23,
 //     defect 5): "USD/JPY" on MARKETS opens #asset/USDJPY%3DX, the JGB 10Y tile's name opens #asset/JGB10Y.
 //   - NEWS: the calendar's Currency picker; JPY leaves only Japan's events, on both layouts (B-12).
-//   - The one-screen layout and text XL place the panels; a server from before 20 Nov 2026 (a stock's answer for every
-//     name, "no quote for JGB10Y") still gives a page that works.
+//   - The one-screen layout shows the designer's two screens (§4.7) switched by GO TO: the chart, KEY DATA, PERFORMANCE
+//     and EVENTS, then NEWS; KEY DATA and PERFORMANCE without an empty block, no panel head cut (the designer's I-4
+//     verdict, 20 Nov 2026). Text XL places the panels in one column; a server from before 20 Nov 2026 (a stock's
+//     answer for every name, "no quote for JGB10Y") still gives a page that works.
 //   - Fixes after the check (20 Nov 2026): a yield an official curve publishes once a day, which the market table stamps
 //     with its date at midnight UTC, shows that date and never a made-up time of day, on its chart tile, in its tooltip
 //     and in MARKETS' row and phone line (R2B-01); every other tile gives its time with its zone (R2B-06); KEY DATA marks
@@ -30,7 +34,11 @@ const PAGES = [
   { hash: "#asset/JGB10Y", name: "JGB 10Y yield", yield: true, ccys: ["JPY"], official: "Japan MOF" },
   { hash: "#asset/GC%3DF", name: "Gold", yield: false, ccys: ["USD"] },
   { hash: "#asset/%5ESTOXX50E", name: "Euro Stoxx 50", yield: false, ccys: ["EUR"] },
+  // an index future quoted in another currency than its index's: its index's calendar first (B-04 (b))
+  { hash: "#asset/NKD%3DF", name: "Nikkei 225 future (CME)", yield: false, ccys: ["JPY", "USD"] },
 ];
+// B's check for the Nikkei 225 future: Japan's events in its calendar
+const NKD_JP = ["JP CPI y/y", "JP PMI Manufacturing (flash)", "JP GDP q/q (preliminary)"];
 // the designer's † after a label the Monitor works out itself (R2B-05); σ vs 1M avg and vs 200D are MARKETS' own here
 const KEY_ROWS = ["Day's range", "Previous close", "52W range †", "From 52W high / low †", "σ vs 1M avg", "vs 200D", "Realised vol, 1M / 3M / 12M †", "Largest rise, 12M †", "Largest fall, 12M †", "Source · as of"];
 const DATE = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
@@ -68,6 +76,7 @@ const desk = (p) => p.evaluate(() => {
     periods: [...document.querySelectorAll(".c12 .pick")].find((x) => /PERIOD/i.test(x.querySelector(".lbl").textContent))?.querySelector("select") ? [...[...document.querySelectorAll(".c12 .pick")].find((x) => /PERIOD/i.test(x.querySelector(".lbl").textContent)).querySelectorAll("option")].map((o) => o.value) : [],
     events: [...document.querySelectorAll("#in-events tbody tr.ecrow")].map((tr) => ({ ccy: tr.cells[1].textContent, title: tr.cells[2].childNodes[1]?.textContent ?? tr.cells[2].textContent })),
     evAux: document.querySelector('.panel[data-k="in-events"] .phead .aux')?.textContent ?? "",
+    meet: document.querySelector("#in-meet")?.textContent.replace(/\s+/g, " ").trim() ?? null,
     newsAux: document.querySelector('.panel[data-k="in-news"] .phead .aux')?.textContent ?? "",
     news: [...document.querySelectorAll("#st-news .snrow")].map((r) => ({ kind: r.dataset.kind, title: r.querySelector(".snt").textContent })),
     newsEmpty: document.querySelector('.panel[data-k="in-news"] .empty')?.textContent ?? null,
@@ -105,6 +114,9 @@ const pc = (t) => /^[+-]?\d[\d,]*\.\d+%$/.test(t) || t === "–";
       await p.locator('.panel[data-k="in-events"] .pick select').selectOption("all"); await p.waitForTimeout(250);
       const all = await desk(p);
       ck(`${pg.name}: EVENTS of ${pg.ccys.join(" and ")} (${all.events.length} with Impact All), the stand-in ones in time order and no other currency's`, all.evAux.includes(`${pg.ccys.join(" and ")} · times in SGT`) && all.events.length === want.length && all.events.every((e, i) => pg.ccys.includes(e.ccy) && e.title === want[i].title), { aux: all.evAux, got: all.events.map((e) => `${e.ccy} ${e.title}`), want: want.map((e) => `${e.currency} ${e.title}`) });
+      // B-04 (b): the banks' next meetings are said to be still to come, as on the phone, never left out unsaid
+      ck(`${pg.name}: EVENTS starts with "${all.meet}"`, /^Next meeting – not kept yet: the central banks' next meetings join here when the Monitor keeps their calendars$/.test(all.meet ?? ""), all.meet);
+      if (pg.hash === "#asset/NKD%3DF") ck(`${pg.name}: its head names JPY ("${all.evAux}") and Impact All lists Japan's events (${NKD_JP.join(", ")}), not only the dollar's`, all.evAux.includes("JPY and USD · times in SGT") && NKD_JP.every((t) => all.events.some((e) => e.ccy === "JPY" && e.title === t)) && all.events.some((e) => e.ccy === "USD"), { aux: all.evAux, got: all.events.map((e) => `${e.ccy} ${e.title}`) });
       await p.locator('.panel[data-k="in-events"] .pick select').selectOption("high"); await p.waitForTimeout(150);
     }
     // USD/JPY's headlines: those that say yen, JPY, BoJ or Bank of Japan, and the page says how they were matched
@@ -208,16 +220,43 @@ const pc = (t) => /^[+-]?\d[\d,]*\.\d+%$/.test(t) || t === "–";
       else ck(`${pg.name}: the chart's time with its zone on the phone too ("${ph.stamp}")`, /^(LIVE|CLOSED) (\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d SGT$/.test(ph.stamp), ph.stamp);
       ck(`${pg.name}: Key data marks the same lines with † (${ph.keys.filter((k) => k.endsWith("†")).length}) and its note names the closes and their dates`, ph.keys.filter((k) => k.endsWith("†")).length === 5 && ["52W range", "From 52W high / low", "Realised vol, 1M / 3M / 12M", "Largest rise, 12M", "Largest fall, 12M"].every((k) => ph.keys.some((x) => x.startsWith(k) && x.endsWith("†"))) && new RegExp(`^† worked out here from .+, ${DATE} – ${DATE}; the other figures as on MARKETS\\. `).test(ph.worked), { keys: ph.keys, worked: ph.worked });
     }
+    // B-04 (b) on the phone: the Nikkei 225 future's Events are Japan's and the dollar's
+    await go(p, MOCK, "#asset/NKD%3DF", "#in-first");
+    await p.locator("#in-imp .mp-tog", { hasText: "All" }).tap(); await p.waitForTimeout(300);
+    const nk = await p.evaluate(() => { const sec = [...document.querySelectorAll(".mp-sec")].find((x) => x.querySelector(":scope > h2 > span:first-child")?.textContent === "Events");
+      return { aux: sec?.querySelector(":scope > h2 .aux, :scope > h2 > span:nth-child(2)")?.textContent ?? "", rows: [...document.querySelectorAll("#in-events .ev-row")].map((r) => ({ ccy: r.querySelector(".ev-t small").textContent, title: r.querySelector(".ev-n").childNodes[1]?.textContent ?? "" })), note: sec?.querySelector(".mp-note")?.textContent ?? "" }; });
+    ck(`Nikkei 225 future (CME) on the phone: Events of "${nk.aux}", and Impact All lists Japan's (${NKD_JP.join(", ")}) beside the dollar's`, /JPY and USD/.test(nk.aux) && NKD_JP.every((t) => nk.rows.some((r) => r.ccy === "JPY" && r.title === t)) && nk.rows.some((r) => r.ccy === "USD") && /^JPY and USD events from five days back/.test(nk.note), nk);
     await p.evaluate(() => { location.hash = "asset/%5EN225"; }); await p.waitForTimeout(800);
     ck("^N225 on the phone: the Nikkei 225 on EQUITIES", (await p.evaluate(() => location.hash)) === "#equities/nk225");
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
 
-  console.log("\n[the one-screen layout (1440x900, compact) and text XL (1440x900: one column in reading order)]");
+  console.log("\n[the one-screen layout (1440x900, compact): the designer's two screens, switched by GO TO; text XL (1440x900: one column in reading order)]");
   { const { ctx, p, errs } = await page(b, { viewport: { width: 1440, height: 900 } }, { size: "AUTO", compact: true, v: 2 });
+    // each panel on the screen: where it is, how much of its body is left empty under its content (a list that ends
+    // early shows its rows and its end), and whether its head is cut
+    const screenOf = (p) => p.evaluate(() => Object.fromEntries([...document.querySelectorAll("#grid .panel")].map((x) => {
+      const r = x.getBoundingClientRect(), pb = x.querySelector(":scope > .pbody"), br = pb.getBoundingClientRect(), pad = parseFloat(getComputedStyle(pb).paddingBottom) || 0;
+      const inner = [...pb.querySelectorAll("*")].filter((e) => e.getBoundingClientRect().height > 0 && getComputedStyle(e).display !== "contents"), end = Math.max(br.top, ...inner.map((e) => Math.min(e.getBoundingClientRect().bottom, br.bottom)));
+      const head = [x.querySelector(".phead .t"), x.querySelector(".phead .aux")].filter(Boolean), cut = head.filter((h) => h.scrollWidth > h.clientWidth + 1 || h.getBoundingClientRect().right > r.right + 0.5).map((h) => h.textContent);
+      return [x.dataset.k, { l: Math.round(r.left), t: Math.round(r.top), r: Math.round(r.right), b: Math.round(r.bottom), empty: Math.round(br.bottom - pad - end), cut }];
+    })));
+    const chips = (p) => p.evaluate(() => [...document.querySelectorAll("#scrbar .chip-sm")].map((c) => ({ t: c.textContent, on: c.classList.contains("on"), screen: c.dataset.screen })));
+    for (const [hash, name] of [["#asset/USDJPY%3DX", "USD/JPY"], ["#asset/%5ETNX", "UST 10Y yield"], ["#asset/%5ESTOXX50E", "Euro Stoxx 50"]]) {
+      await go(p, MOCK, hash, "#in-key");
+      const c = await chips(p), r = await screenOf(p);
+      ck(`${name}: GO TO at the right of the strip (${c.map((x) => `${x.t}${x.on ? "*" : ""}`).join(" · ")}); the first screen holds the chart beside KEY DATA, PERFORMANCE under the chart and EVENTS under KEY DATA, and no NEWS`, c.map((x) => x.t).join() === "KEY DATA,PERFORMANCE,EVENTS,NEWS" && c.filter((x) => x.on).map((x) => x.t).join() === "KEY DATA,PERFORMANCE,EVENTS" && Object.keys(r).sort().join() === "in-chart,in-events,in-key,in-perf" && r["in-key"].l > r["in-chart"].r - 2 && Math.abs(r["in-key"].t - r["in-chart"].t) < 3 && r["in-perf"].t >= r["in-chart"].b - 2 && r["in-events"].t >= r["in-key"].b - 2 && Math.abs(r["in-perf"].b - r["in-events"].b) < 3 && Math.max(...Object.values(r).map((x) => x.b)) <= 900, { c, r });
+      ck(`${name}: KEY DATA and PERFORMANCE take their own height, the chart the rest (empty under their content: KEY DATA ${r["in-key"].empty} px, PERFORMANCE ${r["in-perf"].empty} px; the list in EVENTS ends ${r["in-events"].empty} px above its foot); no head cut`, r["in-key"].empty <= 40 && r["in-perf"].empty <= 40 && Object.values(r).every((x) => x.cut.length === 0), r);
+      await p.locator("#scrbar .chip-sm", { hasText: "NEWS" }).click(); await p.waitForTimeout(400);
+      const c2 = await chips(p), r2 = await screenOf(p);
+      ck(`${name}: GO TO › NEWS shows the second screen: NEWS across, its head whole ("${await p.locator('.panel[data-k="in-news"] .phead .aux').textContent()}"), NEWS lit`, Object.keys(r2).join() === "in-news" && c2.filter((x) => x.on).map((x) => x.t).join() === "NEWS" && r2["in-news"].cut.length === 0 && r2["in-news"].b <= 900 && r2["in-news"].r - r2["in-news"].l > 1300, { c2, r2 });
+    }
+    // and back: GO TO › KEY DATA brings the first screen again
+    await p.locator("#scrbar .chip-sm", { hasText: "KEY DATA" }).click(); await p.waitForTimeout(400);
+    ck("GO TO › KEY DATA brings the first screen back", Object.keys(await screenOf(p)).sort().join() === "in-chart,in-events,in-key,in-perf");
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+  { const { ctx, p, errs } = await page(b, { viewport: { width: 1440, height: 900 } }, { size: "AUTO", compact: false, v: 2 });
     await go(p, MOCK, "#asset/USDJPY%3DX", "#in-key");
-    const r = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll("#grid .panel")].map((x) => { const b = x.getBoundingClientRect(); return [x.dataset.k, { l: Math.round(b.left), t: Math.round(b.top), r: Math.round(b.right), bt: Math.round(b.bottom) }]; })));
-    const ok = r["in-chart"] && r["in-key"].l > r["in-chart"].r - 2 && Math.abs(r["in-key"].t - r["in-chart"].t) < 3 && [r["in-perf"], r["in-events"], r["in-news"]].every((x) => x.t >= r["in-chart"].bt - 2 && Math.abs(x.t - r["in-perf"].t) < 3) && r["in-perf"].r <= r["in-events"].l + 2 && r["in-events"].r <= r["in-news"].l + 2 && Math.max(...Object.values(r).map((x) => x.bt)) <= 900;
-    ck("compact: the chart beside KEY DATA, then PERFORMANCE, EVENTS and NEWS side by side, all on the one screen", ok, r);
+    ck("the scrolling layout has no GO TO and every panel on its one page", (await p.locator("#scrbar").count()) === 0 && (await p.locator("#grid .panel").count()) === 5);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
   { const { ctx, p, errs } = await page(b, { viewport: { width: 1440, height: 900 } }, { size: "XL", compact: false, v: 2 });
     await go(p, MOCK, "#asset/%5ETNX", "#in-key");

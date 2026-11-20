@@ -26,11 +26,15 @@ export const MOCK_WORDS: Record<string, string[]> = {
   "NKD=F": ["Nikkei"],
 };
 /** The currencies of an instrument's calendar (instrfeed.ts eventCurrencies): a pair's two, the dollar index's dollar,
+ *  an index future's index's currency and then the one it is quoted in (the Nikkei 225 future: JPY and USD),
  *  otherwise the currency it is quoted in. */
+const MOCK_FUTURE_HOME: Record<string, string> = { "NKD=F": "JPY", "ES=F": "USD", "NQ=F": "USD", "YM=F": "USD", "RTY=F": "USD" };
 export function mockCcys(symbol: string, name: string, currency: string): string[] {
   if (symbol === "DX-Y.NYB") return ["USD"];
-  const n = /^([A-Z]{3})\/([A-Z]{3})$/.exec(name);
-  return n ? [n[1], n[2]] : currency ? [currency === "CNH" ? "CNY" : currency] : [];
+  const n = /^([A-Z]{3})\/([A-Z]{3})$/.exec(name), home = MOCK_FUTURE_HOME[symbol];
+  if (n) return [n[1], n[2]];
+  if (home) return [...new Set([home, ...(currency ? [currency] : [])])];
+  return currency ? [currency === "CNH" ? "CNY" : currency] : [];
 }
 
 const DAY = 86400, iso = (t: number) => new Date(t * 1000).toISOString().slice(0, 10);

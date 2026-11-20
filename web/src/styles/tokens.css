@@ -1627,23 +1627,6 @@ body.pv2 table.fin th{padding-top:13px;padding-bottom:13px}
   .kvwrap table.kvT td.l{padding-bottom:0;white-space:normal;border-bottom:0}
   .kvwrap table.kvT td.num{text-align:left;padding-top:0}
 }
-/* the one screen (compact): placed by kind, not by number (the designer's §3.4). Until the section bar of I-7 brings
-   the designer's separate screens, everything is on one: the chart beside KEY DATA, PERFORMANCE beside NEWS, BIG
-   MOVES beside SHORT INTEREST, then FINANCIALS. A label there wraps rather than lose its end ("Against Nikkei 225, pp"
-   or a report's date: the compact rule for sector tables cuts them at 112 px) */
-body.term #grid[data-view="asset"]:has(.panel[data-k="st-chart"]){grid-template-rows:auto minmax(0,1.25fr) minmax(0,1.25fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.15fr)}
-body.term #grid[data-view="asset"] .panel[data-k="st-chart"]{grid-column:1 / span 8;grid-row:2 / span 2}
-body.term #grid[data-view="asset"] .panel[data-k="st-key"]{grid-column:9 / span 4;grid-row:2 / span 2}
-body.term #grid[data-view="asset"] .panel[data-k="st-perf"]{grid-column:1 / span 8;grid-row:4}
-body.term #grid[data-view="asset"] .panel[data-k="st-news"]{grid-column:9 / span 4;grid-row:4}
-body.term #grid[data-view="asset"] .panel[data-k="st-moves"]{grid-column:1 / span 8;grid-row:5}
-body.term #grid[data-view="asset"] .panel[data-k="st-short"]{grid-column:9 / span 4;grid-row:5}
-body.term #grid[data-view="asset"] .panel[data-k="st-fin"]{grid-column:1 / -1;grid-row:6}
-body.term #grid[data-view="asset"]:not(:has(.panel[data-k="st-moves"])) .panel[data-k="st-news"]{grid-row:4 / span 2}
-body.term #grid[data-view="asset"]:not(:has(.panel[data-k="st-moves"])) .panel[data-k="st-short"]{grid-column:1 / span 8}
-body.term #grid[data-view="asset"]:not(:has(.panel[data-k="st-news"])) .panel[data-k="st-perf"]{grid-column:1 / -1}
-body.term #grid[data-view="asset"]:not(:has(.panel[data-k="st-news"])):not(:has(.panel[data-k="st-moves"])) .panel[data-k="st-short"]{grid-column:1 / -1}
-body.term #grid[data-view="asset"]:has(.panel[data-k="st-chart"]) table.secT td.l{max-width:none;overflow:visible;text-overflow:clip;white-space:normal}
 /* WATCHLIST at the feed's lengths (D-48): no list scrolls inside its panel; ten alerts and fifteen headlines, then
    SHOW n MORE */
 .nwlist.free{max-height:none;overflow:visible}
@@ -1674,15 +1657,56 @@ table.calT.inev td.num,table.calT.inev td:nth-child(n+4){white-space:nowrap;over
 /* the phone's events: the whole name and the consensus line, wrapped rather than cut */
 #in-events .ev-n.wrap{white-space:normal;overflow:visible}
 #in-events .ev-s{white-space:normal;overflow:visible}
-/* the one screen (compact), until I-7's section bar brings the designer's two screens (§4.7): the chart beside KEY
-   DATA, then PERFORMANCE, EVENTS and NEWS side by side */
-body.term #grid[data-view="asset"]:has(.panel[data-k="in-chart"]){grid-template-rows:auto minmax(0,1.3fr) minmax(0,1.3fr) minmax(0,1.2fr)}
-body.term #grid[data-view="asset"] .panel[data-k="in-chart"]{grid-column:1 / span 8;grid-row:2 / span 2}
-body.term #grid[data-view="asset"] .panel[data-k="in-key"]{grid-column:9 / span 4;grid-row:2 / span 2}
-body.term #grid[data-view="asset"] .panel[data-k="in-perf"]{grid-column:1 / span 4;grid-row:4}
-body.term #grid[data-view="asset"] .panel[data-k="in-events"]{grid-column:5 / span 4;grid-row:4}
-body.term #grid[data-view="asset"] .panel[data-k="in-news"]{grid-column:9 / span 4;grid-row:4}
-body.term #grid[data-view="asset"]:not(:has(.panel[data-k="in-events"])) .panel[data-k="in-perf"]{grid-column:1 / span 8}
-body.term #grid[data-view="asset"]:has(.panel[data-k="in-chart"]) table.secT td.l{max-width:none;overflow:visible;text-overflow:clip;white-space:normal}
 /* the phone EVENTS impact toggles: "All" at least 44 px wide, as the NEWS toggles */
 #in-imp .mp-tog{min-width:44px}
+/* EVENTS' first line on a computer until the Monitor keeps the banks' calendars (I-7): Next meeting, a dash, and why,
+   as the phone's first block says it (B-04 (b), 20 Nov 2026) */
+.evmeet{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;padding:2px 2px 6px;margin-bottom:4px;border-bottom:1px solid #1a1b1e;font-size:11.5px}
+.evmeet .k{color:var(--mut);text-transform:uppercase;font-size:9.5px;letter-spacing:.08em}
+.evmeet b{font-weight:600}
+.evmeet .mut{font-size:10.5px;line-height:1.4}
+body.term .evmeet{padding:1px 1px 2px;margin-bottom:2px;gap:1px 6px;font-size:10px}
+body.term .evmeet .k{font-size:8px}
+body.term .evmeet .mut{font-size:9px;line-height:1.25}
+/* SHORT INTEREST in the right column (D-51, 20 Nov 2026): a label wraps, its date kept whole, so the figures beside it
+   stay whole at text L and XL, where the column is 380 to 430 CSS px; it never scrolls sideways */
+table#st-short td.l{white-space:normal;overflow-wrap:break-word}
+table#st-short td.num{white-space:nowrap}
+/* ---- the one-screen layout's screens on a stock's and an instrument's page (20 Nov 2026; the designer's §3.4 section
+   bar, its compact half, and the screens of §4.6 and §4.7 with the panels that exist today) ---- */
+/* GO TO at the right of the selector strip (components/ScreenChips.tsx) */
+.scrbar{flex-wrap:nowrap}
+.scrbar .lbl{margin-right:4px}
+#grid>.c12:not(.panel)>.chips:has(>.scrbar){flex:1 1 auto}
+body.term #grid>.c12:not(.panel) .chips.scrbar{margin-left:auto!important}
+/* a label wraps rather than lose its end ("Against Nikkei 225, pp", a report's date): the compact rule for sector
+   tables would cut it at 112 px */
+body.term #grid[data-view="asset"]:has(>.pcols[data-page]) table.secT td.l{max-width:none;overflow:visible;text-overflow:clip;white-space:normal}
+/* KEY DATA beside the chart: its rows share the panel's height, so no empty block is left under them */
+body.term .pcols[data-screen="overview"] .panel:is([data-k="st-key"],[data-k="in-key"])>.pbody>.kvwrap{flex:1 1 auto;min-height:0}
+body.term .pcols[data-page="stock"][data-screen="overview"] .panel[data-k="st-key"] table.kvT{height:100%}
+/* a stock: Overview (the chart beside KEY DATA, PERFORMANCE across under them), News (NEWS across; BIG MOVES beside
+   SHORT INTEREST under it, as §4.6's second screen until RESULTS takes NEWS's right), Financials (the whole screen) */
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"]){grid-template-rows:auto minmax(0,1fr) auto}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="overview"]) .panel[data-k="st-chart"]{grid-column:1 / span 8;grid-row:2}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="overview"]) .panel[data-k="st-key"]{grid-column:9 / span 4;grid-row:2}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="overview"]) .panel[data-k="st-perf"]{grid-column:1 / -1;grid-row:3}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="news"]) .panel[data-k="st-news"]{grid-column:1 / -1;grid-row:2}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="news"]) .panel[data-k="st-moves"]{grid-column:1 / span 8;grid-row:3}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="news"]) .panel[data-k="st-short"]{grid-column:9 / span 4;grid-row:3}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="news"]):not(:has(.panel[data-k="st-moves"])) .panel[data-k="st-short"]{grid-column:1 / -1}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="news"]):not(:has(.panel[data-k="st-news"])) .panel[data-k="st-moves"]{grid-row:2 / span 2}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="news"]):not(:has(.panel[data-k="st-news"])) .panel[data-k="st-short"]{grid-row:2 / span 2}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="stock"][data-screen="fin"]) .panel[data-k="st-fin"]{grid-column:1 / -1;grid-row:2 / span 2}
+/* an instrument: Overview (the chart and PERFORMANCE at the left, KEY DATA and EVENTS at the right: KEY DATA and
+   PERFORMANCE take their own height, the chart and EVENTS the rest), News (NEWS across until DRIVERS takes its left
+   with I-12). A page with nothing for a second screen keeps NEWS under EVENTS on the one. */
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]){grid-template-rows:auto auto minmax(0,1fr) auto}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]) .panel[data-k="in-chart"]{grid-column:1 / span 8;grid-row:2 / span 2}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]) .panel[data-k="in-key"]{grid-column:9 / span 4;grid-row:2}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]) .panel[data-k="in-perf"]{grid-column:1 / span 8;grid-row:4}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]) .panel[data-k="in-events"]{grid-column:9 / span 4;grid-row:3 / span 2}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]):not(:has(.panel[data-k="in-events"])) .panel[data-k="in-key"]{grid-row:2 / span 3}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]:not([data-screen])) .panel[data-k="in-news"]{grid-column:9 / span 4;grid-row:4}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"][data-screen="news"]){grid-template-rows:auto minmax(0,1fr)}
+body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"][data-screen="news"]) .panel[data-k="in-news"]{grid-column:1 / -1;grid-row:2}

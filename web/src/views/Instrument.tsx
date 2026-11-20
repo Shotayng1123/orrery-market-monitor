@@ -6,11 +6,13 @@ import type { SigmaWindow } from "../components/SigmaChart";
 import { Pick } from "../components/Pick";
 import { Star } from "../components/Star";
 import { StockNews } from "../components/StockNews";
+import { ScreenChips, screensOf, type ScreenSection } from "../components/ScreenChips";
 import { useApi } from "../lib/useApi";
+import { termMode } from "../lib/prefs";
 import type { EconEvent, TableRow } from "../lib/types";
 import { fmtLevel, fmtSigma, signCls } from "../lib/fmt";
 import { fmtClock, fmtDate, fmtStamp, SGT } from "../lib/time";
-import { EVENTS, LARGEST_FALL, LARGEST_RISE, LEVEL_THEN, NEWS, RANGE_52W, REALISED_VOL, SIGMA_1M, VS_200D, WORKED } from "../lib/labels";
+import { EVENTS, LARGEST_FALL, LARGEST_RISE, LEVEL_THEN, NEWS, NEXT_MEETING, RANGE_52W, REALISED_VOL, SIGMA_1M, VS_200D, WORKED } from "../lib/labels";
 import { asOfWords, calSource, ccyWords, distCls, distText, impactOk, lastAndDay, matchedWords, moveCls, moveText, noEvents, perfNote, periodsOf, sourceNote, volLine, volTip, workedLine, workedOut, type ImpactPick, type InstrumentInfo, type InstrumentPage, type KeyLine } from "../lib/instrument";
 import { dayLabel, dayOf, IMPACTS } from "./News";
 import { SIGMA_1M_TIP } from "./Market";
@@ -52,6 +54,9 @@ function EventTable({ rows }: { rows: EconEvent[] }) {
     </table>
   );
 }
+/** An instrument's page in the one-screen layout (the designer's §4.7, its two compact screens with the panels that exist
+ *  today): Overview (the chart, KEY DATA, PERFORMANCE, EVENTS) and News (NEWS; DRIVERS and STRESS join it with I-12). */
+export type InstrumentScreen = "overview" | "news";
 /** A currency's, a yield's, a commodity's, a future's or an index's own page on a computer (I-4, 20 Nov 2026; B-04, the
  *  designer's §4.7 and I-4 note): the stock page's two-column frame with the panels an instrument has. Left: the chart
  *  and PERFORMANCE (DRIVERS and STRESS join with I-12); right: KEY DATA, EVENTS (the banks' next meetings join with
@@ -63,10 +68,16 @@ export function InstrumentView({ d, tick }: { d: InstrumentPage; tick: number })
   const [period, setPeriod] = useState<ChartPeriod>("12M");
   const [sigmaWindow, setSigmaWindow] = useState<SigmaWindow>("m12");
   const [imp, setImp] = useState<ImpactPick>("high");
+  const [screen, setScreen] = useState<InstrumentScreen>("overview");   // the one-screen layout's screen on view
   const row = useLiveRow(d, tick), { last, day } = lastAndDay(row, u);
   const dec = row.decimals, lvl = (v: number | null | undefined) => fmtLevel(v, dec, u === "yield");
   const ev = i.events, events = (ev?.rows ?? []).filter((e) => impactOk(e, imp));
   const feed = d.feed ?? null, vol = volLine(i.vol, u), r52 = i.range52;
+  // the one-screen layout shows one screen's panels at a time (a page with one screen's worth shows them together);
+  // the scrolling page every panel
+  const sections: Array<ScreenSection<InstrumentScreen>> = [{ k: "key", label: "Key data", screen: "overview" }, { k: "perf", label: "Performance", screen: "overview" }, ...(ev ? [{ k: "events", label: "Events", screen: "overview" as const }] : []), ...(feed ? [{ k: "news", label: "News", screen: "news" as const }] : [])];
+  const scrs = screensOf(sections), term = termMode() && scrs.length > 1, scr: InstrumentScreen = scrs.includes(screen) ? screen : "overview";
+  const on = (k: string) => !term || (k === "chart" ? "overview" : sections.find((x) => x.k === k)?.screen) === scr;
   const left = ["chart", "perf"], right = ["key", ...(ev ? ["events"] : []), ...(feed ? ["news"] : [])], order: string[] = [];
   for (let k = 0; k < Math.max(left.length, right.length); k++) { if (left[k]) order.push(left[k]); if (right[k]) order.push(right[k]); }
   const no = (k: string) => String(order.indexOf(k) + 1).padStart(2, "0");
@@ -74,13 +85,13 @@ export function InstrumentView({ d, tick }: { d: InstrumentPage; tick: number })
   const p = period && periods.includes(period) ? period : "12M";
   return (
     <>
-      <div className="c12"><PeriodBar periods={periods} period={p} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} /></div>
-      <div className="pcols">
+      <div className="c12"><PeriodBar periods={periods} period={p} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} extra={term ? <ScreenChips sections={sections} screen={scr} onScreen={setScreen} /> : undefined} /></div>
+      <div className="pcols" data-page="instrument" data-screen={term ? scr : undefined}>
         <div className="pcol w8">
-          <Panel no={no("chart")} k="in-chart" title={d.name.toUpperCase()} span={8} aux={<><Star symbol={d.symbol} name={d.name} /> {d.symbol} · {i.kind} · {i.source}{i.official ? " · published once a day" : ""}</>}>
+          {on("chart") && <Panel no={no("chart")} k="in-chart" title={d.name.toUpperCase()} span={8} aux={<><Star symbol={d.symbol} name={d.name} /> {d.symbol} · {i.kind} · {i.source}{i.official ? " · published once a day" : ""}</>}>
             <div className="bigwrap"><ChartPanel row={row} period={p} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes /></div>
-          </Panel>
-          <Panel no={no("perf")} k="in-perf" title="PERFORMANCE" span={8} aux={u === "yield" ? "change in bp" : "price change"}>
+          </Panel>}
+          {on("perf") && <Panel no={no("perf")} k="in-perf" title="PERFORMANCE" span={8} aux={u === "yield" ? "change in bp" : "price change"}>
             <table className="secT perfT inperf" id="in-perf">
               <thead><tr><th className="l" />{i.perf.map((r) => <th key={r.h} title={r.from ? `from the close of ${fmtDate(r.from)}` : "no close that far back"}>{r.h}</th>)}</tr></thead>
               <tbody>
@@ -89,10 +100,10 @@ export function InstrumentView({ d, tick }: { d: InstrumentPage; tick: number })
               </tbody>
             </table>
             <div className="mut finnote">Each column is the last level against the last close on or before the start of the window{u === "yield" ? "; a yield's change is the change of its level, in bp" : ""}. {perfNote(i)}</div>
-          </Panel>
+          </Panel>}
         </div>
         <div className="pcol w4">
-          <Panel no={no("key")} k="in-key" title="KEY DATA" span={4} aux={i.asOfKind === "published" ? asOf : `as of ${asOf}`}>
+          {on("key") && <Panel no={no("key")} k="in-key" title="KEY DATA" span={4} aux={i.asOfKind === "published" ? asOf : `as of ${asOf}`}>
             <div className="krow">
               <span><span className="k">Last</span><span className="v" id="in-last">{lvl(last)}</span></span>
               <span><span className="k">Day</span><span className={`v ${moveCls(day, u)}`} id="in-day">{moveText(day, u)}</span></span>
@@ -114,13 +125,16 @@ export function InstrumentView({ d, tick }: { d: InstrumentPage; tick: number })
               </tbody></table>
             </div>
             <div className="mut finnote" id="in-worked">{workedLine(i)}</div>
-          </Panel>
-          {ev && (
+          </Panel>}
+          {ev && on("events") && (
             <Panel no={no("events")} k="in-events" title={EVENTS.toUpperCase()} span={4} aux={<span className="chips" style={{ margin: 0 }}><Pick label="Impact" value={imp} options={IMPACTS} onChange={setImp} /><span className="mut">{ccyWords(ev.ccys)} · times in SGT{calSource(ev.rows) ? ` · ${calSource(ev.rows)}` : ""}</span></span>}>
+              {/* the banks' next meetings come first here once the Monitor keeps their calendars (I-7); until then a dash
+                  that says so, as the phone's first block does (B-04 (b), B's verdict of 20 Nov 2026) */}
+              <div className="evmeet" id="in-meet" title="The central banks' meeting dates are not kept by the Monitor yet: a dash until they are, never a guessed date"><span className="k">{NEXT_MEETING}</span>{" "}<b>–</b>{" "}<span className="mut">not kept yet: the central banks' next meetings join here when the Monitor keeps their calendars</span></div>
               {events.length ? <EventTable rows={events} /> : <Empty title={ev.error ? "The calendar could not be read" : noEvents(ev.ccys, imp)}>{ev.error ?? null}</Empty>}
             </Panel>
           )}
-          {feed && (
+          {feed && on("news") && (
             <Panel no={no("news")} k="in-news" title={NEWS.toUpperCase()} span={4} aux={i.matched.length ? `matched by: ${matchedWords(i.matched)} · ${feed.days} days · times in SGT` : `${feed.days} days · times in SGT`}>
               <StockNews key={d.symbol} symbol={d.symbol} feed={feed} matched={i.matched} name={d.name} />
             </Panel>

@@ -71,12 +71,19 @@ export function pairOf(symbol: string, name?: string | null): [string, string] |
 }
 const DOLLAR_INDEX = /^DX-Y\.NYB$|^DX=F$/;
 
+/** An index future's index's currency, its home: the calendar that moves the index. The CME's Nikkei 225 future is
+ *  quoted in dollars, yet Japan's events are the ones that move the Nikkei (B-04 (b), B's verdict of 20 Nov 2026);
+ *  the yen-quoted one and the US index futures are quoted at home. */
+const INDEX_FUTURE_HOME: Record<string, string> = { "NKD=F": "JPY", "NIY=F": "JPY", "ES=F": "USD", "NQ=F": "USD", "YM=F": "USD", "RTY=F": "USD" };
+
 /** The currencies whose calendar an instrument's page shows (B-04's EVENTS; the designer: "EVENTS · USD AND JPY"):
- *  a pair's two, the dollar index's dollar, and otherwise the currency the instrument is quoted in (gold and oil in
- *  dollars, the Euro Stoxx 50 in euros, a JGB yield in yen). In the calendar's own codes (CNH is CNY). */
+ *  a pair's two; the dollar index's dollar; an index future's, its index's currency first, then the currency it is
+ *  quoted in where that differs (the Nikkei 225 future on the CME: JPY and USD); otherwise the currency the
+ *  instrument is quoted in (gold and oil in dollars, the Euro Stoxx 50 in euros, a JGB yield in yen). In the
+ *  calendar's own codes (CNH is CNY). */
 export function eventCurrencies(symbol: string, name: string | null | undefined, currency: string | null | undefined): string[] {
-  const pair = DOLLAR_INDEX.test(symbol) ? ["USD"] : pairOf(symbol, name);
-  const list = pair ?? (currency ? [currency] : []);
+  const pair = DOLLAR_INDEX.test(symbol) ? ["USD"] : pairOf(symbol, name), home = INDEX_FUTURE_HOME[symbol];
+  const list = pair ?? (home ? [home, ...(currency ? [currency] : [])] : currency ? [currency] : []);
   return [...new Set(list.map((c) => CAL_CCY[c] ?? c).filter((c) => /^[A-Z]{3}$/.test(c)))];
 }
 

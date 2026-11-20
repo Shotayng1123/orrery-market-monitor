@@ -7,7 +7,9 @@ import { money } from "../components/CompanyCard";
 import { FinTable } from "../components/FinTable";
 import { Star } from "../components/Star";
 import { StockNews } from "../components/StockNews";
+import { ScreenChips, screensOf, type ScreenSection } from "../components/ScreenChips";
 import { useApi } from "../lib/useApi";
+import { termMode } from "../lib/prefs";
 import type { TableRow } from "../lib/types";
 import type { MarketId } from "../lib/sessions";
 import { fmtNum, fmtPct, signCls, stockDecimals } from "../lib/fmt";
@@ -75,14 +77,19 @@ function KV({ k, children, title, cls }: { k: ReactNode; children: ReactNode; ti
   return <tr title={title}><td className="l">{k}</td><td className={`num${cls ? ` ${cls}` : ""}`}>{children}</td></tr>;
 }
 
+/** A stock's page in the one-screen layout (the designer's §4.6, its compact screens with the panels that exist today):
+ *  Overview (the chart, KEY DATA, PERFORMANCE), News (NEWS, BIG MOVES, SHORT INTEREST; RESULTS joins with I-14) and
+ *  Financials, switched by GO TO (components/ScreenChips.tsx). */
+export type StockScreen = "overview" | "news" | "fin";
 /** Single-asset page (#asset/SYMBOL; Shota, 18 Nov 2026): the chart with its σ corridors and volume, the key
  *  figures a portfolio manager checks first, the price change over each horizon against the benchmark, the stock's
  *  headlines and alerts, its big moves, short interest, and the statements for ten years with guidance, or the last
  *  twelve single quarters. Since 20 Nov 2026 on the two-column page (the designer's §3.4 and §4.6): the chart,
  *  PERFORMANCE and BIG MOVES on the left, KEY DATA, NEWS and SHORT INTEREST on the right, each column stacking on its
  *  own; FINANCIALS across. Panels are numbered in reading order, row by row; under 1,100 CSS px of layout they follow
- *  each other in that order, and the one-screen layout places them by their kind (`k`). */
+ *  each other in that order. The one-screen layout shows them a screen at a time, placed by their kind (`k`). */
 export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
+  const [screen, setScreen] = useState<StockScreen>("overview");   // the one-screen layout's screen on view
   const [period, setPeriod] = useState<ChartPeriod>("12M");
   const [sigmaWindow, setSigmaWindow] = useState<SigmaWindow>("m12");
   const [view, setView] = useState<"annual" | "quarterly">("annual");
@@ -108,15 +115,19 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
   for (let i = 0; i < Math.max(left.length, right.length); i++) { if (left[i]) order.push(left[i]); if (right[i]) order.push(right[i]); }
   order.push("fin");
   const no = (k: string) => String(order.indexOf(k) + 1).padStart(2, "0");
+  // the one-screen layout shows one screen's panels at a time; the scrolling page every panel
+  const sections: Array<ScreenSection<StockScreen>> = [{ k: "key", label: "Key data", screen: "overview" }, { k: "perf", label: "Performance", screen: "overview" }, ...(feed ? [{ k: "news", label: "News", screen: "news" as const }] : []), ...(d.moves.eligible ? [{ k: "moves", label: "Big moves", screen: "news" as const }] : []), { k: "short", label: "Short interest", screen: "news" }, { k: "fin", label: "Financials", screen: "fin" }];
+  const term = termMode(), scr: StockScreen = screensOf(sections).includes(screen) ? screen : "overview";
+  const on = (k: string) => !term || (k === "chart" ? "overview" : sections.find((x) => x.k === k)?.screen) === scr;
   return (
     <>
-      <div className="c12"><PeriodBar periods={ASSET_PERIODS} period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} /></div>
-      <div className="pcols" data-even={even && feed ? "" : undefined}>
+      <div className="c12"><PeriodBar periods={ASSET_PERIODS} period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} extra={term ? <ScreenChips sections={sections} screen={scr} onScreen={setScreen} /> : undefined} /></div>
+      <div className="pcols" data-even={even && feed ? "" : undefined} data-page="stock" data-screen={term ? scr : undefined}>
         <div className="pcol w8">
-          <Panel no={no("chart")} k="st-chart" title={d.name.toUpperCase()} span={8} aux={<><Star symbol={d.symbol} name={d.name} /> {d.symbol}{d.exchange ? ` · ${d.exchange}` : ""}{d.sector ? ` · ${d.sector}` : ""}{d.industry ? ` · ${d.industry}` : ""}{d.indices.length ? ` · ${d.indices.join(", ")}` : ""} · Yahoo Finance</>}>
+          {on("chart") && <Panel no={no("chart")} k="st-chart" title={d.name.toUpperCase()} span={8} aux={<><Star symbol={d.symbol} name={d.name} /> {d.symbol}{d.exchange ? ` · ${d.exchange}` : ""}{d.sector ? ` · ${d.sector}` : ""}{d.industry ? ` · ${d.industry}` : ""}{d.indices.length ? ` · ${d.indices.join(", ")}` : ""} · Yahoo Finance</>}>
             <div className="bigwrap"><ChartPanel row={row} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes volume marks={marks} /></div>
-          </Panel>
-          <Panel no={no("perf")} k="st-perf" title={bms.length ? `PERFORMANCE VS ${title.toUpperCase()}` : "PERFORMANCE"} span={8} aux="price change, dividends not included">
+          </Panel>}
+          {on("perf") && <Panel no={no("perf")} k="st-perf" title={bms.length ? `PERFORMANCE VS ${title.toUpperCase()}` : "PERFORMANCE"} span={8} aux="price change, dividends not included">
             <table className="secT perfT" id="st-perf">
               <thead><tr><th className="l" />{d.perf.map((r) => <th key={r.h} title={r.from ? `from the close of ${fmtDate(r.from)}` : undefined}>{r.h}</th>)}</tr></thead>
               <tbody>
@@ -128,8 +139,8 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
             </table>
             <div className="mut finnote">Each column is the price now against the last close on or before the same day that many months ago; a benchmark is measured between the same two dates. A column is empty where the history does not reach that far.</div>
             {bms.filter((b) => b.note).map((b) => <div key={b.symbol} className="mut finnote">{b.note}</div>)}
-          </Panel>
-          {d.moves.eligible && (
+          </Panel>}
+          {d.moves.eligible && on("moves") && (
             <Panel no={no("moves")} k="st-moves" title="BIG MOVES AND WHY" span={8} aux={`${d.moves.rows.length} in three years, newest first`}>
               {d.moves.rows.length ? (
                 // a short box with its own scrolling (Shota, 19 Nov 2026): the whole list pushed FINANCIALS a long way down
@@ -152,7 +163,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
           )}
         </div>
         <div className="pcol w4">
-          <Panel no={no("key")} k="st-key" title="KEY DATA" span={4} aux={d.asOf ? `as of ${fmtStamp(d.asOf)}` : ""}>
+          {on("key") && <Panel no={no("key")} k="st-key" title="KEY DATA" span={4} aux={d.asOf ? `as of ${fmtStamp(d.asOf)}` : ""}>
             <div className="krow">
               <span><span className="k">Last</span><span className="v">{fmtNum(d.price, dec)}</span></span>
               <span><span className="k">Day</span><span className={`v ${signCls(d.pct, 2)}`}>{fmtPct(d.pct, 2)}</span></span>
@@ -185,18 +196,18 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
               {prof && <KV k="Annual report" title={prof.doc?.tip ?? prof.none}>{prof.doc ? <a href={prof.doc.href} target="_blank" rel="noreferrer" id="st-yuho">有報 {prof.label} ↗</a> : `有報 ${prof.label}`}</KV>}
             </tbody></table>
             </div>
-          </Panel>
-          {feed && (
+          </Panel>}
+          {feed && on("news") && (
             <Panel no={no("news")} k="st-news" title={NEWS.toUpperCase()} span={4} aux={`headlines and alerts naming ${d.symbol} · ${feed.days} days · times in SGT`}>
               <StockNews key={d.symbol} symbol={d.symbol} feed={feed} fit even={even} onEven={setEven} />
             </Panel>
           )}
-          <Panel no={no("short")} k="st-short" title="SHORT INTEREST" span={4} aux={s ? (s.kind === "jpx" ? "JPX short-position reports" : s.kind === "interest" ? "exchange-reported · Yahoo Finance" : "FINRA") : ""}>
+          {on("short") && <Panel no={no("short")} k="st-short" title="SHORT INTEREST" span={4} aux={s ? (s.kind === "jpx" ? "JPX short-position reports" : s.kind === "interest" ? "exchange-reported · Yahoo Finance" : "FINRA") : ""}>
             {!s ? <Empty title="No short data">None reported for this name.</Empty> : s.kind === "jpx" ? (
               <table className="secT" id="st-short"><tbody>
-                <tr><td className="l"><b>Reported positions (0.5% and above) · {fmtDate(s.d)}</b></td><td className="num"><b>{(s.ratio * 100).toFixed(2)}%</b></td></tr>
+                <tr><td className="l"><b>Reported positions (0.5% and above) · <span className="nb">{fmtDate(s.d)}</span></b></td><td className="num"><b>{(s.ratio * 100).toFixed(2)}%</b></td></tr>
                 <tr><td className="l mut">Shares · days of avg daily volume (60d)</td><td className="num">{fmtCount(s.shares)} · {s.daysToCover == null ? "–" : s.daysToCover.toFixed(1)}</td></tr>
-                {s.holders.slice(0, 8).map((h) => <tr key={h.holder}><td className="l mut">{h.holder}<span className="mut"> · {fmtDate(h.d)}</span></td><td className="num">{(h.ratio * 100).toFixed(2)}%</td></tr>)}
+                {s.holders.slice(0, 8).map((h) => <tr key={h.holder}><td className="l mut">{h.holder}<span className="mut nb"> · {fmtDate(h.d)}</span></td><td className="num">{(h.ratio * 100).toFixed(2)}%</td></tr>)}
               </tbody></table>
             ) : s.kind === "interest" ? (
               <table className="secT" id="st-short"><tbody>
@@ -210,10 +221,10 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
             ) : (
               <table className="secT" id="st-short"><tbody><KV k={`FINRA short-volume share · ${fmtDate(s.d)}`} title="The share of the day's reported volume that was sold short; not short interest">{(s.ratio * 100).toFixed(0)}%</KV></tbody></table>
             )}
-          </Panel>
+          </Panel>}
         </div>
       </div>
-      <Panel no={no("fin")} k="st-fin" title="FINANCIALS" span={12} aux={f ? <>{f.source === "edinetdb" ? "EDINET DB (有価証券報告書 · 決算短信)" : "Yahoo Finance fundamentals"}{f.asOf ? ` · fetched ${fmtDate(f.asOf)}` : ""}</> : ""}>
+      {on("fin") && <Panel no={no("fin")} k="st-fin" title="FINANCIALS" span={12} aux={f ? <>{f.source === "edinetdb" ? "EDINET DB (有価証券報告書 · 決算短信)" : "Yahoo Finance fundamentals"}{f.asOf ? ` · fetched ${fmtDate(f.asOf)}` : ""}</> : ""}>
         {f && fs ? (
           <>
             <div className="finhead">
@@ -227,7 +238,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
             {f.notes.map((n) => <div key={n} className="mut finnote">{n}</div>)}
           </>
         ) : <Empty title="No statements">{d.finNote ?? "Statements are available for equities only."}</Empty>}
-      </Panel>
+      </Panel>}
     </>
   );
 }

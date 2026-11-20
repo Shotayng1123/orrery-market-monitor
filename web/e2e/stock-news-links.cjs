@@ -12,7 +12,11 @@
 //   - Japan's profile rows in KEY DATA (A-27, shown now): fiscal year end, standard, the annual report.
 //   - The two-column page (the designer's §4.6): no empty block over 40 px between the panels of a column, nor under
 //     the shorter column above FINANCIALS, at 1440×900 and 1280×720 (the designer's I-3 check, the reviewer's R2B-02);
-//     at text XL one column in reading order; the one-screen layout by kind.
+//     at text XL one column in reading order. At text L (1440x900, 1366x768, 1536x864) and XL in a 1680-px window the
+//     right column's SHORT INTEREST keeps its figures whole and nothing scrolls sideways (the designer's D-51).
+//   - The one-screen layout (COMPACT, 1440x900): the designer's screens of §4.6 with the panels of today, switched by GO
+//     TO: Overview (the chart, KEY DATA, PERFORMANCE), News (NEWS on its own with at least eight whole rows, BIG MOVES,
+//     SHORT INTEREST) and Financials (the designer's I-3 verdict, 20 Nov 2026).
 //   - A server from before NEWS (no `feed` in its answer): no NEWS panel, nothing breaks.
 // Nothing here depends on the time of day: the stand-in rows are counted from when the suite starts, and every
 // expectation is worked out from the same rows with the same rule as the mock (web/src/lib/mock.ts, stockFeed).
@@ -179,15 +183,46 @@ const heads = (p) => p.evaluate(() => [...document.querySelectorAll("table.fin t
     }
     ck(`${code} · nothing wider than the window; no page errors`, (await p.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 0 && errs.length === 0, errs); await ctx.close(); }
 
-  console.log("\n[the one-screen layout (COMPACT, 1440x900): placed by kind, on one screen]");
+  console.log("\n[D-51 · text L and XL: the right column's SHORT INTEREST keeps its figures whole; nothing scrolls sideways]");
+  for (const [w, h, size] of [[1440, 900, "L"], [1366, 768, "L"], [1536, 864, "L"], [1680, 1050, "XL"]]) {
+    const { ctx, p, errs } = await page(b, { viewport: { width: w, height: h } }, PREFS(size, false));
+    for (const sym of ["7203.T", "NVDA"]) {
+      await go(p, "#asset/" + sym, "#st-short");
+      const r = await p.evaluate(() => { const pn = document.querySelector('.panel[data-k="st-short"]'), pr = pn.getBoundingClientRect();
+        return { w: Math.round(pr.width / (Number(document.body.style.getPropertyValue("--z")) || 1)), sideways: [...document.querySelectorAll("#grid .panel > .pbody")].filter((x) => x.scrollWidth > x.clientWidth + 1).map((x) => x.parentElement.dataset.k),
+          figs: [...pn.querySelectorAll("td.num")].map((td) => { const c = td.getBoundingClientRect(); return { t: td.textContent, whole: td.scrollWidth <= td.clientWidth + 1 && c.right <= pr.right + 0.5 }; }) }; });
+      ck(`${w}x${h} text ${size} · ${sym}: SHORT INTEREST (${r.w} CSS px) shows every figure whole (${r.figs.map((f) => f.t).join(", ")}); no panel scrolls sideways`, r.figs.length >= 3 && r.figs.every((f) => f.whole) && r.sideways.length === 0, r);
+    }
+    ck(`${w}x${h} text ${size}: no page errors`, errs.length === 0, errs); await ctx.close();
+  }
+
+  console.log("\n[the one-screen layout (COMPACT, 1440x900): the designer's screens, switched by GO TO]");
   { const { ctx, p, errs } = await page(b, { viewport: { width: 1440, height: 900 } }, PREFS("AUTO", true));
+    await go(p, "#asset/7203.T", '.panel[data-k="st-key"]');
+    const R = () => p.evaluate(() => Object.fromEntries([...document.querySelectorAll("#grid .panel")].map((x) => { const r = x.getBoundingClientRect(), pb = x.querySelector(":scope > .pbody"), br = pb.getBoundingClientRect(), pad = parseFloat(getComputedStyle(pb).paddingBottom) || 0;
+      const inner = [...pb.querySelectorAll("*")].filter((e) => e.getBoundingClientRect().height > 0 && getComputedStyle(e).display !== "contents"), end = Math.max(br.top, ...inner.map((e) => Math.min(e.getBoundingClientRect().bottom, br.bottom)));
+      const cut = [x.querySelector(".phead .t"), x.querySelector(".phead .aux")].filter(Boolean).filter((h) => h.scrollWidth > h.clientWidth + 1).map((h) => h.textContent);
+      return [x.dataset.k, { l: Math.round(r.left), r: Math.round(r.right), t: Math.round(r.top), b: Math.round(r.bottom), empty: Math.round(br.bottom - pad - end), cut }]; })));
+    const chips = () => p.evaluate(() => [...document.querySelectorAll("#scrbar .chip-sm")].map((c) => ({ t: c.textContent, on: c.classList.contains("on") })));
+    const view = () => p.evaluate(() => ({ h: document.documentElement.scrollHeight, vh: innerHeight }));
+    const c1 = await chips(), o = await R(), v1 = await view();
+    ck(`GO TO at the right of the strip (${c1.map((x) => `${x.t}${x.on ? "*" : ""}`).join(" · ")}); Overview: the chart beside KEY DATA, PERFORMANCE across under both, on the one screen, KEY DATA without an empty block (${o["st-key"]?.empty} px)`, c1.map((x) => x.t).join() === "KEY DATA,PERFORMANCE,NEWS,BIG MOVES,SHORT INTEREST,FINANCIALS" && c1.filter((x) => x.on).map((x) => x.t).join() === "KEY DATA,PERFORMANCE" && Object.keys(o).sort().join() === "st-chart,st-key,st-perf" && o["st-chart"].r < o["st-key"].l && Math.abs(o["st-chart"].t - o["st-key"].t) <= 1 && o["st-perf"].t > o["st-key"].b && o["st-perf"].r - o["st-perf"].l > 1300 && o["st-key"].empty <= 40 && Object.values(o).every((x) => x.b <= v1.vh + 1 && x.cut.length === 0) && v1.h <= v1.vh + 1, { c1, o, v1 });
+    await p.locator("#scrbar .chip-sm", { hasText: "NEWS" }).click(); await p.waitForTimeout(500);
+    const n = await R(), c2 = await chips();
+    const whole = await p.evaluate(() => { const pb = document.querySelector('.panel[data-k="st-news"] > .pbody').getBoundingClientRect(); return [...document.querySelectorAll("#st-news .snrow")].filter((r) => { const x = r.getBoundingClientRect(); return x.top >= pb.top - 0.5 && x.bottom <= pb.bottom + 0.5; }).length; });
+    ck(`GO TO › NEWS: NEWS on its own across the screen with ${whole} whole rows (eight at least), BIG MOVES beside SHORT INTEREST under it, NEWS, BIG MOVES and SHORT INTEREST lit; no head cut`, Object.keys(n).sort().join() === "st-moves,st-news,st-short" && whole >= 8 && c2.filter((x) => x.on).map((x) => x.t).join() === "NEWS,BIG MOVES,SHORT INTEREST" && n["st-moves"].t > n["st-news"].b - 1 && n["st-moves"].r < n["st-short"].l && Math.abs(n["st-moves"].t - n["st-short"].t) <= 1 && Object.values(n).every((x) => x.b <= 901 && x.cut.length === 0), { n, whole, c2 });
+    const cut = await p.evaluate(() => [...document.querySelectorAll('#grid .panel[data-k="st-short"] td.l')].filter((c) => c.scrollWidth > c.clientWidth + 1).map((c) => c.textContent));
+    ck("in it, the labels of SHORT INTEREST wrap rather than lose their end (a report's date)", cut.length === 0, cut);
+    await p.locator("#scrbar .chip-sm", { hasText: "FINANCIALS" }).click(); await p.waitForTimeout(500);
+    const f = await R(), lines = await p.evaluate(() => { const bx = document.querySelector(".finbox, table.fin")?.closest(".pbody"), r = bx.getBoundingClientRect(); return [...document.querySelectorAll("table.fin tbody tr")].filter((tr) => { const x = tr.getBoundingClientRect(); return x.height > 0 && x.top >= r.top - 0.5 && x.bottom <= r.bottom + 0.5; }).length; });
+    ck(`GO TO › FINANCIALS: FINANCIALS alone on the screen, ${lines} lines of the statements in view`, Object.keys(f).join() === "st-fin" && f["st-fin"].r - f["st-fin"].l > 1300 && lines >= 14, { f, lines });
+    await p.locator("#scrbar .chip-sm", { hasText: "KEY DATA" }).click(); await p.waitForTimeout(500);
+    const back = await R();
+    ck("GO TO › KEY DATA brings Overview back; in it the labels of PERFORMANCE wrap rather than lose their end (\"Against Nikkei 225, pp\")", Object.keys(back).sort().join() === "st-chart,st-key,st-perf" && (await p.evaluate(() => [...document.querySelectorAll('#grid .panel[data-k="st-perf"] td.l')].filter((c) => c.scrollWidth > c.clientWidth + 1).length)) === 0, back);
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+  { const { ctx, p, errs } = await page(b, { viewport: { width: 1440, height: 900 } }, PREFS("AUTO", false));
     await go(p, "#asset/7203.T", '.panel[data-k="st-news"]');
-    const R = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll("#grid .panel")].map((x) => { const r = x.getBoundingClientRect(); return [x.dataset.k, { l: Math.round(r.left), r: Math.round(r.right), t: Math.round(r.top), b: Math.round(r.bottom) }]; })));
-    const over = Object.entries(R).flatMap(([k, a]) => Object.entries(R).filter(([j, c]) => j > k && a.l < c.r - 1 && c.l < a.r - 1 && a.t < c.b - 1 && c.t < a.b - 1).map(([j]) => `${k}/${j}`));
-    const page1 = await p.evaluate(() => ({ h: document.documentElement.scrollHeight, vh: innerHeight }));
-    ck("the chart beside KEY DATA, PERFORMANCE beside NEWS, BIG MOVES beside SHORT INTEREST, FINANCIALS across the foot; nothing overlaps, all on one screen", R["st-chart"].r < R["st-key"].l && R["st-perf"].r < R["st-news"].l && Math.abs(R["st-perf"].t - R["st-news"].t) <= 1 && R["st-moves"].r < R["st-short"].l && Math.abs(R["st-moves"].t - R["st-short"].t) <= 1 && R["st-moves"].t > R["st-perf"].b && R["st-fin"].t > R["st-moves"].b && over.length === 0 && Object.values(R).every((x) => x.b <= page1.vh + 1) && page1.h <= page1.vh + 1, { R, over, page1 });
-    const cut = await p.evaluate(() => [...document.querySelectorAll('#grid .panel[data-k="st-perf"] td.l, #grid .panel[data-k="st-short"] td.l')].filter((c) => c.scrollWidth > c.clientWidth + 1).map((c) => c.textContent));
-    ck("in it, the labels of PERFORMANCE and SHORT INTEREST wrap rather than lose their end (\"Against Nikkei 225, pp\", a report's date)", cut.length === 0, cut);
+    ck("the scrolling layout has no GO TO and every panel on its page", (await p.locator("#scrbar").count()) === 0 && (await p.locator("#grid .panel").count()) === 7);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
 
   console.log("\n[a server from before NEWS (its answer has no `feed`): no NEWS panel, nothing breaks]");
