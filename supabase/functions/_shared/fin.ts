@@ -51,8 +51,12 @@ export const LAYOUT_FOREIGN: FinLayout = {
 };
 
 /** One column: a fiscal year ("FY"), a single quarter ("Q", three months, not year-to-date) or the company's
- *  guidance for the year in progress ("FC"). `end` is the last day of the period. */
-export interface FinPeriod { key: string; end: string; label: string; kind: "FY" | "Q" | "FC"; months: number; std: string | null; doc: string | null; url: string | null; note: string | null }
+ *  guidance for the year in progress ("FC"). `end` is the last day of the period.
+ *  `url` is the address of the document behind the column exactly as the source gives it, or null: a year's
+ *  有価証券報告書 on EDINET (`doc` is its document ID), the 決算短信 PDF of the guidance, of a quarter, or of a year
+ *  known only from its 決算短信. An address is never made up. `filed` is the date that document was filed or
+ *  disclosed, where the source says (absent in statements stored before 20 Nov 2026). */
+export interface FinPeriod { key: string; end: string; label: string; kind: "FY" | "Q" | "FC"; months: number; std: string | null; doc: string | null; url: string | null; note: string | null; filed?: string | null }
 export interface FinSet { periods: FinPeriod[]; lines: Partial<Record<FinLine, Array<number | null>>> }
 export interface FinUnit { div: number; label: string; dp: number }
 export interface Fin {

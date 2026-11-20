@@ -17,9 +17,9 @@ const dayBar = (t: string) => (valid(t) ? new Date(t).toLocaleDateString("en-GB"
  *  which wraps to three lines at most (the whole of it on hover), and under it, muted, the publisher and the
  *  companies it names. A row used to spend its width on the date, "SGT", chips and publisher and cut the headline
  *  to about forty characters. `named` keeps only some of the companies (a watchlist shows those on it). */
-export function HeadlineList({ rows, named }: { rows: Headline[]; named?: (symbol: string) => boolean }) {
+export function HeadlineList({ rows, named, free = false }: { rows: Headline[]; named?: (symbol: string) => boolean; free?: boolean /* no box of its own: the page grows (WATCHLIST, D-48) */ }) {
   return (
-    <div className="nwlist">
+    <div className={`nwlist${free ? " free" : ""}`}>
       {rows.map((it, i) => {
         const title = decodeEntities(it.title), chips = (it.tickers ?? []).filter((t) => !named || named(t.s)).slice(0, 3);
         return (

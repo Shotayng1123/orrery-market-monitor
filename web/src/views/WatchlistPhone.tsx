@@ -15,7 +15,7 @@ import { cellBp } from "./Market";
 import { day, decode, lastOf, sourcesOf, WINDOWS, type Feed, type WatchRow } from "./Watchlist";
 
 /** WATCHLIST for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026): the user's own names as lines with one
- *  change (the period is picked at the top), then their earnings dates, alerts, headlines and research mentions.
+ *  change (the period is picked at the top), then their results dates, alerts, headlines and research mentions.
  *  Each line says what it is as of under the name, and its change says its window (19 Nov 2026). */
 type Key = (typeof WINDOWS)[number][0];
 const KEYS: PickOption<Key>[] = WINDOWS.map(([value, , label]) => ({ value, label }));
@@ -70,7 +70,7 @@ export function WatchlistPhone({ tick }: { tick: number }) {
         </div>
         {rows.length > 0 && <p className="mp-note" id="wl-src">{src ? `${/[,;]/.test(src) ? "Sources" : "Source"}: ${src}. ` : ""}A stock is at its last close, a market instrument at its last print; a yield's changes are in bp.</p>}
       </Section>
-      <Section title="Earnings ahead" aux="times in SGT">
+      <Section title="Results ahead" aux="times in SGT">
         {ahead.length ? ahead.map((r, i, arr) => (
           <Fragment key={r.symbol}>
             {(i === 0 || dayOf(r.earningsAt!) !== dayOf(arr[i - 1].earningsAt!)) && <div className="ev-day">{dayLabel(r.earningsAt!)}</div>}
@@ -80,7 +80,7 @@ export function WatchlistPhone({ tick }: { tick: number }) {
               <span className="ev-a sm">{r.earningsEst ? "est." : "confirmed"}</span>
             </div>
           </Fragment>
-        )) : <Empty title="No dates ahead">{rows.length ? "None of your names has an earnings date in the feed." : "Add names to see their earnings dates."}</Empty>}
+        )) : <Empty title="No dates ahead">{rows.length ? "None of your names has a results date in the feed." : "Add names to see their results dates."}</Empty>}
       </Section>
       <Section title="Alerts on my names" aux={feed.data ? `${alerts.length} recent` : ""}>
         {rows.length > 0 && <NotifyNudge />}

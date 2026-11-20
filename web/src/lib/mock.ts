@@ -17,6 +17,7 @@ import type { EarningsRow } from "../components/Earnings";
 import type { PolicyRow } from "../views/RatesFx";
 import type { PolicyStep } from "../components/PolicyChart";
 import type { Hit } from "./candidates";
+import type { StockFeed } from "./stock";
 
 const MASTER: Array<Pick<TableRow, "symbol" | "name" | "cls" | "group" | "market" | "currency" | "decimals" | "order"> & { base: number; vol: number; proxyFor?: string }> = [
   { symbol: "^N225", name: "Nikkei 225", cls: "Equities", group: "equity", market: "TSE", currency: "JPY", decimals: 2, order: 1, base: 57000, vol: 0.013 },
@@ -115,8 +116,10 @@ export function mockSeries(symbol: string, range: string): Series {
   if (range === "1D") return { symbol, res: "1m", points: withVolume(symbol, intradaySeries(symbol), 6e4), asOf: new Date().toISOString() };
   if (range === "1W") return { symbol, res: "15m", points: withVolume(symbol, hourlySeries(symbol, 14, 4), 9e5), asOf: new Date().toISOString() };
   if (range === "1M") return { symbol, res: "1h", points: withVolume(symbol, hourlySeries(symbol, 62), 3.5e6), asOf: new Date().toISOString() };
-  const days: Record<string, number> = { "3M": 93, "12M": 366, "36M": 1096 };
-  const n = Math.round(((days[range] ?? 366) * 2 + 1120) * 0.69);
+  // as the server: one more window to pan into and the σ window's history before it; 5Y and 10Y without the extra
+  // window, and never more than the ten years Yahoo keeps of a stock (supabase/functions/_shared/assets.ts)
+  const days: Record<string, number> = { "3M": 93, "12M": 366, "36M": 1096, "5Y": 1827, "10Y": 3653 }, d = days[range] ?? 366;
+  const n = Math.min(Math.round(((d >= 1827 ? d : d * 2) + 1120) * 0.69), 2615);
   const pts = withVolume(symbol, dailySeries(symbol, n), 2e7);
   return { symbol, res: "1d", points: pts, asOf: new Date(pts[pts.length - 1].t * 1000).toISOString().slice(0, 10) };
 }
@@ -238,6 +241,23 @@ function watchFeed(): Feed {
     research: f.research.map((r) => ({ ...r, symbols: r.symbols.filter((s) => syms.has(s)) })).filter((r) => r.symbols.length > 0) } as unknown as Feed;
 }
 
+/** A stock's NEWS as the server's `stock` sends it (supabase/functions/_shared/stock.ts, feedFor): the stand-in
+ *  headlines that name it (those of NEWS and of WATCHLIST) and the stand-in alerts on it (WATCHLIST's, and the moves
+ *  of the header's list), newest first, at most 60 and 40, over 90 days. With ?mock=empty, none. */
+function stockFeed(symbol: string): StockFeed {
+  if (emptyMode()) return { days: 90, news: [], alerts: [] };
+  const S = SI(), since = Date.now() - 90 * 86400e3, t = (x: string) => Date.parse(x);
+  type N = { id: number; publishedAt: string; source: string; title: string; url: string; category: string | null; tickers: Array<{ s: string }> };
+  type A = { id: number; at: string; symbol: string; kind: string; pct: number | null; market: string; msg: string; url: string | null };
+  const news = [...(S.news as unknown as N[]).map((n) => ({ ...n })), ...(S.watch.feed.news as unknown as N[]).map((n) => ({ ...n, id: n.id + 1000 }))]
+    .filter((n) => n.tickers.some((x) => x.s === symbol) && t(n.publishedAt) >= since).sort((a, b) => t(b.publishedAt) - t(a.publishedAt)).slice(0, 60)
+    .map((n) => ({ id: n.id, publishedAt: n.publishedAt, source: n.source, title: n.title, url: n.url, category: n.category ?? null }));
+  const alerts = [...(S.watch.feed.alerts as unknown as A[]).map((a) => ({ ...a, id: a.id + 1000 })), ...(S.alerts as unknown as A[]).filter((a) => a.kind === "stock" || a.kind === "index")]
+    .filter((a) => a.symbol === symbol && t(a.at) >= since).sort((a, b) => t(b.at) - t(a.at)).slice(0, 40)
+    .map((a) => ({ id: a.id, at: a.at, kind: a.kind, pct: a.pct, market: a.market, msg: a.msg, url: a.url ?? null }));
+  return { days: 90, news, alerts };
+}
+
 /** `?mock=empty`: what the server sends for each action when its tables hold nothing. */
 function emptyAnswer(action: string, params: Record<string, string | number | boolean | undefined> | undefined): unknown {
   const idx = String(params?.idx ?? "SP500");
@@ -309,7 +329,7 @@ export function mockAction(action: string, params: Record<string, string | numbe
       const term = String(params?.q ?? "").trim().toLowerCase();
       return { rows: term ? (S.watch.search as Hit[]).filter((x) => x.symbol.toLowerCase().includes(term) || x.name.toLowerCase().includes(term)) : [] };
     }
-    case "stock": { const sym = String(params?.symbol ?? "7203.T"), pts = dailySeries(sym, 300); return mockStock(sym, pts[pts.length - 1].v, pts); }   // the price the mock chart ends at, and its days for the marks
+    case "stock": { const sym = String(params?.symbol ?? "7203.T"), pts = dailySeries(sym, 300); return { ...mockStock(sym, pts[pts.length - 1].v, pts), feed: stockFeed(sym) }; }   // the price the mock chart ends at, and its days for the marks
     case "asset": {
       const symbol = String(params?.symbol ?? "7203.T"); const r = rng(seedOf(symbol)); const jp = /\.T$/.test(symbol);
       const price = jp ? 1000 + r() * 5000 : 50 + r() * 400; const pct = (r() - 0.5) * 6;

@@ -6,7 +6,8 @@
 //   node e2e/run.cjs --serial                 one suite at a time (default: three at once)
 //
 // The runner starts the servers the chosen suites need, runs the suites, tries a failed one once more, prints
-// one line per suite and exits with 1 if any failed twice. Nothing here needs the real API or a sign-in:
+// one line per suite (with the failed lines of a first try that the second try passed) and exits with 1 if any
+// failed twice. Nothing here needs the real API or a sign-in:
 //   mock     5179  dev server with the in-page mock feed, no sign-in
 //   standin  5181  dev server, no sign-in; API calls are answered by the suite (e2e/harness.cjs)
 //   gate     5183  dev server with the real sign-in screen; API calls answered by the suite
@@ -32,6 +33,8 @@ const SUITES = [
   { name: "phone-equities", needs: ["mock"] },
   { name: "phone-rates-watchlist-stock", needs: ["mock", "standin"] },
   { name: "stock-page", needs: ["mock", "standin"] },
+  { name: "stock-news-links", needs: ["mock", "standin"] },
+  { name: "stock-moves-periods", needs: ["mock"] },
   { name: "phone-default", needs: ["mock", "gate"] },
   { name: "accounts", needs: ["gate"] },
   { name: "install-hint", needs: ["mock"] },
@@ -85,11 +88,20 @@ function runOnce(suite, attempt) {
     c.on("exit", (code) => { clearTimeout(timer); fs.closeSync(out); const text = fs.readFileSync(file, "utf8"); res({ ok: code === 0, secs: Math.round((Date.now() - t0) / 1000), passed: (text.match(/^\s*✓ (?!all checks)/gm) || []).length, failed: (text.match(/^\s*✗ (?!\d+ check)/gm) || []), text }); });
   });
 }
+// The lines of a try that say what failed: its ✗ checks and any error with where it was thrown; for a suite that
+// stopped without one, the last lines it printed.
+const failLines = (r) => {
+  const lines = r.text.split("\n").filter((l) => /✗|Error|at .*\.cjs/.test(l));
+  return (lines.length ? lines.slice(0, 12) : r.text.split("\n").filter((l) => l.trim()).slice(-5)).map((l) => "    " + l.trim().slice(0, 600)).join("\n");
+};
 async function run(suite) {
-  let r = await runOnce(suite, 1), retried = false;
-  if (!r.ok) { retried = true; r = await runOnce(suite, 2); }
+  const first = await runOnce(suite, 1);
+  const r = first.ok ? first : await runOnce(suite, 2), retried = r !== first;
   console.log(`${r.ok ? "✓" : "✗"} ${suite.name}: ${r.passed} checks${r.ok ? "" : `, ${r.failed.length || "the suite stopped;"} failed`} in ${r.secs}s${retried ? (r.ok ? " (passed on the second try)" : " (failed twice)") : ""}`);
-  if (!r.ok) console.log(r.text.split("\n").filter((l) => /✗|Error|at .*\.cjs/.test(l)).slice(0, 12).map((l) => "    " + l.trim().slice(0, 600)).join("\n"));
+  // A check that fails once and passes on the retry is a flaky check: what failed is printed here too, so it can be
+  // found from the publish job's log alone (GitHub's machines keep e2e/.out only as an artifact; 20 Nov 2026).
+  if (retried && r.ok) console.log(`    the first try failed (e2e/.out/${suite.name}.log):\n${failLines(first)}`);
+  if (!r.ok) console.log(failLines(r));
   return { ...r, name: suite.name };
 }
 

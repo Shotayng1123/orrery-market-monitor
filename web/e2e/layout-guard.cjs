@@ -183,9 +183,13 @@ function MEASURE(opt) {
       for (const ps of ["::before", "::after"]) {   // a pseudo-element laid over the element widens what takes the tap
         const s = getComputedStyle(el, ps);
         if (!s.content || s.content === "none" || s.content === "normal" || s.position !== "absolute" || s.pointerEvents === "none" || s.display === "none") continue;
+        // it is placed against the element when the element is positioned, otherwise against its nearest positioned
+        // ancestor (a statements header's link fills its whole header cell this way: I-3, 20 Nov 2026)
+        let cb = el; if (getComputedStyle(el).position === "static") { cb = el.parentElement; while (cb && cb !== document.body && getComputedStyle(cb).position === "static") cb = cb.parentElement; }
+        const c = (cb || el).getBoundingClientRect();
         const px = (v) => (v && v !== "auto" ? parseFloat(v) : null), t = px(s.top), b = px(s.bottom), l = px(s.left), rr = px(s.right);
-        if (t != null && b != null) { T = Math.min(T, r.top + t * z); B = Math.max(B, r.bottom - b * z); }
-        if (l != null && rr != null) { L = Math.min(L, r.left + l * z); R = Math.max(R, r.right - rr * z); }
+        if (t != null && b != null) { T = Math.min(T, c.top + t * z); B = Math.max(B, c.bottom - b * z); }
+        if (l != null && rr != null) { L = Math.min(L, c.left + l * z); R = Math.max(R, c.right - rr * z); }
       }
       const w = R - L, h = B - T;
       if (w >= 43.5 && h >= 43.5) continue;

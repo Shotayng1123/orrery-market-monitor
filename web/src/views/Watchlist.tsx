@@ -3,6 +3,7 @@ import { useAddBox } from "../lib/candidates";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { Empty, Panel } from "../components/Panel";
 import { HeadlineList } from "../components/Headlines";
+import { ShowMore } from "../components/StockNews";
 import { Star } from "../components/Star";
 import { hideCard, money, openAsset, showCard } from "../components/CompanyCard";
 import { useApi } from "../lib/useApi";
@@ -46,8 +47,12 @@ export const decode = (t: string) => t.replace(/&amp;/g, "&").replace(/&#x([0-9a
 /** WATCHLIST: the user's own names in one place: their figures, the earnings dates ahead, and what has happened
  *  around them (alerts, headlines that name them, research that mentions them). Names are added with the star
  *  on any stock's page, in the earnings calendar and the screener, or by typing a symbol here. */
+/** How many alerts and headlines WATCHLIST shows before "SHOW n MORE" (D-48: at the feed's own lengths, 40 alerts
+ *  and 60 headlines, the results dates fell two screens down). */
+export const WL_ALERTS = 10, WL_NEWS = 15;
 export function WatchlistView({ tick }: { tick: number }) {
   const w = useWatch();
+  const [shownA, setShownA] = useState(WL_ALERTS), [shownN, setShownN] = useState(WL_NEWS);
   const list = useApi<{ rows: WatchRow[] }>("watch_list", { v: w.version }, tick);
   const feed = useApi<Feed>("watch_feed", { v: w.version }, Math.floor(tick / 5));
   const box = useAddBox(w.has);
@@ -126,25 +131,29 @@ export function WatchlistView({ tick }: { tick: number }) {
         ) : <Empty title={w.ready && list.data ? "Your watchlist is empty" : "Loading your watchlist"}>{list.error ?? (w.ready && list.data ? how : "")}</Empty>}
       </Panel>
       {/* MY NAMES takes the full width (it gained the AS OF column); below it the two-column page (the designer's
-          §3.4 and §4.5): alerts over results ahead on the left, headlines over research on the right, each column
+          §3.4 and §4.5): results ahead over alerts on the left, headlines over research on the right, each column
           stacking on its own, so a short panel leaves no hole beside a tall one (D-25: about 270 px stood empty
-          under ALERTS). Under 1,100 CSS px of layout, and in the one-screen layout, the panels follow each other. */}
+          under ALERTS). Results ahead come first and the long lists are cut at ten and fifteen rows with "SHOW n MORE",
+          never a box that scrolls inside the page (D-48: with the feed's 40 alerts the results dates fell to y 1,792).
+          Under 1,100 CSS px of layout, and in the one-screen layout, the panels follow each other. */}
       <div className="pcols">
         <div className="pcol w4">
-          <Panel no="02" title="ALERTS ON MY NAMES" span={4} k="wl-alerts" aux={feed.data ? `${alerts.length} recent · times in SGT` : ""}>
-            {alerts.length ? (
-              <table className="secT wlal"><tbody>{alerts.map((a) => <tr key={a.id}><td className="l mut num">{fmtStamp(a.at).replace(" SGT", "")}</td><td className="l wrap">{a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.msg}</a> : <span className="lnk" onClick={() => openAsset(a.symbol)}>{a.msg}</span>}</td><td className={`num ${signCls(a.pct)}`}>{a.pct == null ? "" : fmtPct(a.pct, 1)}</td></tr>)}</tbody></table>
-            ) : <Empty title="No alerts">{feed.error ?? "Moves beyond ±5% (large companies) or ±7%, buybacks, guidance changes and large deals on your names appear here."}</Empty>}
-          </Panel>
-          <Panel no="04" title="EARNINGS AHEAD" span={4} k="wl-earn" aux="my names · SGT">
+          <Panel no="02" title="RESULTS AHEAD" span={4} k="wl-earn" aux="my names · SGT">
             {ahead.length ? (
               <table className="secT"><tbody>{ahead.map((r) => <tr key={r.symbol}><td className="l mut num">{day(r.earningsAt!)} {fmtClock(new Date(r.earningsAt!), SGT)}</td><td className="l wrap"><span className="lnk" onClick={() => openAsset(r.symbol)}>{r.name}</span></td><td className="l mut">{r.earningsEst ? "est." : "confirmed"}</td></tr>)}</tbody></table>
-            ) : <Empty title="No dates ahead">{rows.length ? "None of your names has an earnings date in the feed." : "Add names to see their earnings dates."}</Empty>}
+            ) : <Empty title="No dates ahead">{rows.length ? "None of your names has a results date in the feed." : "Add names to see their results dates."}</Empty>}
+          </Panel>
+          <Panel no="04" title="ALERTS ON MY NAMES" span={4} k="wl-alerts" aux={feed.data ? `${alerts.length} recent · times in SGT` : ""}>
+            {alerts.length ? (
+              <table className="secT wlal"><tbody>{alerts.slice(0, shownA).map((a) => <tr key={a.id}><td className="l mut num">{fmtStamp(a.at).replace(" SGT", "")}</td><td className="l wrap">{a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.msg}</a> : <span className="lnk" onClick={() => openAsset(a.symbol)}>{a.msg}</span>}</td><td className={`num ${signCls(a.pct)}`}>{a.pct == null ? "" : fmtPct(a.pct, 1)}</td></tr>)}</tbody></table>
+            ) : <Empty title="No alerts">{feed.error ?? "Moves beyond ±5% (large companies) or ±7%, buybacks, guidance changes and large deals on your names appear here."}</Empty>}
+            {alerts.length > shownA && <ShowMore id="wl-alerts-more" n={Math.min(WL_ALERTS, alerts.length - shownA)} shown={shownA} total={alerts.length} onMore={() => setShownA((n) => n + WL_ALERTS)} />}
           </Panel>
         </div>
         <div className="pcol w8">
           <Panel no="03" title="HEADLINES ON MY NAMES" span={8} k="wl-news" aux={feed.data ? `${news.length} in the feed · times in SGT` : ""}>
-            {news.length ? <HeadlineList rows={news} named={w.has} /> : <Empty title="No headlines">{feed.error ?? "Headlines that name one of your companies appear here."}</Empty>}
+            {news.length ? <HeadlineList rows={news.slice(0, shownN)} named={w.has} free /> : <Empty title="No headlines">{feed.error ?? "Headlines that name one of your companies appear here."}</Empty>}
+            {news.length > shownN && <ShowMore id="wl-news-more" n={Math.min(WL_NEWS, news.length - shownN)} shown={shownN} total={news.length} onMore={() => setShownN((n) => n + WL_NEWS)} />}
           </Panel>
           <Panel no="05" title="IN RESEARCH" span={8} k="wl-research" aux="pieces that mention my names">
             {research.length ? (

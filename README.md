@@ -60,11 +60,13 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, about 1,130 checks in 24 suites): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, about 1,280 checks in 26 suites): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), the
-  stock page (chart marks, performance, statements), the classic phone layout, the sign-in screen, creating an
+  stock page (chart marks, performance, statements; its NEWS of headlines and alerts, the document behind each
+  statements column, big moves in their sign's colours, a move opened on the phone's chart, a tap on a phone chart,
+  5Y and 10Y, the two-column page and a server from before NEWS), the classic phone layout, the sign-in screen, creating an
   account by verification email, the manager's accounts list, the
   home-screen hint, the new-version bar, opening without a connection, notifications, a tab that fails
   while it is drawn (it says so in its own space; the header and the other tabs stay), the welcome email as its
@@ -83,10 +85,12 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   covers figures on purpose with throwaway styles, to show that it fails each time. XL text and the one-screen
   layout join it once they are fixed. `nothing-cut` checks the designer's findings behind it one by one (whole
   columns at both edges of a phone's statements, pressed back and swiped, short interest at its natural height, chart titles, long headlines under day
-  bars, phone search, the watchlist's two columns, curve labels, the header's alert line for every kind of alert),
+  bars, phone search, the watchlist's two columns at the feed's real lengths, curve labels, the header's alert line for every kind of alert),
   in ways that hold at any time of day.
   `cd web && npm run e2e` starts the test servers it needs and runs them all (about seven minutes, three suites at
   a time); `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
+  A suite that fails once is tried again; when the second try passes, the lines that failed the first time are
+  printed all the same, so a check that fails only now and then can be found from the publish job's log.
   Needs Playwright's browser once: `npx playwright install chromium`.
 - **Logic checks** (`sim/logic.test.ts`): exchange sessions, rolling bands, alert measures, the push encryption,
   the verification email for a new account, and every figure of the stock page (performance, ratios, statements
@@ -123,13 +127,16 @@ A new source is tried from GitHub's machines before a job is built on it: a read
 
 | On the page | Where it comes from |
 |---|---|
-| Chart with σ corridors and volume; price history | Yahoo Finance daily and intraday bars (split-adjusted, dividends not included) |
+| Chart with σ corridors and volume; price history; PERIOD 1D to 36M, and 5Y and 10Y (since 2026-11-20) | Yahoo Finance daily and intraday bars (split-adjusted, dividends not included; ten years of daily bars) |
 | Change over 1D, 1M, 3M, 6M, 12M, 36M, 60M against the benchmark | Worked out from those bars (`_shared/stockstats.ts`). Tokyo names are set against the Nikkei 225 and TOPIX; TOPIX is read from the `1306.T` fund (PROXY). Other names against their home index |
 | 52-week range, volatility, beta, largest fall, average daily volume and value | Worked out from the same bars |
 | Market cap, shares outstanding, float, next earnings date | Yahoo Finance quote and key statistics |
 | Short interest | Tokyo: the positions of 0.5% and above reported to JPX (already stored for the EQUITIES tab). Elsewhere: the exchange-reported short interest Yahoo republishes, with FINRA's daily short-volume share beside it |
 | Statements (income statement, balance sheet, cash flow), ratios, guidance | Tokyo: EDINET DB (有価証券報告書 and 決算短信): ten fiscal years, the company's guidance with later revision notices and the progress against it, and twelve single quarters as EDINET DB derives them. Share counts are the company's own from its latest 決算短信. Yahoo stands in, and the page says so, when no EDINET DB key is set or the day's allowance is used up. Elsewhere: Yahoo Finance fundamentals (about four years and five quarters; no guidance), with the lines of a company reporting under US GAAP or IFRS; a line the company does not report is left out |
-| Big moves and why (companies of 1tn yen / 10bn US dollars and above) | From the bars (`_shared/bigmoves.ts`): a day of 10% or more, and the peaks and bottoms of the closes (large circles: turns of 15%; small circles: turns of 10%; a peak red, a bottom green). Each reason from a web search by the `move-causes` job, kept only with the reports behind it |
+| A column's document (since 2026-11-20) | The address the source gives for it, never a made-up one: a year's 有価証券報告書 on EDINET (`edinetFilingUrl`), the 決算短信 PDF of the guidance, of a quarter or of a year known only from it (`pdfUrl`, which EDINET DB gives on some rows only). A header without an address is plain and says so. Yahoo gives none |
+| Fiscal year end, accounting standard, annual report (Tokyo) | The latest 有価証券報告書 in EDINET DB's answer |
+| News: headlines and alerts naming the stock (since 2026-11-20) | The Monitor's own tables: headlines from the publishers' feeds on NEWS whose companies include the stock, and the Monitor's alerts on it, over 90 days |
+| Big moves and why (companies of 1tn yen / 10bn US dollars and above) | From the bars (`_shared/bigmoves.ts`): a day of 10% or more, and the peaks and bottoms of the closes (large circles: turns of 15%; small circles: turns of 10%; the circles and dots: a peak red, a bottom green; the figures in their sign's colour). Each reason from a web search by the `move-causes` job, kept only with the reports behind it |
 
 A figure a source does not give is shown as a dash. Nothing on the page is estimated; the two sums made on the
 page itself (net cash, free cash flow) say so where they stand. A Japanese company's table keeps the lines of

@@ -17,10 +17,13 @@ import { cellBp, cellPct, CurvePanel, lvlDec, RANGE_52W, RANGE_52W_TIP, SIGMA_1M
  *  laid out for a phone instead of shrunk to fit one: a list by asset class with the name, the last level and one
  *  change (over the period picked at the top) at reading size, on rows a finger can hit. A tap opens the row: its
  *  chart, every period, the 1M σ, the 52-week position and the distance to the 200-day average, and a way to its page. */
-const KEY: Record<ChartPeriod, PeriodKey> = { "1D": "d1", "1W": "w1", "1M": "m1", "3M": "m3", "12M": "m12", "36M": "m36" };
+/** The table's own figure for each period. The tabs offer 1D to 36M (lib/periods.ts CHART_PERIODS); a period the
+ *  table keeps no figure for (5Y, 10Y: a stock's page only) would show a dash. */
+const KEY: Partial<Record<ChartPeriod, PeriodKey>> = { "1D": "d1", "1W": "w1", "1M": "m1", "3M": "m3", "12M": "m12", "36M": "m36" };
 
 /** The move over a period as the table shows it: a % for prices, the difference in yield (bp) for rates. */
-const move = (r: TableRow, k: PeriodKey): number | null => {
+const move = (r: TableRow, k: PeriodKey | undefined): number | null => {
+  if (!k) return null;
   if (!isYield(r)) return r.pct[k] ?? null;
   const c = r.closes[k];
   return c != null && r.last != null ? r.last - c : null;

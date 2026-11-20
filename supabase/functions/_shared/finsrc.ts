@@ -123,6 +123,25 @@ function rowsIn(j: unknown, depth = 0): Row[] {
 }
 const lastDay = (y: number, m: number): string => new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);   // m = 1..12
 const stdOf = (v: unknown): string | null => { const s = typeof v === "string" ? v.toUpperCase().replace(/[^A-Z]/g, "") : ""; return s.startsWith("JP") ? "JP" : s === "IFRS" ? "IFRS" : s.startsWith("US") ? "USGAAP" : null; };
+/** A document's address exactly as the provider gives it, when it is one a browser can open (http or https);
+ *  anything else is no address. The page links only what this returns: an address is never made up. */
+export const docUrl = (v: unknown): string | null => { const s = typeof v === "string" ? v.trim() : ""; return /^https?:\/\/[^\s"'<>]+$/i.test(s) ? s : null; };
+
+/** The 決算短信 PDF of each period, keyed `${fiscal year end}|${quarter}`, where the provider gives one: only some of
+ *  its rows carry `pdfUrl` (Toyota on 20 Nov 2026: three of its six newest, not the newest). Of a period's rows the
+ *  consolidated ones count when there are any (a parent-only row is another document); of those, the newest
+ *  disclosure that carries an address, with its date. */
+function releasePdfs(raw: unknown): Map<string, { url: string; disclosed: string }> {
+  const rows = rowsIn(raw).map((r) => ({ fy: dateOf(r.fiscalyearend), q: numOf(r.quarter), d: dateOf(r.disclosuredate), c: r.isconsolidated === false ? 0 : 1, url: docUrl(r.pdfurl) }))
+    .filter((r): r is { fy: string; q: number; d: string; c: number; url: string | null } => !!r.fy && r.q != null && r.q >= 1 && r.q <= 4 && !!r.d);
+  const cons = new Map<string, number>(), best = new Map<string, { url: string; disclosed: string }>();
+  for (const r of rows) cons.set(`${r.fy}|${r.q}`, Math.max(cons.get(`${r.fy}|${r.q}`) ?? 0, r.c));
+  for (const r of rows) {
+    const k = `${r.fy}|${r.q}`, old = best.get(k);
+    if (r.url && r.c >= (cons.get(k) ?? 0) && (!old || r.d > old.disclosed)) best.set(k, { url: r.url, disclosed: r.d });
+  }
+  return best;
+}
 
 /** The EDINET code of the company with securities code `sec` ("7203") among the companies a search returned.
  *  The search matches part of a code as well (asked for 9020 it also returns 6902, whose code is stored as
@@ -224,7 +243,7 @@ export function edinetFin(raw: EdinetRaw, asOf: string | null): Fin | null {
       // the diluted share count a diluted EPS implies, only where both figures are large enough to imply one and no later split changed the basis
       dilutedShares: same && ni != null && dil != null && Math.abs(ni) >= 1e8 && dil >= 1 && ni > 0 ? ni / dil : null,
     });
-    aMeta.set(end, { key: `FY:${end}`, end, label: fyEnd(y) ? fyLabel(end) : `FY${y}`, kind: "FY", months: 12, std, doc: typeof r.docid === "string" ? r.docid : null, url: typeof r.edinetfilingurl === "string" ? r.edinetfilingurl : null, note: null });
+    aMeta.set(end, { key: `FY:${end}`, end, label: fyEnd(y) ? fyLabel(end) : `FY${y}`, kind: "FY", months: 12, std, doc: typeof r.docid === "string" ? r.docid : null, url: docUrl(r.edinetfilingurl), note: null, filed: dateOf(r.submitdatetime) });
   }
   // a full year the 決算短信 has reported but the 有価証券報告書 has not yet: its headline lines, in millions there
   const M = 1e6, mm = (v: unknown): number | null => { const x = numOf(v); return x == null ? null : x * M; };
@@ -232,7 +251,7 @@ export function edinetFin(raw: EdinetRaw, asOf: string | null): Fin | null {
   if (fullYear && !aRows.has(fullYear.fiscalyearend as string) && (fullYear.fiscalyearend as string) > [...aRows.keys()].sort().slice(-1)[0]) {
     const r = fullYear, end = r.fiscalyearend as string;
     aRows.set(end, { revenue: mm(r.revenue), op: mm(r.operatingincome), ordinary: mm(r.ordinaryincome), ni: mm(r.netincome), eps: numOf(r.eps), dps: numOf(r.dividendpershare), bps: numOf(r.bps), assets: mm(r.totalassets), equity: mm(r.netassets), ocf: mm(r.cfoperating), icf: mm(r.cfinvesting), fincf: mm(r.cffinancing) });
-    aMeta.set(end, { key: `FY:${end}`, end, label: fyLabel(end), kind: "FY", months: 12, std: stdOf(r.accountingstandard), doc: null, url: typeof r.pdfurl === "string" ? r.pdfurl : null, note: `From the 決算短信 of ${r.disclosuredate}; the 有価証券報告書 is not in yet` });
+    aMeta.set(end, { key: `FY:${end}`, end, label: fyLabel(end), kind: "FY", months: 12, std: stdOf(r.accountingstandard), doc: null, url: docUrl(r.pdfurl), note: `From the 決算短信 of ${r.disclosuredate}; the 有価証券報告書 is not in yet`, filed: r.disclosuredate as string });
     notes.push(`${fyLabel(end)} is from the 決算短信 (${r.disclosuredate}): the lines a 決算短信 does not carry are empty until the 有価証券報告書 is filed.`);
   }
   const annual = setOf(aRows, (end) => aMeta.get(end)!, 10);
@@ -251,7 +270,8 @@ export function edinetFin(raw: EdinetRaw, asOf: string | null): Fin | null {
     const g = { revenue: fc("revenue"), op: fc("operatingincome"), ordinary: fc("ordinaryincome"), ni: fc("netincome"), eps: fcShare("eps"), dps: fcShare("dividendpershare") };
     if (Object.values(g).some((v) => v != null) && !annual.periods.some((p) => p.end >= gEnd)) {
       const col = annual.periods.length;
-      annual.periods.push({ key: `FC:${gEnd}`, end: gEnd, label: fyLabel(gEnd), kind: "FC", months: 12, std: stdOf(latest.accountingstandard), doc: null, url: typeof latest.pdfurl === "string" ? latest.pdfurl : null, note: "Company guidance" });
+      // the guidance column's document is the 決算短信 its figures were read from, or none when that row has no address
+      annual.periods.push({ key: `FC:${gEnd}`, end: gEnd, label: fyLabel(gEnd), kind: "FC", months: 12, std: stdOf(latest.accountingstandard), doc: null, url: docUrl(latest.pdfurl), note: "Company guidance", filed: latest.disclosuredate as string });
       for (const line of Object.values(annual.lines)) line!.push(null);
       const put = (id: FinLine, v: number | null) => { if (v == null) return; (annual.lines[id] ??= annual.periods.map(() => null))[col] = v; };
       put("revenue", g.revenue == null ? null : g.revenue * M); put("op", g.op == null ? null : g.op * M); put("ordinary", g.ordinary == null ? null : g.ordinary * M); put("ni", g.ni == null ? null : g.ni * M); put("eps", g.eps); put("dps", g.dps);
@@ -262,7 +282,9 @@ export function edinetFin(raw: EdinetRaw, asOf: string | null): Fin | null {
     }
   }
 
-  // ---- single quarters, as the provider derives them
+  // ---- single quarters, as the provider derives them; each with the 決算短信 PDF of the same fiscal year end and
+  // quarter when one of the stored 決算短信 rows gives its address (the rows are already in hand: no request)
+  const pdfs = releasePdfs(raw.earnings);
   const qRows = new Map<string, Partial<Record<FinLine, number | null>>>(), qMeta = new Map<string, FinPeriod>();
   for (const r of rowsIn(raw.standalone)) {
     const y = numOf(r.fiscalyear), q = numOf(r.quarter), fy = y == null ? null : fyEnd(y);
@@ -275,7 +297,8 @@ export function edinetFin(raw: EdinetRaw, asOf: string | null): Fin | null {
       cash: n("cash"), assets: n("totalassets"), liabilities: n("totalliabilities"), equity: n("netassets"),
       ocf: n("cfoperating"), icf: n("cfinvesting"), fincf: n("cffinancing"), capex: both != null ? Math.abs(both) : ppe != null ? Math.abs(ppe) + Math.abs(intan ?? 0) : null,
     });
-    qMeta.set(end, { key: `Q:${end}`, end, label: qLabel(fy, q), kind: "Q", months: 3, std: stdOf(r.accountingstandard), doc: null, url: null, note: null });
+    const pdf = pdfs.get(`${fy}|${q}`) ?? null;
+    qMeta.set(end, { key: `Q:${end}`, end, label: qLabel(fy, q), kind: "Q", months: 3, std: stdOf(r.accountingstandard), doc: null, url: pdf?.url ?? null, note: null, filed: pdf?.disclosed ?? null });
   }
   const quarterly = setOf(qRows, (end) => qMeta.get(end)!, 12);
 

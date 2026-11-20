@@ -115,16 +115,42 @@ async function movesFor(symbol: string, q: { name: string | null; exchange: stri
   return { eligible: true, rule, ...(rule === "swings" ? { sizes: { day: SWING_D1, large: SWING_PCT, small: SWING_PCT_2 } } : {}), rows };
 }
 
+// ---- the page's NEWS panel: the Monitor's own headlines that name the stock, and its own alerts on it ----
+// Read from the Monitor's tables only (news_items, alerts): no source is asked. Headlines are kept 90 days (the
+// daily prune); alerts, which are kept longer, are read over the same 90 days so the panel means one thing.
+export const FEED_DAYS = 90, FEED_NEWS = 60, FEED_ALERTS = 40;
+export interface StockFeed {
+  days: number;
+  news: Array<{ id: number; publishedAt: string; source: string; title: string; url: string; category: string | null }>;
+  alerts: Array<{ id: number; at: string; kind: string; pct: number | null; market: string; msg: string; url: string | null }>;
+  error?: string;   // a table could not be read: what it said (the other's rows are still sent)
+}
+async function feedFor(symbol: string): Promise<StockFeed> {
+  const since = new Date(Date.now() - FEED_DAYS * 86400e3).toISOString();
+  const [nw, al] = await Promise.all([
+    db.from("news_items").select("id,published_at,source,title,url,category").overlaps("tickers", [symbol]).gte("published_at", since).order("published_at", { ascending: false }).limit(FEED_NEWS),
+    db.from("alerts").select("id,at,kind,pct,market,msg,url").eq("symbol", symbol).gte("at", since).order("at", { ascending: false }).order("id", { ascending: false }).limit(FEED_ALERTS),
+  ]);
+  const error = [nw.error ? `headlines: ${nw.error.message}` : null, al.error ? `alerts: ${al.error.message}` : null].filter(Boolean).join("; ");
+  return {
+    days: FEED_DAYS,
+    news: (nw.data ?? []).map((r) => ({ id: r.id as number, publishedAt: r.published_at as string, source: r.source as string, title: r.title as string, url: r.url as string, category: (r.category as string | null) ?? null })),
+    alerts: (al.data ?? []).map((a) => ({ id: a.id as number, at: a.at as string, kind: a.kind as string, pct: (a.pct as number | null) ?? null, market: a.market as string, msg: a.msg as string, url: (a.url as string | null) ?? null })),
+    ...(error ? { error } : {}),
+  };
+}
+
 export async function stockPage(symbol: string) {
   if (!symbol) throw new Error("symbol required");
   const q = await quoteFor(symbol);
   const benchmarks = benchmarksFor(symbol), jp = /\.T$/.test(symbol), equity = q.quoteType === "EQUITY";
-  const [{ data: con }, own, benches, fin, ks] = await Promise.all([
+  const [{ data: con }, own, benches, fin, ks, feed] = await Promise.all([
     db.from("constituents").select("idx,sector,gics_industry,gics_source").eq("symbol", symbol).limit(5),
     soft(dailyBars(symbol), [] as Bar[], "price history"),
     Promise.all(benchmarks.map((b) => soft(dailyBars(b.symbol), [] as Bar[], `${b.name} history`))),
     equity ? finFor(symbol, q.currency, jp ? edinetStatements : undefined, q.earningsAt) : Promise.resolve({ fin: null, note: "Statements are available for equities only." }),
     equity ? soft(keyStats(symbol), null as KeyStats | null, "key statistics") : Promise.resolve(null),
+    soft(feedFor(symbol), { days: FEED_DAYS, news: [], alerts: [], error: "the headlines and alerts could not be read" } as StockFeed, "news and alerts"),
   ]);
   const member = (con ?? []).find((c) => c.sector) ?? (con ?? [])[0] ?? null;
   const d20 = avgTurnover(own, 20), d60 = avgTurnover(own, 60);
@@ -183,5 +209,6 @@ export async function stockPage(symbol: string) {
     shares, short, moves,
     earningsAt: q.earningsAt ? new Date(q.earningsAt * 1000).toISOString() : null, earningsEst: q.earningsEst ?? null,
     val, fin: f, finNote: fin.note,
+    feed,   // since 20 Nov 2026; a page from before ignores it, and the page shows no NEWS panel without it
   };
 }

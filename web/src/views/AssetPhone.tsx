@@ -1,23 +1,28 @@
 import { useState, type ReactNode } from "react";
 import { Empty } from "../components/Panel";
-import { ChartPanel, CHART_PERIODS, type ChartPeriod } from "../components/ChartPanel";
+import { ASSET_PERIODS, ChartPanel, type ChartPeriod } from "../components/ChartPanel";
 import type { SigmaWindow } from "../components/SigmaChart";
 import { Pick, type PickOption } from "../components/Pick";
 import { Star } from "../components/Star";
 import { money } from "../components/CompanyCard";
 import { FinTable } from "../components/FinTable";
 import { JumpPick, Section, Stat } from "../components/PhoneKit";
+import { StockNews } from "../components/StockNews";
 import { useApi } from "../lib/useApi";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtStamp } from "../lib/time";
-import { chartMarks, finSections, fmtCount, fmtPc, fmtX, isSmallMove, moveRule, siteOf, whyText, type StockPage } from "../lib/stock";
-import { chartRow, GuidanceLine, shortLine } from "./Asset";
+import { chartMarks, finSections, fmtCount, fmtPc, fmtX, isSmallMove, moveRule, NO_DOC, siteOf, whyText, type MoveRow, type StockPage } from "../lib/stock";
+import { periodHolding } from "../lib/periods";
+import { chartRow, GuidanceLine, MoveText, profileOf, shortLine } from "./Asset";
 import { AssetPhoneLegacy } from "./AssetPhoneLegacy";
 
 /** A stock's own page for a phone (Shota, 18 Nov 2026): the same content as the desktop page (views/Asset.tsx),
  *  laid out as cards. The performance table is turned on its side (a row per horizon) so its four figures fit the
  *  width; the statements scroll sideways under line names that stay put, opening at the latest periods and landing
- *  on whole columns ("‹ earlier years" in the names' header goes back a screen; components/FinTable.tsx). */
+ *  on whole columns ("‹ earlier years" in the names' header goes back a screen; components/FinTable.tsx).
+ *  Since 20 Nov 2026 (I-3): News (the stock's headlines and alerts); a big move tapped in the list opens on the chart
+ *  (A-25: PERIOD set to the shortest view that holds it, the page brought to the chart, its card open and its circle
+ *  ringed); a tap on the chart puts its crosshair and read-out on the tapped day (D-42, components/SigmaChart.tsx). */
 const WINDOWS: PickOption<SigmaWindow>[] = [{ value: "m1", label: "1M" }, { value: "m12", label: "12M" }, { value: "m36", label: "36M" }];
 const VIEWS: PickOption<"annual" | "quarterly">[] = [{ value: "annual", label: "Annual" }, { value: "quarterly", label: "Quarterly" }];
 const back = () => { if (history.length > 1) history.back(); else location.hash = "market"; };
@@ -27,6 +32,7 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
   const [period, setPeriod] = useState<ChartPeriod>("12M");
   const [sigmaWindow, setSigmaWindow] = useState<SigmaWindow>("m12");
   const [view, setView] = useState<"annual" | "quarterly">("annual");
+  const [focus, setFocus] = useState<{ t: number; n: number } | null>(null);
   const a = useApi<StockPage>(symbol ? "stock" : null, { symbol }, Math.floor(tick / 5));
   if (a.error === "unknown action") return <AssetPhoneLegacy symbol={symbol} tick={tick} />;   // a server from before this page
   const d = a.data && a.data.symbol ? a.data : null;
@@ -41,6 +47,14 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
   const pp = (v: number | null) => (v == null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1).replace("-", "\u2212")}`);
   const fs = f ? finSections(f, view) : null;
   const marks = d.moves.eligible ? chartMarks(d.moves.rows) : undefined;
+  const prof = profileOf(f), feed = d.feed ?? null;   // a server from before 20 Nov 2026 sends no feed: no News section then
+  // A-25: the move opens on the chart. The chart is brought up under the pinned head first; then PERIOD and the card.
+  const onChart = (m: MoveRow) => {
+    const hero = document.querySelector<HTMLElement>(".mp-hero"), head = document.querySelector<HTMLElement>(".mp-head")?.getBoundingClientRect().height ?? 0;
+    if (hero) window.scrollTo({ top: hero.getBoundingClientRect().top + window.scrollY - head - 8 });
+    setPeriod(periodHolding(m.t, Date.now() / 1000));
+    setFocus((x) => ({ t: m.t, n: (x?.n ?? 0) + 1 }));
+  };
   return (
     <div className="mp">
       <header className="mp-head doc">{backBtn}<Star symbol={d.symbol} name={d.name} /></header>
@@ -49,12 +63,13 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
         <h1>{d.name}</h1>
       </div>
       <div className="mp-picks">
-        <Pick label="Period" value={period} options={CHART_PERIODS} onChange={setPeriod} />
+        <Pick label="Period" value={period} options={ASSET_PERIODS} onChange={setPeriod} />
         <Pick label="σ window" value={sigmaWindow} options={WINDOWS} onChange={setSigmaWindow} />
-        <JumpPick dep={`${d.symbol}|${d.moves.eligible}|${!!f}`} />
+        <JumpPick dep={`${d.symbol}|${d.moves.eligible}|${!!f}|${!!feed}`} />
       </div>
-      <div className="mp-card pad mp-hero"><ChartPanel row={row} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes volume marks={marks} /></div>
-      {d.moves.eligible && d.moves.rows.length > 0 && <p className="mp-note">Circles on the 3M, 12M and 36M charts are big moves. Tap one for the reason; the list is under Big moves below.</p>}
+      <div className="mp-card pad mp-hero"><ChartPanel row={row} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes volume marks={marks} focus={focus} /></div>
+      {d.moves.eligible && d.moves.rows.length > 0 ? <p className="mp-note">Circles on the daily charts (3M to 10Y) are the big moves of the last three years: tap one for the reason, or a move in the list under Big moves. A tap anywhere else on a chart reads that day.</p>
+        : <p className="mp-note">A tap on the chart reads that day: date, level and σ under it.</p>}
 
       <Section title="Key data" aux={d.asOf ? `as of ${fmtStamp(d.asOf)}` : ""} card={false}>
         <div className="mp-card pad" id="st-key">
@@ -80,6 +95,8 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
             <KV k="P/B">{fmtX(d.val.pb, 2)}</KV>
             <KV k="Dividend yield, last year / guidance">{fmtPc(d.val.yield, false, 2)} / {fmtPc(d.val.yieldGuide, false, 2)}</KV>
             <KV k="Next earnings" sub={d.earningsEst ? "estimated, not confirmed by the company" : undefined}>{d.earningsAt ? fmtStamp(d.earningsAt) : "–"}</KV>
+            {prof && <KV k="Fiscal year end · standard" sub={`有価証券報告書 ${prof.label} · EDINET DB`}>{prof.month} · {prof.std}</KV>}
+            {prof && <KV k="Annual report" sub={prof.doc ? undefined : NO_DOC}>{prof.doc ? <a href={prof.doc.href} target="_blank" rel="noreferrer" id="st-yuho" title={prof.doc.tip}>有報 {prof.label} ↗</a> : `有報 ${prof.label}`}</KV>}
           </tbody></table>
         </div>
       </Section>
@@ -104,16 +121,26 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
         </div>
       </Section>
 
+      {feed && (
+        <Section title="News" aux="headlines, alerts" card={false}>
+          <StockNews key={d.symbol} symbol={d.symbol} feed={feed} phone />
+          <p className="mp-note">Headlines from the publishers' feeds the Monitor reads (as on News) that name {d.symbol}, and the Monitor's own alerts on it, over the last {feed.days} days. Times in SGT.</p>
+        </Section>
+      )}
+
       {d.moves.eligible && (
         <Section title="Big moves" aux="and why" card={false}>
           <div className="mp-card pad" id="st-moves">
             {d.moves.rows.length ? (
-              // a short box with its own scrolling (Shota, 19 Nov 2026): the whole list pushed the statements a long way down
+              // a short box with its own scrolling (Shota, 19 Nov 2026): the whole list pushed the statements a long way down.
+              // Each move is a row to tap: it opens on the chart (A-25); its sources stay links of their own.
               <ul className="mp-moves" id="st-movebox" tabIndex={0} aria-label="Big moves, newest first">{d.moves.rows.map((m) => (
-                <li key={`${m.kind}${m.to}`} data-kind={m.kind} data-status={m.status}>
-                  <div className="h"><span className={`dot ${m.dir > 0 ? "up" : "dn"}${isSmallMove(m) ? " sm" : ""}`} /><b className={m.dir > 0 ? "up" : "dn"}>{m.text}</b><span className="d">{m.to}</span></div>
+                <li key={`${m.kind}${m.to}`} data-kind={m.kind} data-status={m.status} role="button" tabIndex={0} title="Open on the chart"
+                  onClick={() => onChart(m)} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onChart(m); } }}>
+                  <div className="h"><span className={`dot ${m.dir > 0 ? "up" : "dn"}${isSmallMove(m) ? " sm" : ""}`} /><MoveText m={m} /></div>
+                  <div className="dl"><span className="d">{m.to}</span><span className="go">On the chart ›</span></div>
                   <div className="w">{whyText(m)}</div>
-                  {m.sources.length > 0 && <div className="s">{m.sources.map((x) => <a key={x.url} href={x.url} target="_blank" rel="noreferrer">{siteOf(x.url)}</a>)}</div>}
+                  {m.sources.length > 0 && <div className="s">{m.sources.map((x) => <a key={x.url} href={x.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{siteOf(x.url)}</a>)}</div>}
                 </li>
               ))}</ul>
             ) : <Empty title="No big moves">None in the last three years by these measures.</Empty>}

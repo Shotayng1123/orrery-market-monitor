@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { fmtPs, fmtRatio, fmtUnit, type FinPeriod, type FinRow, type FinSection, type FinUnit } from "../lib/stock";
+import { fmtPs, fmtRatio, fmtUnit, NO_DOC, periodDoc, type FinPeriod, type FinRow, type FinSection, type FinUnit } from "../lib/stock";
 import { finBack, finFit, finRest } from "../lib/finscroll";
 import { zoomNow } from "../lib/prefs";
 
@@ -19,7 +19,10 @@ import { zoomNow } from "../lib/prefs";
  *  there): every period takes the same whole-pixel width, the room beside the names divided by as many periods as
  *  fit in it, and the names take the pixels left over (lib/finscroll.ts, `finFit`). Wherever the box comes to rest,
  *  it then shows that many whole periods and nothing of the next. The widths are measured again when the box or
- *  the table changes size (a phone turned; the web font arriving after the first drawing). */
+ *  the table changes size (a phone turned; the web font arriving after the first drawing).
+ *  A period's header opens the document behind it where the source gave its address (A-01, 20 Nov 2026; lib/stock.ts
+ *  periodDoc): teal, the whole header cell taking the click or the tap; a header without one is plain text and its
+ *  tip says there is no address from the source. */
 const cell = (r: FinRow, v: number | null, unit: FinUnit): string => (r.fmt === "money" ? fmtUnit(v, unit) : r.fmt === "ps" ? fmtPs(v) : fmtRatio(v, r.fmt === "growth"));
 // a missing figure is greyed; growth is green or red; a negative amount is red, except on the two cash-flow lines
 // where an outflow is the ordinary case
@@ -95,7 +98,15 @@ export function FinTable({ periods, sections, unit, currency }: { periods: FinPe
             <th className="l"><span className="u">{money}</span><small>per share: {currency ?? "currency"}</small>
               {/* a press does not take the focus: focusing a control in the sticky names would scroll the box first */}
               {over && <button type="button" className="finprev nocsv" style={atStart ? { visibility: "hidden" } : undefined} onMouseDown={(e) => e.preventDefault()} onClick={back} title="Show the earlier periods">‹ earlier years</button>}</th>
-            {periods.map((p) => <th key={p.key} className={p.kind === "FC" ? "fc" : undefined} title={[p.kind === "FC" ? "Company guidance" : p.kind === "Q" ? `Three months to ${p.end}` : `Year to ${p.end}`, p.std, p.note].filter(Boolean).join(" · ")}>{p.label}{p.kind === "FC" && <i>E</i>}</th>)}
+            {periods.map((p) => {
+              const doc = periodDoc(p), what = [p.kind === "FC" ? "Company guidance" : p.kind === "Q" ? `Three months to ${p.end}` : `Year to ${p.end}`, p.std, p.note].filter(Boolean).join(" · ");
+              const label = <>{p.label}{p.kind === "FC" && <i>E</i>}</>;
+              return (
+                <th key={p.key} className={[p.kind === "FC" ? "fc" : "", doc ? "doc" : ""].filter(Boolean).join(" ") || undefined} title={doc ? `${doc.tip} · ${what}` : `${what} · ${NO_DOC}`}>
+                  {doc ? <a href={doc.href} target="_blank" rel="noreferrer" title={doc.tip}>{label}</a> : label}
+                </th>
+              );
+            })}
           </tr>
         </thead>
         {sections.map((s) => (

@@ -20,7 +20,8 @@ import { RANGE_52W } from "./Market";
  *  laid out as cards down one column: the index with its chart, the related markets beside it, breadth, the day's
  *  flow and the performance by sector, short interest, the movers, the heat map and a screener of the names. */
 const WINDOWS: PickOption<SigmaWindow>[] = [{ value: "m1", label: "1M" }, { value: "m12", label: "12M" }, { value: "m36", label: "36M" }];
-const SECTOR_KEY: Record<ChartPeriod, keyof SectorRow> = { "1D": "pct1d", "1W": "pct1w", "1M": "pct1m", "3M": "pct3m", "12M": "pct12m", "36M": "pct12m" };   // sectors carry no 36M figure: 12M stands in
+// sectors carry no figure beyond 12M: 12M stands in, and the pill says 12M (the tab offers no 5Y or 10Y: a stock's page only)
+const SECTOR_KEY: Record<ChartPeriod, keyof SectorRow> = { "1D": "pct1d", "1W": "pct1w", "1M": "pct1m", "3M": "pct3m", "12M": "pct12m", "36M": "pct12m", "5Y": "pct12m", "10Y": "pct12m" };
 const pc = (num: number, den: number) => (den ? `${Math.round((num / den) * 100)}%` : "–");
 const PAGE = 30;
 
@@ -149,7 +150,7 @@ export function EquitiesPhone({ sub, onSub, tick }: { sub: string; onSub: (s: st
   const merged = useMemo(() => (s ? mergeClasses(s.rows) : []), [s]);
   const movers = useMemo(() => { const xs = merged.filter((r) => r.pct1d != null).sort((a, b) => b.pct1d! - a.pct1d!); return { top: xs.slice(0, 10), bottom: xs.slice(-10).reverse() }; }, [merged]);
   const noStats = <div className="mp-card"><Empty title="Statistics not computed yet">{st.error ?? "The daily statistics job runs after each close."}</Empty></div>;
-  const sk = SECTOR_KEY[period], sLabel = period === "36M" ? "12M" : period;
+  const sk = SECTOR_KEY[period], sLabel = sk === "pct12m" ? "12M" : period;
   // while the market is open the 1D figures are today's moves so far (Shota, 19 Nov 2026: the S&P 500 was open and
   // the movers were still the day before's)
   const of = s ? (s.live ? <><span className="badge live" id="eq-live" title={`Today's moves so far. Longer periods are measured to the close of ${s.asOf ?? "–"}.`}>INTRADAY</span>{s.idx} names · 1D at {fmtStamp(s.live.asOf)}</> : `${s.idx} names · closes of ${s.asOf ?? "–"}`) : "";

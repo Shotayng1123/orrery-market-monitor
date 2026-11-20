@@ -13,7 +13,7 @@ import { SmtpError, appPassword, buildMessage, dotStuff, parseFrom, smtpTalk, ty
 import { mailReady, mailSetup, resendRequest } from "../supabase/functions/_shared/mail.ts";
 import { avgTurnover, barOnOrBefore, betaCorr, maxDrawdown, monthsBack, perfRows, range52w, realisedVol, type Bar } from "../supabase/functions/_shared/stockstats.ts";
 import { fyLabel, justReported, LAYOUT_FOREIGN, LAYOUT_JP, pickUnit, progress, qEndLabel, qLabel, quarterEnd, ratiosOf, resultsDateToWatch, singleQuarters, valuation, type FinPeriod, type FinRowId, type FinSet } from "../supabase/functions/_shared/fin.ts";
-import { edinetCodeOf, edinetFin, edinetWaiting, legacyStatements, yahooFin, yahooFinTypes } from "../supabase/functions/_shared/finsrc.ts";
+import { docUrl, edinetCodeOf, edinetFin, edinetWaiting, legacyStatements, yahooFin, yahooFinTypes } from "../supabase/functions/_shared/finsrc.ts";
 import { keyStatsOf } from "../supabase/functions/_shared/yahoo.ts";
 import { MOVE_RULE, SWING_PCT, SWING_PCT_2, bigMoves, isLargeCap, moveCtx, moveText, settledBars, siblingKind, turningPoints } from "../supabase/functions/_shared/bigmoves.ts";
 import { liveRows } from "../supabase/functions/_shared/intraday.ts";
@@ -26,6 +26,8 @@ import { alertFigWord, alertHeadline } from "../web/src/lib/alertline.ts";
 import { asOfCell, asOfLine, asOfOf, asOfTitle } from "../web/src/lib/time.ts";
 import { finBack, finFit, finRest } from "../web/src/lib/finscroll.ts";
 import { sectorShort } from "../web/src/lib/sectors.ts";
+import { feedRows, fmtDay, fmtDayTime, moveParts, periodDoc, type MoveRow, type StockFeed } from "../web/src/lib/stock.ts";
+import { PERIOD_DAYS, periodHolding } from "../web/src/lib/periods.ts";
 import { readFileSync as readText, readdirSync as listDir } from "node:fs";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
@@ -715,6 +717,28 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck("a company whose total of debt is nil by the provider's own reckoning has debt of nil, not an empty line; with nothing to reckon from, the line stays empty", noDebt.annual.lines.stDebt?.join() === ",0" && noDebt.annual.lines.ltDebt?.join() === ",0" && noDebt.annual.periods.map((p) => p.label).join() === "FY2025,FY2026" && noDebt.guidance === null && noDebt.quarterly.periods.length === 0, noDebt.annual);
     ck("an answer with no yearly rows, or nothing at all, gives no statements (the caller lets another source stand in)", edinetFin({ annual: { data: [] }, standalone, earnings }, null) === null && edinetFin({ annual: null, standalone: null, earnings: null }, null) === null && edinetFin({ annual: { error: "not found" }, standalone: "x", earnings: 5 }, null) === null);
 
+    // the document behind each column (A-01's links, 20 Nov 2026): the provider's own address, never a made-up one
+    {
+      const Qp = f.quarterly.periods, fc = A.periods[10];
+      ck("a year from the 有価証券報告書 opens that filing: the provider's address, with its document ID; no filing date where the answer gives none", A.periods[9].url === "https://example.org/filing/S100T2026" && A.periods[9].doc === "S100T2026" && A.periods[9].filed === null, A.periods[9]);
+      ck("the guidance column opens the 決算短信 its figures were read from (the consolidated one), with that release's date", fc.kind === "FC" && fc.url === "https://example.org/ir/2q.pdf" && fc.filed === "2026-11-05", fc);
+      ck("a quarter opens the 決算短信 of the same fiscal year end and quarter where a stored row gives its address; a quarter whose rows give none has none", Qp[11].label === "2Q 3/27" && Qp[11].url === "https://example.org/ir/2q.pdf" && Qp[11].filed === "2026-11-05" && Qp[10].label === "1Q 3/27" && Qp[10].url === null && Qp[10].filed === null && Qp.slice(0, 10).every((p) => p.url === null), Qp.map((p) => [p.label, p.url]));
+      // addresses on some rows only, as EDINET DB gives them (Toyota on 20 Nov 2026: three of its six newest). Rows:
+      // 0 the parent alone (2Q, later), 1 consolidated 2Q, 2 a correction of 1Q, 3 the first 1Q, 4 the full year, 5 3Q
+      const patched = (patch: Record<number, Record<string, unknown>>) => ({ ...earnings, earnings: earnings.earnings.map((r, i) => ({ ...r, ...(patch[i] ?? {}) })) });
+      const years = { ...annual, data: annual.data.map((r) => (r.fiscalYear === 2026 ? { ...r, edinetFilingUrl: "https://disclosure2.edinet-fsa.go.jp/WZEK0040.aspx?S100T2026", submitDateTime: "2026-06-10 15:33" } : r.fiscalYear === 2017 ? { ...r, edinetFilingUrl: "javascript:alert(1)" } : r)) };
+      const v = edinetFin({ annual: years, standalone, earnings: patched({ 0: { pdfUrl: "https://example.org/ir/2q-parent.pdf" }, 1: { pdfUrl: undefined }, 3: { pdfUrl: "https://example.org/ir/1q.pdf" }, 4: { pdfUrl: "https://example.org/ir/4q.pdf" }, 5: { pdfUrl: "ir/3q.pdf" } }) }, "2026-11-19")!;
+      const vq = (label: string) => v.quarterly.periods.find((p) => p.label === label)!;
+      ck("a consolidated release without an address leaves its quarter and the guidance without one: the parent-only release's PDF, another document, is not put in its place", vq("2Q 3/27").url === null && v.annual.periods[10].kind === "FC" && v.annual.periods[10].url === null, [vq("2Q 3/27"), v.annual.periods[10]]);
+      ck("where the newest release of a quarter (a correction) has no address and the first one has, the first one's PDF is linked, with its own date", vq("1Q 3/27").url === "https://example.org/ir/1q.pdf" && vq("1Q 3/27").filed === "2026-08-05", vq("1Q 3/27"));
+      ck("a full-year release's PDF is the fourth quarter's document", vq("4Q 3/26").url === "https://example.org/ir/4q.pdf" && vq("4Q 3/26").filed === "2026-05-10", vq("4Q 3/26"));
+      ck("only an address a browser can open is kept: a relative path or a script address is no address (the document ID stays)", vq("3Q 3/26").url === null && v.annual.periods[0].label === "FY3/17" && v.annual.periods[0].url === null && v.annual.periods[0].doc === "S100T2017", [vq("3Q 3/26"), v.annual.periods[0]]);
+      ck("an EDINET address is kept exactly as given, with the filing date from submitDateTime", v.annual.periods[9].url === "https://disclosure2.edinet-fsa.go.jp/WZEK0040.aspx?S100T2026" && v.annual.periods[9].filed === "2026-06-10", v.annual.periods[9]);
+      const solo = edinetFin({ annual, standalone, earnings: { earnings: [{ disclosureDate: "2026-11-05", quarter: 2, isConsolidated: false, fiscalYearEnd: "2027-03-31", revenue: 800000, forecastRevenue: 1650000, pdfUrl: "https://example.org/ir/2q-solo.pdf" }] } }, null)!;
+      ck("a company that reports its own figures only (no consolidated release) links that release", solo.quarterly.periods.find((p) => p.label === "2Q 3/27")!.url === "https://example.org/ir/2q-solo.pdf" && solo.annual.periods.slice(-1)[0].url === "https://example.org/ir/2q-solo.pdf");
+      ck("an address is kept exactly as an http(s) address and nothing else is one", docUrl(" https://example.org/a.pdf ") === "https://example.org/a.pdf" && docUrl("http://example.org/a") === "http://example.org/a" && [null, 7, "", "ftp://x/y", "javascript:alert(1)", "/ir/a.pdf", "https://exa mple.org", 'https://x.example/a"b'].every((x) => docUrl(x) === null));
+    }
+
     // which company
     const found = [{ edinetCode: "E04147", name: "A", secCode: "90200" }, { edinetCode: "E01892", name: "B", secCode: "69020" }];
     ck("the company is the one whose securities code is exactly the one asked for (with its check digit), not another whose code merely contains it", edinetCodeOf({ companies: found }, "9020") === "E04147" && edinetCodeOf({ data: [...found].reverse() }, "9020") === "E04147" && edinetCodeOf(found, "6902") === "E01892" && edinetCodeOf([{ edinet_code: "E1", sec_code: "285A0" }], "285a") === "E1" && edinetCodeOf(found, "902") === "" && edinetCodeOf({ companies: [] }, "9020") === "" && edinetCodeOf(null, "9020") === "");
@@ -989,6 +1013,29 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const tr = sectorShort("輸送用機器", 25), ws = sectorShort("倉庫・運輸関連業", 25), gics = sectorShort("Consumer Discretionary", 25), none = sectorShort(null);
     ck(`a JPX sector is named in English, whole up to 25 characters ("${tr.text}"), cut at a word beyond ("${ws.text}"), with the English and the Japanese on hover ("${ws.full}")`, tr.text === "Transportation Equipment" && ws.text === "Warehousing & Harbor…" && ws.full === "Warehousing & Harbor Transportation Services (倉庫・運輸関連業)" && tr.full === "Transportation Equipment (輸送用機器)", { tr, ws });
     ck("a sector the map does not know (the server's GICS names) is kept as it is; none gives an empty cell; without a limit nothing is cut", gics.text === "Consumer Discretionary" && gics.full === "Consumer Discretionary" && none.text === "" && sectorShort("倉庫・運輸関連業").text === "Warehousing & Harbor Transportation Services");
+  }
+
+  console.log("\n[S] a stock's page (I-3): a big move in parts, the document behind a column, the NEWS rows, the period that holds a day");
+  {
+    const mp = (kind: MoveRow["kind"], pct: number) => moveParts({ kind, pct, from: "2026-05-25", to: "2026-09-14" });
+    ck("a day's move: no word, the figure with its sign, \"on the day\"", JSON.stringify(mp("d1", -12.94)) === JSON.stringify({ word: null, fig: "\u221212.9%", rest: "on the day" }), mp("d1", -12.94));
+    ck("a peak and a bottom: the turn as a word, the figure with its sign, where the move came from", mp("pk", 22.6).word === "New high" && mp("pk", 22.6).fig === "+22.6%" && mp("pk", 22.6).rest === "from the low of 25 May" && mp("bt", -24.1).word === "Bottom" && mp("bt", -24.1).fig === "\u221224.1%" && mp("bt", -24.1).rest === "from the high of 25 May" && mp("p2", 11.3).word === "Smaller peak" && mp("b2", -11.8).word === "Smaller bottom");
+    ck("the parts say word for word what the server's sentence says, for every kind of move and both signs", (["d1", "pk", "bt", "p2", "b2", "w1", "m1"] as const).every((kind) => [12.34, -12.34].every((pct) => { const m = { kind, pct, from: "2026-05-25", to: "2026-09-14" }, p = moveParts(m); return [p.word ? `${p.word}:` : null, p.fig, p.rest].filter(Boolean).join(" ") === moveText(m); })));
+    const edinet = periodDoc({ kind: "FY", label: "FY3/26", doc: "S100Y8NY", url: "https://disclosure2.edinet-fsa.go.jp/WZEK0040.aspx?S100Y8NY", filed: "2026-06-10" });
+    ck("a year from the 有価証券報告書 on EDINET: the address as given, and a tip with the document ID and the filing date", edinet?.href === "https://disclosure2.edinet-fsa.go.jp/WZEK0040.aspx?S100Y8NY" && edinet.tip === "Open the 有価証券報告書 for FY3/26 on EDINET (document S100Y8NY, filed 10 Jun 2026) \u2197", edinet);
+    ck("the guidance column and a quarter: the 決算短信 PDF and the day it was disclosed (the designer's words)", periodDoc({ kind: "FC", label: "FY3/27", doc: null, url: "https://example.com/ir/2q.pdf", filed: "2026-11-05" })?.tip === "Open the 決算短信 PDF, disclosed 5 Nov 2026 \u2197" && periodDoc({ kind: "Q", label: "1Q 3/27", doc: null, url: "https://example.com/ir/1q.pdf", filed: "2026-08-04" })?.tip === "Open the 決算短信 PDF for 1Q 3/27, disclosed 4 Aug 2026 \u2197");
+    ck("no address, or one a browser cannot open, opens nothing; a filing elsewhere than EDINET says where", periodDoc({ kind: "Q", label: "2Q 3/27", doc: null, url: null, filed: null }) === null && periodDoc({ kind: "FY", label: "FY3/26", doc: "S1", url: "javascript:alert(1)", filed: null }) === null && periodDoc({ kind: "FC", label: "FY3/27", doc: null, url: "/ir/x.pdf" }) === null && periodDoc({ kind: "FY", label: "FY3/26", doc: "S1", url: "https://example.org/x", filed: null })?.tip === "Open the 有価証券報告書 for FY3/26 on example.org (document S1) \u2197");
+    const feed: StockFeed = { days: 90, news: [{ id: 1, publishedAt: "2026-11-19T15:22:00Z", source: "Nikkei Asia", title: "A", url: "https://example.com/1", category: null }, { id: 2, publishedAt: "2026-11-18T01:00:00Z", source: "FT Markets", title: "B", url: "https://example.com/2", category: "JP Equities" }],
+      alerts: [{ id: 7, at: "2026-11-19T02:05:00Z", kind: "stock", pct: 16.7, market: "TSE", msg: "TOYOTA MOTOR CORP. up 16.7% intraday", url: null }, { id: 8, at: "2026-11-19T20:00:00Z", kind: "buyback", pct: null, market: "Nikkei Asia", msg: "Buyback: a stand-in", url: "https://example.com/a" }] };
+    const all = feedRows(feed);
+    ck("NEWS: the headlines and the alerts as one list, newest first; an alert says what it is and where it was read, a move has no link", all.map((r) => r.key).join() === "a8,h1,a7,h2" && all[0].source === "buyback, Nikkei Asia" && all[2].source === "move, TSE" && all[2].url === null && all[1].kind === "headline" && all[1].source === "Nikkei Asia" && all[1].url === "https://example.com/1", all);
+    ck("its filters: headlines only, alerts only; nothing from no feed", feedRows(feed, "headlines").map((r) => r.key).join() === "h1,h2" && feedRows(feed, "alerts").map((r) => r.key).join() === "a8,a7" && feedRows(undefined).length === 0 && feedRows({ days: 90, news: [], alerts: [] }).length === 0);
+    ck("a row's time in Singapore (\"19 Nov 23:22\"); a data date as \"5 Nov 2026\"", fmtDayTime("2026-11-19T15:22:00Z") === "19 Nov 23:22" && fmtDayTime("x") === "–" && fmtDay("2026-11-05") === "5 Nov 2026" && fmtDay(null) === "–");
+    const now = Date.parse("2026-11-20T01:25:00Z") / 1000, day = (d: string) => Date.parse(d + "T00:00:00Z") / 1000;
+    ck("a move tapped in the list opens on the shortest daily view that holds its day: 3M, 12M, 36M, then 5Y and 10Y (A-25)", periodHolding(day("2026-09-14"), now) === "3M" && periodHolding(day("2026-08-20"), now) === "3M" && periodHolding(day("2026-08-19"), now) === "12M" && periodHolding(day("2025-11-20"), now) === "12M" && periodHolding(day("2025-11-19"), now) === "36M" && periodHolding(day("2023-10-01"), now) === "5Y" && periodHolding(day("2018-01-01"), now) === "10Y");
+    const ranges = /RANGES: Record<string, number> = \{([^}]*)\}/.exec(readText(new URL("../supabase/functions/_shared/assets.ts", import.meta.url), "utf8"))?.[1] ?? "";
+    const server = Object.fromEntries([...ranges.matchAll(/"(\w+)":\s*(\d+)/g)].map((m) => [m[1], Number(m[2])]));
+    ck("every period the page offers past a day is one the server sends, over the same number of days (5Y and 10Y included)", Object.entries(PERIOD_DAYS).filter(([k]) => k !== "1D").every(([k, d]) => server[k] === d) && server["5Y"] === 1827 && server["10Y"] === 3653, server);
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

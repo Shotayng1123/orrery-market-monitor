@@ -80,12 +80,15 @@ const calRows = (p, phone) => p.evaluate((phone) => phone
       const sec = (t) => [...document.querySelectorAll(".mp-sec")].find((s) => s.querySelector("h2 span")?.textContent === t);
       const rows = phone ? [...document.querySelectorAll(".mp-row.starred")].map((r) => ({ name: r.querySelector(".n").textContent, sym: r.querySelector(".mp-st").textContent.split(" · ")[0] })) : [...document.querySelectorAll('.panel[data-k="wl"] tbody tr')].map((r) => ({ name: r.querySelector("td.nm .lnk").textContent, sym: r.querySelector("td.nm .mut").textContent }));
       const n = (k, ph, sel) => (phone ? sec(ph)?.querySelectorAll(sel).length : document.querySelectorAll(`.panel[data-k="${k}"] ${sel === ".rs-row" || sel === ".ev-row" || sel === ".nw-row" ? "tbody tr" : sel}`).length) ?? 0;
-      return { rows, earn: n("wl-earn", "Earnings ahead", ".ev-row"), alerts: n("wl-alerts", "Alerts on my names", ".nw-row"), news: phone ? sec("Headlines on my names").querySelectorAll(".nw-row").length : document.querySelectorAll('.panel[data-k="wl-news"] .nwrow').length, research: n("wl-research", "In research", ".rs-row") };
+      return { rows, earn: n("wl-earn", "Results ahead", ".ev-row"), alerts: n("wl-alerts", "Alerts on my names", ".nw-row"), news: phone ? sec("Headlines on my names").querySelectorAll(".nw-row").length : document.querySelectorAll('.panel[data-k="wl-news"] .nwrow').length, research: n("wl-research", "In research", ".rs-row") };
     }, phone);
     const syms = w.rows.map((r) => r.sym);
     ck(`my names: the ${w.rows.length} stand-in names, a Tokyo and a US stock, the Nikkei 225, an index without a page on EQUITIES, USD/JPY, the UST 10Y, gold`, w.rows.length === S.watch.start.length && ["7203.T", "NVDA", "^N225", "^SOX", "USDJPY=X", "^TNX", "GC=F"].every((s) => syms.includes(s)), syms);
     ck("a name of 40 characters and more, and one in Japanese only", w.rows.some((r) => r.name === LONG) && w.rows.some((r) => r.name === JP), w.rows.map((r) => r.name));
-    ck(`results ahead (${w.earn}), alerts (${w.alerts}), headlines (${w.news}) and research (${w.research}) on them`, w.earn >= 3 && w.alerts === S.watch.feed.alerts.length && w.news === S.watch.feed.news.length && w.research === S.watch.feed.research.length, w);
+    // the stand-in feed at the server's lengths, 40 alerts and 60 headlines (the designer's D-48): a computer shows 10 and 15
+    // of them before "SHOW n MORE", a phone every alert and 30 headlines
+    const nA = S.watch.feed.alerts.length, nN = S.watch.feed.news.length;
+    ck(`results ahead (${w.earn}), alerts (${w.alerts} of ${nA}), headlines (${w.news} of ${nN}) and research (${w.research}) on them`, nA === 40 && nN === 60 && w.earn >= 3 && w.alerts === (phone ? nA : 10) && w.news === (phone ? 30 : 15) && w.research === S.watch.feed.research.length, w);
     // every kind opens its page: an index with an EQUITIES page opens EQUITIES, the rest their own page
     const opened = [];
     for (const [sym, want] of [["7203.T", "#asset/7203.T"], ["NVDA", "#asset/NVDA"], ["^N225", "#equities/nk225"], ["^SOX", "#asset/%5ESOX"], ["USDJPY=X", "#asset/USDJPY%3DX"], ["^TNX", "#asset/%5ETNX"], ["GC=F", "#asset/GC%3DF"]]) {

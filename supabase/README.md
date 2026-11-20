@@ -231,7 +231,10 @@ with `only` = `counts` says how many accounts have had it.
 
 `api?action=stock&symbol=…` answers the whole page in one go (`_shared/stock.ts`): the quote, the change over each
 horizon against the benchmark(s), the figures worked out from the price history, share counts, short interest,
-valuation, the big moves with their reasons, and the statements. The arithmetic is in `_shared/stockstats.ts`,
+valuation, the big moves with their reasons, the statements, and (since 20 Nov 2026) `feed`, the page's NEWS: the
+Monitor's own headlines whose `tickers` name the stock (at most 60) and its own alerts on it (at most 40), over the
+last 90 days, read from `news_items` and `alerts` alone, so no source is asked. A page from before ignores `feed`;
+the page shows no NEWS panel without it. The arithmetic is in `_shared/stockstats.ts`,
 `_shared/bigmoves.ts` and `_shared/fin.ts`; what each source sends is read in `_shared/finsrc.ts`. All four are
 checked in `sim/logic.test.ts` (sections L to P).
 
@@ -258,6 +261,13 @@ checked in `sim/logic.test.ts` (sections L to P).
     and leaves empty what it could not check against the filings; nothing is derived again here.
   - the company is found by its exact securities code: the provider's search also returns codes that merely
     contain the one asked for.
+  - the document behind each column (since 20 Nov 2026), only as the provider gives its address and only an http(s)
+    one, never made up: a year's `edinetFilingUrl` (its `docID` beside it, and the filing date where the answer has
+    `submitDateTime`); the guidance column's `pdfUrl` from the 決算短信 its figures were read from; a year known only
+    from its 決算短信, that row's `pdfUrl`; a quarter, the `pdfUrl` of a stored 決算短信 row with the same fiscal year
+    end and quarter (consolidated rows first, the newest that carries one). Only some rows carry `pdfUrl`: on 20 Nov
+    2026 Toyota's newest (the second quarter of FY3/27, 5 Nov 2026) had none, so that quarter and the guidance column
+    have no document link. The rows are those already stored: no request is added.
 - **EDINET DB allows a hundred requests a day** on its free plan (the day is Japan's; `EDINETDB_DAILY_BUDGET`,
   default 90, is this server's share). A Tokyo name takes one request to find its EDINET code (kept a year) and
   three for its statements, each stored on its own (`_shared/edinet.ts`): the 決算短信 for a week, and daily once
@@ -456,7 +466,7 @@ What the Monitor does about it:
 
 ## Added 2026-11-07 evening
 
-- Chart frequencies: `tick` now stores one-minute bars (`bars_intraday`, three-day retention) from per-symbol chart calls (a few in parallel, spark as fallback); `daily?job=hourly` keeps `bars_hourly` (three months fetched, sixty days kept) for the 1W and 1M charts; 3M and longer use daily closes. `api?action=series` returns extra history behind each window so the page can pan.
+- Chart frequencies: `tick` now stores one-minute bars (`bars_intraday`, three-day retention) from per-symbol chart calls (a few in parallel, spark as fallback); `daily?job=hourly` keeps `bars_hourly` (three months fetched, sixty days kept) for the 1W and 1M charts; 3M and longer use daily closes. `api?action=series` returns extra history behind each window so the page can pan; 5Y and 10Y (a stock's page, since 20 Nov 2026) return up to ten years and the σ window's history, without a second window (`historyDays` in `_shared/assets.ts`).
 - Alerts: `alerts` table and `api?action=alerts`. Indices beyond ±3% are recorded by the tick every minute. Single stocks beyond their line at any point of the session (`_shared/moves.ts`; the figure is the session's largest move). The line is ±5% for a large company (1tn yen and above, or 10bn US dollars and above, from the market value the flow job last stored) and ±7% for the rest and for a company whose size is not known (`stockLine`; 7% for all until 19 Nov 2026): every fifth minute the tick reads one-minute bars (spark, one request per 20 names) for Nikkei 225 and S&P 500 members and every stock on a watchlist, while the market is open and until the delayed closing prices are in; the flow job (`daily?job=flow&idx=…`) raises the same alert from the day range of its quotes for the other companies of TOPIX, Nasdaq-100, KOSPI 200, Hang Seng and SSE 180 worth USD 5bn or more. In the minutes after a market closes the official closing price of each covered name is measured as well (`closeMove`): a closing auction prints after the last one-minute bar. One row per symbol, session date and kind, written only when the figure changes. `daily?job=constituents` refreshes the S&P 500 (Wikipedia) and Nikkei 225 (Nikkei CSV) lists into `constituents`.
 - WATCHLIST rows (19 Nov 2026): `api?action=watch_list` reads a market instrument from the market table as MARKETS
   shows it (`_shared/watchrow.ts`). A yield's per-cent fields are null and its changes go out as the change of its

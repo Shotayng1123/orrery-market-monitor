@@ -2,6 +2,7 @@
 // from fin.ts and stockstats.ts) and how its figures are written. Everything here is display: no figure is
 // worked out on the page except the two sums named in finSections (net cash, free cash flow).
 import { fmtNum } from "./fmt";
+import { partsIn, SGT } from "./time";
 
 export interface PerfRow { h: string; from: string | null; base: number | null; stock: number | null; bench: Array<number | null>; rel: Array<number | null> }
 export interface Benchmark { symbol: string; name: string; note: string | null }
@@ -14,7 +15,11 @@ export type RatioId = "salesYoy" | "gpm" | "opm" | "npm" | "payout" | "roe" | "e
  *  in `optional` is shown only when some period has a figure. `netCash` and `fcf` are the two sums made here. */
 export type FinRowId = FinLine | "netCash" | "fcf";
 export interface FinLayout { is: FinRowId[]; bs: FinRowId[]; cf: FinRowId[]; optional: Array<FinRowId | RatioId>; labels?: Partial<Record<FinRowId, string>>; titles?: Partial<Record<FinRowId | RatioId, string>> }
-export interface FinPeriod { key: string; end: string; label: string; kind: "FY" | "Q" | "FC"; months: number; std: string | null; doc: string | null; url: string | null; note: string | null }
+/** A column of the statements. `url` is the address of the document behind it as the source gives it (a year's
+ *  有価証券報告書 on EDINET, with `doc` its document ID; the 決算短信 PDF of the guidance, of a quarter or of a year
+ *  known only from it), or null; `filed` the date that document was filed or disclosed, where the source says (a
+ *  server from before 20 Nov 2026 sends none, nor a quarter's address). */
+export interface FinPeriod { key: string; end: string; label: string; kind: "FY" | "Q" | "FC"; months: number; std: string | null; doc: string | null; url: string | null; note: string | null; filed?: string | null }
 export interface FinSet { periods: FinPeriod[]; lines: Partial<Record<FinLine, Array<number | null>>> }
 export interface FinUnit { div: number; label: string; dp: number }
 export interface Fin {
@@ -51,14 +56,86 @@ export function moveRule(rule?: MoveRule, z: MoveSizes = { day: 10, large: 15, s
 }
 export const whyText = (m: MoveRow): string => (m.status === "found" && m.cause ? m.cause : m.status === "not_found" ? "No reliable report of the reason was found." : m.status === "queued" ? "The reason is being looked up; it appears here when found." : m.status === "failed" ? "The look-up for this move failed; no reason is shown." : m.status === "old" ? "Not looked up: reasons are searched for moves of the last twelve months." : "Reasons are not looked up on this server yet.");
 /** The moves as marks for the chart: one per day (the moves that end the same day share a circle, coloured by the
- *  largest; a small circle when they are all smaller peaks or bottoms). */
-export function chartMarks(rows: MoveRow[]): Array<{ t: number; dir: 1 | -1; small: boolean; title: string; items: Array<{ text: string; why: string }> }> {
+ *  largest; a small circle when they are all smaller peaks or bottoms). Each item carries the move in its three
+ *  parts (moveParts) for the chart's card, beside the server's sentence. */
+export function chartMarks(rows: MoveRow[]): Array<{ t: number; dir: 1 | -1; small: boolean; title: string; items: Array<{ text: string; why: string; pct: number; word: string | null; fig: string; rest: string }> }> {
   const by = new Map<string, MoveRow[]>();
   for (const r of rows) by.set(r.to, [...(by.get(r.to) ?? []), r]);
-  return [...by.entries()].map(([to, rs]) => ({ t: rs[0].t, dir: [...rs].sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0].dir, small: rs.every(isSmallMove), title: to, items: rs.map((r) => ({ text: r.text, why: whyText(r) })) }));
+  return [...by.entries()].map(([to, rs]) => ({ t: rs[0].t, dir: [...rs].sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0].dir, small: rs.every(isSmallMove), title: to, items: rs.map((r) => ({ text: r.text, why: whyText(r), pct: r.pct, ...moveParts(r) })) }));
 }
 /** The site a source is on, for a short link label: "reuters.com". */
 export const siteOf = (url: string): string => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; } };
+
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const p2 = (n: number): string => String(n).padStart(2, "0");
+/** A date of the data as the page writes it (the designer's §3.2): "2026-11-05" -> "5 Nov 2026"; "–" for none. */
+export const fmtDay = (ymd: string | null | undefined): string => { const m = ymd ? /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd) : null; return m ? `${Number(m[3])} ${MON[Number(m[2]) - 1]} ${m[1]}` : "–"; };
+const dayMon = (ymd: string): string => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd); return m ? `${Number(m[3])} ${MON[Number(m[2]) - 1]}` : ymd; };
+/** A time as the NEWS rows write it, in Singapore time (the panel's head says so): "19 Nov 23:22"; "–" for none. */
+export function fmtDayTime(t: string | null | undefined): string {
+  const d = t ? new Date(t) : null;
+  if (!d || Number.isNaN(d.getTime())) return "–";
+  const p = partsIn(SGT, d);
+  return `${p.d} ${MON[p.mo - 1]} ${p2(p.h)}:${p2(p.m)}`;
+}
+
+/** A big move in three parts, read from its fields (the designer's D-27 and the PMs' answer to Q3, 20 Nov 2026):
+ *  the turn as a word (none for a day's move), the figure, and the rest of the sentence. On the page the figure
+ *  takes the colour of its sign, as every figure on the Monitor does, and the turn's colour stays on the circle
+ *  and the dot: a green "−24.1%" read as a rise. The server's own sentence (`text`) is the same words in one. */
+export function moveParts(m: Pick<MoveRow, "kind" | "pct" | "from" | "to">): { word: string | null; fig: string; rest: string } {
+  const fig = `${m.pct > 0 ? "+" : "\u2212"}${Math.abs(m.pct).toFixed(1)}%`;
+  switch (m.kind) {
+    case "d1": return { word: null, fig, rest: "on the day" };
+    case "pk": return { word: "New high", fig, rest: `from the low of ${dayMon(m.from)}` };
+    case "bt": return { word: "Bottom", fig, rest: `from the high of ${dayMon(m.from)}` };
+    case "p2": return { word: "Smaller peak", fig, rest: `from the low of ${dayMon(m.from)}` };
+    case "b2": return { word: "Smaller bottom", fig, rest: `from the high of ${dayMon(m.from)}` };
+    case "w1": return { word: null, fig, rest: `in five sessions (from ${dayMon(m.from)})` };
+    default: return { word: null, fig, rest: m.pct < 0 ? `from the high of ${dayMon(m.from)} to the low of ${dayMon(m.to)}` : `from the low of ${dayMon(m.from)} to the high of ${dayMon(m.to)}` };
+  }
+}
+
+/** What a statements column says when it opens no document (the designer's I-3 note). */
+export const NO_DOC = "no document address from the source";
+/** The document a statements column opens (A-01 with A's rules of 19 Nov 2026), or null. Only the address the source
+ *  gave for that column, and only one a browser can open (http or https): never a made-up address, never a search
+ *  page in the document's place. A year from the 有価証券報告書 opens that filing, its document ID in the tip (so it
+ *  can be found on EDINET whatever the page behind the address shows); the guidance column, a quarter and a year
+ *  known only from its 決算短信 open that 決算短信 PDF. */
+export function periodDoc(p: Pick<FinPeriod, "kind" | "label" | "doc" | "url" | "filed">): { href: string; tip: string } | null {
+  const href = typeof p.url === "string" && /^https?:\/\/[^\s"'<>]+$/i.test(p.url.trim()) ? p.url.trim() : null;
+  if (!href) return null;
+  const host = (() => { try { return new URL(href).hostname.toLowerCase(); } catch { return ""; } })();
+  if (p.kind === "FY" && p.doc) return { href, tip: `Open the 有価証券報告書 for ${p.label} ${/(^|\.)edinet-fsa\.go\.jp$/.test(host) ? "on EDINET" : `on ${host}`} (document ${p.doc}${p.filed ? `, filed ${fmtDay(p.filed)}` : ""}) \u2197` };
+  const when = p.filed ? `, disclosed ${fmtDay(p.filed)}` : "";
+  return { href, tip: p.kind === "FC" ? `Open the 決算短信 PDF${when} \u2197` : `Open the 決算短信 PDF for ${p.label}${when} \u2197` };
+}
+
+/** The NEWS panel of a stock's page (I-3, 20 Nov 2026): the Monitor's own headlines that name the stock and its own
+ *  alerts on it, over the last `days` days (supabase/functions/_shared/stock.ts, feedFor). A server from before
+ *  sends no `feed`, and then the page shows no NEWS panel. `error` says which table could not be read. */
+export interface StockFeed {
+  days: number;
+  news: Array<{ id: number; publishedAt: string; source: string; title: string; url: string; category: string | null }>;
+  alerts: Array<{ id: number; at: string; kind: string; pct: number | null; market: string; msg: string; url: string | null }>;
+  error?: string;
+}
+export type FeedFilter = "all" | "headlines" | "alerts";
+/** One row of the panel: line 1 the time, the kind and where it came from; line 2 the headline or the alert. */
+export interface FeedRow { key: string; at: string; kind: "headline" | "alert"; source: string; title: string; url: string | null }
+const ALERT_KIND: Record<string, string> = { stock: "move", index: "index move", buyback: "buyback", revision: "guidance", mna: "M&A" };
+/** The panel's rows for a filter, newest first: a headline with its publisher, an alert with what it is and where it
+ *  was read (the exchange for a move, the publisher for a headline's alert). */
+export function feedRows(feed: StockFeed | null | undefined, filter: FeedFilter = "all"): FeedRow[] {
+  if (!feed) return [];
+  const news: FeedRow[] = filter === "alerts" ? [] : (feed.news ?? []).map((n) => ({ key: `h${n.id}`, at: n.publishedAt, kind: "headline", source: n.source, title: n.title, url: n.url || null }));
+  const alerts: FeedRow[] = filter === "headlines" ? [] : (feed.alerts ?? []).map((a) => ({ key: `a${a.id}`, at: a.at, kind: "alert", source: [ALERT_KIND[a.kind] ?? a.kind, a.market].filter(Boolean).join(", "), title: a.msg, url: a.url || null }));
+  const t = (s: string): number => { const v = Date.parse(s); return Number.isFinite(v) ? v : -Infinity; };
+  return [...news, ...alerts].sort((x, y) => t(y.at) - t(x.at) || x.key.localeCompare(y.key));
+}
+/** How many rows a list shows at first and adds with each "SHOW n MORE" (the designer's I-3 note and D-48). */
+export const FEED_STEP = 15;
 
 export interface StockPage {
   symbol: string; name: string; exchange: string | null; currency: string | null; quoteType: string | null;
@@ -78,6 +155,7 @@ export interface StockPage {
   earningsAt: string | null; earningsEst: boolean | null;
   val: { pe: number | null; peGuide: number | null; pb: number | null; yield: number | null; yieldGuide: number | null; basis: string | null };
   fin: Fin | null; finNote: string | null;
+  feed?: StockFeed;   // since 20 Nov 2026
 }
 
 const MINUS = "−";
