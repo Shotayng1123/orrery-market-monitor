@@ -76,12 +76,15 @@ export function mockStock(symbol: string, last?: number, pts: Array<{ t: number;
   const price = last ?? drawn;
   const scale = jp ? 2.4e12 * (0.5 + r()) : 3.2e11 * (0.5 + r());   // yearly revenue
   const sharesOut = Math.round((scale * 0.07 * 16) / price);   // sized so the mock earnings give a P/E in the teens
-  const P = (end: string, label: string, kind: FinPeriod["kind"], months: number, std: string | null, doc: { doc?: string | null; url: string | null; filed: string | null } = { url: null, filed: null }): FinPeriod => ({ key: `${kind}:${end}`, end, label, kind, months, std, doc: doc.doc ?? null, url: doc.url, note: null, filed: doc.filed });
+  const P = (end: string, label: string, kind: FinPeriod["kind"], months: number, std: string | null, doc: { doc?: string | null; url: string | null; filed: string | null; gone?: string } = { url: null, filed: null }): FinPeriod => ({ key: `${kind}:${end}`, end, label, kind, months, std, doc: doc.doc ?? null, url: doc.url, note: null, filed: doc.filed, ...(doc.gone ? { docGone: doc.gone } : {}) });
   const toyota = symbol === "7203.T", ir = `https://example.com/mock-ir/${symbol.replace(/\W/g, "")}`;
 
   // ---- annual
   const years = jp ? 10 : 4, lastFy = jp ? 2026 : 2025, fyM = jp ? 3 : 12;
-  const aP: FinPeriod[] = Array.from({ length: years }, (_, i) => { const y = lastFy - (years - 1 - i); return P(`${y}-${String(fyM).padStart(2, "0")}-${fyM === 3 ? 31 : 31}`, `FY${fyM}/${two(y)}`, "FY", 12, jp ? "JP" : null, jp ? { doc: `S100MK${two(y)}`, url: `https://example.org/mock-edinet/S100MK${two(y)}`, filed: `${y}-06-${18 + (y % 5)}` } : undefined); });
+  // another Tokyo symbol's oldest year is one EDINET DB flags as no longer on EDINET (its ~10-year retention; the
+  // reviewer's R2B-04): no address, and the reason in its tip, as the server sends it (finsrc.ts filingLink)
+  const aged = (y: number) => !toyota && y === lastFy - (years - 1);
+  const aP: FinPeriod[] = Array.from({ length: years }, (_, i) => { const y = lastFy - (years - 1 - i); return P(`${y}-${String(fyM).padStart(2, "0")}-${fyM === 3 ? 31 : 31}`, `FY${fyM}/${two(y)}`, "FY", 12, jp ? "JP" : null, jp ? { doc: `S100MK${two(y)}`, url: aged(y) ? null : `https://example.org/mock-edinet/S100MK${two(y)}`, filed: `${y}-06-${18 + (y % 5)}`, gone: aged(y) ? `document S100MK${two(y)} no longer on EDINET, per EDINET DB (stand-in flag)` : undefined } : undefined); });
   const g = (i: number, base: number, drift: number, noise: number) => base * (1 + drift) ** i * (1 + (r() - 0.5) * noise);
   const rev = aP.map((_, i) => g(i, scale * 0.62, 0.055, 0.08));
   const cogs = rev.map((v) => v * (0.71 + (r() - 0.5) * 0.03)), gross = rev.map((v, i) => v - cogs[i]);

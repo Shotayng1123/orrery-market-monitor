@@ -10,7 +10,7 @@ import { fmtPct, fmtChg, fmtLevel, fmtSigma, fmtStampSafe, isYield, signCls } fr
 import { cellBp, cellPct } from "../lib/fmt";
 import { pageHash } from "../lib/indices";
 import { openAsset } from "../components/CompanyCard";
-import { fmtDate } from "../lib/time";
+import { fmtDate, rowAsOfTitle } from "../lib/time";
 import { classLabel, delayed, dottedLine, FX, RANGE_52W as RANGE_WORD, RATES, SIGMA_1M as SIGMA_WORD, VS_200D } from "../lib/labels";
 import { Flash } from "../components/Flash";
 import { PERIODS, type Curve, type TableRow } from "../lib/types";
@@ -95,7 +95,7 @@ function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
         const isRate = isYield(r);
         // every row opens its instrument's page (the designer's D-15, B-23): the name a teal link, the row a pointer
         return (
-          <tr key={r.symbol} className={`click${r.live ? " live" : ""}`} title={`${r.symbol} · last ${fmtStampSafe(r.lastAt)}${r.live ? " · market open" : ""} · open its page`} onClick={(e) => { if (!(e.target as HTMLElement).closest("a")) openAsset(r.symbol); }}>
+          <tr key={r.symbol} className={`click${r.live ? " live" : ""}`} title={`${r.symbol} · ${rowAsOfTitle(r)}${r.live ? " · market open" : ""} · open its page`} onClick={(e) => { if (!(e.target as HTMLElement).closest("a")) openAsset(r.symbol); }}>
             <td className="l" title={`${r.name} (${r.symbol})`}><a className="lnk" href={`#${pageHash(r.symbol)}`}>{shortName(r.symbol, r.name)}</a><Badges r={r} /></td>
             <td className="num"><Flash value={r.last}><b>{levelOf(r, r.last)}</b></Flash></td>
             {PERIODS.map((p) => {

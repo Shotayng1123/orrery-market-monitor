@@ -3,6 +3,8 @@ name: live-check
 # A read-only look at the live database (jobs/live_check.ts): what the jobs last did, whether EQUITIES has today's
 # quotes, the alerts of the last two days, the reasons for big moves and their cost, the EDINET DB allowance.
 # It changes nothing and prints market data and counts only. By hand: Actions > live-check > Run workflow.
+# "stock" runs the server's own reads for an instrument's page and a stock's NEWS (supabase/functions/_shared/
+# pagefeed.ts) against the live tables, for USD/JPY, ^TNX, JGB 10Y and 7203.T: worth a run after a server deploy.
 # One part is not read-only and runs only when asked for by name: "token" has the database ask GitHub to start a
 # run of this check (its counts part) and prints GitHub's answer, which is how a stored token is tried out.
 # Another runs only by name: "keys" tries the owner's source keys (jobs/live_keys.ts): for SEC_USER_AGENT,
@@ -12,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: "Parts to print, comma-separated (jobs, relay, sources, market, source, equities, alerts, reasons, edinet, counts); empty for all. token = try the stored GitHub token; keys = try the owner's source keys (SEC, EDINET, BLS)"
+        description: "Parts to print, comma-separated (jobs, relay, sources, market, source, equities, alerts, reasons, edinet, stock, counts); empty for all. token = try the stored GitHub token; keys = try the owner's source keys (SEC, EDINET, BLS)"
         required: false
         default: ""
 

@@ -19,7 +19,12 @@ export interface FinLayout { is: FinRowId[]; bs: FinRowId[]; cf: FinRowId[]; opt
  *  有価証券報告書 on EDINET, with `doc` its document ID; the 決算短信 PDF of the guidance, of a quarter or of a year
  *  known only from it), or null; `filed` the date that document was filed or disclosed, where the source says (a
  *  server from before 20 Nov 2026 sends none, nor a quarter's address). */
-export interface FinPeriod { key: string; end: string; label: string; kind: "FY" | "Q" | "FC"; months: number; std: string | null; doc: string | null; url: string | null; note: string | null; filed?: string | null }
+export interface FinPeriod {
+  key: string; end: string; label: string; kind: "FY" | "Q" | "FC"; months: number; std: string | null; doc: string | null; url: string | null; note: string | null; filed?: string | null;
+  /** Why a column the source gave an address for opens nothing: EDINET DB says the filing is no longer on EDINET (its
+   *  ~10-year retention). Sent since 20 Nov 2026 (the reviewer's R2B-04); a server from before sends none. */
+  docGone?: string;
+}
 export interface FinSet { periods: FinPeriod[]; lines: Partial<Record<FinLine, Array<number | null>>> }
 export interface FinUnit { div: number; label: string; dp: number }
 export interface Fin {
@@ -109,6 +114,9 @@ export function periodName(p: Pick<FinPeriod, "kind" | "label">): { full: string
 
 /** What a statements column says when it opens no document (the designer's I-3 note). */
 export const NO_DOC = "no document address from the source";
+/** Why a column opens no document: the source's own reason where it gives one ("document S100… no longer on EDINET,
+ *  per EDINET DB"), otherwise that it gave no address. */
+export const noDocWhy = (p: Pick<FinPeriod, "docGone">): string => (typeof p.docGone === "string" && p.docGone.trim() ? p.docGone.trim() : NO_DOC);
 /** The document a statements column opens (A-01 with A's rules of 19 Nov 2026), or null. Only the address the source
  *  gave for that column, and only one a browser can open (http or https): never a made-up address, never a search
  *  page in the document's place. A year from the 有価証券報告書 opens that filing, its document ID in the tip (so it

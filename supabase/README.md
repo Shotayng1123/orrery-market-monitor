@@ -288,10 +288,14 @@ checked in `sim/logic.test.ts` (sections L to P).
 ## An instrument's page (added 2026-11-20)
 
 `api?action=stock&symbol=…` answers a currency, a yield, a commodity, a future or an index with an instrument's page
-(`instrumentPage` in `_shared/stock.ts`): a symbol of the `instruments` table always, and a symbol Yahoo quotes as an
-INDEX, CURRENCY, FUTURE or CRYPTOCURRENCY. A share, an ETF or a fund keeps a stock's page. The arithmetic is in
-`_shared/instrstats.ts` and the calendar's and headlines' rules in `_shared/instrfeed.ts`, both pure and checked in
-`sim/logic.test.ts` (section U).
+(`pageOrQuote` and `instrumentPage` in `_shared/pagefeed.ts`, called by `stockPage` in `_shared/stock.ts`): a symbol of
+the `instruments` table always, and a symbol Yahoo quotes as an INDEX, CURRENCY, FUTURE or CRYPTOCURRENCY. A share, an
+ETF or a fund keeps a stock's page. The arithmetic is in `_shared/instrstats.ts` and the calendar's and headlines'
+rules in `_shared/instrfeed.ts`, both pure and checked in `sim/logic.test.ts` (section U). The reads (the instruments
+row, the market table's row, the stored closes, the calendar, the headlines and alerts, and a stock's NEWS, `feedFor`)
+take the database client as a parameter (since 2026-11-20): `sim/logic.test.ts` section V runs them against a stand-in
+that records each query, `sim/sql/words.test.cjs` runs the headline pattern on PGlite, and Actions › live-check with
+`only` = `stock` runs them against the live tables (below).
 
 - **What it reads.** A Monitor instrument: its row of the market table (the `snapshots` row MARKETS reads, so the page's
   last print, its changes over 1D to 36M, σ vs 1M avg, the 52W position and vs 200D are MARKETS' own) and five years of
@@ -406,6 +410,12 @@ Browsers already signed in stay signed in (tokens are signed with `MONITOR_TOKEN
   failing, when the market table's own quotes last printed against when they were pulled, each EQUITIES list's
   booked closes and today's quotes, the alerts of the last 48 hours, the reasons for big moves and their cost,
   and the EDINET DB allowance used. Market data and counts only: no email address, no watchlist.
+  With `only` = `stock` (added 2026-11-20; deploy-server runs it after each deploy, read-only, a failure a warning) it runs the server's own reads for an
+  instrument's page and a stock's NEWS (`_shared/pagefeed.ts`) against the live tables, for USDJPY=X, ^TNX, JGB10Y and
+  7203.T: whether `instrument` is there, its units, source and as-of, whether the market table has the row, the
+  stored closes, and the counts of events, headlines, alerts and feed rows, and whether the database takes the headline
+  pattern (the route falls back to plain parts of the title if not). It asks for no quote and no statements: EDINET DB
+  is never asked from it.
 - `api?action=health` (with a sign-in token) → `tick.ageMin` ≤ 3 during a session, `daily.ok` true, `feed.ok` true,
   `sources` without errors.
 

@@ -99,6 +99,30 @@ export function sourceNote(i: Pick<InstrumentInfo, "official" | "monitor" | "sou
   return `Worked out from Yahoo Finance's quote and its daily closes since ${fmtDate(i.history.from)}, by the rules of the MARKETS table.`;
 }
 
+/** Where PERFORMANCE's changes come from, in words, under it: MARKETS' own figures, an official publisher's daily
+ *  ones, or worked out by MARKETS' rules from Yahoo Finance's quote and daily closes. */
+export function perfNote(i: Pick<InstrumentInfo, "official" | "monitor" | "source">): string {
+  if (i.official) return `${i.source} publishes this yield once a day: these are its daily figures, with no prices within the day.`;
+  if (i.monitor) return `The same figures as MARKETS (${i.source}).`;
+  return "Worked out from Yahoo Finance's quote and its daily closes, by the rules of the MARKETS table.";
+}
+
+/** Which of KEY DATA's figures the Monitor works out itself (the designer's † of §3.2; the reviewer's R2B-05): the
+ *  52-week high and low with their dates and the distance from them, realised volatility with its percentile, the
+ *  largest rise and fall; and, where the instrument is not on MARKETS, σ vs 1M avg and vs 200D too (MARKETS' own
+ *  otherwise, as there, without the mark). */
+export type KeyLine = "range52" | "fromHiLo" | "z1m" | "vs200" | "vol" | "rise" | "fall";
+export const workedOut = (i: Pick<InstrumentInfo, "monitor">, line: KeyLine): boolean => (line === "z1m" || line === "vs200" ? !i.monitor : true);
+/** The line under KEY DATA that says what † means here: "† worked out here from the daily closes the Monitor stores
+ *  from Yahoo Finance, 26 Nov 2021 – 19 Nov 2026; the other figures as on MARKETS". An official yield's are its
+ *  publisher's daily figures; a name the Monitor does not follow, Yahoo Finance's daily closes. */
+export function workedLine(i: Pick<InstrumentInfo, "official" | "monitor" | "source" | "history">): string {
+  const from = i.history.from ? fmtDate(i.history.from) : null, to = i.history.to ? fmtDate(i.history.to) : null;
+  const span = from && to ? `, ${from} – ${to}` : from ? ` since ${from}` : "";
+  const what = i.official ? `${i.source}'s published daily yields` : i.monitor ? `the daily closes the Monitor stores from ${i.source}` : "Yahoo Finance's daily closes";
+  return `\u2020 worked out here from ${what}${span}${i.monitor ? "; the other figures as on MARKETS" : ""}.`;
+}
+
 /** The calendar's source, as the NEWS tab names it. */
 export const calSource = (rows: Array<Pick<EconEvent, "source">>): string => (rows[0]?.source === "fxstreet" ? "FXStreet" : rows.length ? "ForexFactory" : "");
 /** What an empty calendar says. */

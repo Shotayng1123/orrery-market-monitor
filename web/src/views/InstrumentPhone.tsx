@@ -10,8 +10,8 @@ import type { EconEvent } from "../lib/types";
 import { fmtLevel, fmtSigma, signCls } from "../lib/fmt";
 import { fmtClock, fmtDate, fmtStamp, SGT } from "../lib/time";
 import { EVENTS, LARGEST_FALL, LARGEST_RISE, LEVEL_THEN, NEWS, NEXT_MEETING, PERIOD, RANGE_52W, REALISED_VOL, SIGMA_1M, SIGMA_WINDOW, VS_200D } from "../lib/labels";
-import { asOfWords, calSource, ccyWords, distCls, distText, impactOk, lastAndDay, matchedWords, moveCls, moveText, noEvents, pctlText, periodsOf, sourceNote, volLine, volTip, type ImpactPick, type InstrumentPage } from "../lib/instrument";
-import { useLiveRow } from "./Instrument";
+import { asOfWords, calSource, ccyWords, distCls, distText, impactOk, lastAndDay, matchedWords, moveCls, moveText, noEvents, pctlText, periodsOf, volLine, volTip, workedLine, type ImpactPick, type InstrumentPage } from "../lib/instrument";
+import { keyLabel, useLiveRow } from "./Instrument";
 import { dayLabel, dayOf, IMPACTS } from "./News";
 
 /** A currency's, a yield's, a commodity's, a future's or an index's page on a phone (I-4, 20 Nov 2026; the designer's
@@ -66,9 +66,9 @@ export function InstrumentPhone({ d, tick }: { d: InstrumentPage; tick: number }
         <div className="mp-grid in">
           <Stat k="Day" cls={moveCls(day, u)}>{moveText(day, u)}</Stat>
           <Stat k={RANGE_52W} title={`Low ${lvl(r52.lo)} on ${fmtDate(r52.loDate)}, high ${lvl(r52.hi)} on ${fmtDate(r52.hiDate)}`}>{r52.pos == null ? "–" : `${Math.round(r52.pos)}%`}<span className="bar">{r52.pos != null && <i style={{ left: `${Math.max(0, Math.min(100, r52.pos))}%` }} />}</span></Stat>
-          <Stat k={SIGMA_1M} cls={signCls(i.z1m, 1)}>{fmtSigma(i.z1m)}</Stat>
-          <Stat k={`${REALISED_VOL} 3M`} title={volTip(u)}>{u === "yield" ? (v3.day == null ? "–" : `${(v3.day * 100).toFixed(1)}bp`) : v3.ann == null ? "–" : `${v3.ann.toFixed(1)}%`}<small>{u === "yield" ? "a day" : "a year"} · 3Y pctl {pctlText(v3.pctl)}</small></Stat>
-          <Stat k={VS_200D} cls={distCls(i.vs200, u)}>{distText(i.vs200, u)}</Stat>
+          <Stat k={keyLabel(i, SIGMA_1M, "z1m")} cls={signCls(i.z1m, 1)}>{fmtSigma(i.z1m)}</Stat>
+          <Stat k={keyLabel(i, `${REALISED_VOL} 3M`, "vol")} title={volTip(u)}>{u === "yield" ? (v3.day == null ? "–" : `${(v3.day * 100).toFixed(1)}bp`) : v3.ann == null ? "–" : `${v3.ann.toFixed(1)}%`}<small>{u === "yield" ? "a day" : "a year"} · 3Y pctl {pctlText(v3.pctl)}</small></Stat>
+          <Stat k={keyLabel(i, VS_200D, "vs200")} cls={distCls(i.vs200, u)}>{distText(i.vs200, u)}</Stat>
           <Stat k={NEXT_MEETING} title="The central banks' meeting dates are not kept by the Monitor yet: a dash until they are, never a guessed date">–<small>not kept yet</small></Stat>
         </div>
       </div>
@@ -86,16 +86,16 @@ export function InstrumentPhone({ d, tick }: { d: InstrumentPage; tick: number }
             <KV k="Last" sub={asOf}>{lvl(last)}</KV>
             <KV k="Day's range" sub={i.official ? "published once a day: none" : undefined}>{i.session && i.session.low != null && i.session.high != null ? `${lvl(i.session.low)} – ${lvl(i.session.high)}` : "–"}</KV>
             <KV k="Previous close" sub={i.prev.date ? fmtDate(i.prev.date) : undefined}>{lvl(i.prev.level)}</KV>
-            <KV k={RANGE_52W} sub={`${fmtDate(r52.loDate)} · ${fmtDate(r52.hiDate)}`}>{lvl(r52.lo)} – {lvl(r52.hi)}</KV>
-            <KV k="From 52W high / low"><span className={distCls(r52.fromHi, u)}>{distText(r52.fromHi, u)}</span> / <span className={distCls(r52.fromLo, u)}>{distText(r52.fromLo, u)}</span></KV>
-            <KV k={SIGMA_1M}><span className={signCls(i.z1m, 1)}>{fmtSigma(i.z1m)}</span></KV>
-            <KV k={VS_200D}><span className={distCls(i.vs200, u)}>{distText(i.vs200, u)}</span></KV>
-            <KV k={`${REALISED_VOL}, 1M / 3M / 12M`} sub={vol.sub}>{vol.main}</KV>
-            <KV k={LARGEST_RISE} sub={i.rise ? `${fmtDate(i.rise.from)} to ${fmtDate(i.rise.to)}` : undefined}>{i.rise ? <span className={distCls(i.rise.chg, u)}>{distText(i.rise.chg, u)}</span> : "–"}</KV>
-            <KV k={LARGEST_FALL} sub={i.fall ? `${fmtDate(i.fall.from)} to ${fmtDate(i.fall.to)}` : undefined}>{i.fall ? <span className={distCls(i.fall.chg, u)}>{distText(i.fall.chg, u)}</span> : "–"}</KV>
+            <KV k={keyLabel(i, RANGE_52W, "range52")} sub={`${fmtDate(r52.loDate)} · ${fmtDate(r52.hiDate)}`}>{lvl(r52.lo)} – {lvl(r52.hi)}</KV>
+            <KV k={keyLabel(i, "From 52W high / low", "fromHiLo")}><span className={distCls(r52.fromHi, u)}>{distText(r52.fromHi, u)}</span> / <span className={distCls(r52.fromLo, u)}>{distText(r52.fromLo, u)}</span></KV>
+            <KV k={keyLabel(i, SIGMA_1M, "z1m")}><span className={signCls(i.z1m, 1)}>{fmtSigma(i.z1m)}</span></KV>
+            <KV k={keyLabel(i, VS_200D, "vs200")}><span className={distCls(i.vs200, u)}>{distText(i.vs200, u)}</span></KV>
+            <KV k={keyLabel(i, `${REALISED_VOL}, 1M / 3M / 12M`, "vol")} sub={vol.sub}>{vol.main}</KV>
+            <KV k={keyLabel(i, LARGEST_RISE, "rise")} sub={i.rise ? `${fmtDate(i.rise.from)} to ${fmtDate(i.rise.to)}` : undefined}>{i.rise ? <span className={distCls(i.rise.chg, u)}>{distText(i.rise.chg, u)}</span> : "–"}</KV>
+            <KV k={keyLabel(i, LARGEST_FALL, "fall")} sub={i.fall ? `${fmtDate(i.fall.from)} to ${fmtDate(i.fall.to)}` : undefined}>{i.fall ? <span className={distCls(i.fall.chg, u)}>{distText(i.fall.chg, u)}</span> : "–"}</KV>
           </tbody></table>
         </div>
-        <p className="mp-note">{sourceNote(i)} A percentile needs three years of readings: "–" where the history is shorter.</p>
+        <p className="mp-note" id="in-worked">{workedLine(i)} A percentile needs three years of readings: "–" where the history is shorter. Source: {i.source}, as of {asOf}.</p>
       </Section>
 
       <Section title="Performance" aux={u === "yield" ? "change in bp" : "price change"} card={false}>

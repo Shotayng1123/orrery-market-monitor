@@ -14,25 +14,8 @@ export async function sourceErr(name: string, err: unknown): Promise<void> {
   await db.from("source_status").upsert({ name, last_error: String(err instanceof Error ? err.message : err).slice(0, 500), last_error_at: new Date().toISOString() }, { onConflict: "name" });
 }
 
-/** PostgREST caps a response at 1,000 rows; this pages through a query until it runs dry. */
-// deno-lint-ignore no-explicit-any
-export async function selectAll<T>(build: () => any, pageSize = 1000, maxRows = 50000): Promise<T[]> {
-  const out: T[] = [];
-  for (let from = 0; from < maxRows; from += pageSize) {
-    const { data, error } = await build().range(from, from + pageSize - 1);
-    if (error) throw new Error(error.message);
-    const rows = (data ?? []) as T[];
-    out.push(...rows);
-    if (rows.length < pageSize) break;
-  }
-  return out;
-}
-
-export function chunk<T>(arr: T[], n: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
-  return out;
-}
+/** PostgREST's page of 1,000 rows, and chunks of a list: written once in paging.ts, which needs no client. */
+export { chunk, selectAll } from "./paging.ts";
 
 export interface InstrumentRow {
   symbol: string; name: string; cls: string; grp: string; market: string; tz: string; currency: string; decimals: number;

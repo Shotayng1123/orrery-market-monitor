@@ -1,15 +1,18 @@
 // A stock's page, increment I-3 (20 Nov 2026), part one: NEWS, the documents behind the statements' columns, and the
 // page's layout. The figures are the mock feed's; the headlines and alerts are the stand-in rows (web/src/lib/standin.json).
 //   - NEWS (A-05's headlines and alerts): #asset/7203.T and #asset/NVDA list the stand-in headlines and alerts that
-//     name them, newest first, fifteen at a time with "SHOW n MORE" and no box that scrolls inside the page; All,
-//     Headlines and Alerts; a name with none says so. On a computer and on a phone.
+//     name them, newest first, with "SHOW n MORE" (fifteen more each time) and no box that scrolls inside the page; All,
+//     Headlines and Alerts; a name with none says so. On a computer the list starts with the rows that sit beside the
+//     left column (three at least), so both columns end together above FINANCIALS (the reviewer's R2B-02); on a phone
+//     and in one column, with fifteen.
 //   - FINANCIALS (A-01 with A's rules): a column's header opens the document the source gave for it (a year's
 //     有価証券報告書, the guidance's or a quarter's 決算短信 PDF), in teal; a header without an address is plain and says
 //     so. 7203.T is as EDINET DB gave Toyota's on 20 Nov 2026: no address for the newest quarter nor the guidance.
 //     Another Tokyo name has them, so the newest quarter's header opening its 決算短信 is seen too. On both layouts.
 //   - Japan's profile rows in KEY DATA (A-27, shown now): fiscal year end, standard, the annual report.
-//   - The two-column page (the designer's §4.6): no empty block over 40 px between the panels of a column at 1440×900
-//     and at text XL, where the page is one column in reading order; the one-screen layout by kind.
+//   - The two-column page (the designer's §4.6): no empty block over 40 px between the panels of a column, nor under
+//     the shorter column above FINANCIALS, at 1440×900 and 1280×720 (the designer's I-3 check, the reviewer's R2B-02);
+//     at text XL one column in reading order; the one-screen layout by kind.
 //   - A server from before NEWS (no `feed` in its answer): no NEWS panel, nothing breaks.
 // Nothing here depends on the time of day: the stand-in rows are counted from when the suite starts, and every
 // expectation is worked out from the same rows with the same rule as the mock (web/src/lib/mock.ts, stockFeed).
@@ -42,6 +45,11 @@ function expected(sym) {
 const newsRows = (p, phone) => p.evaluate((phone) => [...document.querySelectorAll(phone ? "#st-news .nw-row" : "#st-news .snrow")].map((r) => ({ kind: r.dataset.kind, meta: (phone ? r.querySelector(".nw-meta") : r.querySelector(".snm")).innerText.replace(/\s+/g, " ").trim(), title: (phone ? r.querySelector(".nw-title") : r.querySelector(".snt")).textContent, href: phone ? (r.tagName === "A" ? r.href : null) : r.querySelector(".snt a")?.href ?? null, tagCol: getComputedStyle(r.querySelector(".snk")).color })), phone);
 const noInnerBox = (p, sel) => p.evaluate((sel) => { const el = document.querySelector(sel); return el ? [...el.querySelectorAll("*")].filter((e) => e.scrollHeight > e.clientHeight + 1 && ["auto", "scroll", "hidden"].includes(getComputedStyle(e).overflowY)).map((e) => e.className) : ["missing"]; }, sel);
 const AMBER = "rgb(255, 111, 97)", TXT2 = "rgb(198, 194, 183)", CYAN = "rgb(31, 209, 193)";
+// how the computer's NEWS stands: the rows it starts with beside the left column, once fitted ("done 5"), and the gap
+// between where the two columns end
+const fitOf = (p) => p.evaluate(() => { const f = document.querySelector(".snbox")?.dataset.fit ?? "", cols = [...document.querySelectorAll(".pcols > .pcol")], end = (c) => Math.max(...[...c.children].map((x) => x.getBoundingClientRect().bottom));
+  return { step: f.split(" ")[0], n: Number(f.split(" ")[1]), even: !!document.querySelector(".pcols[data-even]"), gap: cols.length === 2 ? Math.round(Math.abs(end(cols[0]) - end(cols[1]))) : null }; });
+const NEWS_MIN = 3;
 // the statements' headers: label, the link's address, its tip, its colour, the header's own tip and its height
 const heads = (p) => p.evaluate(() => [...document.querySelectorAll("table.fin thead th:not(.l)")].map((th) => { const a = th.querySelector("a"); return { label: th.textContent, href: a ? a.getAttribute("href") : null, target: a?.target ?? null, rel: a?.rel ?? null, tip: a?.title ?? null, col: a ? getComputedStyle(a).color : null, thTip: th.title, h: Math.round(th.getBoundingClientRect().height) }; }));
 
@@ -52,23 +60,27 @@ const heads = (p) => p.evaluate(() => [...document.querySelectorAll("table.fin t
     await go(p, "#asset/7203.T", "#st-news .snrow");
     const head = await p.evaluate(() => { const pn = document.querySelector('.panel[data-k="st-news"]'); return { title: pn.querySelector(".phead .t").textContent, aux: pn.querySelector(".phead .aux").textContent, chips: [...pn.querySelectorAll("#st-news-f .chip-sm")].map((c) => `${c.textContent}${c.classList.contains("on") ? "*" : ""}`) }; });
     ck(`the panel: NEWS, "${head.aux}", chips ${head.chips.join(" · ")}`, head.title === "NEWS" && head.aux === "headlines and alerts naming 7203.T · 90 days · times in SGT" && head.chips.join() === "ALL*,HEADLINES,ALERTS", head);
-    let rows = await newsRows(p, false);
-    ck(`fifteen rows to start, newest first, the stand-in headlines and alerts that name 7203.T in their order (${t7203.length} in all)`, t7203.length > 15 && rows.length === 15 && rows.map((r) => r.title).join("|") === t7203.slice(0, 15).map((r) => r.title).join("|"), { rows: rows.map((r) => r.title), want: t7203.slice(0, 15).map((r) => r.title) });
+    let rows = await newsRows(p, false), fit = await fitOf(p);
+    ck(`the rows that sit beside the left column to start (${fit.n}, at least ${NEWS_MIN}), newest first: the stand-in headlines and alerts that name 7203.T in their order (${t7203.length} in all); the two columns end together (${fit.gap} px apart)`, t7203.length > 15 && fit.step === "done" && fit.n >= NEWS_MIN && fit.n <= 15 && rows.length === fit.n && rows.map((r) => r.title).join("|") === t7203.slice(0, fit.n).map((r) => r.title).join("|") && fit.even && fit.gap <= 2, { fit, rows: rows.map((r) => r.title), want: t7203.slice(0, fit.n).map((r) => r.title) });
     ck("each row: the time in SGT (\"23:18\" today, \"19 Nov 23:18\" before: the panel\'s head says SGT), HEADLINE or ALERT, where it came from; then the headline or the alert", rows.every((r) => /^(\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d · (HEADLINE|ALERT) · \S.+$/.test(r.meta) && r.meta.includes(r.kind === "alert" ? "ALERT" : "HEADLINE")) && rows.some((r) => r.kind === "alert") && rows.some((r) => r.kind === "headline"), rows.map((r) => r.meta));
     ck("HEADLINE in the muted text colour, ALERT in the coral of titles (the designer's note); an alert from a headline names its kind and publisher, a move its exchange", rows.every((r) => r.tagCol === (r.kind === "alert" ? AMBER : TXT2)) && rows.some((r) => / · ALERT · buyback, Nikkei Asia$/.test(r.meta)) && rows.some((r) => / · ALERT · move, TSE$/.test(r.meta)), rows.map((r) => [r.meta, r.tagCol]));
     ck("a headline opens the publisher's page; a move alert, which has no page, is plain text", rows.filter((r) => r.kind === "headline").every((r, i) => r.href === t7203.filter((x) => x.kind === "headline")[i].url) && rows.filter((r) => r.kind === "alert" && /move,/.test(r.meta)).every((r) => r.href === null), rows.map((r) => [r.kind, r.href]));
     const more = await p.evaluate(() => document.querySelector("#st-news-more")?.innerText.replace(/\s+/g, " ").trim() ?? null);
-    ck(`under them "${more}", and no box in the panel that scrolls inside the page`, more === `SHOW ${Math.min(15, t7203.length - 15)} MORE 15 of ${t7203.length}` && (await noInnerBox(p, '.panel[data-k="st-news"]')).length === 0, more);
+    ck(`under them "${more}", and no box in the panel that scrolls inside the page`, more === `SHOW ${Math.min(15, t7203.length - fit.n)} MORE ${fit.n} of ${t7203.length}` && (await noInnerBox(p, '.panel[data-k="st-news"]')).length === 0, more);
     await p.locator("#st-news-more .chip-sm").click(); await p.waitForTimeout(250); rows = await newsRows(p, false);
-    ck(`SHOW MORE: all ${t7203.length}, in order, and the chip is gone; still nothing scrolls inside the panel`, rows.length === t7203.length && rows.map((r) => r.title).join("|") === t7203.map((r) => r.title).join("|") && (await p.locator("#st-news-more").count()) === 0 && (await noInnerBox(p, '.panel[data-k="st-news"]')).length === 0, rows.length);
-    await p.locator("#st-news-f .chip-sm", { hasText: "HEADLINES" }).click(); await p.waitForTimeout(200); rows = await newsRows(p, false);
+    const moves0 = await p.evaluate(() => Math.round(document.querySelector('.panel[data-k="st-moves"]').getBoundingClientRect().height));
+    ck(`SHOW 15 MORE adds fifteen (${rows.length} of ${t7203.length}), in order; the column then runs on, and BIG MOVES beside it is not stretched to match (${moves0} px)`, rows.length === Math.min(t7203.length, fit.n + 15) && rows.map((r) => r.title).join("|") === t7203.slice(0, rows.length).map((r) => r.title).join("|") && !(await fitOf(p)).even && moves0 < 320, { n: rows.length, moves0 });
+    for (let k = 0; k < 5 && (await p.locator("#st-news-more").count()); k++) { await p.locator("#st-news-more .chip-sm").click(); await p.waitForTimeout(200); }
+    rows = await newsRows(p, false);
+    ck(`SHOW MORE until the end: all ${t7203.length}, in order, and the chip is gone; still nothing scrolls inside the panel`, rows.length === t7203.length && rows.map((r) => r.title).join("|") === t7203.map((r) => r.title).join("|") && (await p.locator("#st-news-more").count()) === 0 && (await noInnerBox(p, '.panel[data-k="st-news"]')).length === 0, rows.length);
+    await p.locator("#st-news-f .chip-sm", { hasText: "HEADLINES" }).click(); await p.waitForTimeout(250); rows = await newsRows(p, false); fit = await fitOf(p);
     const nh = t7203.filter((r) => r.kind === "headline");
-    ck(`HEADLINES: only the headlines (${Math.min(15, nh.length)} of ${nh.length} shown), from fifteen again`, rows.every((r) => r.kind === "headline") && rows.length === Math.min(15, nh.length) && rows[0].title === nh[0].title, rows.length);
-    await p.locator("#st-news-f .chip-sm", { hasText: "ALERTS" }).click(); await p.waitForTimeout(200); rows = await newsRows(p, false);
+    ck(`HEADLINES: only the headlines (${rows.length} of ${nh.length} shown, the list fitted again beside the left column, ${fit.gap} px apart)`, rows.every((r) => r.kind === "headline") && fit.step === "done" && rows.length === Math.min(fit.n, nh.length) && rows.length >= Math.min(NEWS_MIN, nh.length) && rows[0].title === nh[0].title && fit.gap <= 2, { n: rows.length, fit });
+    await p.locator("#st-news-f .chip-sm", { hasText: "ALERTS" }).click(); await p.waitForTimeout(250); rows = await newsRows(p, false); fit = await fitOf(p);
     const na = t7203.filter((r) => r.kind === "alert");
-    ck(`ALERTS: only the alerts (${na.length}), newest first`, rows.length === Math.min(15, na.length) && rows.every((r) => r.kind === "alert") && rows.map((r) => r.title).join("|") === na.slice(0, 15).map((r) => r.title).join("|"), rows.map((r) => r.title));
-    await go(p, "#asset/NVDA", "#st-news .snrow"); rows = await newsRows(p, false);
-    ck(`NVDA: its own rows, fifteen of ${tNvda.length}, in order`, rows.length === 15 && rows.map((r) => r.title).join("|") === tNvda.slice(0, 15).map((r) => r.title).join("|") && (await p.locator("#st-news-more").count()) === 1, rows.map((r) => r.title).slice(0, 3));
+    ck(`ALERTS: only the alerts (${rows.length} of ${na.length}), newest first`, rows.length === Math.min(fit.n, na.length) && rows.length >= Math.min(NEWS_MIN, na.length) && rows.every((r) => r.kind === "alert") && rows.map((r) => r.title).join("|") === na.slice(0, rows.length).map((r) => r.title).join("|"), rows.map((r) => r.title));
+    await go(p, "#asset/NVDA", "#st-news .snrow"); rows = await newsRows(p, false); fit = await fitOf(p);
+    ck(`NVDA: its own rows, the ${fit.n} that sit beside the left column of ${tNvda.length}, in order; the columns end together (${fit.gap} px apart)`, fit.step === "done" && rows.length === fit.n && fit.n >= NEWS_MIN && rows.map((r) => r.title).join("|") === tNvda.slice(0, fit.n).map((r) => r.title).join("|") && (await p.locator("#st-news-more").count()) === 1 && fit.gap <= 2, { fit, rows: rows.map((r) => r.title).slice(0, 3) });
     await go(p, "#asset/9999.T", '.panel[data-k="st-news"]');
     const empty = await p.evaluate(() => document.querySelector('.panel[data-k="st-news"] .empty')?.textContent ?? null);
     ck(`a name that no headline or alert names says so: "${empty}"`, empty === "No headlines or alerts name 9999.T in the last 90 days.", empty);
@@ -129,6 +141,9 @@ const heads = (p) => p.evaluate(() => [...document.querySelectorAll("table.fin t
     await p.waitForTimeout(300); h = await heads(p);
     const g = h.find((x) => x.label === "FY3/27E");
     ck(`${dev} · 6758.T's guidance column opens the 決算短信 PDF of its figures ("${g?.tip}")`, !!g && g.href === "https://example.com/mock-ir/6758T/2027_2q_summary.pdf" && g.tip === "Open the 決算短信 PDF, disclosed 5 Nov 2026 ↗" && g.col === CYAN, g);
+    // a year EDINET DB flags as no longer on EDINET (its ~10-year retention; the reviewer's R2B-04): no link, and why
+    const y17 = h.find((x) => x.label === "FY3/17");
+    ck(`${dev} · 6758.T's oldest year, flagged by EDINET DB as no longer on EDINET, is plain and its tip says so ("${y17?.thTip}"); the other years open their filings`, !!y17 && y17.href === null && / · document S100MK17 no longer on EDINET, per EDINET DB \(stand-in flag\)$/.test(y17.thTip) && !/no document address/.test(y17.thTip) && h.filter((x) => /^FY3\/\d\d$/.test(x.label) && x.label !== "FY3/17").every((x) => x.href && x.col === CYAN), y17);
     await go(p, "#asset/NVDA", "table.fin"); h = await heads(p);
     ck(`${dev} · NVDA (Yahoo, which gives no document): no header is a link, and each says so`, h.length >= 4 && h.every((x) => x.href === null && /no document address from the source$/.test(x.thTip)), h.map((x) => [x.label, x.thTip]));
     ck(`${dev} · no page errors`, errs.length === 0, errs); await ctx.close(); }
@@ -153,9 +168,14 @@ const heads = (p) => p.evaluate(() => [...document.querySelectorAll("table.fin t
       const cols = new Map(); for (const x of L.filter((x) => x.k !== "st-fin")) cols.set(x.l, [...(cols.get(x.l) ?? []), x]);
       const gaps = [...cols.values()].flatMap((c) => c.sort((a, z) => a.t - z.t).slice(1).map((x, i) => x.t - c[i].bt));
       const order = [...L].sort((a, z) => a.t - z.t || a.l - z.l).map((x) => x.k), nos = L.map((x) => x.no).sort().join();
-      if (code.startsWith("C3")) ck(`${code} · ${sym}: one column in reading order (${L.map((x) => x.no).join(" ")}: ${order.join(", ")}), each across the page, ${Math.max(...gaps)} px at most between two panels`, cols.size === 1 && order.join() === "st-chart,st-key,st-perf,st-news,st-moves,st-short,st-fin" && nos === "01,02,03,04,05,06,07" && L.every((x) => x.l === L[0].l && x.r === L[0].r) && gaps.every((g) => g >= 0 && g <= 40), { L, gaps });
+      if (code.startsWith("C3")) { ck(`${code} · ${sym}: one column in reading order (${L.map((x) => x.no).join(" ")}: ${order.join(", ")}), each across the page, ${Math.max(...gaps)} px at most between two panels`, cols.size === 1 && order.join() === "st-chart,st-key,st-perf,st-news,st-moves,st-short,st-fin" && nos === "01,02,03,04,05,06,07" && L.every((x) => x.l === L[0].l && x.r === L[0].r) && gaps.every((g) => g >= 0 && g <= 40), { L, gaps });
+        const n = (await newsRows(p, false)).length, fit = await fitOf(p);
+        ck(`${code} · ${sym}: in one column NEWS starts with fifteen, as before (${n}), and nothing is stretched`, n === 15 && !fit.even && fit.step === "done", { n, fit }); }
       else { const left = [...cols.entries()].sort((a, z) => a[0] - z[0]), lk = left[0][1].map((x) => x.k).join(), rk = left[1]?.[1].map((x) => x.k).join(), fin = L.find((x) => x.k === "st-fin");
-        ck(`${code} · ${sym}: the chart, PERFORMANCE and BIG MOVES on the left, KEY DATA, NEWS and SHORT INTEREST on the right, numbered row by row (${L.map((x) => `${x.no} ${x.k}`).join(", ")}); FINANCIALS across under both; ${Math.max(...gaps)} px at most between two panels of a column`, cols.size === 2 && lk === "st-chart,st-perf,st-moves" && rk === "st-key,st-news,st-short" && nos === "01,02,03,04,05,06,07" && L.find((x) => x.k === "st-news").no === "04" && L.find((x) => x.k === "st-moves").no === "05" && gaps.every((g) => g >= 0 && g <= 40) && fin.t > Math.max(...L.filter((x) => x.k !== "st-fin").map((x) => x.bt)) && fin.l === left[0][0] && fin.r === Math.max(...L.map((x) => x.r)), { L, gaps }); }
+        ck(`${code} · ${sym}: the chart, PERFORMANCE and BIG MOVES on the left, KEY DATA, NEWS and SHORT INTEREST on the right, numbered row by row (${L.map((x) => `${x.no} ${x.k}`).join(", ")}); FINANCIALS across under both; ${Math.max(...gaps)} px at most between two panels of a column`, cols.size === 2 && lk === "st-chart,st-perf,st-moves" && rk === "st-key,st-news,st-short" && nos === "01,02,03,04,05,06,07" && L.find((x) => x.k === "st-news").no === "04" && L.find((x) => x.k === "st-moves").no === "05" && gaps.every((g) => g >= 0 && g <= 40) && fin.t > Math.max(...L.filter((x) => x.k !== "st-fin").map((x) => x.bt)) && fin.l === left[0][0] && fin.r === Math.max(...L.map((x) => x.r)), { L, gaps });
+        // the designer's I-3 check, as the reviewer measured it (R2B-02): the block between each column's last panel and FINANCIALS
+        const holes = left.map(([, c]) => fin.t - Math.max(...c.map((x) => x.bt))), fit = await fitOf(p);
+        ck(`${code} · ${sym}: no empty block over 40 px under either column above FINANCIALS (${holes.join(" and ")} px): NEWS starts with the ${fit.n} rows that sit beside the left column`, holes.every((h) => h >= 0 && h <= 40) && fit.step === "done" && fit.n >= NEWS_MIN && fit.n <= 15, { holes, fit }); }
     }
     ck(`${code} · nothing wider than the window; no page errors`, (await p.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 0 && errs.length === 0, errs); await ctx.close(); }
 

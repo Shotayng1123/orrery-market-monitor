@@ -26,6 +26,9 @@ export const DRIVERS = "Drivers";
 /** Realised volatility over 1M, 3M and 12M (a stock's page and an instrument's: one word for both, I-4), and the
  *  largest rise and fall of the last twelve months. */
 export const REALISED_VOL = "Realised vol", LARGEST_RISE = "Largest rise, 12M", LARGEST_FALL = "Largest fall, 12M";
+/** The designer's mark for a figure the Monitor works out from sourced figures (§3.2): after the label, never the
+ *  figure, with one line under the panel saying from what and over which dates (the reviewer's R2B-05). */
+export const WORKED = "\u2020";
 /** An instrument's page (I-4): its calendar, the level each change is measured from, its central banks' next
  *  meeting (filled once the Monitor keeps the banks' calendars, I-7), the calendar's currency picker on NEWS. */
 export const EVENTS = "Events", LEVEL_THEN = "Level then", NEXT_MEETING = "Next meeting", CURRENCY = "Currency";

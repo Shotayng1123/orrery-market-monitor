@@ -7,6 +7,8 @@
 // Needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (workflow live-check: Actions > live-check > Run workflow).
 import { db } from "./lib/db.js";
 import { spark } from "./lib/yahoo.js";
+import { feedFor, headlineQuery, instrumentPage, INSTRUMENT_COLS, tableRow } from "../supabase/functions/_shared/pagefeed.ts";
+import type { InstrumentDef } from "../supabase/functions/_shared/instrstats.ts";
 
 const now = Date.now();
 const age = (iso: string | null | undefined): string => { if (!iso) return "never"; const m = Math.round((now - Date.parse(iso)) / 60000); return m < 120 ? `${m} min ago` : m < 2880 ? `${(m / 60).toFixed(1)} h ago` : `${Math.round(m / 1440)} days ago`; };
@@ -14,7 +16,7 @@ const utc = (iso: string | null | undefined): string => (iso ? iso.slice(0, 16).
 const head = (t: string): void => console.log(`\n== ${t}`);
 // a table or a column that a database from before some change does not have is said, not thrown
 // LIVE_CHECK_ONLY (the workflow's "only" input): a comma-separated choice of parts, by the first word of each title
-// below (jobs, relay, sources, market, source, equities, alerts, reasons, edinet, counts); empty for all of them
+// below (jobs, relay, sources, market, source, equities, alerts, reasons, edinet, stock, counts); empty for all of them
 const ONLY = (process.env.LIVE_CHECK_ONLY ?? "").toLowerCase().split(",").map((x) => x.trim()).filter(Boolean);
 async function part(key: string, title: string, f: () => Promise<void>): Promise<void> { if (ONLY.length && !ONLY.includes(key)) return; head(title); try { await f(); } catch (e) { console.log(`  could not be read: ${e instanceof Error ? e.message : String(e)}`); } }
 const must = <T>(r: { data: T | null; error: { message: string } | null }): T => { if (r.error) throw new Error(r.error.message); return r.data as T; };
@@ -182,6 +184,29 @@ async function main(): Promise<void> {
     const budget = rows.filter((r) => kind(r.key) === "budget").sort((a, b) => b.key.localeCompare(a.key)).slice(0, 4);
     for (const b of budget) console.log(`  requests counted on ${b.key.split(":")[2]} (Japan's day): ${b.payload?.used ?? "?"}`);
     if (!budget.length) console.log("  no request has been counted yet: no Tokyo stock's statements have been asked for from EDINET DB");
+  });
+
+  // The server's own code for an instrument's page and a stock's NEWS (supabase/functions/_shared/pagefeed.ts, the
+  // reviewer's R2B-03), run here against the live tables after a deploy: the same queries the stock route makes (the
+  // market table's row, the stored closes, the calendar with its or(currency.in, country.in), the headline pattern and
+  // its fallback, the alerts). Read-only. No quote is asked for (the route asks Yahoo for one; the figures here are the
+  // market table's) and no statements: EDINET DB is never asked from here.
+  await part("stock", "an instrument's page and a stock's NEWS, read by the server's own code from the live tables (no quote, no EDINET DB)", async () => {
+    for (const symbol of ["USDJPY=X", "^TNX", "JGB10Y"]) {
+      const def = must(await sb.from("instruments").select(INSTRUMENT_COLS).eq("symbol", symbol).maybeSingle()) as InstrumentDef | null;
+      if (!def) { console.log(`  ${symbol}: not in the instruments table`); continue; }
+      const p = await instrumentPage({ db: sb, dailyBars: async () => { throw new Error("not asked from here"); } }, symbol, def, null);
+      const i = p.instrument, f = p.feed, inTable = !!(await tableRow(sb, symbol));
+      console.log(`  ${symbol}: instrument ${i ? "present" : "MISSING"}; units ${i.units}; ${i.official ? "official, " : ""}source ${i.source}; as of ${i.asOfKind ?? "–"} ${i.asOf ?? "–"}; last ${i.last ?? "–"}; ${inTable ? "the market table's row" : "NOT in the market table"}; ${i.history.n} stored closes (${i.history.from ?? "–"} to ${i.history.to ?? "–"})`);
+      console.log(`    events ${i.events.rows.length} (${i.events.ccys.join(" and ") || "no currency"})${i.events.error ? `, error: ${i.events.error}` : ""}; headlines ${f.news.length}, alerts ${f.alerts.length}, feed rows ${f.news.length + f.alerts.length}${f.error ? `, error: ${f.error}` : ""}; matched by: ${i.matched.join(", ") || "no words"}`);
+      if (i.matched.length) {
+        // whether the live database takes the headline pattern, or the route falls back to plain parts of the title
+        const r = await headlineQuery(sb, i.matched, new Date(now - f.days * 86400e3).toISOString(), "pattern");
+        console.log(`    the headline pattern: ${r.error ? `REFUSED (${r.error.message}); the route asks by plain parts instead` : `accepted, ${(r.data ?? []).length} rows before the page's own rule`}`);
+      }
+    }
+    const f = await feedFor(sb, "7203.T");
+    console.log(`  7203.T (a stock's NEWS only; its statements are not asked for here): headlines ${f.news.length}, alerts ${f.alerts.length}, feed rows ${f.news.length + f.alerts.length}${f.error ? `, error: ${f.error}` : ""}`);
   });
 
   await part("counts", "counts (numbers only)", async () => {

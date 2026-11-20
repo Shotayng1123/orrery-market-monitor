@@ -12,7 +12,7 @@ import { PERIODS, type PeriodKey, type TableRow } from "../lib/types";
 import { marketById } from "../lib/sessions";
 import { shortName } from "../lib/short";
 import { cellBp, cellPct, CurvePanel, levelOf, RANGE_52W, RANGE_52W_TIP, SIGMA_1M, SIGMA_1M_TIP } from "./Market";
-import { fmtDate } from "../lib/time";
+import { fmtDate, rowAsOfTitle } from "../lib/time";
 import { classLabel, delayed, PERIOD, TAB, VS_200D } from "../lib/labels";
 
 /** MARKET for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026). The same rows and figures as the desktop table,
@@ -55,7 +55,7 @@ function Detail({ r, period, tick, sigmaWindow, head = false }: { r: TableRow; p
   const rate = isYield(r);
   return (
     <div className="mp-det">
-      <div className="mp-full">{r.name} · {r.symbol} · last print {fmtStampSafe(r.lastAt)}</div>
+      <div className="mp-full">{r.name} · {r.symbol} · {rowAsOfTitle(r)}</div>
       <ChartPanel row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} axes chartHeight={head ? HEAD_CHART : undefined} />
       <div className="mp-grid">
         {PERIODS.map((p) => { const v = move(r, p.key); return <div key={p.key} className={p.label === period ? "cur" : undefined}><span className="k">{p.label}</span><span className={`v ${moveCls(r, v)}`}>{fmtMove(r, v)}</span></div>; })}

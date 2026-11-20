@@ -200,3 +200,15 @@ jobs:
             --data "$(jq -n --arg t "$NOTE_DISPATCH_TOKEN" '{p_token: $t}')")
           if [ "$code" = "200" ]; then echo "the database holds the token that starts the Morning Note"
           else echo "::warning title=Morning Note token::could not be stored (HTTP $code): $(head -c 300 /tmp/answer)"; fi
+
+      # read-only: the server's reads for an instrument's page and a stock's NEWS (supabase/functions/_shared/pagefeed.ts)
+      # run against the live tables, for USD/JPY, ^TNX, JGB 10Y and 7203.T (jobs/live_check.ts, part "stock"; the
+      # reviewer's R2B-03, 20 Nov 2026). It asks for no quote and no statements, so EDINET DB is never asked. What it
+      # prints is shown; a failure is a warning here, not a failed deploy.
+      - name: The page reads against the live tables
+        if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy'
+        continue-on-error: true
+        working-directory: jobs
+        env:
+          LIVE_CHECK_ONLY: stock
+        run: npx tsx live_check.ts

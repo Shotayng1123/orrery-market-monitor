@@ -2,13 +2,11 @@
 // benchmark, the figures worked out from the price history, share counts, short interest, valuation and the
 // statements. The arithmetic lives in stockstats.ts and fin.ts and the reading of each source in finsrc.ts
 // (all three checked in sim/logic.test.ts); this file only fetches, caches and puts the parts together.
-import { db, selectAll } from "./db.ts";
+import { db } from "./db.ts";
 import { fetchText } from "./http.ts";
 import { keyStats, quotes, type KeyStats } from "./yahoo.ts";
 import { benchmarksFor, dailyBars, quoteFor } from "./assets.ts";
-import { INSTRUMENT_QUOTES, instrumentFigures, isOfficial, legacyStockFields, type InstrumentDef, type InstrumentFigures, type QuoteLike, type RowLike } from "./instrstats.ts";
-import { EVENTS_AHEAD_DAYS, EVENTS_BACK_DAYS, INSTR_FEED_DAYS, eventCurrencies, eventsFor, matchHeadlines, newsWords, wordsPg, type EventRow } from "./instrfeed.ts";
-import { isYieldQuote } from "./watchrow.ts";
+import { FEED_DAYS, feedFor, pageOrQuote, type StockFeed } from "./pagefeed.ts";
 import { avgTurnover, betaCorr, maxDrawdown, perfRows, range52w, realisedVol, type Bar } from "./stockstats.ts";
 import { justReported, resultsDateToWatch, valuation, type Fin, type FinLine } from "./fin.ts";
 import { yahooFin, yahooFinTypes } from "./finsrc.ts";
@@ -118,109 +116,17 @@ async function movesFor(symbol: string, q: { name: string | null; exchange: stri
   return { eligible: true, rule, ...(rule === "swings" ? { sizes: { day: SWING_D1, large: SWING_PCT, small: SWING_PCT_2 } } : {}), rows };
 }
 
-// ---- the page's NEWS panel: the Monitor's own headlines that name the stock, and its own alerts on it ----
-// Read from the Monitor's tables only (news_items, alerts): no source is asked. Headlines are kept 90 days (the
-// daily prune); alerts, which are kept longer, are read over the same 90 days so the panel means one thing.
-export const FEED_DAYS = 90, FEED_NEWS = 60, FEED_ALERTS = 40;
-export interface StockFeed {
-  days: number;
-  news: Array<{ id: number; publishedAt: string; source: string; title: string; url: string; category: string | null }>;
-  alerts: Array<{ id: number; at: string; kind: string; pct: number | null; market: string; msg: string; url: string | null }>;
-  error?: string;   // a table could not be read: what it said (the other's rows are still sent)
-}
-async function feedFor(symbol: string): Promise<StockFeed> {
-  const since = new Date(Date.now() - FEED_DAYS * 86400e3).toISOString();
-  const [nw, al] = await Promise.all([
-    db.from("news_items").select("id,published_at,source,title,url,category").overlaps("tickers", [symbol]).gte("published_at", since).order("published_at", { ascending: false }).limit(FEED_NEWS),
-    db.from("alerts").select("id,at,kind,pct,market,msg,url").eq("symbol", symbol).gte("at", since).order("at", { ascending: false }).order("id", { ascending: false }).limit(FEED_ALERTS),
-  ]);
-  const error = [nw.error ? `headlines: ${nw.error.message}` : null, al.error ? `alerts: ${al.error.message}` : null].filter(Boolean).join("; ");
-  return {
-    days: FEED_DAYS,
-    news: (nw.data ?? []).map((r) => ({ id: r.id as number, publishedAt: r.published_at as string, source: r.source as string, title: r.title as string, url: r.url as string, category: (r.category as string | null) ?? null })),
-    alerts: (al.data ?? []).map((a) => ({ id: a.id as number, at: a.at as string, kind: a.kind as string, pct: (a.pct as number | null) ?? null, market: a.market as string, msg: a.msg as string, url: (a.url as string | null) ?? null })),
-    ...(error ? { error } : {}),
-  };
-}
-
-// ---- an instrument's own page (I-4, 20 Nov 2026): a currency, a yield, a commodity, a future or an index ----
-// Read from the Monitor's own tables (the instruments, the market table, the stored daily closes, the calendar, the
-// headlines, the alerts) and, for a name the table does not carry, from the same Yahoo quote and daily bars a stock's
-// page reads. No other source is asked: EDINET DB is never asked for an instrument, and no big-move look-up is queued.
-/** How far back the stored closes are read: five years and a month, for the 36M change, a stock page's 60M (the
- *  answer's older fields) and three years of 12-month volatility readings. */
-const INSTR_HISTORY_DAYS = 5 * 366 + 35;
-async function storedCloses(symbol: string): Promise<Bar[]> {
-  const from = new Date(Date.now() - INSTR_HISTORY_DAYS * 86400e3).toISOString().slice(0, 10);
-  const rows = await selectAll<{ d: string; close: number }>(() => db.from("prices_daily").select("d,close").eq("symbol", symbol).gte("d", from).order("d"));
-  return rows.filter((r) => Number.isFinite(r.close)).map((r) => ({ t: Date.parse(r.d + "T00:00:00Z") / 1000, c: r.close }));
-}
-/** The market table's row for a symbol, as MARKETS shows it (the snapshot `tick` rebuilds every minute). */
-async function tableRow(symbol: string): Promise<RowLike | null> {
-  const { data } = await db.from("snapshots").select("payload").eq("key", "table").maybeSingle();
-  return (((data?.payload as { rows?: RowLike[] } | null)?.rows) ?? []).find((r) => r.symbol === symbol) ?? null;
-}
-/** Its calendar: the events of its currencies, five days back and eight ahead (as the calendar on NEWS). */
-async function eventsOf(ccys: string[]): Promise<{ ccys: string[]; from: string; to: string; rows: EventRow[]; error?: string }> {
-  const from = new Date(Date.now() - EVENTS_BACK_DAYS * 86400e3).toISOString(), to = new Date(Date.now() + EVENTS_AHEAD_DAYS * 86400e3).toISOString();
-  if (!ccys.length) return { ccys, from, to, rows: [] };
-  const list = ccys.join(",");
-  const { data, error } = await db.from("econ_events").select("id,at,country,currency,title,impact,forecast,previous,actual,better,kind,source").gte("at", from).lte("at", to).or(`currency.in.(${list}),country.in.(${list})`).order("at").limit(600);
-  return { ccys, from, to, rows: eventsFor((data ?? []) as EventRow[], ccys, from, to), ...(error ? { error: error.message } : {}) };
-}
-/** Its NEWS: the headlines of the last 30 days whose title holds one of its words (instrfeed.ts), and the Monitor's
- *  own alerts on it. The database is asked with the words as one pattern; the same rule is applied again here. */
-async function instrFeed(symbol: string, words: string[]): Promise<StockFeed> {
-  const since = new Date(Date.now() - INSTR_FEED_DAYS * 86400e3).toISOString(), pg = wordsPg(words);
-  const heads = () => db.from("news_items").select("id,published_at,source,title,url,category").gte("published_at", since);
-  const [first, al] = await Promise.all([
-    pg ? heads().filter("title", "imatch", pg).order("published_at", { ascending: false }).limit(150) : Promise.resolve({ data: [], error: null }),
-    db.from("alerts").select("id,at,kind,pct,market,msg,url").eq("symbol", symbol).gte("at", since).order("at", { ascending: false }).order("id", { ascending: false }).limit(FEED_ALERTS),
-  ]);
-  // should the pattern be refused, the words are asked for as plain parts of the title; the rule below keeps whole words
-  const nw = first.error && words.length ? await heads().or(words.map((w) => `title.ilike.*${w.replace(/[,()*]/g, "")}*`).join(",")).order("published_at", { ascending: false }).limit(300) : first;
-  const error = [nw.error ? `headlines: ${nw.error.message}` : null, al.error ? `alerts: ${al.error.message}` : null].filter(Boolean).join("; ");
-  const rows = ((nw.data ?? []) as Array<Record<string, unknown>>).map((r) => ({ id: r.id as number, publishedAt: r.published_at as string, source: r.source as string, title: r.title as string, url: r.url as string, category: (r.category as string | null) ?? null }));
-  return {
-    days: INSTR_FEED_DAYS,
-    news: matchHeadlines(rows, words, FEED_NEWS),
-    alerts: ((al.data ?? []) as Array<Record<string, unknown>>).map((a) => ({ id: a.id as number, at: a.at as string, kind: a.kind as string, pct: (a.pct as number | null) ?? null, market: a.market as string, msg: a.msg as string, url: (a.url as string | null) ?? null })),
-    ...(error ? { error } : {}),
-  };
-}
-/** The page of a Monitor instrument (`def`) or of a plain quote that is not a stock (`q`). The answer keeps every
- *  field of a stock's (filled for what an instrument has, empty for the rest: legacyStockFields), so the page from
- *  before 20 Nov 2026 still draws it, and adds `instrument` with the figures in the instrument's own units. */
-async function instrumentPage(symbol: string, def: InstrumentDef | null, q: QuoteLike | null) {
-  const name = def?.name ?? q?.name ?? symbol, currency = def?.currency ?? q?.currency ?? null;
-  const words = newsWords(symbol, name), ccys = eventCurrencies(symbol, name, currency);
-  const [row, bars, events, feed] = await Promise.all([
-    def ? soft(tableRow(symbol), null, "market table") : Promise.resolve(null),
-    def ? soft(storedCloses(symbol), [] as Bar[], "stored closes") : soft(dailyBars(symbol), [] as Bar[], "price history"),
-    soft(eventsOf(ccys), { ccys, from: "", to: "", rows: [], error: "the calendar could not be read" }, "calendar"),
-    soft(instrFeed(symbol, words), { days: INSTR_FEED_DAYS, news: [], alerts: [], error: "the headlines and alerts could not be read" } as StockFeed, "news and alerts"),
-  ]);
-  const f: InstrumentFigures = instrumentFigures({ symbol, def, row, quote: q, bars, yieldQuote: !def && !!q && isYieldQuote(symbol, q.name, q.quoteType), now: Date.now() });
-  return {
-    symbol, name,
-    ...legacyStockFields(f, q, bars),
-    feed,
-    instrument: { ...f, events, matched: words },   // since 20 Nov 2026; a page from before ignores it
-  };
-}
-const INSTRUMENT_COLS = "symbol,name,cls,grp,market,currency,decimals,provider,provider_symbol,proxy_for";
+// ---- the page's NEWS panel and an instrument's own page: pagefeed.ts (the reads, with the client handed in, so the
+// checks and live-check run them too; the reviewer's R2B-03) ----
+export { FEED_ALERTS, FEED_DAYS, FEED_NEWS, type StockFeed } from "./pagefeed.ts";
 
 export async function stockPage(symbol: string) {
   if (!symbol) throw new Error("symbol required");
-  // a Monitor instrument has its own page; a yield read from an official curve has no quote to ask for
-  const { data: def } = await db.from("instruments").select(INSTRUMENT_COLS).eq("symbol", symbol).maybeSingle();
-  if (def) {
-    const d = def as InstrumentDef;
-    const quote = isOfficial(d.provider) ? null : await soft(quotes([symbol]).then((x) => x[symbol] ?? null), null, "quote");
-    return instrumentPage(symbol, d, quote);
-  }
-  const q = await quoteFor(symbol);
-  if (q.quoteType && INSTRUMENT_QUOTES.has(q.quoteType)) return instrumentPage(symbol, null, q);
+  // a Monitor instrument has its own page (a yield read from an official curve has no quote to ask for), and so does
+  // a plain quote that is not a stock: an index, a pair, a future, a coin (pagefeed.ts pageOrQuote)
+  const first = await pageOrQuote({ db, dailyBars, quote: (s: string) => quotes([s]).then((x) => x[s] ?? null), quoteFor }, symbol);
+  if ("instrument" in first) return first.instrument;
+  const q = first.stock;
   const benchmarks = benchmarksFor(symbol), jp = /\.T$/.test(symbol), equity = q.quoteType === "EQUITY";
   const [{ data: con }, own, benches, fin, ks, feed] = await Promise.all([
     db.from("constituents").select("idx,sector,gics_industry,gics_source").eq("symbol", symbol).limit(5),
@@ -228,7 +134,7 @@ export async function stockPage(symbol: string) {
     Promise.all(benchmarks.map((b) => soft(dailyBars(b.symbol), [] as Bar[], `${b.name} history`))),
     equity ? finFor(symbol, q.currency, jp ? edinetStatements : undefined, q.earningsAt) : Promise.resolve({ fin: null, note: "Statements are available for equities only." }),
     equity ? soft(keyStats(symbol), null as KeyStats | null, "key statistics") : Promise.resolve(null),
-    soft(feedFor(symbol), { days: FEED_DAYS, news: [], alerts: [], error: "the headlines and alerts could not be read" } as StockFeed, "news and alerts"),
+    soft(feedFor(db, symbol), { days: FEED_DAYS, news: [], alerts: [], error: "the headlines and alerts could not be read" } as StockFeed, "news and alerts"),
   ]);
   const member = (con ?? []).find((c) => c.sector) ?? (con ?? [])[0] ?? null;
   const d20 = avgTurnover(own, 20), d60 = avgTurnover(own, 60);

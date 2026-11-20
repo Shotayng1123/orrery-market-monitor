@@ -142,3 +142,38 @@ export function asOfTitle(a: AsOf | null, source?: string | null): string {
   const full = `${a.date} ${a.ymd.slice(0, 4)}`;
   return who + (a.kind === "close" ? `close of ${full}` : a.kind === "published" ? `published for ${full}` : `last print ${full} ${a.time} SGT`);
 }
+
+// ---- a market-table row's as-of: its chart tile, its tooltips (the reviewer's R2B-01 and R2B-06, 20 Nov 2026) ----
+// The table stamps a booked close "<date>T00:00:00Z" (an official yield, which has no quote, and any instrument whose
+// quote is missing): a date with no time of day, which read in SGT became "19 Nov 08:00", a print that never was.
+/** The providers whose figure is an official publisher's daily one: a yield read from a stored curve (the instruments
+ *  table's `provider`, which the market table sends as `source`; the server's watchrow.ts and instrstats.ts). */
+const OFFICIAL_PROVIDERS: ReadonlySet<string> = new Set(["treasury", "mof", "curve"]);
+const CURVE_SOURCES: Array<[RegExp, string]> = [[/^UST/, "US Treasury"], [/^JGB/, "Japan MOF"], [/^DE\d/, "Bundesbank"], [/^GB\d/, "Bank of England"], [/^EA\d/, "ECB"], [/^CA\d/, "Bank of Canada"]];
+/** Whether a market-table row's figure is an official publisher's daily figure. */
+export const isOfficialRow = (r: { source?: string | null }): boolean => OFFICIAL_PROVIDERS.has(r.source ?? "");
+/** Who publishes a market-table row's figures, by name (the server's watchrow.ts sourceName): an official yield's
+ *  publisher, otherwise Yahoo Finance (also for a row that names no provider: a stock's page, a server from before). */
+export function rowSource(r: { source?: string | null; symbol: string }): string {
+  if (r.source === "treasury") return "US Treasury";
+  if (r.source === "mof") return "Japan MOF";
+  if (r.source === "curve") return CURVE_SOURCES.find(([re]) => re.test(r.symbol))?.[1] ?? "official yield curve";
+  return "Yahoo Finance";
+}
+/** A row's as-of: the date an official yield was published for, the date of a booked close, or a print's time. */
+export const rowAsOf = (r: { lastAt: string | null; source?: string | null }, now: Date = new Date()): AsOf | null => asOfOf(r.lastAt, isOfficialRow(r) ? "published" : null, now);
+/** A row's as-of for a tooltip, with its source: "Japan MOF · published for 19 Nov 2026", "Yahoo Finance · close of
+ *  19 Nov 2026", "Yahoo Finance · last print 20 Nov 2026 13:35 SGT". */
+export const rowAsOfTitle = (r: { lastAt: string | null; source?: string | null; symbol: string }, now: Date = new Date()): string => asOfTitle(rowAsOf(r, now), rowSource(r));
+export interface TileStamp { label: "LIVE" | "CLOSED" | "PUBLISHED"; text: string; tip: string }
+/** A chart tile's stamp: LIVE or CLOSED with the print's time and its zone ("13:35 SGT" today, "19 Nov 13:35 SGT"
+ *  before: a tile's panel does not say its times are in SGT); CLOSED with the date of a booked close; PUBLISHED with
+ *  the date an official yield was published for ("19 Nov 2026"). Never a time of day for a figure that has none. The
+ *  tooltip names the source. */
+export function tileStamp(r: { lastAt: string | null; live: boolean; source?: string | null; symbol: string }, now: Date = new Date()): TileStamp {
+  const a = rowAsOf(r, now), tip = asOfTitle(a, rowSource(r));
+  if (!a) return { label: r.live ? "LIVE" : "CLOSED", text: "–", tip };
+  if (a.kind === "published") return { label: "PUBLISHED", text: fmtDate(a.ymd), tip };
+  if (a.kind === "close") return { label: "CLOSED", text: fmtDate(a.ymd), tip };
+  return { label: r.live ? "LIVE" : "CLOSED", text: `${a.today ? a.time : `${a.date} ${a.time}`} SGT`, tip };
+}

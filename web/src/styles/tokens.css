@@ -961,7 +961,7 @@ button.go.ghost:hover{color:var(--txt);border-color:var(--amber)}
 .mvT .dot.up{background:var(--up)} .mvT .dot.dn{background:var(--dn)}
 /* a smaller peak or bottom (the rule on trial, 19 Nov 2026): a smaller dot, as its circle on the chart is smaller */
 .mvT .dot.sm{width:5px;height:5px;margin:0 7px 1px 2px}
-.kvT td.l{color:var(--txt2)}
+.kvT td.l{color:var(--txt2);white-space:normal}   /* a label wraps rather than push its figures out of the panel (the designer's §3.2: labels may wrap); "12M †" stays together */
 .kvT td.num{white-space:nowrap}
 .rng{display:inline-flex;align-items:center;gap:7px}
 .rng .bar{position:relative;display:inline-block;width:54px;height:3px;border-radius:2px;background:var(--bord2)}
@@ -1521,6 +1521,10 @@ body.cmp #grid{--gap:7px}
 .pcol.w8{flex:0 0 calc((100% - 11 * var(--gap)) / 12 * 8 + 7 * var(--gap))}
 .pcol.w4{flex:0 0 calc((100% - 11 * var(--gap)) / 12 * 4 + 3 * var(--gap))}
 .pcol>.panel{width:100%}
+/* the two columns end together (the reviewer's R2B-02): the stock page's NEWS starts with the rows that sit beside the
+   left column, and the shorter column's last panel takes the few pixels left (less than a row; StockNews says when) */
+.pcols[data-even]{align-items:stretch}
+.pcols[data-even]>.pcol>.panel:last-child{flex-grow:1}
 body.term .pcols,body.term .pcol{display:contents}
 @container wrap (max-width:1100px){
   .pcols,.pcol{display:contents}

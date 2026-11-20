@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { fmtPs, fmtRatio, fmtUnit, NO_DOC, periodDoc, periodName, type FinPeriod, type FinRow, type FinSection, type FinUnit } from "../lib/stock";
+import { fmtPs, fmtRatio, fmtUnit, noDocWhy, periodDoc, periodName, type FinPeriod, type FinRow, type FinSection, type FinUnit } from "../lib/stock";
 import { fmtDate } from "../lib/time";
 import { finBack, finFit, finRest } from "../lib/finscroll";
 import { zoomNow } from "../lib/prefs";
@@ -104,7 +104,7 @@ export function FinTable({ periods, sections, unit, currency }: { periods: FinPe
               // a quarter's name on two lines ("2Q" over "FY3/27"), so the column is no wider than before
               const n = periodName(p), label = <>{n.top}{n.sub && <> <span className="fy">{n.sub}</span></>}{p.kind === "FC" && <i>E</i>}</>;
               return (
-                <th key={p.key} className={[p.kind === "FC" ? "fc" : "", doc ? "doc" : ""].filter(Boolean).join(" ") || undefined} title={doc ? `${doc.tip} · ${what}` : `${what} · ${NO_DOC}`}>
+                <th key={p.key} className={[p.kind === "FC" ? "fc" : "", doc ? "doc" : ""].filter(Boolean).join(" ") || undefined} title={doc ? `${doc.tip} · ${what}` : `${what} · ${noDocWhy(p)}`}>
                   {doc ? <a href={doc.href} target="_blank" rel="noreferrer" title={doc.tip}>{label}</a> : label}
                 </th>
               );

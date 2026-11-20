@@ -12,7 +12,7 @@ import { useApi } from "../lib/useApi";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtDate, fmtStamp } from "../lib/time";
 import { avgTurnover, avgVolume, LARGEST_FALL, MKT_CAP, NEWS, NEXT_RESULTS, PERIOD, REALISED_VOL, SIGMA_WINDOW } from "../lib/labels";
-import { chartMarks, finSections, fmtCount, fmtPc, fmtPp, fmtX, isSmallMove, moveRule, NO_DOC, siteOf, whyText, type MoveRow, type StockPage } from "../lib/stock";
+import { chartMarks, finSections, fmtCount, fmtPc, fmtPp, fmtX, isSmallMove, moveRule, siteOf, whyText, type MoveRow, type StockPage } from "../lib/stock";
 import { periodHolding } from "../lib/periods";
 import { chartRow, GuidanceLine, MoveText, profileOf, shortLine } from "./Asset";
 import { AssetPhoneLegacy } from "./AssetPhoneLegacy";
@@ -101,7 +101,7 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
             <KV k="Dividend yield, last year / guidance">{fmtPc(d.val.yield, false, 2)} / {fmtPc(d.val.yieldGuide, false, 2)}</KV>
             <KV k={NEXT_RESULTS} sub={d.earningsEst ? "estimated, not confirmed by the company" : undefined}>{d.earningsAt ? fmtStamp(d.earningsAt) : "–"}</KV>
             {prof && <KV k="Fiscal year end · standard" sub={`有価証券報告書 ${prof.label} · EDINET DB`}>{prof.month} · {prof.std}</KV>}
-            {prof && <KV k="Annual report" sub={prof.doc ? undefined : NO_DOC}>{prof.doc ? <a href={prof.doc.href} target="_blank" rel="noreferrer" id="st-yuho" title={prof.doc.tip}>有報 {prof.label} ↗</a> : `有報 ${prof.label}`}</KV>}
+            {prof && <KV k="Annual report" sub={prof.doc ? undefined : prof.none}>{prof.doc ? <a href={prof.doc.href} target="_blank" rel="noreferrer" id="st-yuho" title={prof.doc.tip}>有報 {prof.label} ↗</a> : `有報 ${prof.label}`}</KV>}
           </tbody></table>
         </div>
       </Section>

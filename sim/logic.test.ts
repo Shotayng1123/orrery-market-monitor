@@ -13,7 +13,7 @@ import { SmtpError, appPassword, buildMessage, dotStuff, parseFrom, smtpTalk, ty
 import { mailReady, mailSetup, resendRequest } from "../supabase/functions/_shared/mail.ts";
 import { avgTurnover, barOnOrBefore, betaCorr, maxDrawdown, monthsBack, perfRows, range52w, realisedVol, type Bar } from "../supabase/functions/_shared/stockstats.ts";
 import { fyLabel, justReported, LAYOUT_FOREIGN, LAYOUT_JP, pickUnit, progress, qEndLabel, qLabel, quarterEnd, ratiosOf, resultsDateToWatch, singleQuarters, valuation, type FinPeriod, type FinRowId, type FinSet } from "../supabase/functions/_shared/fin.ts";
-import { docUrl, edinetCodeOf, edinetFin, edinetWaiting, legacyStatements, yahooFin, yahooFinTypes } from "../supabase/functions/_shared/finsrc.ts";
+import { docUrl, edinetCodeOf, edinetFin, edinetWaiting, filingLink, legacyStatements, yahooFin, yahooFinTypes } from "../supabase/functions/_shared/finsrc.ts";
 import { keyStatsOf } from "../supabase/functions/_shared/yahoo.ts";
 import { MOVE_RULE, SWING_PCT, SWING_PCT_2, bigMoves, isLargeCap, moveCtx, moveText, settledBars, siblingKind, turningPoints } from "../supabase/functions/_shared/bigmoves.ts";
 import { liveRows } from "../supabase/functions/_shared/intraday.ts";
@@ -23,18 +23,19 @@ import { FEED_LATE_MIN, OWN_SHORT_MIN, barDayEnd, barSettled, feedState, fxTradi
 import { OWN_FRESH_MIN, RELAY_BEAT_MAX_S, RELAY_CRON, RELAY_JOBS, RELAY_LATE_MIN, RELAY_OK_RUN, RELAY_WAIT_MIN, beatFresh, cronDue, current, newerOnly, reading, relayAct, relayJobsDue, usable, type RelayView } from "../supabase/functions/_shared/relay.ts";
 import { CBOE_YIELDS, closeDay, isYieldQuote, isYieldRow, sourceName, watchRowFromQuote, watchRowFromTable, type QuoteLike } from "../supabase/functions/_shared/watchrow.ts";
 import { alertFigWord, alertHeadline } from "../web/src/lib/alertline.ts";
-import { asOfCell, asOfLine, asOfOf, asOfTitle } from "../web/src/lib/time.ts";
+import { asOfCell, asOfLine, asOfOf, asOfTitle, rowAsOfTitle, rowSource, tileStamp } from "../web/src/lib/time.ts";
 import { finBack, finFit, finRest } from "../web/src/lib/finscroll.ts";
 import { sectorShort } from "../web/src/lib/sectors.ts";
-import { feedRows, fmtDay, fmtDayTime, fmtPc, fmtPp, fmtRatio, fyName, moveParts, periodDoc, periodName, type MoveRow, type StockFeed } from "../web/src/lib/stock.ts";
+import { feedRows, fmtDay, fmtDayTime, fmtPc, fmtPp, fmtRatio, fyName, moveParts, noDocWhy, periodDoc, periodName, type MoveRow, type StockFeed } from "../web/src/lib/stock.ts";
 import { axisDecimals, fallbackDecimals, fmtChg, fmtLevel, fmtNum, fmtPct, fmtSigma, fmtSigned, signCls, stockDecimals } from "../web/src/lib/fmt.ts";
 import { datesIn, fmtDate, fmtDayMon, fmtDayTime as dayTime, fmtStamp, fmtWhen } from "../web/src/lib/time.ts";
-import { avgTurnover as avgTurnoverLabel, avgVolume, bankName, classLabel, delayed, dottedLine, hitLine, MOVERS_SIGMA, NEWS, NEWS_FILINGS, SIGMA_1D, SIGMA_1M as SIGMA_1M_WORD, SIGMA_MOVE, stockKind, TAB, TAB_BAR } from "../web/src/lib/labels.ts";
+import { avgTurnover as avgTurnoverLabel, avgVolume, bankName, classLabel, delayed, dottedLine, hitLine, MOVERS_SIGMA, NEWS, NEWS_FILINGS, SIGMA_1D, SIGMA_1M as SIGMA_1M_WORD, SIGMA_MOVE, stockKind, TAB, TAB_BAR, WORKED } from "../web/src/lib/labels.ts";
 import { TIME_VALUES } from "../web/src/lib/chart.ts";
 import { PERIOD_DAYS, periodHolding } from "../web/src/lib/periods.ts";
 import { anchorsOf, change, INSTRUMENT_QUOTES, instrumentFigures, isOfficial, legacyStockFields, publisher, quoteDecimals, seriesStats, swings, volStat, type InstrumentDef, type QuoteLike, type RowLike } from "../supabase/functions/_shared/instrstats.ts";
 import { eventCcy as srvEventCcy, eventCurrencies, eventsFor, matchHeadlines, newsWords, pairOf, wordsPg, wordsRegex, type EventRow } from "../supabase/functions/_shared/instrfeed.ts";
-import { asOfWords, calSource, ccyWords, DAILY_PERIODS, distCls, distText, isInstrumentPage, lastAndDay, moveCls, moveText as instrMove, noEvents, pctlText, periodsOf, sourceNote, volLine } from "../web/src/lib/instrument.ts";
+import { asOfWords, calSource, ccyWords, DAILY_PERIODS, distCls, distText, isInstrumentPage, lastAndDay, moveCls, moveText as instrMove, noEvents, pctlText, perfNote, periodsOf, sourceNote, volLine, workedLine, workedOut } from "../web/src/lib/instrument.ts";
+import { FEED_ALERTS, FEED_DAYS, FEED_NEWS, INSTR_HISTORY_DAYS, INSTRUMENT_COLS, eventsOf, feedFor, instrFeed, pageOrQuote, type Db } from "../supabase/functions/_shared/pagefeed.ts";
 import { MOCK_WORDS, mockCcys } from "../web/src/lib/mockInstr.ts";
 import { calendarRows, currencyOptions, eventCcy } from "../web/src/lib/calendar.ts";
 import { readFileSync as readText, readdirSync as listDir } from "node:fs";
@@ -746,6 +747,14 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
       const solo = edinetFin({ annual, standalone, earnings: { earnings: [{ disclosureDate: "2026-11-05", quarter: 2, isConsolidated: false, fiscalYearEnd: "2027-03-31", revenue: 800000, forecastRevenue: 1650000, pdfUrl: "https://example.org/ir/2q-solo.pdf" }] } }, null)!;
       ck("a company that reports its own figures only (no consolidated release) links that release", solo.quarterly.periods.find((p) => p.label === "2Q 3/27")!.url === "https://example.org/ir/2q-solo.pdf" && solo.annual.periods.slice(-1)[0].url === "https://example.org/ir/2q-solo.pdf");
       ck("an address is kept exactly as an http(s) address and nothing else is one", docUrl(" https://example.org/a.pdf ") === "https://example.org/a.pdf" && docUrl("http://example.org/a") === "http://example.org/a" && [null, 7, "", "ftp://x/y", "javascript:alert(1)", "/ir/a.pdf", "https://exa mple.org", 'https://x.example/a"b'].every((x) => docUrl(x) === null));
+      // EDINET DB's own flag on each filing's address (the reviewer's R2B-04): a filing aged out of EDINET's ~10-year
+      // retention keeps its document ID but gets no address, and says why; one flagged available, or not flagged, keeps it
+      const flagged = { ...annual, data: annual.data.map((r) => (r.fiscalYear === 2017 ? { ...r, edinetFilingUrl: "https://disclosure2.edinet-fsa.go.jp/WZEK0040.aspx?S100T2017", edinetFilingUrlAvailability: "expired", edinetFilingUrlNote: "past the  retention\nperiod" } : r.fiscalYear === 2026 ? { ...r, edinetFilingUrl: "https://disclosure2.edinet-fsa.go.jp/WZEK0040.aspx?S100T2026", edinetFilingUrlAvailability: "available" } : r.fiscalYear === 2025 ? { ...r, edinetFilingUrl: "https://disclosure2.edinet-fsa.go.jp/WZEK0040.aspx?S100T2025" } : r)) };
+      const ag = edinetFin({ annual: flagged, standalone, earnings }, "2026-11-19")!, a17 = ag.annual.periods[0], a26 = ag.annual.periods[9], a25 = ag.annual.periods[8];
+      ck(`a year EDINET DB flags as no longer on EDINET has no address, keeps its document ID, and says why ("${a17.docGone}")`, a17.label === "FY3/17" && a17.url === null && a17.doc === "S100T2017" && a17.docGone === "document S100T2017 no longer on EDINET, per EDINET DB (expired: past the retention period)", a17);
+      ck("a year flagged available keeps its address; a year whose answer carries no flag keeps it too (as before); neither says anything is gone", a26.url === "https://disclosure2.edinet-fsa.go.jp/WZEK0040.aspx?S100T2026" && a26.docGone === undefined && a25.url === "https://disclosure2.edinet-fsa.go.jp/WZEK0040.aspx?S100T2025" && !("docGone" in a25), [a26, a25]);
+      ck("the flag is read whatever its case or the field names' style; a flag on a row with no usable address changes nothing", filingLink({ edinetfilingurl: "https://x.example/a", edinetfilingurlavailability: " Available " }).url === "https://x.example/a" && filingLink({ edinetfilingurl: "https://x.example/a", edinetfilingurlavailability: "unavailable" }).gone === "the filing no longer on EDINET, per EDINET DB (unavailable)" && JSON.stringify(filingLink({ edinetfilingurl: "javascript:x", edinetfilingurlavailability: "expired" })) === JSON.stringify({ url: null, gone: null }) && edinetFin({ annual: { data: [{ fiscal_year: 2026, revenue: 1, edinet_filing_url: "https://x.example/b", edinet_filing_url_availability: "expired", doc_id: "S1" }] }, standalone: null, earnings: null }, null)!.annual.periods[0].docGone === "document S1 no longer on EDINET, per EDINET DB (expired)");
+      ck("the page's header tip: the source's own reason where it gives one, otherwise that it gave no address", noDocWhy({ docGone: "document S1 no longer on EDINET, per EDINET DB (expired)" }) === "document S1 no longer on EDINET, per EDINET DB (expired)" && noDocWhy({}) === "no document address from the source" && noDocWhy({ docGone: "  " }) === "no document address from the source");
     }
 
     // which company
@@ -1169,6 +1178,131 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck("a currency the Countries pick no longer offers reads as All; Impact still applies within a currency", calendarRows(cal, "all", "major", "NZD").ccy === "All" && calendarRows(cal, "all", "all", "NZD").events.map((e) => e.id).join() === "3" && calendarRows(cal, "high", "all", "EUR").events.length === 0);
     // the local copy's stand-in words are the server's (so the designer and the PMs see the real rule)
     ck(`the mock's words for its ${Object.keys(MOCK_WORDS).length} instruments are the server's, word for word; and its calendar currencies`, Object.entries(MOCK_WORDS).every(([sym, w]) => newsWords(sym).join() === w.join()) && mockCcys("USDJPY=X", "USD/JPY", "JPY").join() === eventCurrencies("USDJPY=X", "USD/JPY", "JPY").join() && mockCcys("DX-Y.NYB", "US Dollar Index (DXY)", "USD").join() === "USD" && mockCcys("GC=F", "Gold", "USD").join() === "USD", Object.entries(MOCK_WORDS).filter(([sym, w]) => newsWords(sym).join() !== w.join()).map(([sym]) => sym));
+  }
+
+  console.log("\n[V] fixes after the check (20 Nov 2026): a date for a figure with no time of day, the zone on a tile, the worked-out mark, and the page's reads run against a stand-in database");
+  {
+    // R2B-01, R2B-06: the chart tile's stamp and the MARKETS tooltips
+    const now = new Date("2026-11-20T06:00:00Z");   // 14:00 in Singapore
+    const jgb = { symbol: "JGB10Y", lastAt: "2026-11-19T00:00:00Z", live: false, source: "mof" };
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+    ck(`an official yield, which the table stamps at midnight UTC, shows the date it was published for, never "19 Nov 08:00" ("${tileStamp(jgb, now).label} ${tileStamp(jgb, now).text}", "${tileStamp(jgb, now).tip}")`, same(tileStamp(jgb, now), { label: "PUBLISHED", text: "19 Nov 2026", tip: "Japan MOF · published for 19 Nov 2026" }) && rowAsOfTitle(jgb, now) === "Japan MOF · published for 19 Nov 2026");
+    ck("each official curve's publisher: UST2Y the US Treasury, UST3M too (a curve), the Bund the Bundesbank; a row with no provider (a stock's page) Yahoo Finance", tileStamp({ symbol: "UST2Y", lastAt: "2026-11-19T00:00:00Z", live: false, source: "treasury" }, now).tip === "US Treasury · published for 19 Nov 2026" && rowSource({ symbol: "UST3M", source: "curve" }) === "US Treasury" && rowSource({ symbol: "DE10Y", source: "curve" }) === "Bundesbank" && rowSource({ symbol: "7203.T" }) === "Yahoo Finance" && rowSource({ symbol: "XX", source: "curve" }) === "official yield curve");
+    const missing = { symbol: "^HSI", lastAt: "2026-11-19T00:00:00Z", live: false, source: "yahoo" };
+    ck("an instrument whose quote is missing (the table falls back to its booked close) shows that close's date, not a time", same(tileStamp(missing, now), { label: "CLOSED", text: "19 Nov 2026", tip: "Yahoo Finance · close of 19 Nov 2026" }));
+    const today = { symbol: "USDJPY=X", lastAt: "2026-11-20T05:35:00+00:00", live: true, source: "yahoo" }, before = { ...today, lastAt: "2026-11-19T07:35:00+00:00", live: false };
+    ck(`a print keeps its time, now with its zone, the tile's panel not saying SGT ("${tileStamp(today, now).text}", "${tileStamp(before, now).text}")`, same(tileStamp(today, now), { label: "LIVE", text: "13:35 SGT", tip: "Yahoo Finance · last print 20 Nov 2026 13:35 SGT" }) && same(tileStamp(before, now), { label: "CLOSED", text: "19 Nov 15:35 SGT", tip: "Yahoo Finance · last print 19 Nov 2026 15:35 SGT" }) && tileStamp({ symbol: "NVDA", lastAt: "2026-11-20T05:35:00+00:00", live: false }, now).tip === "Yahoo Finance · last print 20 Nov 2026 13:35 SGT");
+    ck("no as-of: a dash; a figure with only a date never gets a clock time", tileStamp({ symbol: "X", lastAt: null, live: false, source: "yahoo" }, now).text === "–" && ![jgb, missing].some((r) => /\d{2}:\d{2}/.test(tileStamp(r, now).text) || /\d{2}:\d{2}/.test(tileStamp(r, now).tip)));
+
+    // R2B-05: the worked-out mark on an instrument's KEY DATA, and the line under it
+    const hist = { from: "2021-11-26", to: "2026-11-19", n: 1300, source: "x" };
+    ck("† marks the 52-week high and low, the distance from them, realised volatility and the largest moves; σ vs 1M avg and vs 200D only where MARKETS does not carry the name", WORKED === "†" && (["range52", "fromHiLo", "vol", "rise", "fall"] as const).every((k) => workedOut({ monitor: true }, k) && workedOut({ monitor: false }, k)) && !workedOut({ monitor: true }, "z1m") && !workedOut({ monitor: true }, "vs200") && workedOut({ monitor: false }, "z1m") && workedOut({ monitor: false }, "vs200"));
+    ck("the line under KEY DATA names what the figures were worked out from and over which dates: an official yield's publisher, the closes the Monitor stores, or Yahoo's own", workedLine({ official: true, monitor: true, source: "Japan MOF", history: hist }) === "† worked out here from Japan MOF's published daily yields, 26 Nov 2021 – 19 Nov 2026; the other figures as on MARKETS." && workedLine({ official: false, monitor: true, source: "Yahoo Finance", history: hist }) === "† worked out here from the daily closes the Monitor stores from Yahoo Finance, 26 Nov 2021 – 19 Nov 2026; the other figures as on MARKETS." && workedLine({ official: false, monitor: false, source: "Yahoo Finance", history: hist }) === "† worked out here from Yahoo Finance's daily closes, 26 Nov 2021 – 19 Nov 2026." && workedLine({ official: false, monitor: false, source: "Yahoo Finance", history: { ...hist, from: null, to: null } }) === "† worked out here from Yahoo Finance's daily closes.");
+    ck("PERFORMANCE's line says whose its changes are; the worked-out figures are KEY DATA's to name", perfNote({ official: false, monitor: true, source: "Yahoo Finance" }) === "The same figures as MARKETS (Yahoo Finance)." && /^Japan MOF publishes this yield once a day/.test(perfNote({ official: true, monitor: true, source: "Japan MOF" })) && /by the rules of the MARKETS table\.$/.test(perfNote({ official: false, monitor: false, source: "Yahoo Finance" })) && !/worked out/i.test(perfNote({ official: false, monitor: true, source: "Yahoo Finance" })));
+
+    // R2B-03: the server's reads (supabase/functions/_shared/pagefeed.ts), run against a stand-in database that records
+    // each query, as supabase-js builds it, and answers it
+    type Asked = { table: string; ops: Array<[string, unknown[]]> };
+    const stub = (answer: (a: Asked) => { data: unknown; error: { message: string } | null }) => {
+      const asked: Asked[] = [];
+      const db: Db = { from(table: string) {
+        const a: Asked = { table, ops: [] }; asked.push(a);
+        // every call returns the same chain; awaiting it answers the query as built so far
+        const b: unknown = new Proxy({}, { get: (_t, k) => (k === "then" ? (ok: (v: unknown) => unknown, bad: (e: unknown) => unknown) => Promise.resolve().then(() => answer(a)).then(ok, bad) : (...args: unknown[]) => { a.ops.push([String(k), args]); return b; }) });
+        return b;
+      } };
+      return { db, asked };
+    };
+    const opOf = (a: Asked | undefined, name: string): unknown[][] => (a ? a.ops.filter((o) => o[0] === name).map((o) => o[1]) : []);
+    const has = (a: Asked | undefined, name: string, ...args: unknown[]) => opOf(a, name).some((x) => JSON.stringify(x) === JSON.stringify(args));
+    const T0 = Date.parse("2026-11-20T01:25:00Z"), ago = (d: number) => new Date(T0 - d * 86400e3).toISOString(), ahead = (d: number) => new Date(T0 + d * 86400e3).toISOString();
+    const NEWS_ROWS = [
+      { id: 1, published_at: "2026-11-19T23:00:00Z", source: "Nikkei Asia", title: "Yen firms as the Bank of Japan meets", url: "https://example.com/1", category: "FX" },
+      { id: 2, published_at: "2026-11-19T22:00:00Z", source: "CNBC", title: "Hayen Corp shares rise", url: "https://example.com/2", category: null },
+      { id: 3, published_at: "2026-11-18T03:00:00Z", source: "WSJ", title: "BoJ holds rates", url: "https://example.com/3", category: "Macro" },
+      { id: 4, published_at: "2026-11-19T21:00:00Z", source: "FT", title: "Bojangles sales climb", url: "https://example.com/4", category: null },
+    ];
+    const ALERT_ROWS = [{ id: 9, at: "2026-11-19T06:00:00Z", kind: "index", pct: -3.2, market: "TSE", msg: "USD/JPY alert (stand-in)", url: null }];
+    const EVENTS = [
+      { id: 11, at: ahead(1), country: "US", currency: "USD", title: "US CPI", impact: "High", forecast: null, previous: null, actual: null },
+      { id: 12, at: ago(1), country: "JPY", currency: null, title: "JP CPI (ForexFactory)", impact: "High", forecast: null, previous: null, actual: null },
+      { id: 13, at: ahead(2), country: "EU", currency: "EUR", title: "EZ PMI", impact: "Medium", forecast: null, previous: null, actual: null },
+      { id: 14, at: ago(9), country: "US", currency: "USD", title: "too old", impact: "High", forecast: null, previous: null, actual: null },
+    ];
+    const D = 86400, closes: Array<{ d: string; close: number }> = [];
+    for (let t = Math.floor(T0 / 1000 / D) * D - 1400 * D, i = 0; t < T0 / 1000 - D / 2; t += D) { const wd = new Date(t * 1000).getUTCDay(); if (wd === 0 || wd === 6) continue; closes.push({ d: new Date(t * 1000).toISOString().slice(0, 10), close: 1.5 + Math.sin(i++ / 30) * 0.3 }); }
+    const jgbRow: RowLike = { symbol: "JGB10Y", name: "JGB 10Y yield", cls: "Fixed income", group: "rates", market: "TSE", currency: "JPY", decimals: 3, order: 34, last: closes[closes.length - 1].close, lastAt: `${closes[closes.length - 1].d}T00:00:00Z`, live: false, source: "mof",
+      closes: { d1: closes[closes.length - 2].close }, closeDates: { d1: closes[closes.length - 2].d }, pct: {}, chg: {}, z1m: 0.4, pos52: 61, vs200: 0.02 };
+    const DEFS: Record<string, InstrumentDef> = {
+      JGB10Y: { symbol: "JGB10Y", name: "JGB 10Y yield", cls: "Fixed income", grp: "rates", market: "TSE", currency: "JPY", decimals: 3, provider: "mof" },
+      "USDJPY=X": { symbol: "USDJPY=X", name: "USD/JPY", cls: "Currency", grp: "fx", market: "FX", currency: "JPY", decimals: 3, provider: "yahoo" },
+    };
+    let refusePattern = false, failAlerts = false;
+    const answer = (a: Asked): { data: unknown; error: { message: string } | null } => {
+      if (a.table === "instruments") return { data: DEFS[opOf(a, "eq")[0]?.[1] as string] ?? null, error: null };
+      if (a.table === "snapshots") return { data: { payload: { rows: [jgbRow, { ...jgbRow, symbol: "UST2Y", source: "treasury" }] } }, error: null };
+      if (a.table === "prices_daily") { const [from, to] = opOf(a, "range")[0] as [number, number]; return { data: closes.slice(from, to + 1), error: null }; }
+      if (a.table === "econ_events") return { data: EVENTS, error: null };
+      if (a.table === "news_items") return refusePattern && opOf(a, "filter").length ? { data: null, error: { message: "invalid regular expression (stand-in)" } } : { data: NEWS_ROWS, error: null };
+      if (a.table === "alerts") return failAlerts ? { data: null, error: { message: "permission denied (stand-in)" } } : { data: ALERT_ROWS, error: null };
+      return { data: null, error: { message: `no such table here: ${a.table}` } };
+    };
+    // a stock's NEWS
+    {
+      const { db, asked } = stub(answer);
+      const f = await feedFor(db, "7203.T", T0);
+      const nw = asked.find((a) => a.table === "news_items"), al = asked.find((a) => a.table === "alerts");
+      ck(`a stock's NEWS asks for the headlines whose tickers name it, of ${FEED_DAYS} days, newest first, at most ${FEED_NEWS}`, has(nw, "select", "id,published_at,source,title,url,category") && has(nw, "overlaps", "tickers", ["7203.T"]) && has(nw, "gte", "published_at", ago(90)) && has(nw, "order", "published_at", { ascending: false }) && has(nw, "limit", FEED_NEWS), nw);
+      ck(`and the alerts on it over the same days, newest first (by time, then by id), at most ${FEED_ALERTS}`, has(al, "eq", "symbol", "7203.T") && has(al, "gte", "at", ago(90)) && JSON.stringify(opOf(al, "order")) === JSON.stringify([["at", { ascending: false }], ["id", { ascending: false }]]) && has(al, "limit", FEED_ALERTS), al);
+      ck("the rows in the page's shape: a headline's time, publisher, title, address and category; an alert's kind, move, market and message", f.days === 90 && f.news.length === 4 && f.news[0].publishedAt === "2026-11-19T23:00:00Z" && f.news[0].source === "Nikkei Asia" && f.news[1].category === null && f.alerts[0].kind === "index" && f.alerts[0].pct === -3.2 && f.alerts[0].url === null && !("error" in f) && asked.length === 2, f);
+      failAlerts = true; const g = await feedFor(stub(answer).db, "7203.T", T0); failAlerts = false;
+      ck(`a table that cannot be read says which and why, and the other's rows still come ("${g.error}")`, g.error === "alerts: permission denied (stand-in)" && g.news.length === 4 && g.alerts.length === 0, g);
+    }
+    // an instrument's headlines: one pattern, or plain parts where the pattern is refused; whole words either way
+    {
+      const words = newsWords("USDJPY=X", "USD/JPY");
+      let { db, asked } = stub(answer);
+      const f = await instrFeed(db, "USDJPY=X", words, T0);
+      const nw = asked.filter((a) => a.table === "news_items");
+      ck("an instrument's headlines are asked for with the words as one pattern, whole words any case, over 30 days", nw.length === 1 && has(nw[0], "filter", "title", "imatch", "[[:<:]](yen|jpy|boj|bank of japan)[[:>:]]") && has(nw[0], "gte", "published_at", ago(30)) && has(nw[0], "limit", 150) && has(nw[0], "order", "published_at", { ascending: false }), nw);
+      ck(`what comes back is held to the same rule: "Hayen" and "Bojangles" are not the yen or the BoJ (${f.news.map((n) => n.title).join(" | ")})`, f.news.map((n) => n.id).join() === "1,3" && f.alerts.length === 1 && f.days === 30 && !("error" in f), f.news);
+      refusePattern = true; ({ db, asked } = stub(answer)); const g = await instrFeed(db, "USDJPY=X", words, T0); refusePattern = false;
+      const both = asked.filter((a) => a.table === "news_items");
+      ck("a database that refuses the pattern is asked again with each word as a plain part of the title, and the page keeps whole words only", both.length === 2 && has(both[1], "or", "title.ilike.*yen*,title.ilike.*JPY*,title.ilike.*BoJ*,title.ilike.*Bank of Japan*") && has(both[1], "limit", 300) && g.news.map((n) => n.id).join() === "1,3" && !("error" in g), { both, news: g.news });
+      ({ db, asked } = stub(answer)); const none = await instrFeed(db, "X=F", [], T0);
+      ck("an instrument with no words asks for no headlines, only its alerts", none.news.length === 0 && asked.every((a) => a.table === "alerts"), asked);
+    }
+    // its calendar: the rows of its currencies, a FXStreet row by its currency, a ForexFactory row by its country
+    {
+      const { db, asked } = stub(answer);
+      const e = await eventsOf(db, ["USD", "JPY"], T0), ev = asked[0];
+      ck(`the calendar is asked for both kinds of row of USD and JPY, five days back and eight ahead (${e.rows.map((r) => r.title).join(" | ")})`, has(ev, "or", "currency.in.(USD,JPY),country.in.(USD,JPY)") && has(ev, "gte", "at", ago(5)) && has(ev, "lte", "at", ahead(8)) && has(ev, "limit", 600) && e.rows.map((r) => r.id).join() === "12,11" && e.from === ago(5) && e.to === ahead(8), { ev, rows: e.rows });
+      const { db: db2, asked: asked2 } = stub(answer);
+      ck("no currency, no calendar query", (await eventsOf(db2, [], T0)).rows.length === 0 && asked2.length === 0);
+    }
+    // which page a symbol gets, and what each asks for
+    {
+      const calls = { quote: [] as string[], quoteFor: [] as string[], bars: [] as string[] };
+      const deps = (db: Db, q: Partial<QuoteLike> & { quoteType: string | null } = { quoteType: "EQUITY" }) => ({
+        db, now: T0,
+        quote: async (sym: string) => { calls.quote.push(sym); return { name: "USD/JPY", quoteType: "CURRENCY", currency: "JPY", exchange: "CCY", price: 158.4, prevClose: 158.0, time: T0 / 1000 - 300, open: 158.1, high: 158.6, low: 157.9, volume: 0 } as QuoteLike; },
+        quoteFor: async (sym: string) => { calls.quoteFor.push(sym); return { name: sym, currency: "EUR", exchange: "STOXX", price: 5612, prevClose: 5600, time: T0 / 1000 - 300, open: 5601, high: 5620, low: 5590, volume: null, ...q } as QuoteLike; },
+        dailyBars: async (sym: string) => { calls.bars.push(sym); return closes.map((c) => ({ t: Date.parse(c.d + "T00:00:00Z") / 1000, c: 5000 + c.close * 100 })); },
+      });
+      const OTHER = ["asset_cache", "move_causes", "constituents", "jp_short_positions", "short_volume"];
+      let s = stub(answer);
+      const j = await pageOrQuote(deps(s.db), "JGB10Y");
+      const ji = "instrument" in j ? j.instrument : null, tables = [...new Set(s.asked.map((a) => a.table))].sort().join();
+      ck(`JGB 10Y (a Monitor instrument from an official curve): its instruments row is read (${INSTRUMENT_COLS.split(",").length} columns), no quote is asked for, and the page has its own figures`, has(s.asked[0], "select", INSTRUMENT_COLS) && has(s.asked[0], "eq", "symbol", "JGB10Y") && opOf(s.asked[0], "maybeSingle").length === 1 && calls.quote.length === 0 && calls.quoteFor.length === 0 && calls.bars.length === 0 && !!ji, { asked: s.asked[0], calls });
+      ck(`it reads the market table's row, its stored closes (${INSTR_HISTORY_DAYS} days back, a page at a time), its calendar, its headlines and its alerts, and nothing that is a stock's: no EDINET DB store, no big-move queue (${tables})`, tables === "alerts,econ_events,instruments,news_items,prices_daily,snapshots" && !s.asked.some((a) => OTHER.includes(a.table)) && has(s.asked.find((a) => a.table === "snapshots"), "eq", "key", "table") && has(s.asked.find((a) => a.table === "prices_daily"), "gte", "d", new Date(T0 - INSTR_HISTORY_DAYS * 86400e3).toISOString().slice(0, 10)) && has(s.asked.find((a) => a.table === "prices_daily"), "range", 0, 999), tables);
+      ck(`its answer: a yield, Japan MOF's, published for ${ji?.instrument.asOf}, its events in yen, the words its headlines were matched by, the table's own last figure; and every field the page of before reads`, !!ji && ji.instrument.units === "yield" && ji.instrument.official && ji.instrument.source === "Japan MOF" && ji.instrument.asOfKind === "published" && ji.instrument.asOf === closes[closes.length - 1].d && ji.instrument.events.ccys.join() === "JPY" && ji.instrument.matched.includes("Bank of Japan") && ji.price === jgbRow.last && ji.instrument.row.source === "mof" && ji.instrument.session === null && ji.instrument.vol.m3.day != null && ji.feed.days === 30 && Array.isArray(ji.benchmarks) && ji.fin === null && ji.moves.eligible === false, ji?.instrument);
+      s = stub(answer); const u = await pageOrQuote(deps(s.db), "USDJPY=X"), ui = "instrument" in u ? u.instrument : null;
+      ck("USD/JPY (a Monitor instrument with a quote): its quote is asked for once; the day's range is the quote's; its calendar is USD and JPY's", !!ui && calls.quote.join() === "USDJPY=X" && ui.instrument.session?.low === 157.9 && ui.instrument.events.ccys.join() === "USD,JPY" && ui.instrument.events.rows.map((r) => r.id).join() === "12,11" && ui.feed.news.map((n) => n.id).join() === "1,3" && ui.instrument.source === "Yahoo Finance", ui?.instrument.events);
+      s = stub(answer); const x = await pageOrQuote(deps(s.db, { quoteType: "INDEX" }), "^STOXX50E"), xi = "instrument" in x ? x.instrument : null;
+      ck("an index the Monitor does not follow: its quote decides (an index), its daily bars come from the reader handed in, and neither the market table nor the stored closes are asked", !!xi && calls.quoteFor.join() === "^STOXX50E" && calls.bars.join() === "^STOXX50E" && !s.asked.some((a) => a.table === "snapshots" || a.table === "prices_daily") && xi.instrument.monitor === false && xi.instrument.events.ccys.join() === "EUR" && xi.instrument.units === "price", { asked: s.asked.map((a) => a.table), calls });
+      s = stub(answer); const st = await pageOrQuote(deps(s.db, { quoteType: "EQUITY" }), "7203.T");
+      ck("a share: its quote is handed back for a stock's page, and nothing else is read here", "stock" in st && st.stock.quoteType === "EQUITY" && s.asked.map((a) => a.table).join() === "instruments" && calls.bars.join() === "^STOXX50E", { asked: s.asked.map((a) => a.table) });
+    }
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

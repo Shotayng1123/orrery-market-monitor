@@ -13,6 +13,10 @@
 //   - NEWS: the calendar's Currency picker; JPY leaves only Japan's events, on both layouts (B-12).
 //   - The one-screen layout and text XL place the panels; a server from before 20 Nov 2026 (a stock's answer for every
 //     name, "no quote for JGB10Y") still gives a page that works.
+//   - Fixes after the check (20 Nov 2026): a yield an official curve publishes once a day, which the market table stamps
+//     with its date at midnight UTC, shows that date and never a made-up time of day, on its chart tile, in its tooltip
+//     and in MARKETS' row and phone line (R2B-01); every other tile gives its time with its zone (R2B-06); KEY DATA marks
+//     what the Monitor works out itself with † after the label, with a line under the panel (R2B-05). Both layouts.
 // Run from web/:  node e2e/run.cjs instrument-pages   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
 const { S } = require("./standin.cjs");
@@ -27,7 +31,9 @@ const PAGES = [
   { hash: "#asset/GC%3DF", name: "Gold", yield: false, ccys: ["USD"] },
   { hash: "#asset/%5ESTOXX50E", name: "Euro Stoxx 50", yield: false, ccys: ["EUR"] },
 ];
-const KEY_ROWS = ["Day's range", "Previous close", "52W range", "From 52W high / low", "σ vs 1M avg", "vs 200D", "Realised vol, 1M / 3M / 12M", "Largest rise, 12M", "Largest fall, 12M", "Source · as of"];
+// the designer's † after a label the Monitor works out itself (R2B-05); σ vs 1M avg and vs 200D are MARKETS' own here
+const KEY_ROWS = ["Day's range", "Previous close", "52W range †", "From 52W high / low †", "σ vs 1M avg", "vs 200D", "Realised vol, 1M / 3M / 12M †", "Largest rise, 12M †", "Largest fall, 12M †", "Source · as of"];
+const DATE = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
 const STOCK_ONLY = /Mkt cap|Shares outstanding|Diluted shares|P\/E|P\/B|Dividend yield|Next results|Short interest|Beta vs|Avg daily|Volume today|FINANCIALS|BIG MOVES|SHORT INTEREST|Statements/;
 async function page(b, opts, prefs) {
   const ctx = await b.newContext(opts);
@@ -51,7 +57,9 @@ const desk = (p) => p.evaluate(() => {
     fin: !!document.querySelector("table.fin"),
     krow: [...document.querySelectorAll('.panel[data-k="in-key"] .krow .k')].map((e) => e.textContent),
     last: document.querySelector("#in-last")?.textContent ?? null, day: document.querySelector("#in-day")?.textContent ?? null,
-    rows: key ? Object.fromEntries([...key.querySelectorAll("tr")].map((tr) => [tr.cells[0].textContent, tr.cells[1].innerText.replace(/\s+/g, " ").trim()])) : {},
+    rows: key ? Object.fromEntries([...key.querySelectorAll("tr")].map((tr) => [tr.cells[0].textContent.replace(/\s+/g, " "), tr.cells[1].innerText.replace(/\s+/g, " ").trim()])) : {},
+    src: document.querySelector("#in-src")?.textContent ?? "", worked: document.querySelector("#in-worked")?.textContent ?? "",
+    stamp: document.querySelector(".bigwrap .vl .asof")?.textContent.replace(/\s+/g, " ").trim() ?? "", stampTip: document.querySelector(".bigwrap .vl .asof")?.getAttribute("title") ?? "",
     chartAux: document.querySelector('.panel[data-k="in-chart"] .phead .aux')?.textContent ?? "",
     tile: document.querySelector(".bigwrap .ch")?.textContent ?? "", tilePx: document.querySelector(".bigwrap .px")?.textContent ?? "",
     perfHead: [...document.querySelectorAll("#in-perf thead th")].slice(1).map((x) => x.textContent),
@@ -78,15 +86,21 @@ const pc = (t) => /^[+-]?\d[\d,]*\.\d+%$/.test(t) || t === "–";
       ck(`${pg.name}: an instrument's page, panels in reading order (${d.panels.join(" · ")}), and no stock-only line: no market cap, shares, valuation, results, short interest, big moves or statements`, d.panels.join("|") === `01 ${pg.name.toUpperCase()}|02 KEY DATA|03 PERFORMANCE|04 EVENTS|05 NEWS` && !d.fin && !STOCK_ONLY.test(d.text), { panels: d.panels, stockOnly: (STOCK_ONLY.exec(d.text) || [])[0] });
       ck(`${pg.name}: KEY DATA in the designer's order (Last and Day, then the day's range … the source and as-of)`, d.krow.join() === "Last,Day" && Object.keys(d.rows).join("|") === KEY_ROWS.join("|"), { krow: d.krow, rows: Object.keys(d.rows) });
       if (pg.yield) {
-        const [hi, lo] = d.rows["From 52W high / low"].split(" / "), [rise] = d.rows["Largest rise, 12M"].split(" · "), [fall] = d.rows["Largest fall, 12M"].split(" · ");
+        const [hi, lo] = d.rows["From 52W high / low †"].split(" / "), [rise] = d.rows["Largest rise, 12M †"].split(" · "), [fall] = d.rows["Largest fall, 12M †"].split(" · ");
         ck(`${pg.name}: every change in bp (B's defect 1): the day ${d.day}, 1D … 36M ${d.chg.join(" ")}, from the 52W high and low ${hi} / ${lo}, vs 200D ${d.rows["vs 200D"]}, largest rise ${rise} and fall ${fall}; the tile "${d.tile.trim()}"`, bp(d.day) && d.chg.length === 6 && d.chg.every(bp) && bp(hi) && bp(lo) && bp(d.rows["vs 200D"]) && bp(rise) && bp(fall) && /^[+-]?\d+(\.\d)?bp\s/.test(d.tile.trim()), d);
-        ck(`${pg.name}: its volatility in bp a day and a year ("${d.rows["Realised vol, 1M / 3M / 12M"]}"); its levels in % (${d.last}, then ${d.then.join(" ")})`, /^[\d.–]+ \/ [\d.–]+ \/ [\d.–]+ bp\/day [\d–]+ \/ [\d–]+ \/ [\d–]+ bp ann\. · 3Y pctl /.test(d.rows["Realised vol, 1M / 3M / 12M"]) && /^\d\.\d{3}%$/.test(d.last) && d.then.every((t) => /^\d\.\d{3}%$/.test(t)) && /%$/.test(d.tilePx), d.rows);
+        ck(`${pg.name}: its volatility in bp a day and a year ("${d.rows["Realised vol, 1M / 3M / 12M †"]}"); its levels in % (${d.last}, then ${d.then.join(" ")})`, /^[\d.–]+ \/ [\d.–]+ \/ [\d.–]+ bp\/day [\d–]+ \/ [\d–]+ \/ [\d–]+ bp ann\. · 3Y pctl /.test(d.rows["Realised vol, 1M / 3M / 12M †"]) && /^\d\.\d{3}%$/.test(d.last) && d.then.every((t) => /^\d\.\d{3}%$/.test(t)) && /%$/.test(d.tilePx), d.rows);
       } else {
-        ck(`${pg.name}: a price's changes in per cent (the day ${d.day}, 1D … 36M ${d.chg.join(" ")}) and its volatility a yearly per cent ("${d.rows["Realised vol, 1M / 3M / 12M"]}")`, pc(d.day) && d.chg.every(pc) && /^[\d.–]+ \/ [\d.–]+ \/ [\d.–]+% ann\. 3Y pctl /.test(d.rows["Realised vol, 1M / 3M / 12M"]), d.rows);
+        ck(`${pg.name}: a price's changes in per cent (the day ${d.day}, 1D … 36M ${d.chg.join(" ")}) and its volatility a yearly per cent ("${d.rows["Realised vol, 1M / 3M / 12M †"]}")`, pc(d.day) && d.chg.every(pc) && /^[\d.–]+ \/ [\d.–]+ \/ [\d.–]+% ann\. 3Y pctl /.test(d.rows["Realised vol, 1M / 3M / 12M †"]), d.rows);
       }
       if (pg.official) {
-        ck(`${pg.name}: opens though Yahoo does not carry it (B's defect 2), names ${pg.official} and the day it was published for ("${d.rows["Source · as of"]}"); no day's range; daily charts only (${d.periods.join(" ")})`, new RegExp(`^${pg.official} · published for \\d{1,2} [A-Z][a-z]{2} \\d{4}$`).test(d.rows["Source · as of"]) && d.chartAux.includes(`${pg.official} · published once a day`) && d.rows["Day's range"] === "–" && d.periods.join() === "3M,12M,36M,5Y,10Y", { src: d.rows["Source · as of"], aux: d.chartAux, range: d.rows["Day's range"], periods: d.periods });
-      } else ck(`${pg.name}: Yahoo Finance and the time of its print; a day's range; every period from 1D to 10Y`, /^Yahoo Finance · /.test(d.rows["Source · as of"]) && /\d%? – \d/.test(d.rows["Day's range"]) && d.periods.join() === "1D,1W,1M,3M,12M,36M,5Y,10Y", { src: d.rows["Source · as of"], range: d.rows["Day's range"], periods: d.periods });
+        ck(`${pg.name}: opens though Yahoo does not carry it (B's defect 2), names ${pg.official} and the day it was published for ("${d.src}"); no day's range; daily charts only (${d.periods.join(" ")})`, new RegExp(`^${pg.official} · published for ${DATE}$`).test(d.src) && d.chartAux.includes(`${pg.official} · published once a day`) && d.rows["Day's range"] === "–" && d.periods.join() === "3M,12M,36M,5Y,10Y", { src: d.src, aux: d.chartAux, range: d.rows["Day's range"], periods: d.periods });
+        // R2B-01: the chart tile above KEY DATA gives the same date, and no time of day
+        const day = d.src.replace(`${pg.official} · published for `, "");
+        ck(`${pg.name}: its chart tile says "${d.stamp}" ("${d.stampTip}"): the date KEY DATA gives, never a time of day (it read "CLOSED 19 Nov 08:00", midnight UTC in SGT)`, d.stamp === `PUBLISHED ${day}` && d.stampTip === `${pg.official} · published for ${day}` && !/\d\d:\d\d/.test(d.stamp + d.stampTip), { stamp: d.stamp, tip: d.stampTip, day });
+      } else ck(`${pg.name}: Yahoo Finance and the time of its print; a day's range; every period from 1D to 10Y; the tile's time with its zone ("${d.stamp}")`, /^Yahoo Finance · /.test(d.src) && /\d%? – \d/.test(d.rows["Day's range"]) && d.periods.join() === "1D,1W,1M,3M,12M,36M,5Y,10Y" && /^(LIVE|CLOSED) (\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d SGT$/.test(d.stamp) && /^Yahoo Finance · last print /.test(d.stampTip), { src: d.src, range: d.rows["Day's range"], periods: d.periods, stamp: d.stamp });
+      // R2B-05: what the Monitor works out itself is marked, and the line under KEY DATA says from what and over which dates
+      const from = pg.official ? `${pg.official}'s published daily yields` : "the daily closes the Monitor stores from Yahoo Finance";
+      ck(`${pg.name}: KEY DATA's worked-out lines carry † and its source row says so; under it "${d.worked}"`, new RegExp(`^† worked out here from ${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}, ${DATE} – ${DATE}; the other figures as on MARKETS\\.$`).test(d.worked) && /† worked out by the Monitor$/.test(d.rows["Source · as of"]), { worked: d.worked, src: d.rows["Source · as of"] });
       const want = eventsOf(pg.ccys);
       await p.locator('.panel[data-k="in-events"] .pick select').selectOption("all"); await p.waitForTimeout(250);
       const all = await desk(p);
@@ -128,9 +142,36 @@ const pc = (t) => /^[+-]?\d[\d,]*\.\d+%$/.test(t) || t === "–";
     await go(p, MOCK, "#rates", '.panel[data-k="yields"] a.lbtxt');
     await p.locator('.panel[data-k="yields"] a.lbtxt', { hasText: "JGB 10Y yield" }).first().click(); await p.waitForSelector("#in-key");
     const j = await desk(p);
-    ck(`RATES & FX: the JGB 10Y tile's name opens #asset/JGB10Y, and that page works (B-23): ${j.last}, ${j.rows["Source · as of"]}`, (await p.evaluate(() => location.hash)) === "#asset/JGB10Y" && /^\d\.\d{3}%$/.test(j.last) && /^Japan MOF · published for /.test(j.rows["Source · as of"]), j.rows);
+    ck(`RATES & FX: the JGB 10Y tile's name opens #asset/JGB10Y, and that page works (B-23): ${j.last}, ${j.src}`, (await p.evaluate(() => location.hash)) === "#asset/JGB10Y" && /^\d\.\d{3}%$/.test(j.last) && /^Japan MOF · published for /.test(j.src), j.rows);
     await p.evaluate(() => { location.hash = "asset/%5EN225"; }); await p.waitForTimeout(800);
     ck("an address of ^N225's single-name page lands on the Nikkei 225 on EQUITIES (the designer's I-4 check)", (await p.evaluate(() => location.hash)) === "#equities/nk225");
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+
+  console.log("\n[a figure with a date and no time of day (R2B-01); every tile's time with its zone (R2B-06)]");
+  { const { ctx, p, errs } = await page(b, { viewport: { width: 1440, height: 900 } }, { size: "AUTO", compact: false, v: 2 });
+    await go(p, MOCK, "#market", "table.mkt tbody tr.click");
+    for (let y = 0; y < 4000; y += 600) { await p.evaluate((yy) => scrollTo(0, yy), y); await p.waitForTimeout(80); }
+    const t = await p.evaluate(() => ({
+      tiles: [...document.querySelectorAll(".mtile.cp")].filter((x) => x.querySelector(":scope > .vl .asof")).map((x) => ({ name: x.querySelector(".lbtxt").textContent, stamp: x.querySelector(".vl .asof").textContent.replace(/\s+/g, " ").trim(), tip: x.querySelector(".vl .asof").getAttribute("title") })),
+      rows: Object.fromEntries([...document.querySelectorAll("table.mkt tbody tr.click")].map((tr) => [tr.querySelector("a.lnk").textContent, tr.title])),
+    }));
+    const pub = t.tiles.filter((x) => /^(UST 2Y|JGB 10Y) yield$/.test(x.name)), rest = t.tiles.filter((x) => !pub.includes(x));
+    ck(`MARKETS: the yields an official curve publishes once a day show the date they were published for, never a time (${pub.map((x) => `${x.name}: "${x.stamp}", "${x.tip}"`).join("; ")})`, pub.length === 2 && pub.every((x) => new RegExp(`^PUBLISHED ${DATE}$`).test(x.stamp) && x.tip === `${x.name.startsWith("JGB") ? "Japan MOF" : "US Treasury"} · published for ${x.stamp.slice(10)}`), pub);
+    ck(`MARKETS: every other tile gives its time with its zone and names its source (${rest.length}: "${rest[0]?.stamp}", "${rest[0]?.tip}")`, rest.length >= 15 && rest.every((x) => /^(LIVE|CLOSED) (\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d SGT$/.test(x.stamp) && /^Yahoo Finance · last print \d{1,2} [A-Z][a-z]{2} \d{4} \d\d:\d\d SGT$/.test(x.tip)), rest.filter((x) => !/ SGT$/.test(x.stamp)).slice(0, 4));
+    const jr = t.rows["JGB 10Y"] ?? t.rows["JGB 10Y yield"] ?? Object.entries(t.rows).find(([k]) => /JGB/.test(k))?.[1];
+    ck(`MARKETS: JGB 10Y's row says when it was published, with no time of day ("${jr}")`, new RegExp(`^JGB10Y · Japan MOF · published for ${DATE} · open its page$`).test(jr ?? ""), t.rows);
+    await go(p, MOCK, "#rates", '.panel[data-k="yields"] .mtile.cp');
+    const r = await p.evaluate(() => [...document.querySelectorAll('.panel[data-k="yields"] .mtile.cp')].map((x) => ({ name: x.querySelector(".lbtxt").textContent, stamp: x.querySelector(".vl .asof")?.textContent.replace(/\s+/g, " ").trim() ?? "" })));
+    ck(`RATES & FX: the JGB 10Y tile too ("${r.find((x) => /JGB 10Y/.test(x.name))?.stamp}"); the others with their zone`, r.some((x) => /JGB 10Y/.test(x.name) && new RegExp(`^PUBLISHED ${DATE}$`).test(x.stamp)) && r.filter((x) => !/^(UST 2Y|JGB 10Y) yield$/.test(x.name)).every((x) => / SGT$/.test(x.stamp)), r);
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+  { const { ctx, p, errs } = await page(b, { ...devices["iPhone 13"] });
+    await go(p, MOCK, "#market", ".mp-row");
+    await p.locator(".mp-row", { hasText: "JGB 10Y" }).first().tap(); await p.waitForSelector(".mp-item.open .mp-full"); await p.waitForTimeout(300);
+    const line = await p.locator(".mp-item.open .mp-full").textContent();
+    ck(`phone MARKETS: JGB 10Y's opened line says when it was published, with no time of day ("${line}")`, new RegExp(`^JGB 10Y yield · JGB10Y · Japan MOF · published for ${DATE}$`).test(line), line);
+    await p.locator(".mp-row", { hasText: "USD/JPY" }).first().tap(); await p.waitForTimeout(400);
+    const l2 = await p.locator(".mp-item.open .mp-full").textContent();
+    ck(`phone MARKETS: a print's line keeps its time and zone ("${l2}")`, /^USD\/JPY · USDJPY=X · Yahoo Finance · last print \d{1,2} [A-Z][a-z]{2} \d{4} \d\d:\d\d SGT$/.test(l2), l2);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
 
   console.log("\n[NEWS: the calendar's Currency picker (B-12), on a computer and on a phone]");
@@ -153,15 +194,19 @@ const pc = (t) => /^[+-]?\d[\d,]*\.\d+%$/.test(t) || t === "–";
       await go(p, MOCK, pg.hash, "#in-first");
       const ph = await p.evaluate(() => ({
         meta: [...document.querySelectorAll(".mp-doc.asset .meta span")].map((s) => s.textContent), h1: document.querySelector(".mp-doc.asset h1")?.textContent,
-        first: [...document.querySelectorAll("#in-first .mp-grid > div")].map((c) => [c.querySelector(".k").textContent, c.querySelector(".v").childNodes[0]?.textContent ?? ""]),
+        first: [...document.querySelectorAll("#in-first .mp-grid > div")].map((c) => [c.querySelector(".k").textContent.replace(/\s+/g, " "), c.querySelector(".v").childNodes[0]?.textContent ?? ""]),
+        keys: [...document.querySelectorAll("#in-key tr td:first-child")].map((td) => td.childNodes[0]?.textContent.replace(/\s+/g, " ") + (td.querySelector(".wk") ? " †" : "")), worked: document.querySelector("#in-worked")?.textContent ?? "",
+        stamp: document.querySelector(".mp-hero .vl .asof")?.textContent.replace(/\s+/g, " ").trim() ?? "",
         secs: [...document.querySelectorAll(".mp-sec > h2 > span:first-child")].map((e) => e.textContent), text: document.querySelector(".mp").innerText,
         perf: [...document.querySelectorAll("#in-perf tbody tr")].map((tr) => tr.cells[2].textContent), periods: [...document.querySelector(".mp-picks .pick select").options].map((o) => o.value),
         ox: document.documentElement.scrollWidth - innerWidth,
       }));
       const firstK = ph.first.map((c) => c[0]).join("|");
-      ck(`${pg.name}: the stock page's frame, "${ph.meta.join(" · ")}" over "${ph.h1}"; the first block (${firstK}); then Key data, Performance, Events and News, and no stock-only section`, ph.meta[0] === decodeURIComponent(pg.hash.replace("#asset/", "")) && ph.h1 === pg.name && firstK === "Day|52W range|σ vs 1M avg|Realised vol 3M|vs 200D|Next meeting" && ph.first[5][1] === "–" && ph.secs.join() === "Key data,Performance,Events,News" && !STOCK_ONLY.test(ph.text) && ph.ox <= 0, ph);
+      ck(`${pg.name}: the stock page's frame, "${ph.meta.join(" · ")}" over "${ph.h1}"; the first block (${firstK}); then Key data, Performance, Events and News, and no stock-only section`, ph.meta[0] === decodeURIComponent(pg.hash.replace("#asset/", "")) && ph.h1 === pg.name && firstK === "Day|52W range|σ vs 1M avg|Realised vol 3M †|vs 200D|Next meeting" && ph.first[5][1] === "–" && ph.secs.join() === "Key data,Performance,Events,News" && !STOCK_ONLY.test(ph.text) && ph.ox <= 0, ph);
       if (pg.yield) ck(`${pg.name}: in bp on the phone too: the day ${ph.first[0][1]}, vs 200D ${ph.first[4][1]}, the volatility ${ph.first[3][1]} a day, 1D … 36M ${ph.perf.join(" ")}`, bp(ph.first[0][1]) && bp(ph.first[4][1]) && /^\d+\.\dbp$/.test(ph.first[3][1]) && ph.perf.length === 6 && ph.perf.every(bp), ph.first);
-      if (pg.official) ck(`${pg.name}: daily charts only on the phone (${ph.periods.join(" ")})`, ph.periods.join() === "3M,12M,36M,5Y,10Y", ph.periods);
+      if (pg.official) ck(`${pg.name}: daily charts only on the phone (${ph.periods.join(" ")}); the chart says "${ph.stamp}", a date and no time of day`, ph.periods.join() === "3M,12M,36M,5Y,10Y" && new RegExp(`^PUBLISHED ${DATE}$`).test(ph.stamp), { periods: ph.periods, stamp: ph.stamp });
+      else ck(`${pg.name}: the chart's time with its zone on the phone too ("${ph.stamp}")`, /^(LIVE|CLOSED) (\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d SGT$/.test(ph.stamp), ph.stamp);
+      ck(`${pg.name}: Key data marks the same lines with † (${ph.keys.filter((k) => k.endsWith("†")).length}) and its note names the closes and their dates`, ph.keys.filter((k) => k.endsWith("†")).length === 5 && ["52W range", "From 52W high / low", "Realised vol, 1M / 3M / 12M", "Largest rise, 12M", "Largest fall, 12M"].every((k) => ph.keys.some((x) => x.startsWith(k) && x.endsWith("†"))) && new RegExp(`^† worked out here from .+, ${DATE} – ${DATE}; the other figures as on MARKETS\\. `).test(ph.worked), { keys: ph.keys, worked: ph.worked });
     }
     await p.evaluate(() => { location.hash = "asset/%5EN225"; }); await p.waitForTimeout(800);
     ck("^N225 on the phone: the Nikkei 225 on EQUITIES", (await p.evaluate(() => location.hash)) === "#equities/nk225");

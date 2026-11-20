@@ -127,6 +127,21 @@ const stdOf = (v: unknown): string | null => { const s = typeof v === "string" ?
  *  anything else is no address. The page links only what this returns: an address is never made up. */
 export const docUrl = (v: unknown): string | null => { const s = typeof v === "string" ? v.trim() : ""; return /^https?:\/\/[^\s"'<>]+$/i.test(s) ? s : null; };
 
+/** A year's 有価証券報告書 on EDINET, where EDINET DB says the filing is still there (the reviewer's R2B-04, 20 Nov
+ *  2026). EDINET DB marks each address with `edinetFilingUrlAvailability` ("available" on Toyota's of FY2026) and a
+ *  note, which flag filings that have aged out of EDINET's ~10-year retention window (the provider's own description
+ *  of the fields, C/probes/edinetdb_toyota_links.md); ten years are shown, so the oldest is at that edge. A filing
+ *  flagged as anything but available gets no address, and `gone` says why, so the page's header is plain and its tip
+ *  says the document is no longer on EDINET. A row without the flag (an answer that does not carry it) keeps its
+ *  address, as before. */
+export function filingLink(r: Record<string, unknown>): { url: string | null; gone: string | null } {
+  const url = docUrl(r.edinetfilingurl), av = typeof r.edinetfilingurlavailability === "string" ? r.edinetfilingurlavailability.trim() : "";
+  if (!url || av === "" || /^available$/i.test(av)) return { url, gone: null };
+  const id = typeof r.docid === "string" && r.docid.trim() ? r.docid.trim() : null;
+  const note = typeof r.edinetfilingurlnote === "string" ? r.edinetfilingurlnote.replace(/\s+/g, " ").trim().slice(0, 160) : "";
+  return { url: null, gone: `${id ? `document ${id}` : "the filing"} no longer on EDINET, per EDINET DB (${av}${note ? `: ${note}` : ""})` };
+}
+
 /** The 決算短信 PDF of each period, keyed `${fiscal year end}|${quarter}`, where the provider gives one: only some of
  *  its rows carry `pdfUrl` (Toyota on 20 Nov 2026: three of its six newest, not the newest). Of a period's rows the
  *  consolidated ones count when there are any (a parent-only row is another document); of those, the newest
@@ -243,7 +258,8 @@ export function edinetFin(raw: EdinetRaw, asOf: string | null): Fin | null {
       // the diluted share count a diluted EPS implies, only where both figures are large enough to imply one and no later split changed the basis
       dilutedShares: same && ni != null && dil != null && Math.abs(ni) >= 1e8 && dil >= 1 && ni > 0 ? ni / dil : null,
     });
-    aMeta.set(end, { key: `FY:${end}`, end, label: fyEnd(y) ? fyLabel(end) : `FY${y}`, kind: "FY", months: 12, std, doc: typeof r.docid === "string" ? r.docid : null, url: docUrl(r.edinetfilingurl), note: null, filed: dateOf(r.submitdatetime) });
+    const link = filingLink(r);
+    aMeta.set(end, { key: `FY:${end}`, end, label: fyEnd(y) ? fyLabel(end) : `FY${y}`, kind: "FY", months: 12, std, doc: typeof r.docid === "string" ? r.docid : null, url: link.url, note: null, filed: dateOf(r.submitdatetime), ...(link.gone ? { docGone: link.gone } : {}) });
   }
   // a full year the 決算短信 has reported but the 有価証券報告書 has not yet: its headline lines, in millions there
   const M = 1e6, mm = (v: unknown): number | null => { const x = numOf(v); return x == null ? null : x * M; };

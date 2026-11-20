@@ -10,8 +10,8 @@ import { useApi } from "../lib/useApi";
 import type { EconEvent, TableRow } from "../lib/types";
 import { fmtLevel, fmtSigma, signCls } from "../lib/fmt";
 import { fmtClock, fmtDate, fmtStamp, SGT } from "../lib/time";
-import { EVENTS, LARGEST_FALL, LARGEST_RISE, LEVEL_THEN, NEWS, RANGE_52W, REALISED_VOL, SIGMA_1M, VS_200D } from "../lib/labels";
-import { asOfWords, calSource, ccyWords, distCls, distText, impactOk, lastAndDay, matchedWords, moveCls, moveText, noEvents, periodsOf, sourceNote, volLine, volTip, type ImpactPick, type InstrumentPage } from "../lib/instrument";
+import { EVENTS, LARGEST_FALL, LARGEST_RISE, LEVEL_THEN, NEWS, RANGE_52W, REALISED_VOL, SIGMA_1M, VS_200D, WORKED } from "../lib/labels";
+import { asOfWords, calSource, ccyWords, distCls, distText, impactOk, lastAndDay, matchedWords, moveCls, moveText, noEvents, perfNote, periodsOf, sourceNote, volLine, volTip, workedLine, workedOut, type ImpactPick, type InstrumentInfo, type InstrumentPage, type KeyLine } from "../lib/instrument";
 import { dayLabel, dayOf, IMPACTS } from "./News";
 import { SIGMA_1M_TIP } from "./Market";
 
@@ -23,6 +23,11 @@ export function useLiveRow(d: InstrumentPage, tick: number): TableRow {
 }
 function KV({ k, children, title, cls }: { k: ReactNode; children: ReactNode; title?: string; cls?: string }) {
   return <tr title={title}><td className="l">{k}</td><td className={`num${cls ? ` ${cls}` : ""}`}>{children}</td></tr>;
+}
+/** A KEY DATA label, with the designer's † after it where the Monitor works the figure out itself (the reviewer's
+ *  R2B-05): the line under the panel says from what and over which dates. Both layouts. */
+export function keyLabel(i: Pick<InstrumentInfo, "monitor">, text: string, line: KeyLine): ReactNode {
+  return workedOut(i, line) ? <>{text}{"\u00a0"}<span className="wk" title="Worked out by the Monitor: the line under the panel says from what">{WORKED}</span></> : text;
 }
 
 /** The calendar of the instrument's currencies, in the NEWS calendar's style: a bar for each day, past events dimmed,
@@ -83,7 +88,7 @@ export function InstrumentView({ d, tick }: { d: InstrumentPage; tick: number })
                 <tr data-r="chg"><td className="l">Change</td>{i.perf.map((r) => <td key={r.h} className={`num ${moveCls(r.chg, u)}`}>{moveText(r.chg, u)}</td>)}</tr>
               </tbody>
             </table>
-            <div className="mut finnote">Each column is the last level against the last close on or before the start of the window{u === "yield" ? "; a yield's change is the change of its level, in bp" : ""}. {sourceNote(i)}</div>
+            <div className="mut finnote">Each column is the last level against the last close on or before the start of the window{u === "yield" ? "; a yield's change is the change of its level, in bp" : ""}. {perfNote(i)}</div>
           </Panel>
         </div>
         <div className="pcol w4">
@@ -96,18 +101,19 @@ export function InstrumentView({ d, tick }: { d: InstrumentPage; tick: number })
               <table className="secT kvT" id="in-key"><tbody>
                 <KV k="Day's range" title={i.official ? "A yield published once a day has no prices within the day" : i.session?.at ? `${i.source}: the session's low and high, as of ${fmtStamp(i.session.at)}` : "No session figures from the source"}>{i.session && i.session.low != null && i.session.high != null ? `${lvl(i.session.low)} – ${lvl(i.session.high)}` : "–"}</KV>
                 <KV k="Previous close" title={i.prev.date ? `the close of ${fmtDate(i.prev.date)}` : undefined}>{lvl(i.prev.level)}</KV>
-                <KV k={RANGE_52W} title={`The lowest and highest of the last 252 closes: low ${fmtDate(r52.loDate)}, high ${fmtDate(r52.hiDate)}; ${r52.pos == null ? "–" : `${Math.round(r52.pos)}%`} of the way up, as on MARKETS`}>
+                <KV k={keyLabel(i, RANGE_52W, "range52")} title={`The lowest and highest of the last 252 closes: low ${fmtDate(r52.loDate)}, high ${fmtDate(r52.hiDate)}; ${r52.pos == null ? "–" : `${Math.round(r52.pos)}%`} of the way up, as on MARKETS`}>
                   <span className="rng"><span>{lvl(r52.lo)}</span><span className="bar">{r52.pos != null && <i style={{ left: `${Math.max(0, Math.min(100, r52.pos))}%` }} />}</span><span>{lvl(r52.hi)}</span></span>
                 </KV>
-                <KV k="From 52W high / low" title={u === "yield" ? "The last level against the 52-week high and low, in bp" : undefined}><span className={distCls(r52.fromHi, u)}>{distText(r52.fromHi, u)}</span> / <span className={distCls(r52.fromLo, u)}>{distText(r52.fromLo, u)}</span></KV>
-                <KV k={SIGMA_1M} title={SIGMA_1M_TIP} cls={signCls(i.z1m, 1)}>{fmtSigma(i.z1m)}</KV>
-                <KV k={VS_200D} title={`The last level against its 200-day average (${u === "yield" ? "bp" : "%"})`} cls={distCls(i.vs200, u)}>{distText(i.vs200, u)}</KV>
-                <KV k={`${REALISED_VOL}, 1M / 3M / 12M`} title={volTip(u)}><span className="vl1">{vol.main}</span><small className="vl2" id="in-volsub">{vol.sub}</small></KV>
-                <KV k={LARGEST_RISE} title={i.rise ? `From the low of ${fmtDate(i.rise.from)} to the high of ${fmtDate(i.rise.to)}` : "No rise in the last twelve months"}>{i.rise ? <><span className={distCls(i.rise.chg, u)}>{distText(i.rise.chg, u)}</span><span className="mut"> · {fmtDate(i.rise.to)}</span></> : "–"}</KV>
-                <KV k={LARGEST_FALL} title={i.fall ? `From the high of ${fmtDate(i.fall.from)} to the low of ${fmtDate(i.fall.to)}` : "No fall in the last twelve months"}>{i.fall ? <><span className={distCls(i.fall.chg, u)}>{distText(i.fall.chg, u)}</span><span className="mut"> · {fmtDate(i.fall.to)}</span></> : "–"}</KV>
-                <KV k="Source · as of" title={sourceNote(i)}><span id="in-src">{i.source} · {asOf}</span></KV>
+                <KV k={keyLabel(i, "From 52W high / low", "fromHiLo")} title={u === "yield" ? "The last level against the 52-week high and low, in bp" : undefined}><span className={distCls(r52.fromHi, u)}>{distText(r52.fromHi, u)}</span> / <span className={distCls(r52.fromLo, u)}>{distText(r52.fromLo, u)}</span></KV>
+                <KV k={keyLabel(i, SIGMA_1M, "z1m")} title={SIGMA_1M_TIP} cls={signCls(i.z1m, 1)}>{fmtSigma(i.z1m)}</KV>
+                <KV k={keyLabel(i, VS_200D, "vs200")} title={`The last level against its 200-day average (${u === "yield" ? "bp" : "%"})`} cls={distCls(i.vs200, u)}>{distText(i.vs200, u)}</KV>
+                <KV k={keyLabel(i, `${REALISED_VOL}, 1M / 3M / 12M`, "vol")} title={volTip(u)}><span className="vl1">{vol.main}</span><small className="vl2" id="in-volsub">{vol.sub}</small></KV>
+                <KV k={keyLabel(i, LARGEST_RISE, "rise")} title={i.rise ? `From the low of ${fmtDate(i.rise.from)} to the high of ${fmtDate(i.rise.to)}` : "No rise in the last twelve months"}>{i.rise ? <><span className={distCls(i.rise.chg, u)}>{distText(i.rise.chg, u)}</span><span className="mut"> · {fmtDate(i.rise.to)}</span></> : "–"}</KV>
+                <KV k={keyLabel(i, LARGEST_FALL, "fall")} title={i.fall ? `From the high of ${fmtDate(i.fall.from)} to the low of ${fmtDate(i.fall.to)}` : "No fall in the last twelve months"}>{i.fall ? <><span className={distCls(i.fall.chg, u)}>{distText(i.fall.chg, u)}</span><span className="mut"> · {fmtDate(i.fall.to)}</span></> : "–"}</KV>
+                <KV k="Source · as of" title={sourceNote(i)}><span id="in-src">{i.source} · {asOf}</span><small className="vl2">{WORKED} worked out by the Monitor</small></KV>
               </tbody></table>
             </div>
+            <div className="mut finnote" id="in-worked">{workedLine(i)}</div>
           </Panel>
           {ev && (
             <Panel no={no("events")} k="in-events" title={EVENTS.toUpperCase()} span={4} aux={<span className="chips" style={{ margin: 0 }}><Pick label="Impact" value={imp} options={IMPACTS} onChange={setImp} /><span className="mut">{ccyWords(ev.ccys)} · times in SGT{calSource(ev.rows) ? ` · ${calSource(ev.rows)}` : ""}</span></span>}>

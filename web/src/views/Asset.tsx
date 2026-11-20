@@ -13,7 +13,7 @@ import type { MarketId } from "../lib/sessions";
 import { fmtNum, fmtPct, signCls, stockDecimals } from "../lib/fmt";
 import { fmtDate, fmtStamp } from "../lib/time";
 import { avgTurnover, avgVolume, LARGEST_FALL, MKT_CAP, NEWS, NEXT_RESULTS, RANGE_52W, REALISED_VOL } from "../lib/labels";
-import { chartMarks, finSections, fmtCount, fmtPc, fmtPp, fmtX, isSmallMove, moveParts, moveRule, NO_DOC, periodDoc, siteOf, whyText, type Fin, type MoveRow, type StockPage } from "../lib/stock";
+import { chartMarks, finSections, fmtCount, fmtPc, fmtPp, fmtX, isSmallMove, moveParts, moveRule, noDocWhy, periodDoc, siteOf, whyText, type Fin, type MoveRow, type StockPage } from "../lib/stock";
 import { AssetViewLegacy } from "./AssetLegacy";
 import { InstrumentView } from "./Instrument";
 import { isInstrumentPage } from "../lib/instrument";
@@ -64,11 +64,11 @@ const MONTH = ["January", "February", "March", "April", "May", "June", "July", "
 /** A Tokyo company's fiscal year end, accounting standard and latest annual report, from the statements the page
  *  already holds (A-27's Japan part, shown now: the latest fiscal year from the 有価証券報告書 in EDINET DB's answer).
  *  Null for statements from elsewhere. */
-export function profileOf(f: Fin | null): { label: string; month: string; std: string; doc: ReturnType<typeof periodDoc> } | null {
+export function profileOf(f: Fin | null): { label: string; month: string; std: string; doc: ReturnType<typeof periodDoc>; none: string } | null {
   if (!f || f.source !== "edinetdb") return null;
   const fy = [...f.annual.periods].reverse().find((p) => p.kind === "FY" && p.doc);
   if (!fy) return null;
-  return { label: fy.label, month: MONTH[Number(fy.end.slice(5, 7)) - 1] ?? "–", std: (fy.std && STD[fy.std]) ?? "–", doc: periodDoc(fy) };
+  return { label: fy.label, month: MONTH[Number(fy.end.slice(5, 7)) - 1] ?? "–", std: (fy.std && STD[fy.std]) ?? "–", doc: periodDoc(fy), none: noDocWhy(fy) };
 }
 
 function KV({ k, children, title, cls }: { k: ReactNode; children: ReactNode; title?: string; cls?: string }) {
@@ -86,6 +86,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
   const [period, setPeriod] = useState<ChartPeriod>("12M");
   const [sigmaWindow, setSigmaWindow] = useState<SigmaWindow>("m12");
   const [view, setView] = useState<"annual" | "quarterly">("annual");
+  const [even, setEven] = useState(false);   // the two columns end together: NEWS says so once it has fitted (StockNews `fit`)
   const a = useApi<StockPage>(symbol ? "stock" : null, { symbol }, Math.floor(tick / 5));   // the figures every five minutes; the chart refreshes each minute
   if (a.error === "unknown action") return <AssetViewLegacy symbol={symbol} tick={tick} />;   // a server from before this page
   const d = a.data && a.data.symbol && a.data.symbol.toUpperCase() === symbol.toUpperCase() ? a.data : null;   // the answer for this address only: another name's, kept while this one loads or fails, is not shown under it
@@ -110,7 +111,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
   return (
     <>
       <div className="c12"><PeriodBar periods={ASSET_PERIODS} period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} /></div>
-      <div className="pcols">
+      <div className="pcols" data-even={even && feed ? "" : undefined}>
         <div className="pcol w8">
           <Panel no={no("chart")} k="st-chart" title={d.name.toUpperCase()} span={8} aux={<><Star symbol={d.symbol} name={d.name} /> {d.symbol}{d.exchange ? ` · ${d.exchange}` : ""}{d.sector ? ` · ${d.sector}` : ""}{d.industry ? ` · ${d.industry}` : ""}{d.indices.length ? ` · ${d.indices.join(", ")}` : ""} · Yahoo Finance</>}>
             <div className="bigwrap"><ChartPanel row={row} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes volume marks={marks} /></div>
@@ -181,13 +182,13 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
               <KV k="Dividend yield, last year / guidance" title={d.val.basis ?? undefined}>{fmtPc(d.val.yield, false, 2)} / {fmtPc(d.val.yieldGuide, false, 2)}</KV>
               <KV k={NEXT_RESULTS} title={d.earningsEst ? "Estimated by Yahoo Finance; not confirmed by the company" : undefined}>{d.earningsAt ? `${fmtStamp(d.earningsAt)}${d.earningsEst ? " (est.)" : ""}` : "–"}</KV>
               {prof && <KV k="Fiscal year end · standard" title={`From the 有価証券報告書 for ${prof.label} (EDINET DB)`}>{prof.month} · {prof.std}</KV>}
-              {prof && <KV k="Annual report" title={prof.doc?.tip ?? NO_DOC}>{prof.doc ? <a href={prof.doc.href} target="_blank" rel="noreferrer" id="st-yuho">有報 {prof.label} ↗</a> : `有報 ${prof.label}`}</KV>}
+              {prof && <KV k="Annual report" title={prof.doc?.tip ?? prof.none}>{prof.doc ? <a href={prof.doc.href} target="_blank" rel="noreferrer" id="st-yuho">有報 {prof.label} ↗</a> : `有報 ${prof.label}`}</KV>}
             </tbody></table>
             </div>
           </Panel>
           {feed && (
             <Panel no={no("news")} k="st-news" title={NEWS.toUpperCase()} span={4} aux={`headlines and alerts naming ${d.symbol} · ${feed.days} days · times in SGT`}>
-              <StockNews key={d.symbol} symbol={d.symbol} feed={feed} />
+              <StockNews key={d.symbol} symbol={d.symbol} feed={feed} fit even={even} onEven={setEven} />
             </Panel>
           )}
           <Panel no={no("short")} k="st-short" title="SHORT INTEREST" span={4} aux={s ? (s.kind === "jpx" ? "JPX short-position reports" : s.kind === "interest" ? "exchange-reported · Yahoo Finance" : "FINRA") : ""}>

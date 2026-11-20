@@ -56,6 +56,9 @@ const EXTRA: typeof MASTER = [
 ];
 /** The publisher of each yield the server reads from an official curve (instrstats.ts publisher). */
 const PUBLISHED: Record<string, string> = { UST2Y: "US Treasury", UST3M: "US Treasury", JGB10Y: "Japan MOF", JGB2Y: "Japan MOF", JGB30Y: "Japan MOF", DE2Y: "Bundesbank", DE10Y: "Bundesbank", GB10Y: "Bank of England", EA10Y: "ECB", CA10Y: "Bank of Canada" };
+/** The instruments table's provider of each, as the market table sends it in `source` (the seeds: UST2Y "treasury",
+ *  JGB10Y "mof", the rest of the official yields "curve"; every other instrument "yahoo"). */
+const providerOf = (symbol: string): string => (symbol === "UST2Y" ? "treasury" : symbol === "JGB10Y" ? "mof" : PUBLISHED[symbol] ? "curve" : "yahoo");
 
 function rng(seed: number): () => number {
   let s = seed >>> 0 || 1;
@@ -115,8 +118,11 @@ export function mockTable(): { rows: TableRow[]; asOf: string } {
     // σ 1M, 52-week position and distance to the 200-day average from the same synthetic closes, so those columns are not blank in the preview
     const tail = (n: number) => s.slice(-n).map((p) => p.v), mean = (xs: number[]) => xs.reduce((x, y) => x + y, 0) / xs.length;
     const m21 = tail(21), mu = mean(m21), sd = Math.sqrt(mean(m21.map((v) => (v - mu) ** 2))), y = tail(252), lo = Math.min(...y, last), hi = Math.max(...y, last), m200 = mean(tail(200));
-    const rate = m.group === "rates" && !m.symbol.endsWith("=F");
-    return { ...m, proxyFor: m.proxyFor, last, lastAt: new Date().toISOString(), live: m.market === "FX" || m.market === "CME", closes, closeDates, pct,
+    const rate = m.group === "rates" && !m.symbol.endsWith("=F"), source = providerOf(m.symbol);
+    // as the server's table (table.ts): a print's own time; an official yield, which has no quote, stamped with the
+    // date it was published for at midnight UTC ("<date>T00:00:00Z": a date, no time of day; the reviewer's R2B-01)
+    const lastAt = source === "yahoo" ? new Date().toISOString() : `${new Date(s[s.length - 1].t * 1000).toISOString().slice(0, 10)}T00:00:00Z`;
+    return { ...m, proxyFor: m.proxyFor, last, lastAt, source, live: source === "yahoo" && (m.market === "FX" || m.market === "CME"), closes, closeDates, pct,
       z1m: sd > 0 ? (last - mu) / sd : null, pos52: hi > lo ? ((last - lo) / (hi - lo)) * 100 : null, vs200: rate ? last - m200 : (last / m200 - 1) * 100 };
   });
   return { rows, asOf: new Date().toISOString() };
@@ -290,7 +296,7 @@ function instrumentAnswer(sym: string): unknown {
   // the table's own row (as the server sends it, so the page, its chart and MARKETS agree), or one made the table's way;
   // an official yield's figure is its last published close
   const row = tableRow ?? rowFromBars(def, bars.slice(0, -1), def.base, lastAt);   // the walk's last point is the print
-  return mockInstrument({ ...row, lastAt: pub ? lastAt : row.lastAt, live: pub ? false : row.live }, bars, { official: pub, monitor: !!known, calendar: S.calendar as unknown as EconEvent[], news: S.news as unknown as NewsItem[], alerts: [...(S.watch.feed.alerts as unknown as Alert[]).map((a) => ({ ...a, id: a.id + 1000 })), ...(S.alerts as unknown as Alert[])], now: Date.now() });
+  return mockInstrument({ ...row, lastAt: pub ? lastAt : row.lastAt, live: pub ? false : row.live, source: providerOf(sym) }, bars, { official: pub, monitor: !!known, calendar: S.calendar as unknown as EconEvent[], news: S.news as unknown as NewsItem[], alerts: [...(S.watch.feed.alerts as unknown as Alert[]).map((a) => ({ ...a, id: a.id + 1000 })), ...(S.alerts as unknown as Alert[])], now: Date.now() });
 }
 
 /** `?mock=empty`: what the server sends for each action when its tables hold nothing. */
