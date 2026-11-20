@@ -98,10 +98,13 @@ const DBS: Array<[string, string]> = [
   ["FM01", "call money market (candidate code)"],
   ["MD01", "money and deposits: the first of MD01-MD14"],
   ["BS01", "balance sheets: the first of BS01-BS02"],
-  ["CO", "Tankan"],
+  // db=CO (Tankan) is not listed again: on 20 Nov 2026, 04:54 UTC, its getMetadata answer was 99,052,783 characters
+  // with 166,513 series (run 44677493875), too large to fetch at every run. Its first series is read directly below.
 ];
 const found: Series[] = [];
 let metadataWorks = true;
+/** The Tankan series measured on 20 Nov 2026 (getMetadata db=CO, the first series listed). */
+const TANKAN: Series = { db: "CO", code: "TK99F0000601GCQ00000", name: "D.I./Business Conditions/All Enterprises/All industries/Actual result", freq: "QUARTERLY" };
 for (const [db, what] of DBS) {
   head(`getMetadata, db=${db}: ${what}`);
   const r = await look(`${API}/getMetadata?format=json&lang=en&db=${db}`, { ...A, show: 300 });
@@ -113,7 +116,7 @@ for (const [db, what] of DBS) {
     const s = seriesIn(db, j);
     console.log(`  top-level keys: ${topKeys(j)}; ${s.length} series recognised`);
     for (const x of s.slice(0, 4)) console.log(`  ${x.code} | ${x.freq} | ${x.name.slice(0, 110)}`);
-    found.push(...s);
+    for (const x of s) found.push(x); // a loop, not push(...s): spreading 166,513 series overflowed the stack
   }
   await pause(GAP);
 }
@@ -127,7 +130,7 @@ if (!metadataWorks) {
   const WANT: Array<[string, RegExp]> = [
     ["the uncollateralized overnight call rate", /call rate|uncollateralized overnight/i],
     ["current account balances", /current account/i],
-    ["the Bank's total assets", /total assets|assets,? total/i],
+    ["the Bank's total assets", /total assets|assets[,/ ]+total/i],
     ["a Tankan diffusion index", /business conditions|diffusion index|\bD\.I\./i],
   ];
   const picks: Array<[string, Series]> = [];
@@ -135,6 +138,7 @@ if (!metadataWorks) {
     const s = found.find((x) => re.test(x.name));
     if (s) picks.push([what, s]); else console.log(`\n(no series named like ${what} among the ${found.length} listed)`);
   }
+  if (!picks.some(([, s]) => s.db === "CO")) picks.push(["a Tankan diffusion index (code measured on 20 Nov)", TANKAN]);
   for (const [what, s] of picks) { await data(`${what}, frequency ${s.freq}`, s.db, s.code); await pause(GAP); }
   if (!picks.length) await data("the basic discount rate (an unofficial client's example code)", "IR01", "MADR1Z@D");
   console.log(`\n${found.length} series listed in all; ${picks.length} read.`);
