@@ -16,10 +16,17 @@
 //     by design, with their names fixed);
 //   - on a phone, every tap target is 44 x 44 px or more, measured on the element that takes the tap: a drop-down's
 //     <select> (its frame plus 10 px), a toggle's or a chip's ::before (the designer's I-2 note (h)). The targets the
-//     designer listed as really under 44 px are printed and pass until the increment named beside them.
+//     designer listed as really under 44 px are printed and pass until the increment named beside them;
+//   - a stock's statements, which scroll sideways under their fixed line names on a phone, are walked as a reader
+//     moves them, not only where they open (the designer's verdict on D-03, 20 Nov 2026: after a press or a swipe a
+//     period was cut at the right edge, "2,9" of 2,971.0): where they rest, after each press of "‹ earlier years" to
+//     the start, and after swipes of 40 px each way, on four phones (iPhone SE, iPhone 13, Pixel 7, iPhone 14 Pro Max),
+//     both stocks, annual and quarterly, and on a computer where they are wider than their panel today (1100x800 at
+//     text XL). No period may be drawn in part beside the names or at the box's right edge.
 // Then it proves it can fail: throwaway styles injected into the test page cut figures in each of those ways (also a
-// unit cut off whole digits, on a computer and in a phone's pills, a clip-path, and a box laid over figures), the guard
-// must report them, and with the style removed it must report nothing again.
+// unit cut off whole digits, on a computer and in a phone's pills, a clip-path, a box laid over figures, and the
+// statements' periods held at their own widths, as before 20 Nov), the guard must report them, and with the style
+// removed it must report nothing again.
 // XL text and the one-screen (COMPACT) layout join when increment I-9 fixes them (the designer's D-06 and D-21).
 // Run from web/:  node e2e/run.cjs layout-guard   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
@@ -37,6 +44,11 @@ const SIZES = [
 ];
 // what scrolls sideways by design on a phone: the statements under their fixed line names, and the wide phone tables
 const SIDEWAYS_OK = [".finbox", ".mp-xs"];
+// where the statements are walked: the two phones above and the designer's two wider ones (the verdict on D-03), and a
+// computer whose statements are wider than their panel today: 1100x800 at text XL, a zoom of 1.35, where a period's
+// edge falls between screen pixels unless the widths are worked out in them
+const FIN_WALKS = [...[SIZES[5], SIZES[6], { code: "PX7", label: "Pixel 7", ctx: { ...devices["Pixel 7"] }, phone: true }, { code: "PM", label: "iPhone 14 Pro Max", ctx: { ...devices["iPhone 14 Pro Max"] }, phone: true }].map((s) => ({ ...s, syms: ["7203.T", "NVDA"] })),
+  { code: "CX", label: "1100x800, text XL", ctx: { viewport: { width: 1100, height: 800 } }, prefs: { size: "XL", compact: false, v: 2 }, syms: ["7203.T"] }];
 // tap targets the designer measured as really under 44 px (plan review, I-22 "What is really under 44 px"), each with
 // the increment that brings it to 44; a target not on this list fails
 const KNOWN_TAPS = [
@@ -218,6 +230,38 @@ const open = async (b, s) => {
   const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message)); return { ctx, p, errs };
 };
 
+/** In the page: the statements box now. A period drawn in part beside the line names or at the box's right edge
+ *  (by more than half a pixel), the periods shown whole, and whether "‹ earlier years" is offered. */
+function FINSTATE() {
+  const bx = document.querySelector(".finbox"); if (!bx) return null;
+  const nr = bx.querySelector("thead th.l").getBoundingClientRect(), br = bx.getBoundingClientRect(), L = nr.right, R = br.right - parseFloat(getComputedStyle(bx).borderRightWidth);
+  const cols = [...bx.querySelectorAll("thead th:not(.l)")].map((th) => { const r = th.getBoundingClientRect(); return { t: th.textContent, l: r.left, r: r.right }; });
+  const btn = bx.querySelector(".finprev");
+  return { left: Math.round(bx.scrollLeft), over: bx.scrollWidth > bx.clientWidth + 1,
+    part: cols.filter((c) => (c.l < L - 0.5 && c.r > L + 0.5) || (c.l < R - 0.5 && c.r > R + 0.5)).map((c) => (c.l < L - 0.5 ? `${c.t}: ${Math.round(c.r - L)}px beside the names` : `${c.t}: ${Math.round(R - c.l)}px at the right edge`)),
+    shown: cols.filter((c) => c.l >= L - 0.5 && c.r <= R + 0.5).map((c) => c.t), last: cols.length ? cols[cols.length - 1].t : null, back: !!btn && getComputedStyle(btn).visibility !== "hidden" };
+}
+// the box at rest: the same place for eight drawn frames running (a snap or a smooth scroll takes a moment; each drawn
+// frame shows where the scroll is, so nothing here is timed against the machine's speed)
+const finRest = (p) => p.evaluate(() => new Promise((res) => { const bx = document.querySelector(".finbox"); let last = NaN, same = 0; const t0 = performance.now();
+  const tick = () => { const v = bx.scrollLeft; if (v === last) same++; else { same = 0; last = v; } if ((same >= 8 && performance.now() - t0 >= 200) || performance.now() - t0 > 8000) return res(v); requestAnimationFrame(tick); };
+  requestAnimationFrame(tick); }));
+/** The statements walked as a reader moves them (the designer's verdict on D-03): where they rest, each press of
+ *  "‹ earlier years" to the start, a swipe of 40 px on and back from there, then from the latest periods a swipe of
+ *  40 px back and on. A swipe is the scroll a finger leaves (40 px), after which the box snaps where it will. */
+async function walkFin(p) {
+  const states = [], at = async (what) => { await finRest(p); const s = await p.evaluate(FINSTATE); states.push({ what, ...s }); return s; };
+  const swipe = (dx) => p.evaluate((d) => document.querySelector(".finbox").scrollBy({ left: d, behavior: "instant" }), dx);
+  await p.evaluate(() => { const t = document.querySelector(".finbox thead").getBoundingClientRect(); window.scrollTo(0, scrollY + t.top - innerHeight / 2); });
+  const rest = await at("at rest");
+  for (let i = 1; i <= 12 && states[states.length - 1].back; i++) { await p.evaluate(() => document.querySelector(".finprev").click()); await at(`press ${i}`); }
+  await swipe(40); await at("swipe on from the start"); await swipe(-40); await at("swipe back");
+  await p.evaluate(() => { const bx = document.querySelector(".finbox"); bx.scrollTo({ left: bx.scrollWidth, behavior: "instant" }); }); await at("at the latest again");
+  await swipe(-40); await at("swipe back from the latest"); await swipe(40); await at("swipe on");
+  return { rest, states, bad: states.filter((s) => s.part.length), presses: states.filter((s) => /^press/.test(s.what)).length, places: new Set(states.map((s) => s.left)).size };
+}
+const span = (s) => (s.shown.length ? `${s.shown[0]}–${s.shown[s.shown.length - 1]}` : "none");
+
 (async () => { const b = await chromium.launch();
   const knownSeen = new Map();
   for (const s of SIZES) {
@@ -238,6 +282,24 @@ const open = async (b, s) => {
   }
   console.log("\n  known, under 44 px until the increment named (the designer's plan review, I-22):");
   for (const [i, n] of [...knownSeen.entries()].sort((a, c) => a[0] - c[0])) console.log(`    · ${KNOWN_TAPS[i].why}: ${n} seen`);
+
+  console.log("\n[a stock's statements where they are wider than their box, walked: at rest, each press of ‹ earlier years, swipes of 40 px each way; no period drawn in part beside the names or at the right edge]");
+  for (const s of FIN_WALKS) {
+    const { ctx, p, errs } = await open(b, s);
+    for (const sym of s.syms) {
+      await p.goto(MOCK + "#asset/" + sym, { waitUntil: "networkidle" }); await settle(p);
+      for (const view of ["annual", "quarterly"]) {
+        // the Periods picker (a drop-down on a phone, chips on a computer) keeps its choice from one stock to the next:
+        // chosen each time, and its periods awaited
+        if (await p.locator("#st-view select").count()) await p.locator("#st-view select").selectOption(view);
+        else await p.locator("#st-view .chip-sm", { hasText: view.toUpperCase() }).click();
+        await p.waitForFunction((v) => { const hs = [...document.querySelectorAll(".finbox thead th:not(.l)")].map((h) => h.textContent); return hs.length > 0 && hs.every((t) => /^FY/.test(t) === (v === "annual")); }, view);
+        const w = await walkFin(p);
+        ck(`${s.label} · ${sym} · ${view}: whole periods at both edges in all ${w.states.length} places it came to rest, ${w.presses} press(es) back included (${w.states.map(span).join(" · ")})`, w.rest.over && w.rest.shown.includes(w.rest.last) && w.presses >= 1 && w.places >= 2 && w.bad.length === 0 && w.states.every((x) => x.shown.length >= 1), { bad: w.bad.slice(0, 4).map((x) => ({ what: x.what, part: x.part })), rest: w.rest, presses: w.presses, places: w.places });
+      }
+    }
+    ck("no page errors", errs.length === 0, errs); await ctx.close();
+  }
 
   // ---- the guard fails when a figure is cut: throwaway styles injected into the test page ----
   console.log("\n[the guard catches a cut figure: a throwaway style cuts figures on purpose, then is taken away again]");
@@ -304,6 +366,16 @@ const open = async (b, s) => {
     await drawChart(48); const m48 = await measure(p, false);
     await p.evaluate(() => document.getElementById("canary-chart")?.remove());
     ck(`a chart's "100%" right-aligned on a 34-px y-axis runs past the canvas's left edge and is reported (${m34.canvasCut.map((c) => c.edges.join(", ")).join("; ")}); on a 48-px axis, as the breadth chart now has, it is not`, m34.canvasCut.some((c) => /canary-chart/.test(c.el) && c.edges.includes("left")) && !m48.canvasCut.length, { m34: m34.canvasCut, m48: m48.canvasCut });
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+  // the statements with their periods held at their own widths, as before 20 Nov: they open whole, but after a press
+  // or a swipe the right edge falls inside a period (the designer's verdict on D-03), and the walk must say so
+  { const { ctx, p, errs } = await open(b, SIZES[6]);
+    await p.goto(MOCK + "#asset/7203.T", { waitUntil: "networkidle" }); await settle(p);
+    await p.addStyleTag({ content: ".finbox{--fin-col:0px!important;--fin-names:128px!important}" });
+    await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    const w = await walkFin(p), right = w.bad.filter((x) => x.part.some((q) => /right edge/.test(q)));
+    await p.reload({ waitUntil: "networkidle" }); await settle(p); const back = await walkFin(p);
+    ck(`iPhone 13 · 7203.T with the periods at their own widths (before 20 Nov): ${right.length} of ${w.states.length} places reported with a period cut at the right edge (e.g. after ${right[0]?.what}, "${right[0]?.part[0]}"); as built, none of ${back.states.length}`, w.rest.part.length === 0 && right.length >= 2 && back.bad.length === 0, { rest: w.rest.part, right: right.slice(0, 3).map((x) => ({ what: x.what, part: x.part })), back: back.bad.slice(0, 3).map((x) => ({ what: x.what, part: x.part })) });
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
   { const { ctx, p, errs } = await open(b, SIZES[6]);
     await p.goto(MOCK + "#equities", { waitUntil: "networkidle" }); await settle(p);

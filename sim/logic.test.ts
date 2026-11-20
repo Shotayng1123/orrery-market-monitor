@@ -24,7 +24,7 @@ import { OWN_FRESH_MIN, RELAY_BEAT_MAX_S, RELAY_CRON, RELAY_JOBS, RELAY_LATE_MIN
 import { CBOE_YIELDS, closeDay, isYieldQuote, isYieldRow, sourceName, watchRowFromQuote, watchRowFromTable, type QuoteLike } from "../supabase/functions/_shared/watchrow.ts";
 import { alertFigWord, alertHeadline } from "../web/src/lib/alertline.ts";
 import { asOfCell, asOfLine, asOfOf, asOfTitle } from "../web/src/lib/time.ts";
-import { finBack, finRest } from "../web/src/lib/finscroll.ts";
+import { finBack, finFit, finRest } from "../web/src/lib/finscroll.ts";
 import { sectorShort } from "../web/src/lib/sectors.ts";
 import { readFileSync as readText, readdirSync as listDir } from "node:fs";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
@@ -967,6 +967,25 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const steps = [r.left]; for (let i = 0; i < 6 && steps[steps.length - 1] > 0; i++) steps.push(finBack(128, 357, starts, steps[steps.length - 1]));
     ck(`"earlier years" goes back a screen at a time, each time to a period's edge, the one before the screen's first period ending against the names: ${steps.join(" → ")}`, steps.join() === "576,360,144,0" && steps.every((x) => (x + 128 - 128) % 72 === 0), steps);
     ck("from a place between two edges it goes back to an edge; at the start it stays", finBack(128, 357, starts, 600) === 432 && finBack(128, 357, starts, 0) === 0 && finBack(128, 357, [128], 0) === 0);
+    // the right edge (the designer's verdict on D-03, 20 Nov 2026): periods of 72.6 px left 11 to 66 px of the next
+    // one showing at the box's right edge after a press or a swipe; each period now takes room ÷ n
+    const PHONES: Array<[string, number, number, number]> = [["iPhone SE", 357, 76, 129], ["iPhone 13", 372, 81, 129], ["Pixel 7", 394, 88, 130], ["iPhone 14 Pro Max", 412, 94, 130]];
+    for (const [phone, boxW, col, names] of PHONES) {
+      const f = finFit(boxW, 128, 72.609375, 11);
+      // every place the box can rest: a period's edge against the names, from the start to where it rests
+      const st = Array.from({ length: 11 }, (_, i) => (f?.names ?? 0) + i * (f?.col ?? 0)), tw = (f?.names ?? 0) + 11 * (f?.col ?? 0), rest = f && finRest(f.names, boxW, st, tw);
+      const stops = rest ? Array.from({ length: rest.k + 1 }, (_, k) => k * f!.col) : [];
+      // at the k-th place: period k against the names, period k + 2 ending at the box's right edge, period k + 3 (if
+      // any) starting there
+      const clean = stops.every((s, k) => st[k] - s === f!.names && st[k + 2] + f!.col - s === boxW && (k + 3 >= st.length || st[k + 3] - s >= boxW));
+      ck(`${phone} (a ${boxW}-px box, names 128 px, eleven periods of 72.6 px): three periods of ${f?.col} px, the names ${f?.names} px; at each of its ${stops.length} resting places the third period ends exactly at the box's right edge and the next starts there`, !!f && f.n === 3 && f.col === col && f.names === names && f.names + 3 * f.col === boxW && !!rest && rest.pad === 0 && rest.left === 8 * col && clean, { f, rest, stops });
+    }
+    const back = [PHONES[1]].map(([, boxW]) => { const f = finFit(boxW, 128, 72.609375, 11)!, st = Array.from({ length: 11 }, (_, i) => f.names + i * f.col), out = [finRest(f.names, boxW, st, f.names + 11 * f.col).left]; for (let i = 0; i < 6 && out[out.length - 1] > 0; i++) out.push(finBack(f.names, boxW, st, out[out.length - 1])); return out; })[0];
+    ck(`iPhone 13: "earlier years" goes back exactly three periods at a time (${back.join(" → ")}), the last screen the first three`, back.join() === "648,405,162,0", back);
+    ck("a layout width already whole is not rounded up (73 px stays 73); 1/64 px more is (74)", finFit(372, 128, 73, 11)?.col === 81 && finFit(300, 80, 73, 11)?.n === 3 && finFit(300, 80, 73 + 1 / 64, 11)?.n === 2 && finFit(300, 80, 73 + 1 / 64, 11)?.col === 110);
+    ck("nothing to fit: every period fits beside the names, one period is wider than the room, or there are none", finFit(1200, 270, 72.6, 11) === null && finFit(357, 128, 240, 11) === null && finFit(357, 128, 0, 0) === null && finFit(357, 128, 72.6, 3) === null);
+    const pc = finFit(1019.5, 270.25, 90.3, 12);
+    ck(`a computer's box with fractions (1,019.5 px, names 270.25): ${pc?.n} periods of ${pc?.col} px, the names ${pc?.names} px, filling the box exactly and never narrower than before`, !!pc && pc.n === 8 && pc.col === 93 && pc.names === 275.5 && pc.names + pc.n * pc.col === 1019.5 && pc.names >= 270.25, pc);
     const tr = sectorShort("輸送用機器", 25), ws = sectorShort("倉庫・運輸関連業", 25), gics = sectorShort("Consumer Discretionary", 25), none = sectorShort(null);
     ck(`a JPX sector is named in English, whole up to 25 characters ("${tr.text}"), cut at a word beyond ("${ws.text}"), with the English and the Japanese on hover ("${ws.full}")`, tr.text === "Transportation Equipment" && ws.text === "Warehousing & Harbor…" && ws.full === "Warehousing & Harbor Transportation Services (倉庫・運輸関連業)" && tr.full === "Transportation Equipment (輸送用機器)", { tr, ws });
     ck("a sector the map does not know (the server's GICS names) is kept as it is; none gives an empty cell; without a limit nothing is cut", gics.text === "Consumer Discretionary" && gics.full === "Consumer Discretionary" && none.text === "" && sectorShort("倉庫・運輸関連業").text === "Warehousing & Harbor Transportation Services");

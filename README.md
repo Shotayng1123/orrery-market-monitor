@@ -76,10 +76,13 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   hit-tested where it stands, the page moved down a screen at a time), a chart's axis label runs off its canvas,
   anything scrolls sideways (a phone's statements and wide phone tables do so by design), or a phone tap target is
   under 44 × 44 px, measured on what takes the tap (a drop-down's transparent select, a toggle's reach); the few
-  targets the designer listed as still small are printed with the change that fixes them. It also cuts, clips and
+  targets the designer listed as still small are printed with the change that fixes them. A stock's statements,
+  where they scroll sideways, are walked as a reader moves them (where they open, each press of "‹ earlier years",
+  swipes of 40 px each way) on four phones and on a computer at text XL, and every place they come to rest must show
+  each period whole, beside the line names and at the right edge. It also cuts, clips and
   covers figures on purpose with throwaway styles, to show that it fails each time. XL text and the one-screen
   layout join it once they are fixed. `nothing-cut` checks the designer's findings behind it one by one (whole
-  columns in a phone's statements, short interest at its natural height, chart titles, long headlines under day
+  columns at both edges of a phone's statements, pressed back and swiped, short interest at its natural height, chart titles, long headlines under day
   bars, phone search, the watchlist's two columns, curve labels, the header's alert line for every kind of alert),
   in ways that hold at any time of day.
   `cd web && npm run e2e` starts the test servers it needs and runs them all (about seven minutes, three suites at

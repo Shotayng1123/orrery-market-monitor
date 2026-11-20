@@ -974,11 +974,15 @@ button.go.ghost:hover{color:var(--txt);border-color:var(--amber)}
 .finbox{overflow-x:auto;border:1px solid var(--bord);border-radius:3px;-webkit-overflow-scrolling:touch}
 /* the periods land on whole columns against the line names (D-03): each period snaps to the names' right edge
    (--stick, set by FinTable), and a spacer after the last column (--fin-pad) lets the box rest with the latest
-   periods whole. A table that fits its box does not scroll, and none of this shows. */
+   periods whole. At the right edge too: every period column takes the same width (--fin-col), the room beside the
+   names divided by as many periods as fit, and the names the pixels left over (--fin-names, below), so wherever the
+   box rests nothing of a period shows past the edge (the designer's verdict on D-03). A minimum, since a table
+   narrower than its periods gives each column its minimum. A table that fits its box does not scroll, and none of
+   this shows. */
 .finbox{display:flex;scroll-snap-type:x mandatory;scroll-padding-left:var(--stick,0px)}
 .finbox>table.fin{flex:none}
 .finbox::after{content:"";flex:0 0 var(--fin-pad,0px)}
-table.fin thead th:not(.l){scroll-snap-align:start}
+table.fin thead th:not(.l){scroll-snap-align:start;min-width:var(--fin-col,0px)}
 .finprev{position:relative;display:block;margin:5px 0 0;padding:0;border:0;background:none;color:var(--cyan);font:inherit;font-size:11px;font-weight:500;letter-spacing:.02em;text-transform:none;cursor:pointer;white-space:nowrap}
 .finprev:hover{text-decoration:underline}
 .finprev::before{content:"";position:absolute;inset:-15px -6px}   /* 44 px for a finger */
@@ -987,7 +991,7 @@ table.fin th{position:static;padding:6px 10px;text-align:right;font-size:10.5px;
 table.fin th.fc{color:var(--amber)}
 table.fin th i{font-style:normal;font-size:8.5px;margin-left:2px;vertical-align:super}
 table.fin td{padding:4px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--bord)}
-table.fin th.l,table.fin td.l{position:sticky;left:0;z-index:2;min-width:170px;text-align:left}
+table.fin th.l,table.fin td.l{position:sticky;left:0;z-index:2;min-width:var(--fin-names,170px);text-align:left}
 table.fin th.l{position:sticky;z-index:3;color:var(--amber);letter-spacing:.06em}
 table.fin th.l .u{font-size:11.5px;font-weight:700}
 table.fin th.l small{margin-left:8px;font-size:9.5px;font-weight:400;letter-spacing:.02em;color:var(--mut)}
@@ -1370,7 +1374,7 @@ body.pv2 .finbox{border:0;border-radius:0;margin:10px -10px 0}
 body.pv2 table.fin{font-size:13px}
 body.pv2 table.fin th{padding:9px 9px;font-size:11.5px}
 body.pv2 table.fin td{padding:8px 9px}
-body.pv2 table.fin th.l,body.pv2 table.fin td.l{min-width:128px;max-width:142px;white-space:normal;line-height:1.25;padding-left:10px}
+body.pv2 table.fin th.l,body.pv2 table.fin td.l{min-width:var(--fin-names,128px);max-width:var(--fin-names,142px);white-space:normal;line-height:1.25;padding-left:10px}
 body.pv2 table.fin td.l{font-family:var(--sans);font-size:13px}
 body.pv2 table.fin tr.band td{padding:14px 9px 6px;font-size:11px}
 body.pv2 table.fin th.l .u{font-size:13px}

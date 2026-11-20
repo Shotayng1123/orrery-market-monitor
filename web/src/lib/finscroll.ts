@@ -16,6 +16,26 @@ export function finRest(stick: number, boxW: number, starts: number[], tableW: n
   return { k, left: Math.max(0, starts[k] - stick), pad: Math.max(0, view - (tableW - starts[k])) };
 }
 
+/** Column widths that make the room beside the names hold a whole number of periods (the designer's verdict on D-03,
+ *  20 Nov 2026). Snapping puts a period's edge against the names, so the left edge is always clean; but with periods
+ *  of 73 px in a room of 229 to 284 px the right edge then falls inside a column, and part of a figure shows there
+ *  ("2,9" of 2,971.0, or "764" of 764.5 with its decimals cut). So every period takes the same whole-pixel width,
+ *  `col` = room ÷ n, where n is how many of the widest period fit in the room; the names take what is left over
+ *  (`names`, never less than they had). Every place the box can rest then shows exactly n whole periods, at both
+ *  edges. null when there is nothing to fit: every period fits beside the names, or one alone is wider than the room
+ *  (then the box keeps the periods' own widths).
+ *
+ *  `boxW`: the box's inner width; `names`: the names' width; `widest`: the widest period as its content lays it out;
+ *  `count`: the number of periods. All in the same px; `boxW` and `names` may have fractions on a computer. */
+export function finFit(boxW: number, names: number, widest: number, count: number): { n: number; col: number; names: number } | null {
+  const room = boxW - names, need = Math.ceil(widest - 1 / 128);   // a layout width is a multiple of 1/64 px
+  if (count < 1 || need < 1 || need > room) return null;
+  const n = Math.floor(room / need);
+  if (n >= count) return null;
+  const col = Math.floor(room / n);
+  return { n, col, names: Math.round((boxW - n * col) * 64) / 64 };
+}
+
 /** One screen back from where the box rests (`left`): the offset that puts against the names the earliest column
  *  from which the columns up to the one now against the names fill the screen; 0 at the start. A column wider than
  *  the screen still moves back by one. */

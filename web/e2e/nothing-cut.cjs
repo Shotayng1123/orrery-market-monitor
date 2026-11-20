@@ -1,5 +1,6 @@
 // Nothing cut, nothing hidden (19 Nov 2026): the designer's findings of increment I-2, each checked where it was seen.
-//   D-03  the phone's statements land on whole columns: no fragment of a number beside the line names
+//   D-03  the phone's statements land on whole columns: no fragment of a number beside the line names, nor at the
+//         right edge after a press of "‹ earlier years" or a 40-px swipe (the designer's verdict, 20 Nov 2026)
 //   D-07  SHORT INTEREST at its natural height in three columns, headed, a sector column of 9 em (with D-45: English
 //         source names first; D-46: the sector drawer's short column says which short figure it is)
 //   D-08  chart tile titles whole, their badges and stamp on the price line; EQUITIES in the designer's order
@@ -45,17 +46,21 @@ function dayBars(seq) {
   for (let i = 1; i < bars.length; i++) { const a = WD.indexOf(bars[i - 1].split(" ")[0]), b = WD.indexOf(bars[i].split(" ")[0]); if (a < 0 || b !== (a + 6) % 7) bad.push(`"${bars[i]}" under "${bars[i - 1]}" is not the day before`); }
   return { bars, bad };
 }
-// the statements box at rest after a scroll (a snap or a smooth scroll takes a moment; waited for, not timed)
-const rest = (p) => p.waitForFunction(() => new Promise((res) => { const bx = document.querySelector(".finbox"), a = bx.scrollLeft; setTimeout(() => res(bx.scrollLeft === a), 160); }), null, { timeout: 5000, polling: 50 }).catch(() => undefined);
-// the statements table on a phone: where each period's text sits against the line names' right edge
+// the statements box at rest after a scroll: a snap or a smooth scroll takes a moment, so the box must keep its place
+// for eight frames running (each drawn frame shows where the scroll is; nothing here is timed against the machine)
+const rest = (p) => p.evaluate(() => new Promise((res) => { const bx = document.querySelector(".finbox"); let last = NaN, same = 0; const t0 = performance.now();
+  const tick = () => { const v = bx.scrollLeft; if (v === last) same++; else { same = 0; last = v; } if ((same >= 8 && performance.now() - t0 >= 200) || performance.now() - t0 > 8000) return res(v); requestAnimationFrame(tick); };
+  requestAnimationFrame(tick); }));
+// the statements table on a phone: a period drawn in part beside the line names or at the box's right edge (the
+// designer's D-03, and the right edge in the verdict of 20 Nov 2026), and the periods shown whole
 const finState = (p) => p.evaluate(() => {
-  const box = document.querySelector(".finbox"), names = box.querySelector("thead th.l"), edge = names.getBoundingClientRect().right, b = box.getBoundingClientRect();
+  const box = document.querySelector(".finbox"), names = box.querySelector("thead th.l"), edge = names.getBoundingClientRect().right, b = box.getBoundingClientRect(), right = b.right - parseFloat(getComputedStyle(box).borderRightWidth);
   const textRect = (el) => { const rg = document.createRange(); rg.selectNodeContents(el); return rg.getBoundingClientRect(); };
   const heads = [...box.querySelectorAll("thead th:not(.l)")], revenue = [...box.querySelectorAll('tr[data-line="revenue"] td:not(.l)')];
-  const partial = [...heads, ...revenue].filter((c) => { const r = textRect(c); return r.width > 0 && r.left < edge - 0.5 && r.right > edge + 0.5; }).map((c) => c.textContent);
-  const shown = heads.filter((c) => textRect(c).left >= edge - 0.5 && textRect(c).right <= b.right + 0.5).map((c) => c.textContent);
+  const partial = [...heads, ...revenue].filter((c) => { const r = c.getBoundingClientRect(); return (r.left < edge - 0.5 && r.right > edge + 0.5) || (r.left < right - 0.5 && r.right > right + 0.5); }).map((c) => `${c.textContent} (${Math.round(c.getBoundingClientRect().left < edge - 0.5 ? c.getBoundingClientRect().right - edge : right - c.getBoundingClientRect().left)}px at the ${c.getBoundingClientRect().left < edge - 0.5 ? "names" : "right edge"})`);
+  const shown = heads.filter((c) => c.getBoundingClientRect().left >= edge - 0.5 && c.getBoundingClientRect().right <= right + 0.5).map((c) => c.textContent);
   const btn = box.querySelector(".finprev"), br = btn?.getBoundingClientRect(), bs = btn && getComputedStyle(btn, "::before");
-  return { left: Math.round(box.scrollLeft), over: box.scrollWidth > box.clientWidth + 1, partial, shown, last: heads[heads.length - 1].textContent, lastWhole: textRect(heads[heads.length - 1]).right <= b.right + 0.5,
+  return { left: Math.round(box.scrollLeft), over: box.scrollWidth > box.clientWidth + 1, partial, shown, last: heads[heads.length - 1].textContent, lastWhole: heads[heads.length - 1].getBoundingClientRect().right <= right + 0.5 && textRect(heads[heads.length - 1]).right <= right + 0.5,
     btn: btn ? { vis: getComputedStyle(btn).visibility, text: btn.textContent, h: Math.round(br.height - parseFloat(bs.top) - parseFloat(bs.bottom)), w: Math.round(br.width - parseFloat(bs.left) - parseFloat(bs.right)), x: br.left + br.width / 2, y: br.top + br.height / 2 } : null,
     notes: [...document.querySelectorAll(".mp-note")].map((n) => n.textContent).filter((t) => /swipe|Fetched/.test(t)) };
 });
@@ -155,24 +160,32 @@ const finState = (p) => p.evaluate(() => {
     ck(`computer: the placeholder "${s.ph}", a "${s.key}" key cap inside the box at its right, and the key itself jumps to the box`, s.ph === "Search stocks, bonds, currencies" && s.key === "/" && s.inside && focused, s);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
 
-  console.log("\n[D-03 · a stock's statements on a phone: whole columns beside the line names, at the latest periods, and back]");
+  console.log("\n[D-03 · a stock's statements on a phone: whole columns beside the line names and at the right edge, at the latest periods, pressed back and swiped]");
   for (const dev of ["iPhone SE (3rd gen)", "iPhone 13"]) for (const sym of ["7203.T", "NVDA"]) {
     const { ctx, p, errs } = await page(b, { ...devices[dev] });
     await go(p, "#asset/" + sym, "table.fin");
-    await p.evaluate(() => { const t = document.querySelector("table.fin thead").getBoundingClientRect(); window.scrollTo(0, scrollY + t.top - innerHeight / 2); }); await p.waitForTimeout(200);
+    await p.evaluate(() => { const t = document.querySelector("table.fin thead").getBoundingClientRect(); window.scrollTo(0, scrollY + t.top - innerHeight / 2); }); await rest(p);
     for (const view of ["annual", "quarterly"]) {
-      if (view === "quarterly") { await p.locator("#st-view").selectOption("quarterly"); await p.waitForTimeout(500); }
+      if (view === "quarterly") { const was = await p.evaluate(() => document.querySelector(".finbox thead th:not(.l)").textContent); await p.locator("#st-view").selectOption("quarterly"); await p.waitForFunction((w) => document.querySelector(".finbox thead th:not(.l)")?.textContent !== w, was); await rest(p); }
       const o = await finState(p);
-      ck(`${dev} · ${sym} · ${view}: opens at the latest periods (${o.shown.join(", ")}, the last ending inside the box) with no part of a figure beside the line names`, o.over && o.lastWhole && o.shown.includes(o.last) && o.partial.length === 0, o);
+      ck(`${dev} · ${sym} · ${view}: opens at the latest periods (${o.shown.join(", ")}, the last ending inside the box) with no part of a period beside the line names or at the right edge`, o.over && o.lastWhole && o.shown.includes(o.last) && o.partial.length === 0, o);
       await p.evaluate(() => { const bx = document.querySelector(".finbox"); bx.scrollLeft = Math.max(0, bx.scrollLeft - 50); }); await rest(p);
       const s = await finState(p);
-      ck(`${dev} · ${sym} · ${view}: moved 50 px, part of a column, it comes to rest on a column's edge (${s.shown[0]} against the names), no fragment beside them`, s.partial.length === 0 && s.left < o.left, { o: o.left, s });
+      ck(`${dev} · ${sym} · ${view}: moved 50 px, part of a column, it comes to rest on a column's edge (${s.shown.join(", ")}), nothing of a period at either edge`, s.partial.length === 0 && s.left < o.left, { o: o.left, s });
+      // the designer's swipe: 40 px each way from where it rests, and back
+      const sw = [];
+      for (const [from, dx] of [["latest", -40], ["", 40], ["", 40]]) {
+        if (from) { await p.evaluate(() => { const bx = document.querySelector(".finbox"); bx.scrollTo({ left: bx.scrollWidth, behavior: "instant" }); }); await rest(p); }
+        await p.evaluate((d) => document.querySelector(".finbox").scrollBy({ left: d, behavior: "instant" }), dx); await rest(p);
+        const w = await finState(p); sw.push({ dx, left: w.left, shown: w.shown.join(", "), partial: w.partial });
+      }
+      ck(`${dev} · ${sym} · ${view}: swiped 40 px back and 40 px on, it rests on whole periods every time (${sw.map((x) => `${x.dx > 0 ? "+" : ""}${x.dx}: ${x.shown}`).join(" · ")})`, sw.every((x) => x.partial.length === 0 && x.shown) && sw[0].left < o.left && sw[1].left === o.left, sw);
       if (o.btn && s.left > 0) {
         await p.evaluate(() => { const bx = document.querySelector(".finbox"); bx.scrollTo({ left: bx.scrollWidth }); }); await rest(p);
         const a = await finState(p), steps = [];
-        for (let i = 0; i < 8; i++) { const v = await finState(p); if (!v.btn || v.btn.vis === "hidden") break; await p.touchscreen.tap(v.btn.x, v.btn.y); await p.waitForTimeout(100); await rest(p); const w = await finState(p); steps.push(`${w.shown[0]}${w.partial.length ? " (partial!)" : ""}`); if (w.partial.length) break; }
+        for (let i = 0; i < 8; i++) { const v = await finState(p); if (!v.btn || v.btn.vis === "hidden") break; await p.touchscreen.tap(v.btn.x, v.btn.y); await rest(p); const w = await finState(p); steps.push(`${w.shown.join(" ")}${w.partial.length ? ` (partial: ${w.partial.join(", ")})` : ""}`); if (w.partial.length) break; }
         const z = await finState(p);
-        ck(`${dev} · ${sym} · ${view}: "${a.btn.text}" (${a.btn.w}x${a.btn.h}px to a finger) goes back a screen at a time (${steps.join(" → ")}), never leaving a fragment, and hides at the start`, a.btn.vis === "visible" && a.btn.h >= 44 && a.btn.w >= 44 && steps.length >= 1 && !steps.some((x) => /partial/.test(x)) && z.left === 0 && z.btn.vis === "hidden" && z.partial.length === 0, { a: a.btn, steps, z: { left: z.left, btn: z.btn } });
+        ck(`${dev} · ${sym} · ${view}: "${a.btn.text}" (${a.btn.w}x${a.btn.h}px to a finger) goes back a screen at a time (${steps.join(" → ")}), never leaving part of a period at either edge, and hides at the start`, a.btn.vis === "visible" && a.btn.h >= 44 && a.btn.w >= 44 && steps.length >= 1 && !steps.some((x) => /partial/.test(x)) && z.left === 0 && z.btn.vis === "hidden" && z.partial.length === 0, { a: a.btn, steps, z: { left: z.left, btn: z.btn } });
       }
     }
     const notes = await p.evaluate(() => [...document.querySelectorAll(".mp-note")].map((n) => n.textContent).filter((t) => /swipe|Fetched/.test(t)));
