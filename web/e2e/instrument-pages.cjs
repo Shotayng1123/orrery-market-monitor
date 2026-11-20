@@ -1,0 +1,215 @@
+// An instrument's own page (I-4, 20 Nov 2026; B-04, B-23 = D-15, B-12's currency filter, B's defects 1, 2, 5 and 6, and the
+// designer's I-4 note). The figures are the mock feed's; the events and headlines the stand-in rows
+// (web/src/lib/standin.json), counted from when the suite starts, so nothing here depends on the time of day.
+//   - #asset/USDJPY%3DX, ^TNX, JGB10Y, GC=F and ^STOXX50E open as an instrument's page on a computer and on a phone, with
+//     no stock-only line (no market cap, shares, valuation, results, short interest, big moves or statements); ^N225
+//     still opens the Nikkei 225 on EQUITIES (the designer's rule: one page per name).
+//   - A yield's changes, distances, volatility and largest moves are in bp, on the page and on its chart tile (B's defect
+//     1); its level ends in %. JGB 10Y, which Yahoo does not carry, opens (defect 2) and names Japan MOF and its date.
+//   - USD/JPY's EVENTS are the stand-in USD and JPY events; its NEWS the stand-in headlines matched by yen, JPY, BoJ and
+//     Bank of Japan, and says so.
+//   - On a computer every instrument name on MARKETS and RATES & FX is a teal link and its row opens the page (D-15, B-23,
+//     defect 5): "USD/JPY" on MARKETS opens #asset/USDJPY%3DX, the JGB 10Y tile's name opens #asset/JGB10Y.
+//   - NEWS: the calendar's Currency picker; JPY leaves only Japan's events, on both layouts (B-12).
+//   - The one-screen layout and text XL place the panels; a server from before 20 Nov 2026 (a stock's answer for every
+//     name, "no quote for JGB10Y") still gives a page that works.
+// Run from web/:  node e2e/run.cjs instrument-pages   (the runner starts the servers this needs; see e2e/run.cjs)
+const { chromium, devices } = require("playwright");
+const { S } = require("./standin.cjs");
+const { routes } = require("./harness.cjs");
+const MOCK = "http://localhost:5179/orrery-market-monitor/", STANDIN = "http://localhost:5181/orrery-market-monitor/";
+let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d).slice(0, 1500)}`); };
+const CYAN = "rgb(31, 209, 193)";
+const PAGES = [
+  { hash: "#asset/USDJPY%3DX", name: "USD/JPY", yield: false, ccys: ["USD", "JPY"] },
+  { hash: "#asset/%5ETNX", name: "UST 10Y yield", yield: true, ccys: ["USD"] },
+  { hash: "#asset/JGB10Y", name: "JGB 10Y yield", yield: true, ccys: ["JPY"], official: "Japan MOF" },
+  { hash: "#asset/GC%3DF", name: "Gold", yield: false, ccys: ["USD"] },
+  { hash: "#asset/%5ESTOXX50E", name: "Euro Stoxx 50", yield: false, ccys: ["EUR"] },
+];
+const KEY_ROWS = ["Day's range", "Previous close", "52W range", "From 52W high / low", "σ vs 1M avg", "vs 200D", "Realised vol, 1M / 3M / 12M", "Largest rise, 12M", "Largest fall, 12M", "Source · as of"];
+const STOCK_ONLY = /Mkt cap|Shares outstanding|Diluted shares|P\/E|P\/B|Dividend yield|Next results|Short interest|Beta vs|Avg daily|Volume today|FINANCIALS|BIG MOVES|SHORT INTEREST|Statements/;
+async function page(b, opts, prefs) {
+  const ctx = await b.newContext(opts);
+  await ctx.addInitScript((pr) => { try { if (pr) localStorage.setItem("om_prefs", JSON.stringify(pr)); } catch {} }, prefs || null);
+  const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message)); return { ctx, p, errs };
+}
+const go = async (p, base, hash, sel) => { await p.goto(base + hash, { waitUntil: "networkidle" }); if (sel) await p.waitForSelector(sel); await p.evaluate(() => document.fonts.ready); await p.addStyleTag({ content: "#mockbar{display:none!important}" }); await p.waitForTimeout(400); };
+// the stand-in rows the mock's instrument page shows: the events of the currencies in time order; the headlines whose
+// title holds one of the words, newest first (the server's rule, supabase/functions/_shared/instrfeed.ts)
+const eventsOf = (ccys) => S.calendar.filter((e) => ccys.includes(e.currency ?? e.country)).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+const wordRe = (words) => new RegExp(`(?:^|[^A-Za-z0-9_])(?:${words.join("|")})(?![A-Za-z0-9_])`, "i");
+const decode = (t) => t.replace(/&#x2019;/g, "’").replace(/&amp;/g, "&");
+const headlinesOf = (words) => S.news.filter((n) => wordRe(words).test(n.title)).sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
+// the computer page as data
+const desk = (p) => p.evaluate(() => {
+  const pn = [...document.querySelectorAll("#grid .panel")];
+  const key = document.querySelector("#in-key");
+  return {
+    panels: pn.map((x) => `${x.dataset.no} ${x.querySelector(".phead .t").textContent}`).sort(),
+    text: pn.map((x) => x.innerText).join("\n"),
+    fin: !!document.querySelector("table.fin"),
+    krow: [...document.querySelectorAll('.panel[data-k="in-key"] .krow .k')].map((e) => e.textContent),
+    last: document.querySelector("#in-last")?.textContent ?? null, day: document.querySelector("#in-day")?.textContent ?? null,
+    rows: key ? Object.fromEntries([...key.querySelectorAll("tr")].map((tr) => [tr.cells[0].textContent, tr.cells[1].innerText.replace(/\s+/g, " ").trim()])) : {},
+    chartAux: document.querySelector('.panel[data-k="in-chart"] .phead .aux')?.textContent ?? "",
+    tile: document.querySelector(".bigwrap .ch")?.textContent ?? "", tilePx: document.querySelector(".bigwrap .px")?.textContent ?? "",
+    perfHead: [...document.querySelectorAll("#in-perf thead th")].slice(1).map((x) => x.textContent),
+    then: [...document.querySelectorAll('#in-perf tr[data-r="then"] td')].slice(1).map((x) => x.textContent),
+    chg: [...document.querySelectorAll('#in-perf tr[data-r="chg"] td')].slice(1).map((x) => x.textContent),
+    periods: [...document.querySelectorAll(".c12 .pick")].find((x) => /PERIOD/i.test(x.querySelector(".lbl").textContent))?.querySelector("select") ? [...[...document.querySelectorAll(".c12 .pick")].find((x) => /PERIOD/i.test(x.querySelector(".lbl").textContent)).querySelectorAll("option")].map((o) => o.value) : [],
+    events: [...document.querySelectorAll("#in-events tbody tr.ecrow")].map((tr) => ({ ccy: tr.cells[1].textContent, title: tr.cells[2].childNodes[1]?.textContent ?? tr.cells[2].textContent })),
+    evAux: document.querySelector('.panel[data-k="in-events"] .phead .aux')?.textContent ?? "",
+    newsAux: document.querySelector('.panel[data-k="in-news"] .phead .aux')?.textContent ?? "",
+    news: [...document.querySelectorAll("#st-news .snrow")].map((r) => ({ kind: r.dataset.kind, title: r.querySelector(".snt").textContent })),
+    newsEmpty: document.querySelector('.panel[data-k="in-news"] .empty')?.textContent ?? null,
+    ox: document.documentElement.scrollWidth - innerWidth,
+  };
+});
+const bp = (t) => /^[+-]?\d+(\.\d)?bp$/.test(t) || t === "–";
+const pc = (t) => /^[+-]?\d[\d,]*\.\d+%$/.test(t) || t === "–";
+
+(async () => { const b = await chromium.launch();
+  console.log("\n[a computer, 1440x900: five instruments' pages]");
+  { const { ctx, p, errs } = await page(b, { viewport: { width: 1440, height: 900 } }, { size: "AUTO", compact: false, v: 2 });
+    for (const pg of PAGES) {
+      await go(p, MOCK, pg.hash, "#in-key"); await p.waitForSelector(".bigwrap canvas, .bigwrap .chartbox");
+      const d = await desk(p);
+      ck(`${pg.name}: an instrument's page, panels in reading order (${d.panels.join(" · ")}), and no stock-only line: no market cap, shares, valuation, results, short interest, big moves or statements`, d.panels.join("|") === `01 ${pg.name.toUpperCase()}|02 KEY DATA|03 PERFORMANCE|04 EVENTS|05 NEWS` && !d.fin && !STOCK_ONLY.test(d.text), { panels: d.panels, stockOnly: (STOCK_ONLY.exec(d.text) || [])[0] });
+      ck(`${pg.name}: KEY DATA in the designer's order (Last and Day, then the day's range … the source and as-of)`, d.krow.join() === "Last,Day" && Object.keys(d.rows).join("|") === KEY_ROWS.join("|"), { krow: d.krow, rows: Object.keys(d.rows) });
+      if (pg.yield) {
+        const [hi, lo] = d.rows["From 52W high / low"].split(" / "), [rise] = d.rows["Largest rise, 12M"].split(" · "), [fall] = d.rows["Largest fall, 12M"].split(" · ");
+        ck(`${pg.name}: every change in bp (B's defect 1): the day ${d.day}, 1D … 36M ${d.chg.join(" ")}, from the 52W high and low ${hi} / ${lo}, vs 200D ${d.rows["vs 200D"]}, largest rise ${rise} and fall ${fall}; the tile "${d.tile.trim()}"`, bp(d.day) && d.chg.length === 6 && d.chg.every(bp) && bp(hi) && bp(lo) && bp(d.rows["vs 200D"]) && bp(rise) && bp(fall) && /^[+-]?\d+(\.\d)?bp\s/.test(d.tile.trim()), d);
+        ck(`${pg.name}: its volatility in bp a day and a year ("${d.rows["Realised vol, 1M / 3M / 12M"]}"); its levels in % (${d.last}, then ${d.then.join(" ")})`, /^[\d.–]+ \/ [\d.–]+ \/ [\d.–]+ bp\/day [\d–]+ \/ [\d–]+ \/ [\d–]+ bp ann\. · 3Y pctl /.test(d.rows["Realised vol, 1M / 3M / 12M"]) && /^\d\.\d{3}%$/.test(d.last) && d.then.every((t) => /^\d\.\d{3}%$/.test(t)) && /%$/.test(d.tilePx), d.rows);
+      } else {
+        ck(`${pg.name}: a price's changes in per cent (the day ${d.day}, 1D … 36M ${d.chg.join(" ")}) and its volatility a yearly per cent ("${d.rows["Realised vol, 1M / 3M / 12M"]}")`, pc(d.day) && d.chg.every(pc) && /^[\d.–]+ \/ [\d.–]+ \/ [\d.–]+% ann\. 3Y pctl /.test(d.rows["Realised vol, 1M / 3M / 12M"]), d.rows);
+      }
+      if (pg.official) {
+        ck(`${pg.name}: opens though Yahoo does not carry it (B's defect 2), names ${pg.official} and the day it was published for ("${d.rows["Source · as of"]}"); no day's range; daily charts only (${d.periods.join(" ")})`, new RegExp(`^${pg.official} · published for \\d{1,2} [A-Z][a-z]{2} \\d{4}$`).test(d.rows["Source · as of"]) && d.chartAux.includes(`${pg.official} · published once a day`) && d.rows["Day's range"] === "–" && d.periods.join() === "3M,12M,36M,5Y,10Y", { src: d.rows["Source · as of"], aux: d.chartAux, range: d.rows["Day's range"], periods: d.periods });
+      } else ck(`${pg.name}: Yahoo Finance and the time of its print; a day's range; every period from 1D to 10Y`, /^Yahoo Finance · /.test(d.rows["Source · as of"]) && /\d%? – \d/.test(d.rows["Day's range"]) && d.periods.join() === "1D,1W,1M,3M,12M,36M,5Y,10Y", { src: d.rows["Source · as of"], range: d.rows["Day's range"], periods: d.periods });
+      const want = eventsOf(pg.ccys);
+      await p.locator('.panel[data-k="in-events"] .pick select').selectOption("all"); await p.waitForTimeout(250);
+      const all = await desk(p);
+      ck(`${pg.name}: EVENTS of ${pg.ccys.join(" and ")} (${all.events.length} with Impact All), the stand-in ones in time order and no other currency's`, all.evAux.includes(`${pg.ccys.join(" and ")} · times in SGT`) && all.events.length === want.length && all.events.every((e, i) => pg.ccys.includes(e.ccy) && e.title === want[i].title), { aux: all.evAux, got: all.events.map((e) => `${e.ccy} ${e.title}`), want: want.map((e) => `${e.currency} ${e.title}`) });
+      await p.locator('.panel[data-k="in-events"] .pick select').selectOption("high"); await p.waitForTimeout(150);
+    }
+    // USD/JPY's headlines: those that say yen, JPY, BoJ or Bank of Japan, and the page says how they were matched
+    await go(p, MOCK, "#asset/USDJPY%3DX", "#in-key");
+    const d = await desk(p), want = headlinesOf(["yen", "JPY", "BoJ", "Bank of Japan"]);
+    ck(`USD/JPY: NEWS says how it matched ("${d.newsAux}") and lists the yen headlines, newest first (${want.length} in the stand-in rows, fifteen shown)`, d.newsAux === "matched by: yen, JPY, BoJ, Bank of Japan · 30 days · times in SGT" && want.length > 15 && d.news.length === 15 && d.news.every((n, i) => n.kind === "headline" && n.title === decode(want[i].title)), { aux: d.newsAux, got: d.news.slice(0, 3), want: want.slice(0, 3).map((n) => n.title) });
+    await go(p, MOCK, "#asset/GC%3DF", "#in-key");
+    const g = await desk(p);
+    ck(`Gold: no stand-in headline says gold or bullion, and the list says which words it looked for ("${g.newsEmpty}")`, g.newsEmpty === "In the last 30 days no headline matched gold or bullion, and there was no alert on Gold." && g.newsAux.startsWith("matched by: gold, bullion · 30 days"), g);
+    ck("no page errors; nothing sideways", errs.length === 0 && d.ox <= 0 && g.ox <= 0, errs); await ctx.close(); }
+
+  console.log("\n[a computer: every instrument name opens its page (D-15, B-23)]");
+  { const { ctx, p, errs } = await page(b, { viewport: { width: 1440, height: 900 } }, { size: "AUTO", compact: false, v: 2 });
+    await go(p, MOCK, "#market", "table.mkt tbody tr.click");
+    const row = p.locator("table.mkt tbody tr.click", { hasText: "USD/JPY" }).first();
+    const look = await row.evaluate((tr) => { const a = tr.querySelector("a.lnk"); return { href: a?.getAttribute("href"), col: a ? getComputedStyle(a).color : null, cursor: getComputedStyle(tr).cursor, name: a?.textContent }; });
+    await row.locator("td").nth(3).hover(); await p.waitForTimeout(100);
+    const under = await row.evaluate((tr) => getComputedStyle(tr.querySelector("a.lnk")).textDecorationLine);
+    ck(`MARKETS: the name is a teal link to its page (${look.href}), the row a pointer, and hovering anywhere on the row underlines the name`, look.href === "#asset/USDJPY%3DX" && look.col === CYAN && look.cursor === "pointer" && under === "underline", { ...look, under });
+    await row.locator("td").nth(3).click(); await p.waitForSelector("#in-key");
+    ck("MARKETS: clicking USD/JPY's row opens #asset/USDJPY%3DX, the instrument's page", (await p.evaluate(() => location.hash)) === "#asset/USDJPY%3DX" && (await p.locator('.panel[data-k="in-chart"] .phead .t').textContent()) === "USD/JPY");
+    await go(p, MOCK, "#market", "table.mkt tbody tr.click");
+    await p.locator("table.mkt tbody tr.click a.lnk", { hasText: "Nikkei 225" }).first().click(); await p.waitForTimeout(700);
+    ck("MARKETS: the Nikkei 225 opens on EQUITIES, its own page there", (await p.evaluate(() => location.hash)) === "#equities/nk225");
+    await go(p, MOCK, "#market", ".mtile.cp a.lbtxt");
+    const tiles = await p.evaluate(() => [...document.querySelectorAll(".mtile.cp .lb > a.lbtxt")].map((a) => ({ t: a.textContent, href: a.getAttribute("href"), col: getComputedStyle(a).color })));
+    ck(`MARKETS: every chart tile's title is a teal link to its page (${tiles.length} tiles: equities, rates, FX, commodities)`, tiles.length >= 15 && tiles.every((x) => x.col === CYAN && /^#(asset|equities)\//.test(x.href)) && tiles.some((x) => x.t === "UST 10Y yield" && x.href === "#asset/%5ETNX") && tiles.some((x) => x.t === "Gold" && x.href === "#asset/GC%3DF"), tiles.slice(0, 6));
+    await p.locator(".mtile.cp a.lbtxt", { hasText: "UST 10Y yield" }).first().click(); await p.waitForSelector("#in-key");
+    ck("MARKETS: the UST 10Y tile's title opens #asset/%5ETNX", (await p.evaluate(() => location.hash)) === "#asset/%5ETNX");
+    await go(p, MOCK, "#rates", '.panel[data-k="fx"] tbody tr.click');
+    const fx = await p.evaluate(() => [...document.querySelectorAll('.panel[data-k="fx"] tbody tr')].map((tr) => ({ click: tr.classList.contains("click"), href: tr.querySelector("a.lnk")?.getAttribute("href") ?? null })));
+    ck(`RATES & FX: every FX row opens its pair's page (${fx.length} rows)`, fx.length >= 3 && fx.every((r) => r.click && /^#asset\//.test(r.href)), fx);
+    await p.locator('.panel[data-k="fx"] tbody tr.click', { hasText: "USD/JPY" }).locator("td").nth(2).click(); await p.waitForSelector("#in-key");
+    ck("RATES & FX: clicking USD/JPY's FX row opens its page", (await p.evaluate(() => location.hash)) === "#asset/USDJPY%3DX");
+    await go(p, MOCK, "#rates", '.panel[data-k="yields"] a.lbtxt');
+    await p.locator('.panel[data-k="yields"] a.lbtxt', { hasText: "JGB 10Y yield" }).first().click(); await p.waitForSelector("#in-key");
+    const j = await desk(p);
+    ck(`RATES & FX: the JGB 10Y tile's name opens #asset/JGB10Y, and that page works (B-23): ${j.last}, ${j.rows["Source · as of"]}`, (await p.evaluate(() => location.hash)) === "#asset/JGB10Y" && /^\d\.\d{3}%$/.test(j.last) && /^Japan MOF · published for /.test(j.rows["Source · as of"]), j.rows);
+    await p.evaluate(() => { location.hash = "asset/%5EN225"; }); await p.waitForTimeout(800);
+    ck("an address of ^N225's single-name page lands on the Nikkei 225 on EQUITIES (the designer's I-4 check)", (await p.evaluate(() => location.hash)) === "#equities/nk225");
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+
+  console.log("\n[NEWS: the calendar's Currency picker (B-12), on a computer and on a phone]");
+  const jpEvents = S.calendar.filter((e) => e.impact === "High" && (e.currency ?? e.country) === "JPY");
+  for (const dev of ["desk", "iPhone 13"]) {
+    const { ctx, p, errs } = await page(b, dev === "desk" ? { viewport: { width: 1440, height: 900 } } : { ...devices[dev] }, { size: "AUTO", compact: false, v: 2 });
+    await go(p, MOCK, "#news", dev === "desk" ? "table.calT tr.ecrow" : ".ev-row");
+    const opts = await p.locator("#cal-ccy select option").evaluateAll((os) => os.map((o) => o.value));
+    await p.locator("#cal-ccy select").selectOption("JPY"); await p.waitForTimeout(400);
+    const rows = await p.evaluate((desk) => desk ? [...document.querySelectorAll("table.calT tr.ecrow")].map((tr) => ({ ccy: tr.cells[1].textContent, title: tr.cells[2].childNodes[0].textContent })) : [...document.querySelectorAll(".ev-row")].map((r) => ({ ccy: r.querySelector(".ev-t small").textContent, title: r.querySelector(".ev-n").childNodes[1].textContent })), dev === "desk");
+    ck(`${dev === "desk" ? "computer" : dev}: Currency beside Countries offers ${opts.slice(0, 5).join(", ")} …; JPY leaves only Japan's events (${rows.length}: ${rows.map((r) => r.title).join(" · ")})`, opts[0] === "All" && opts.slice(1, 4).join() === "USD,EUR,JPY" && rows.length === jpEvents.length && rows.every((r, i) => r.ccy === "JPY" && r.title === jpEvents[i].title), { opts, rows, want: jpEvents.map((e) => e.title) });
+    await p.locator("#cal-ccy select").selectOption("All"); await p.waitForTimeout(300);
+    const back = await p.evaluate((desk) => new Set([...document.querySelectorAll(desk ? "table.calT tr.ecrow td:nth-child(2)" : ".ev-row .ev-t small")].map((x) => x.textContent)).size, dev === "desk");
+    ck(`${dev === "desk" ? "computer" : dev}: All brings every currency back; no page errors`, back > 3 && errs.length === 0, { back, errs }); await ctx.close();
+  }
+
+  console.log("\n[a phone, iPhone 13: the same five pages]");
+  { const { ctx, p, errs } = await page(b, { ...devices["iPhone 13"] });
+    for (const pg of PAGES) {
+      await go(p, MOCK, pg.hash, "#in-first");
+      const ph = await p.evaluate(() => ({
+        meta: [...document.querySelectorAll(".mp-doc.asset .meta span")].map((s) => s.textContent), h1: document.querySelector(".mp-doc.asset h1")?.textContent,
+        first: [...document.querySelectorAll("#in-first .mp-grid > div")].map((c) => [c.querySelector(".k").textContent, c.querySelector(".v").childNodes[0]?.textContent ?? ""]),
+        secs: [...document.querySelectorAll(".mp-sec > h2 > span:first-child")].map((e) => e.textContent), text: document.querySelector(".mp").innerText,
+        perf: [...document.querySelectorAll("#in-perf tbody tr")].map((tr) => tr.cells[2].textContent), periods: [...document.querySelector(".mp-picks .pick select").options].map((o) => o.value),
+        ox: document.documentElement.scrollWidth - innerWidth,
+      }));
+      const firstK = ph.first.map((c) => c[0]).join("|");
+      ck(`${pg.name}: the stock page's frame, "${ph.meta.join(" · ")}" over "${ph.h1}"; the first block (${firstK}); then Key data, Performance, Events and News, and no stock-only section`, ph.meta[0] === decodeURIComponent(pg.hash.replace("#asset/", "")) && ph.h1 === pg.name && firstK === "Day|52W range|σ vs 1M avg|Realised vol 3M|vs 200D|Next meeting" && ph.first[5][1] === "–" && ph.secs.join() === "Key data,Performance,Events,News" && !STOCK_ONLY.test(ph.text) && ph.ox <= 0, ph);
+      if (pg.yield) ck(`${pg.name}: in bp on the phone too: the day ${ph.first[0][1]}, vs 200D ${ph.first[4][1]}, the volatility ${ph.first[3][1]} a day, 1D … 36M ${ph.perf.join(" ")}`, bp(ph.first[0][1]) && bp(ph.first[4][1]) && /^\d+\.\dbp$/.test(ph.first[3][1]) && ph.perf.length === 6 && ph.perf.every(bp), ph.first);
+      if (pg.official) ck(`${pg.name}: daily charts only on the phone (${ph.periods.join(" ")})`, ph.periods.join() === "3M,12M,36M,5Y,10Y", ph.periods);
+    }
+    await p.evaluate(() => { location.hash = "asset/%5EN225"; }); await p.waitForTimeout(800);
+    ck("^N225 on the phone: the Nikkei 225 on EQUITIES", (await p.evaluate(() => location.hash)) === "#equities/nk225");
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+
+  console.log("\n[the one-screen layout (1440x900, compact) and text XL (1440x900: one column in reading order)]");
+  { const { ctx, p, errs } = await page(b, { viewport: { width: 1440, height: 900 } }, { size: "AUTO", compact: true, v: 2 });
+    await go(p, MOCK, "#asset/USDJPY%3DX", "#in-key");
+    const r = await p.evaluate(() => Object.fromEntries([...document.querySelectorAll("#grid .panel")].map((x) => { const b = x.getBoundingClientRect(); return [x.dataset.k, { l: Math.round(b.left), t: Math.round(b.top), r: Math.round(b.right), bt: Math.round(b.bottom) }]; })));
+    const ok = r["in-chart"] && r["in-key"].l > r["in-chart"].r - 2 && Math.abs(r["in-key"].t - r["in-chart"].t) < 3 && [r["in-perf"], r["in-events"], r["in-news"]].every((x) => x.t >= r["in-chart"].bt - 2 && Math.abs(x.t - r["in-perf"].t) < 3) && r["in-perf"].r <= r["in-events"].l + 2 && r["in-events"].r <= r["in-news"].l + 2 && Math.max(...Object.values(r).map((x) => x.bt)) <= 900;
+    ck("compact: the chart beside KEY DATA, then PERFORMANCE, EVENTS and NEWS side by side, all on the one screen", ok, r);
+    ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+  { const { ctx, p, errs } = await page(b, { viewport: { width: 1440, height: 900 } }, { size: "XL", compact: false, v: 2 });
+    await go(p, MOCK, "#asset/%5ETNX", "#in-key");
+    const r = await p.evaluate(() => [...document.querySelectorAll("#grid .panel")].map((x) => ({ no: x.dataset.no, t: x.getBoundingClientRect().top, w: x.getBoundingClientRect().width })).sort((a, b) => a.t - b.t));
+    ck(`text XL: one column, the panels in their reading order (${r.map((x) => x.no).join(" ")}), each the page's width`, r.map((x) => x.no).join() === "01,02,03,04,05" && r.every((x) => Math.abs(x.w - r[0].w) < 2), r);
+    ck("no page errors; nothing sideways", errs.length === 0 && (await p.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 0, errs); await ctx.close(); }
+
+  console.log("\n[one format (I-5) on the new pages: no day/month, dd-Mon-yy or ISO date and no signed zero, in the text or a tooltip; USD/JPY with its own three decimals]");
+  { const BAD = { "a numeric day/month (11/19)": /(?<!FY)(?<![\w/])\d{1,2}\/\d{1,2}(?![\d/])/g, "a dd-Mon-yy date": /\b\d{2}-[A-Z][a-z]{2}-\d{2}\b/g, "an ISO date (2026-11-19)": /\b\d{4}-\d{2}-\d{2}\b/g, "a signed zero (−0.0, +0.0)": /[-−+]0(?:\.0+)?(?![\d.])(?:%|bp|σ)?/g };
+    const scan = (p) => p.evaluate((bad) => { const all = `${document.body.innerText}\n${[...document.querySelectorAll("[title]")].map((e) => e.getAttribute("title")).join("\n")}`, out = {};
+      for (const [k, src] of Object.entries(bad)) { const hits = [...all.matchAll(new RegExp(src, "g"))].map((m) => all.slice(Math.max(0, m.index - 30), m.index + m[0].length + 12).replace(/\s+/g, " ")); if (hits.length) out[k] = hits.slice(0, 4); } return out; }, Object.fromEntries(Object.entries(BAD).map(([k, re]) => [k, re.source])));
+    for (const dev of ["desk", "iPhone 13"]) {
+      const { ctx, p, errs } = await page(b, dev === "desk" ? { viewport: { width: 1440, height: 900 } } : { ...devices[dev] }, { size: "AUTO", compact: false, v: 2 });
+      const found = {};
+      for (const pg of PAGES) { await go(p, MOCK, pg.hash, dev === "desk" ? "#in-key" : "#in-first"); const s = await scan(p); if (Object.keys(s).length) found[pg.name] = s; }
+      await go(p, MOCK, "#asset/USDJPY%3DX", dev === "desk" ? "#in-key" : "#in-first");
+      const lv = await p.evaluate((desk) => desk ? [document.querySelector("#in-last").textContent, ...[...document.querySelectorAll('#in-perf tr[data-r="then"] td.num')].map((x) => x.textContent), document.querySelector("#in-key tr:nth-child(2) td.num").textContent] : [...document.querySelectorAll("#in-perf tbody tr td:nth-child(2)")].map((x) => x.textContent), dev === "desk");
+      ck(`${dev === "desk" ? "computer" : dev}: none on the five pages; USD/JPY's levels all with three decimals (${lv.slice(0, 3).join(", ")} …)`, Object.keys(found).length === 0 && lv.length >= 6 && lv.every((t) => /^\d{3}\.\d{3}$/.test(t)) && errs.length === 0, { found, lv, errs });
+      await ctx.close();
+    }
+  }
+
+  console.log("\n[a server from before 20 Nov 2026: a stock's answer for every name, and no quote for JGB 10Y]");
+  { const old = { symbol: "USDJPY=X", name: "USD/JPY", exchange: "CCY", currency: "JPY", quoteType: "CURRENCY", sector: null, industry: null, indices: [], price: 158.4, prevClose: 158.0, pct: 0.25, asOf: new Date().toISOString(), open: 158.1, high: 158.6, low: 157.9, volume: 0, mcap: null, benchmarks: [], perf: [{ h: "1D", from: null, base: 158, stock: 0.25, bench: [], rel: [] }], range: { hi: 162, hiDate: "2026-07-01", lo: 140, loDate: "2026-02-01", fromHi: -2.2, fromLo: 13.1, pos: 84 }, vol: { m1: 9, m3: 8.9, m12: 7.8 }, beta: [], drawdown: { pct: -11.7, from: "2026-07-01", to: "2026-11-18" }, turnover: { d20: { shares: null, value: null }, d60: { shares: null, value: null } }, shares: { outstanding: null, diluted: null, dilutedNote: null, treasury: null, float: null, asOf: null, source: null }, short: null, moves: { eligible: false, rule: "classic", rows: [] }, earningsAt: null, earningsEst: null, val: { pe: null, peGuide: null, pb: null, yield: null, yieldGuide: null, basis: null }, fin: null, finNote: "Statements are available for equities only." };
+    for (const dev of ["desk", "iPhone 13"]) {
+      const { ctx, p, errs } = await page(b, dev === "desk" ? { viewport: { width: 1440, height: 900 } } : { ...devices[dev] });
+      await routes(p);
+      await p.route("**/fakeapi?*", (r) => { const q = new URL(r.request().url()).searchParams, a = q.get("action"), h = { "access-control-allow-origin": "*" };
+        if (a === "stock" && q.get("symbol") === "USDJPY=X") return r.fulfill({ status: 200, contentType: "application/json", headers: h, body: JSON.stringify(old) });
+        if (a === "stock") return r.fulfill({ status: 500, contentType: "application/json", headers: h, body: JSON.stringify({ error: `no quote for ${q.get("symbol")}` }) });
+        return r.fallback(); });
+      await go(p, STANDIN, "#asset/USDJPY%3DX", dev === "desk" ? "#st-key" : "#st-key");
+      const s1 = await p.evaluate(() => ({ stock: !!document.querySelector("#st-key"), instr: !!document.querySelector("#in-key, #in-first") }));
+      await p.evaluate(() => { location.hash = "asset/JGB10Y"; }); await p.waitForTimeout(1200);
+      const s2 = await p.evaluate(() => document.body.innerText.includes("no quote for JGB10Y"));
+      ck(`${dev === "desk" ? "computer" : dev}: a stock's answer draws the page as before (no instrument layout, nothing broken); "no quote for JGB10Y" says so; no page errors`, s1.stock && !s1.instr && s2 && errs.length === 0, { s1, s2, errs }); await ctx.close();
+    }
+  }
+
+  await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0); })();

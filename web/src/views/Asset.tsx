@@ -12,9 +12,11 @@ import type { TableRow } from "../lib/types";
 import type { MarketId } from "../lib/sessions";
 import { fmtNum, fmtPct, signCls, stockDecimals } from "../lib/fmt";
 import { fmtDate, fmtStamp } from "../lib/time";
-import { avgTurnover, avgVolume, MKT_CAP, NEWS, NEXT_RESULTS, RANGE_52W } from "../lib/labels";
+import { avgTurnover, avgVolume, LARGEST_FALL, MKT_CAP, NEWS, NEXT_RESULTS, RANGE_52W, REALISED_VOL } from "../lib/labels";
 import { chartMarks, finSections, fmtCount, fmtPc, fmtPp, fmtX, isSmallMove, moveParts, moveRule, NO_DOC, periodDoc, siteOf, whyText, type Fin, type MoveRow, type StockPage } from "../lib/stock";
 import { AssetViewLegacy } from "./AssetLegacy";
+import { InstrumentView } from "./Instrument";
+import { isInstrumentPage } from "../lib/instrument";
 
 export const marketOf = (symbol: string): MarketId => (/\.T$/.test(symbol) ? "TSE" : /\.KS$/.test(symbol) ? "KRX" : /\.HK$/.test(symbol) ? "HKEX" : /\.SS$|\.SZ$/.test(symbol) ? "SSE" : /\.L$/.test(symbol) ? "LSE" : /\.SI$/.test(symbol) ? "SGX" : "NYSE");
 /** A stock's decimals: the stocks' rule of every screen (lib/fmt.ts stockDecimals). */
@@ -86,9 +88,12 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
   const [view, setView] = useState<"annual" | "quarterly">("annual");
   const a = useApi<StockPage>(symbol ? "stock" : null, { symbol }, Math.floor(tick / 5));   // the figures every five minutes; the chart refreshes each minute
   if (a.error === "unknown action") return <AssetViewLegacy symbol={symbol} tick={tick} />;   // a server from before this page
-  const d = a.data && a.data.symbol ? a.data : null;
+  const d = a.data && a.data.symbol && a.data.symbol.toUpperCase() === symbol.toUpperCase() ? a.data : null;   // the answer for this address only: another name's, kept while this one loads or fails, is not shown under it
   if (!symbol) return <Panel no="01" title="ASSET" span={12}><Empty title="No symbol">Use the search box at the top right.</Empty></Panel>;
-  if (!d) return <Panel no="01" title={symbol.toUpperCase()} span={12}>{a.error ? <Empty title="Not found">{a.error}</Empty> : <Empty title="Loading">{symbol}</Empty>}</Panel>;
+  if (!d) return <Panel no="01" title={symbol.toUpperCase()} span={12}>{a.error && !a.loading ? <Empty title="Not found">{a.error}</Empty> : <Empty title="Loading">{symbol}</Empty>}</Panel>;
+  // a currency, a yield, a commodity, a future or an index: its own page (I-4, 20 Nov 2026); a server from before that
+  // day sends a stock's answer for every name, and the page then shows it as it always did
+  if (isInstrumentPage(d)) return <InstrumentView key={d.symbol} d={d} tick={tick} />;
   const row = chartRow(d), dec = row.decimals, ccy = d.currency;
   const f = d.fin, sh = shortLine(d), s = d.short, prof = profileOf(f);
   const fs = f ? finSections(f, view) : null;
@@ -168,9 +173,9 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
                 <span className="rng"><span>{fmtNum(d.range.lo, dec)}</span><span className="bar">{d.range.pos != null && <i style={{ left: `${d.range.pos}%` }} />}</span><span>{fmtNum(d.range.hi, dec)}</span></span>
               </KV>
               <KV k="From 52W high / low">{<><span className={signCls(d.range.fromHi, 1)}>{fmtPc(d.range.fromHi, true)}</span> / <span className={signCls(d.range.fromLo, 1)}>{fmtPc(d.range.fromLo, true)}</span></>}</KV>
-              <KV k="Volatility, 1M / 3M / 12M" title="Standard deviation of daily log returns over 21, 63 and 252 sessions, as a yearly figure">{fmtPc(d.vol.m1, false, 0)} / {fmtPc(d.vol.m3, false, 0)} / {fmtPc(d.vol.m12, false, 0)}</KV>
+              <KV k={`${REALISED_VOL}, 1M / 3M / 12M`} title="Standard deviation of daily log returns over 21, 63 and 252 sessions, as a yearly figure">{fmtPc(d.vol.m1, false, 0)} / {fmtPc(d.vol.m3, false, 0)} / {fmtPc(d.vol.m12, false, 0)}</KV>
               {bms.map((b, k) => <KV key={b.symbol} k={`Beta vs ${b.name}, 12M`} title={`From daily returns over the last ${d.beta[k]?.days ?? 0} sessions on which both traded; correlation ${d.beta[k]?.corr == null ? "–" : d.beta[k].corr!.toFixed(2)}`}>{d.beta[k]?.beta == null ? "–" : d.beta[k].beta!.toFixed(2)}</KV>)}
-              <KV k="Largest fall, 12M" title={d.drawdown.from ? `From the close of ${fmtDate(d.drawdown.from)} to that of ${fmtDate(d.drawdown.to)}` : undefined} cls={signCls(d.drawdown.pct, 1)}>{fmtPc(d.drawdown.pct)}</KV>
+              <KV k={LARGEST_FALL} title={d.drawdown.from ? `From the close of ${fmtDate(d.drawdown.from)} to that of ${fmtDate(d.drawdown.to)}` : undefined} cls={signCls(d.drawdown.pct, 1)}>{fmtPc(d.drawdown.pct)}</KV>
               <KV k="P/E, last year / guidance" title={d.val.basis ?? undefined}>{fmtX(d.val.pe)} / {fmtX(d.val.peGuide)}</KV>
               <KV k="P/B" title={d.val.basis ?? undefined}>{fmtX(d.val.pb, 2)}</KV>
               <KV k="Dividend yield, last year / guidance" title={d.val.basis ?? undefined}>{fmtPc(d.val.yield, false, 2)} / {fmtPc(d.val.yieldGuide, false, 2)}</KV>

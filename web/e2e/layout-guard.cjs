@@ -32,7 +32,12 @@
 const { chromium, devices } = require("playwright");
 const MOCK = "http://localhost:5179/orrery-market-monitor/";
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d).slice(0, 1500)}`); };
-const SCREENS = ["market", "news", "research", "equities", "rates", "watch", "asset/NVDA", "asset/7203.T"];
+// an instrument's page (I-4: a pair, a yield read from the market and one from an official curve, an index without an
+// EQUITIES page) is guarded the same way by a suite of its own, layout-guard-instruments, which names its screens in
+// GUARD_SCREENS and leaves out the statements' walks and the proofs below: the two runs side by side keep each well
+// inside the runner's six minutes
+const ONLY = process.env.GUARD_SCREENS ? process.env.GUARD_SCREENS.split(",").filter(Boolean) : null;
+const SCREENS = ONLY ?? ["market", "news", "research", "equities", "rates", "watch", "asset/NVDA", "asset/7203.T"];
 const SIZES = [
   { code: "C1", label: "1440x900", ctx: { viewport: { width: 1440, height: 900 } }, prefs: { size: "AUTO", compact: false, v: 2 } },
   { code: "C2", label: "1280x720", ctx: { viewport: { width: 1280, height: 720 } }, prefs: { size: "AUTO", compact: false, v: 2 } },
@@ -286,6 +291,7 @@ const span = (s) => (s.shown.length ? `${s.shown[0]}–${s.shown[s.shown.length 
   }
   console.log("\n  known, under 44 px until the increment named (the designer's plan review, I-22):");
   for (const [i, n] of [...knownSeen.entries()].sort((a, c) => a[0] - c[0])) console.log(`    · ${KNOWN_TAPS[i].why}: ${n} seen`);
+  if (ONLY) { await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0); }
 
   console.log("\n[a stock's statements where they are wider than their box, walked: at rest, each press of ‹ earlier years, swipes of 40 px each way; no period drawn in part beside the names or at the right edge]");
   for (const s of FIN_WALKS) {

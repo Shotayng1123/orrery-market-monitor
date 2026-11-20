@@ -9,9 +9,9 @@ import { useApi } from "../lib/useApi";
 import { useRowCap } from "../lib/useRowCap";
 import type { EconEvent, NewsItem } from "../lib/types";
 import { fmtClock, fmtWhen, SGT } from "../lib/time";
-import { categoryLabel, HEADLINES, MKT_CAP, RESULTS_CALENDAR, TAB } from "../lib/labels";
+import { categoryLabel, CURRENCY, HEADLINES, MKT_CAP, RESULTS_CALENDAR, TAB } from "../lib/labels";
 import { fmtStampSafe } from "./shared";
-import { CAL_MODES, CATEGORY_OPTIONS, dayLabel, dayOf, decodeEntities, IMPACTS, MAJOR, NEWS_CATEGORIES, SCOPES } from "./News";
+import { CAL_MODES, calendarRows, CATEGORY_OPTIONS, dayLabel, dayOf, decodeEntities, IMPACTS, NEWS_CATEGORIES, SCOPES } from "./News";
 
 /** NEWS for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026): the calendar and the headlines of the desktop tab
  *  as lists at reading size. The calendar is a box of ten lines that scrolls inside itself and opens at the next
@@ -74,6 +74,7 @@ export function NewsPhone({ tick }: { tick: number }) {
   const [calMode, setCalMode] = useState<"macro" | "earnings">("macro");
   const [imp, setImp] = useState<"high" | "hm" | "all">("high");
   const [scope, setScope] = useState<"major" | "all">("major");
+  const [ccyPick, setCcy] = useState("All");
   const [region, setRegion] = useState<(typeof REGIONS)[number]>("All");
   const [big, setBig] = useState(true);
   const [cat, setCat] = useState<(typeof NEWS_CATEGORIES)[number]>("All");
@@ -81,7 +82,7 @@ export function NewsPhone({ tick }: { tick: number }) {
   const cal = useApi<{ rows: EconEvent[] }>("calendar", undefined, Math.floor(tick / 5));   // the calendar syncs hourly, the headlines every ten minutes
   const ern = useApi<{ rows: EarningsRow[]; source: string }>(calMode === "earnings" ? "earnings" : null, { days: 21 }, Math.floor(tick / 30));
   const news = useApi<{ rows: NewsItem[] }>("news", { category: cat === "All" ? undefined : cat, n: 150 }, Math.floor(tick / 5));
-  const events = useMemo(() => (cal.data?.rows ?? []).filter((e) => (imp === "all" || e.impact === "High" || (imp === "hm" && e.impact === "Medium")) && (scope === "all" || MAJOR.has(e.country))), [cal.data, imp, scope]);
+  const { events, ccy, ccys } = useMemo(() => calendarRows(cal.data?.rows ?? [], imp, scope, ccyPick), [cal.data, imp, scope, ccyPick]);
   const companies = useMemo(() => (ern.data?.rows ?? []).filter((r) => (region === "All" || REGION(r) === region) && (!big || (r.mcapUsd ?? 0) >= 1e10)), [ern.data, region, big]);
   const upcoming = events.some((e) => Date.parse(e.at) > Date.now());
   const heads = news.data?.rows ?? [];
@@ -94,6 +95,7 @@ export function NewsPhone({ tick }: { tick: number }) {
           {macro ? <>
             <Pick label="Impact" value={imp} options={IMPACTS} onChange={setImp} />
             <Pick label="Countries" value={scope} options={SCOPES} onChange={setScope} />
+            <Pick label={CURRENCY} id="cal-ccy" value={ccy} options={ccys} onChange={setCcy} title="Only the events of one currency (JPY: Japan's)" />
           </> : <>
             <Pick label="Region" value={region} options={REGIONS} onChange={setRegion} />
             <Pick label={MKT_CAP} value={big ? "big" : "all"} options={SIZES} onChange={(v) => setBig(v === "big")} />
@@ -101,7 +103,7 @@ export function NewsPhone({ tick }: { tick: number }) {
         </div>
         <div className="mp-card">
           {macro
-            ? (events.length ? <MacroList events={events} listKey={`${imp}|${scope}`} /> : <Empty title="No calendar loaded">{cal.error ?? "The calendar sync runs every hour."}</Empty>)
+            ? (events.length ? <MacroList events={events} listKey={`${imp}|${scope}|${ccy}`} /> : <Empty title="No calendar loaded">{cal.error ?? "The calendar sync runs every hour."}</Empty>)
             : (companies.length ? <EarningsList rows={companies} /> : <Empty title={ern.data ? "No companies match" : "Loading results dates"}>{ern.error ?? (ern.data ? "Widen the region or the market cap." : "")}</Empty>)}
         </div>
         <p className="mp-note">

@@ -9,6 +9,7 @@
 //   om_mock_bare = "a,b"              those actions answered as one the mock does not know ({ rows: [] })
 //   om_mock_stale = "1", om_mock_live = "1"   a stopped price feed; EQUITIES while its market is open (below)
 import { mockStock } from "./mockStock";
+import { mockInstrument, rowFromBars } from "./mockInstr";
 import standin from "./standin.json";
 import { isYield } from "./fmt";
 import type { TableRow, Health, Curve, Series, Alert, EconEvent, NewsItem, Note, Report, PeriodKey } from "./types";
@@ -40,6 +41,22 @@ const MASTER: Array<Pick<TableRow, "symbol" | "name" | "cls" | "group" | "market
   { symbol: "GC=F", name: "Gold", cls: "Commodities", group: "cmdty", market: "CME", currency: "USD", decimals: 2, order: 38, base: 4074.9, vol: 0.011 },
 ];
 
+/** Instruments the mock knows that its MARKETS table does not show (the live table carries them): an index without an
+ *  EQUITIES page, and the yields read from official curves, published once a day. Their pages and charts use them. */
+const EXTRA: typeof MASTER = [
+  { symbol: "^STOXX50E", name: "Euro Stoxx 50", cls: "Equities", group: "equity", market: "XETRA", currency: "EUR", decimals: 2, order: 14, base: 5612, vol: 0.011 },
+  { symbol: "UST3M", name: "UST 3M bill yield", cls: "Fixed income", group: "rates", market: "NYSE", currency: "USD", decimals: 3, order: 75, base: 4.19, vol: 0.004 },
+  { symbol: "JGB2Y", name: "JGB 2Y yield", cls: "Fixed income", group: "rates", market: "TSE", currency: "JPY", decimals: 3, order: 76, base: 1.88, vol: 0.01 },
+  { symbol: "JGB30Y", name: "JGB 30Y yield", cls: "Fixed income", group: "rates", market: "TSE", currency: "JPY", decimals: 3, order: 77, base: 3.94, vol: 0.009 },
+  { symbol: "DE2Y", name: "Bund 2Y yield", cls: "Fixed income", group: "rates", market: "XETRA", currency: "EUR", decimals: 3, order: 78, base: 2.29, vol: 0.012 },
+  { symbol: "DE10Y", name: "Bund 10Y yield", cls: "Fixed income", group: "rates", market: "XETRA", currency: "EUR", decimals: 3, order: 79, base: 2.66, vol: 0.011 },
+  { symbol: "GB10Y", name: "Gilt 10Y yield", cls: "Fixed income", group: "rates", market: "LSE", currency: "GBP", decimals: 3, order: 80, base: 4.45, vol: 0.01 },
+  { symbol: "EA10Y", name: "Euro area AAA 10Y yield", cls: "Fixed income", group: "rates", market: "XETRA", currency: "EUR", decimals: 3, order: 81, base: 2.78, vol: 0.011 },
+  { symbol: "CA10Y", name: "Canada 10Y yield", cls: "Fixed income", group: "rates", market: "NYSE", currency: "CAD", decimals: 3, order: 82, base: 3.67, vol: 0.01 },
+];
+/** The publisher of each yield the server reads from an official curve (instrstats.ts publisher). */
+const PUBLISHED: Record<string, string> = { UST2Y: "US Treasury", UST3M: "US Treasury", JGB10Y: "Japan MOF", JGB2Y: "Japan MOF", JGB30Y: "Japan MOF", DE2Y: "Bundesbank", DE10Y: "Bundesbank", GB10Y: "Bank of England", EA10Y: "ECB", CA10Y: "Bank of Canada" };
+
 function rng(seed: number): () => number {
   let s = seed >>> 0 || 1;
   return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return (s % 100000) / 100000; };
@@ -48,7 +65,7 @@ function rng(seed: number): () => number {
 const gauss = (r: () => number) => { let x = 0; for (let i = 0; i < 12; i++) x += r(); return x - 6; };
 const seedOf = (s: string) => Array.from(s).reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
 const DAY = 86400;
-const master = (symbol: string) => MASTER.find((x) => x.symbol === symbol) ?? MASTER[0];
+const master = (symbol: string) => MASTER.find((x) => x.symbol === symbol) ?? EXTRA.find((x) => x.symbol === symbol) ?? MASTER[0];
 
 /** A letter code that tells apart the stand-in companies sharing a base name ("Toyota Motor B", "Sony Group AB"):
  *  real names carry no counter, and a number in a name would read as a figure to the layout guard. */
@@ -261,6 +278,21 @@ function stockFeed(symbol: string): StockFeed {
   return { days: 90, news, alerts };
 }
 
+/** An instrument's page (I-4): a Monitor instrument of the stand-in table or of EXTRA, or any symbol Yahoo writes for
+ *  an index, a pair, a future or a coin ("^…", "…=X", "…=F", "…-USD"), which the server reads from its quote. */
+const isInstrumentSymbol = (sym: string): boolean => MASTER.some((m) => m.symbol === sym) || EXTRA.some((m) => m.symbol === sym) || /^\^|=X$|=F$|-USD$/.test(sym);
+function instrumentAnswer(sym: string): unknown {
+  const S = SI(), known = MASTER.find((m) => m.symbol === sym) ?? EXTRA.find((m) => m.symbol === sym);
+  const def = known ?? { symbol: sym, name: sym, cls: /=X$/.test(sym) ? "Currency" : /=F$/.test(sym) ? "Futures" : /-USD$/.test(sym) ? "Crypto" : "Equities", group: /=X$|-USD$/.test(sym) ? "fx" : /=F$/.test(sym) ? "cmdty" : "equity", market: /=X$/.test(sym) ? "FX" : "NYSE", currency: "USD", decimals: 2, order: 0, base: 57000, vol: 0.013 } as (typeof MASTER)[number];
+  const pts = dailySeries(sym, 1300), bars = pts.map((p) => ({ t: p.t, c: p.v })), pub = PUBLISHED[sym] ?? null;
+  const tableRow = MASTER.some((m) => m.symbol === sym) ? mockTable().rows.find((r) => r.symbol === sym) ?? null : null;
+  const lastAt = pub ? `${new Date(pts[pts.length - 1].t * 1000).toISOString().slice(0, 10)}T00:00:00Z` : new Date().toISOString();
+  // the table's own row (as the server sends it, so the page, its chart and MARKETS agree), or one made the table's way;
+  // an official yield's figure is its last published close
+  const row = tableRow ?? rowFromBars(def, bars.slice(0, -1), def.base, lastAt);   // the walk's last point is the print
+  return mockInstrument({ ...row, lastAt: pub ? lastAt : row.lastAt, live: pub ? false : row.live }, bars, { official: pub, monitor: !!known, calendar: S.calendar as unknown as EconEvent[], news: S.news as unknown as NewsItem[], alerts: [...(S.watch.feed.alerts as unknown as Alert[]).map((a) => ({ ...a, id: a.id + 1000 })), ...(S.alerts as unknown as Alert[])], now: Date.now() });
+}
+
 /** `?mock=empty`: what the server sends for each action when its tables hold nothing. */
 function emptyAnswer(action: string, params: Record<string, string | number | boolean | undefined> | undefined): unknown {
   const idx = String(params?.idx ?? "SP500");
@@ -332,7 +364,11 @@ export function mockAction(action: string, params: Record<string, string | numbe
       const term = String(params?.q ?? "").trim().toLowerCase();
       return { rows: term ? (S.watch.search as Hit[]).filter((x) => x.symbol.toLowerCase().includes(term) || x.name.toLowerCase().includes(term)) : [] };
     }
-    case "stock": { const sym = String(params?.symbol ?? "7203.T"), pts = dailySeries(sym, 300); return { ...mockStock(sym, pts[pts.length - 1].v, pts), feed: stockFeed(sym) }; }   // the price the mock chart ends at, and its days for the marks
+    case "stock": {
+      const sym = String(params?.symbol ?? "7203.T");
+      if (isInstrumentSymbol(sym)) return instrumentAnswer(sym);   // a currency, a yield, a commodity, a future or an index (I-4)
+      const pts = dailySeries(sym, 300); return { ...mockStock(sym, pts[pts.length - 1].v, pts), feed: stockFeed(sym) };   // the price the mock chart ends at, and its days for the marks
+    }
     case "asset": {
       const symbol = String(params?.symbol ?? "7203.T"); const r = rng(seedOf(symbol)); const jp = /\.T$/.test(symbol);
       const price = jp ? 1000 + r() * 5000 : 50 + r() * 400; const pct = (r() - 0.5) * 6;

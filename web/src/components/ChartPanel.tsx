@@ -6,6 +6,7 @@ import { fmtChg, fmtLevel, fmtPct, fmtSigma, isYield, signCls } from "../lib/fmt
 import { fmtDate, fmtStamp, fmtWhen, SGT } from "../lib/time";
 import { delayed } from "../lib/labels";
 import { marketById } from "../lib/sessions";
+import { pageHash } from "../lib/indices";
 import { Flash } from "./Flash";
 import { LONG_PERIODS, PERIOD_DAYS, type ChartPeriod } from "../lib/periods";
 
@@ -31,8 +32,9 @@ function sessionWindow(points: Array<{ t: number }>): number {
  *  share the name's line and cut it to a few letters ("Nikkei 2…": the designer's D-08, 19 Nov 2026). */
 const WIN_LABEL: Record<SigmaWindow, string> = { m1: "1M", m12: "12M", m36: "36M" };
 /** `focus`: a mark to open on the chart (its day, `t`), each new `n` once: a big move tapped in the phone's list
- *  (A-25). */
-export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wide", axes = false, volume = false, marks, chartHeight = 150, focus }: { row: TableRow; period: ChartPeriod; tick: number; sigmaWindow?: SigmaWindow; shape?: "wide" | "square" | "large"; axes?: boolean; volume?: boolean; marks?: ChartMark[]; chartHeight?: number /* the "wide" shape's chart, in px */; focus?: { t: number; n: number } | null }) {
+ *  (A-25). `link`: the title opens the instrument's own page, in the teal of everything that opens something (the
+ *  designer's D-15 and B-23: the tiles of MARKETS and RATES & FX). */
+export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wide", axes = false, volume = false, marks, chartHeight = 150, focus, link = false }: { row: TableRow; period: ChartPeriod; tick: number; sigmaWindow?: SigmaWindow; shape?: "wide" | "square" | "large"; axes?: boolean; volume?: boolean; marks?: ChartMark[]; chartHeight?: number /* the "wide" shape's chart, in px */; focus?: { t: number; n: number } | null; link?: boolean }) {
   // The tile's price and change come from the table row, refreshed every minute. The line itself is refetched
   // as often as its bars change: one-minute bars every minute, 15-minute and hourly bars every five minutes,
   // daily closes every quarter of an hour (a full history per tile per minute is megabytes of traffic an hour).
@@ -82,7 +84,8 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
   return (
     <div ref={box} className={`mtile cp ${shape}${row.live ? " live" : ""}`}>
       <div className="lb">
-        <span className="lbtxt" title={`${row.name} (${row.symbol})`}>{row.name}</span>
+        {link ? <a className="lbtxt lnk" href={`#${pageHash(row.symbol)}`} title={`${row.name} (${row.symbol}): open its page`}>{row.name}</a>
+          : <span className="lbtxt" title={`${row.name} (${row.symbol})`}>{row.name}</span>}
       </div>
       <div className="vl">
         <span className="px"><Flash value={row.last}>{lvl(row.last)}</Flash></span>

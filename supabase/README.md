@@ -285,6 +285,39 @@ checked in `sim/logic.test.ts` (sections L to P).
 - **Benchmarks**: Tokyo names are set against the Nikkei 225 and TOPIX, others against their home index
   (`benchmarksFor` in `_shared/assets.ts`). TOPIX is read from the `1306.T` fund.
 
+## An instrument's page (added 2026-11-20)
+
+`api?action=stock&symbol=…` answers a currency, a yield, a commodity, a future or an index with an instrument's page
+(`instrumentPage` in `_shared/stock.ts`): a symbol of the `instruments` table always, and a symbol Yahoo quotes as an
+INDEX, CURRENCY, FUTURE or CRYPTOCURRENCY. A share, an ETF or a fund keeps a stock's page. The arithmetic is in
+`_shared/instrstats.ts` and the calendar's and headlines' rules in `_shared/instrfeed.ts`, both pure and checked in
+`sim/logic.test.ts` (section U).
+
+- **What it reads.** A Monitor instrument: its row of the market table (the `snapshots` row MARKETS reads, so the page's
+  last print, its changes over 1D to 36M, σ vs 1M avg, the 52W position and vs 200D are MARKETS' own) and five years of
+  its stored daily closes (`prices_daily`), from which realised volatility over 21, 63 and 252 sessions, its percentile
+  among the daily readings of the last 36 months, the 52-week high and low with their dates and the largest rise and fall
+  of 12 months are worked out. A yield read from an official curve (`provider` treasury, mof or curve: UST2Y, UST3M,
+  JGB2Y/10Y/30Y, DE2Y/10Y, GB10Y, EA10Y, CA10Y) asks no quote: no session figures, the publisher named, its as-of the day
+  it was published for. Any other Monitor instrument asks one Yahoo quote for the session's open, high and low (a failed
+  quote leaves them as dashes). A name found by search: its Yahoo quote and the same ten years of daily bars a stock's
+  page reads, with the market table's rules for the anchors and the statistics (today's bar, still moving, left out).
+- **Units.** A yield's figures are sent in points of its level (the page writes bp), a price's in per cent; `units` says
+  which. Nothing for a yield is a per cent of its level.
+- **Events** (`instrument.events`): the `econ_events` rows of its currencies from five days back to eight ahead (a pair's
+  two, the dollar index's dollar, otherwise the currency it is quoted in; CNH is read as CNY).
+- **News** (`feed`, as on a stock's page, over 30 days): the `news_items` whose title holds one of the instrument's words
+  as a whole word, any case (`instrument.matched`, which the page shows): asked of the database as one pattern
+  (PostgREST's `imatch` with PostgreSQL's word edges `[[:<:]]` and `[[:>:]]`) and checked again in the function; and the
+  `alerts` on the symbol.
+- **Asked of no source but the ones above.** EDINET DB is never asked for an instrument, no statements are read and no
+  big-move look-up is queued (those cost money).
+- **A page from before 20 Nov 2026** shows every name as a stock. The answer keeps every field a stock's answer has
+  (`legacyStockFields`: the changes, the range, the volatility and the largest fall worked out as for a stock from the
+  same closes; no shares, statements, short interest or big moves) and adds `instrument`, which that page ignores. It
+  draws an instrument as it did before; JGB 10Y and the other official yields, which gave "no quote for …", now draw
+  too. A newer page given an older server's answer (no `instrument`) shows the stock's page, as before.
+
 ## Big moves and why (added 2026-11-18)
 
 For a company of 1tn yen and above, or 10bn US dollars and above, the stock page marks on the chart (the rule

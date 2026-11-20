@@ -7,6 +7,9 @@ import type { SigmaWindow } from "../components/SigmaChart";
 import { CurveChart, spread } from "../components/CurveChart";
 import { useApi, DEV_MOCK } from "../lib/useApi";
 import { fmtPct, fmtChg, fmtLevel, fmtSigma, fmtStampSafe, isYield, signCls } from "./shared";
+import { cellBp, cellPct } from "../lib/fmt";
+import { pageHash } from "../lib/indices";
+import { openAsset } from "../components/CompanyCard";
 import { fmtDate } from "../lib/time";
 import { classLabel, delayed, dottedLine, FX, RANGE_52W as RANGE_WORD, RATES, SIGMA_1M as SIGMA_WORD, VS_200D } from "../lib/labels";
 import { Flash } from "../components/Flash";
@@ -40,9 +43,8 @@ function Badges({ r }: { r: TableRow }) {
 export const levelOf = (r: Pick<TableRow, "decimals" | "group" | "symbol">, v: number | null | undefined): string => fmtLevel(v, r.decimals, isYield(r));
 
 /** Table cells are narrow: moves of 100% or 100bp and more drop one decimal so the figure is never cut off
- *  (the base level stays in the cell's tooltip). */
-export const cellPct = (v: number | null | undefined) => (v != null && Math.abs(v) >= 100 ? fmtPct(v, 1) : fmtPct(v));
-export const cellBp = (v: number | null | undefined) => (v != null && Math.abs(v) >= 1 ? `${v > 0 ? "+" : "-"}${Math.round(Math.abs(v) * 100)}bp` : fmtChg(v, 3, true));
+ *  (the base level stays in the cell's tooltip). Written once in lib/fmt.ts, for an instrument's page too. */
+export { cellBp, cellPct };
 
 /** One table (Shota): the level only as of now, every window as a % change (bp for a yield), then σ vs 1M avg, the
  *  52W range in % and the distance to the 200-day average. The asset class is the section bar, not a column. */
@@ -91,9 +93,10 @@ function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
       <tr className="cls"><td colSpan={5 + PERIODS.length}><span>{classLabel(cls)}</span></td></tr>
       {rs.map((r) => {
         const isRate = isYield(r);
+        // every row opens its instrument's page (the designer's D-15, B-23): the name a teal link, the row a pointer
         return (
-          <tr key={r.symbol} className={r.live ? "live" : undefined} title={`${r.symbol} · last ${fmtStampSafe(r.lastAt)}${r.live ? " · market open" : ""}`}>
-            <td className="l" title={`${r.name} (${r.symbol})`}>{shortName(r.symbol, r.name)}<Badges r={r} /></td>
+          <tr key={r.symbol} className={`click${r.live ? " live" : ""}`} title={`${r.symbol} · last ${fmtStampSafe(r.lastAt)}${r.live ? " · market open" : ""} · open its page`} onClick={(e) => { if (!(e.target as HTMLElement).closest("a")) openAsset(r.symbol); }}>
+            <td className="l" title={`${r.name} (${r.symbol})`}><a className="lnk" href={`#${pageHash(r.symbol)}`}>{shortName(r.symbol, r.name)}</a><Badges r={r} /></td>
             <td className="num"><Flash value={r.last}><b>{levelOf(r, r.last)}</b></Flash></td>
             {PERIODS.map((p) => {
               const c = r.closes[p.key];
@@ -114,7 +117,7 @@ function ChartGroup({ no, title, rows, period, tick, sigmaWindow, show, children
   return (
     <Panel no={no} title={title} span={12} aux={`${rows.length} panels · ${period}`}>
       {children}
-      {rows.length ? <TileGrid n={rows.length} rows={show} group="market">{rows.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} />)}</TileGrid> : <Empty title="No instruments in this group yet" />}
+      {rows.length ? <TileGrid n={rows.length} rows={show} group="market">{rows.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} link />)}</TileGrid> : <Empty title="No instruments in this group yet" />}
     </Panel>
   );
 }

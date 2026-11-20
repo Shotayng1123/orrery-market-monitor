@@ -23,6 +23,12 @@ export const RANGE_52W = "52W range";
 export const VS_50D = "vs 50D", VS_200D = "vs 200D";
 /** The instruments that move an index or a pair. */
 export const DRIVERS = "Drivers";
+/** Realised volatility over 1M, 3M and 12M (a stock's page and an instrument's: one word for both, I-4), and the
+ *  largest rise and fall of the last twelve months. */
+export const REALISED_VOL = "Realised vol", LARGEST_RISE = "Largest rise, 12M", LARGEST_FALL = "Largest fall, 12M";
+/** An instrument's page (I-4): its calendar, the level each change is measured from, its central banks' next
+ *  meeting (filled once the Monitor keeps the banks' calendars, I-7), the calendar's currency picker on NEWS. */
+export const EVENTS = "Events", LEVEL_THEN = "Level then", NEXT_MEETING = "Next meeting", CURRENCY = "Currency";
 /** The asset classes as the table's bars and the kinds name them: a currency is FX, a yield is Rates. */
 export const FX = "FX", RATES = "Rates";
 const CLASS: Record<string, string> = { Currency: FX, "Fixed income": RATES };

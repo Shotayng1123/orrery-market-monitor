@@ -83,3 +83,8 @@ export const signCls = (v: number | null | undefined, decimals?: number): string
 
 /** A row quoted as a yield (level in %, changes in bp). A bond future sits in the rates group but is a price. */
 export const isYield = (r: { group: string; symbol: string }): boolean => r.group === "rates" && !r.symbol.endsWith("=F");
+
+/** A change in a narrow table cell (MARKETS, the watchlist, an instrument's page): moves of 100% or 100bp and more drop
+ *  one decimal so the figure is never cut off. A yield's change comes in points of its level and is written in bp. */
+export const cellPct = (v: number | null | undefined) => (v != null && Math.abs(v) >= 100 ? fmtPct(v, 1) : fmtPct(v));
+export const cellBp = (v: number | null | undefined) => (v != null && Math.abs(v) >= 1 ? `${v > 0 ? "+" : "-"}${Math.round(Math.abs(v) * 100)}bp` : fmtChg(v, 3, true));

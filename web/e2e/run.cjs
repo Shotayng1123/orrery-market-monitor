@@ -46,6 +46,8 @@ const SUITES = [
   { name: "units-labels", needs: ["mock", "standin"] },
   { name: "one-format", needs: ["mock", "standin"] },
   { name: "layout-guard", needs: ["mock"] },
+  { name: "layout-guard-instruments", needs: ["mock"] },
+  { name: "instrument-pages", needs: ["mock", "standin"] },
   { name: "nothing-cut", needs: ["mock", "standin"] },
   { name: "update-bar", needs: ["mock", "built"] },
   { name: "offline", needs: ["mock", "built"] },

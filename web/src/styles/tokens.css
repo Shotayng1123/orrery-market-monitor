@@ -1649,3 +1649,36 @@ body.term #grid[data-view="asset"]:has(.panel[data-k="st-chart"]) table.secT td.
 body.pv2 #st-yuho{position:relative}
 body.pv2 #st-yuho::before{content:"";position:absolute;inset:-13px -8px}
 #st-news-f .mp-tog{min-width:44px}
+/* ---- I-4 (20 Nov 2026): an instrument's page; every instrument name opens it ---- */
+/* MARKETS and RATES & FX (the designer's D-15, B-23): the name is a teal link, the whole row a pointer, and hovering
+   the row underlines its name */
+tr.click:hover .lnk{text-decoration:underline}
+/* KEY DATA: realised volatility's second line (bp a year for a yield, the three-year percentiles) under the first */
+.kvT td.num .vl1{white-space:nowrap}
+.kvT td.num .vl2{display:block;margin-top:1px;font-size:10px;line-height:1.35;color:var(--mut);white-space:normal}
+/* EVENTS in the right column: the calendar's table with room for its figures (none is ever cut), the impact as a dot
+   before the event, and the event's name wrapping */
+table.calT.inev col.nv{width:16%}
+table.calT.inev td{text-overflow:clip}
+table.calT.inev td.ev{white-space:normal;overflow:visible;overflow-wrap:break-word;line-height:1.35}
+table.calT.inev td.ev .imp{margin-right:6px;vertical-align:1px}
+table.calT.inev td.num,table.calT.inev td:nth-child(n+4){white-space:nowrap;overflow:visible}
+/* the phone's first block: labels may wrap; a figure's note on a line of its own under it */
+.mp-first .mp-grid{margin-top:0}
+.mp-first .mp-grid .k{white-space:normal;line-height:1.2}
+.mp-first .mp-grid .v small{display:block;margin-top:3px;font-family:var(--sans);font-size:11px;font-weight:400;line-height:1.25;color:var(--mut);white-space:normal}
+/* the phone's events: the whole name and the consensus line, wrapped rather than cut */
+#in-events .ev-n.wrap{white-space:normal;overflow:visible}
+#in-events .ev-s{white-space:normal;overflow:visible}
+/* the one screen (compact), until I-7's section bar brings the designer's two screens (§4.7): the chart beside KEY
+   DATA, then PERFORMANCE, EVENTS and NEWS side by side */
+body.term #grid[data-view="asset"]:has(.panel[data-k="in-chart"]){grid-template-rows:auto minmax(0,1.3fr) minmax(0,1.3fr) minmax(0,1.2fr)}
+body.term #grid[data-view="asset"] .panel[data-k="in-chart"]{grid-column:1 / span 8;grid-row:2 / span 2}
+body.term #grid[data-view="asset"] .panel[data-k="in-key"]{grid-column:9 / span 4;grid-row:2 / span 2}
+body.term #grid[data-view="asset"] .panel[data-k="in-perf"]{grid-column:1 / span 4;grid-row:4}
+body.term #grid[data-view="asset"] .panel[data-k="in-events"]{grid-column:5 / span 4;grid-row:4}
+body.term #grid[data-view="asset"] .panel[data-k="in-news"]{grid-column:9 / span 4;grid-row:4}
+body.term #grid[data-view="asset"]:not(:has(.panel[data-k="in-events"])) .panel[data-k="in-perf"]{grid-column:1 / span 8}
+body.term #grid[data-view="asset"]:has(.panel[data-k="in-chart"]) table.secT td.l{max-width:none;overflow:visible;text-overflow:clip;white-space:normal}
+/* the phone EVENTS impact toggles: "All" at least 44 px wide, as the NEWS toggles */
+#in-imp .mp-tog{min-width:44px}

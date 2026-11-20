@@ -66,7 +66,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, about 1,300 checks in 27 suites): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, about 1,400 checks in 29 suites): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -74,7 +74,10 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   "11/19", "16-Nov-26", "2026-11-19" or "−0.0" on any screen or tooltip, the glossary's words alike on both layouts), the
   stock page (chart marks, performance, statements; its NEWS of headlines and alerts, the document behind each
   statements column, big moves in their sign's colours, a move opened on the phone's chart, a tap on a phone chart,
-  5Y and 10Y, the two-column page and a server from before NEWS), the classic phone layout, the sign-in screen, creating an
+  5Y and 10Y, the two-column page and a server from before NEWS), an instrument's page (`instrument-pages`: a pair, two
+  yields, gold and an index without an EQUITIES page on both layouts with no stock-only line, a yield's figures in bp,
+  JGB 10Y from Japan MOF, USD/JPY's events and yen headlines, every instrument name on MARKETS and RATES & FX opening
+  its page, NEWS's Currency picker, and a server from before), the classic phone layout, the sign-in screen, creating an
   account by verification email, the manager's accounts list, the
   home-screen hint, the new-version bar, opening without a connection, notifications, a tab that fails
   while it is drawn (it says so in its own space; the header and the other tabs stay), the welcome email as its
@@ -89,7 +92,8 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   targets the designer listed as still small are printed with the change that fixes them. A stock's statements,
   where they scroll sideways, are walked as a reader moves them (where they open, each press of "‹ earlier years",
   swipes of 40 px each way) on four phones and on a computer at text XL, and every place they come to rest must show
-  each period whole, beside the line names and at the right edge. It also cuts, clips and
+  each period whole, beside the line names and at the right edge. `layout-guard-instruments` runs the same checks on
+  four instruments' pages at the same sizes. It also cuts, clips and
   covers figures on purpose with throwaway styles, to show that it fails each time. XL text and the one-screen
   layout join it once they are fixed. `nothing-cut` checks the designer's findings behind it one by one (whole
   columns at both edges of a phone's statements, pressed back and swiped, short interest at its natural height, chart titles, long headlines under day
@@ -102,7 +106,9 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   Needs Playwright's browser once: `npx playwright install chromium`.
 - **Logic checks** (`sim/logic.test.ts`): exchange sessions, rolling bands, alert measures, the push encryption,
   the verification email for a new account, and every figure of the stock page (performance, ratios, statements
-  as read from each source, big moves, the reading of a move's reason), and the second path for prices (when the
+  as read from each source, big moves, the reading of a move's reason), every figure of an instrument's page (its
+  units, volatility and percentile, largest moves, the table's anchors and statistics for a name it does not keep, the
+  calendar's currencies and the headlines' words, and the fields a page from before still reads), and the second path for prices (when the
   relay takes over and hands back, its timetable against the database's own), where a statements table wider
   than the screen comes to rest, and the one formatting of figures, dates and words (`lib/fmt.ts`, `lib/time.ts`,
   `lib/labels.ts`). `cd jobs && npx tsx ../sim/logic.test.ts`.
@@ -146,6 +152,26 @@ A new source is tried from GitHub's machines before a job is built on it: a read
 | Fiscal year end, accounting standard, annual report (Tokyo) | The latest 有価証券報告書 in EDINET DB's answer |
 | News: headlines and alerts naming the stock (since 2026-11-20) | The Monitor's own tables: headlines from the publishers' feeds on NEWS whose companies include the stock, and the Monitor's alerts on it, over 90 days |
 | Big moves and why (companies of 1tn yen / 10bn US dollars and above) | From the bars (`_shared/bigmoves.ts`): a day of 10% or more, and the peaks and bottoms of the closes (large circles: turns of 15%; small circles: turns of 10%; the circles and dots: a peak red, a bottom green; the figures in their sign's colour). Each reason from a web search by the `move-causes` job, kept only with the reports behind it |
+
+### An instrument's page (`#asset/USDJPY%3DX`, `#asset/JGB10Y`, `#asset/GC%3DF` …, since 2026-11-20)
+
+A currency, a yield, a commodity, a future or an index gets a page of its own instead of a stock's (an index with a page
+on EQUITIES, such as the Nikkei 225, keeps opening there). On a computer every instrument name on MARKETS and RATES & FX
+opens it (the name a teal link, the whole row a pointer, a chart tile's title a link); on a phone, "Open … page".
+
+| On the page | Where it comes from |
+|---|---|
+| Chart with σ corridors; PERIOD 1D to 10Y (an official yield: 3M to 10Y, it is published once a day) | The Monitor's own series (the market table's instruments) or Yahoo Finance's bars for a name found by search |
+| Last, the day's change, previous close, the change over 1D to 36M, σ vs 1M avg, 52W range, vs 200D | A Monitor instrument: MARKETS' own figures, from the same market table, so the page and MARKETS agree. A name found by search: its Yahoo quote and daily closes, with the table's rules |
+| The day's range | The Yahoo quote's session high and low; none for an official yield |
+| Realised volatility 1M / 3M / 12M and its percentile among three years of daily readings; the 52-week high and low with their dates; the largest rise and fall of 12 months | Worked out from the stored daily closes (`_shared/instrstats.ts`). A yield in bp of its level (bp a day, bp a year), a price in per cent |
+| Events | The economic calendar the Monitor stores (FXStreet, ForexFactory as the fallback): the events of its currencies, five days back and eight ahead |
+| News | The Monitor's own headlines of the last 30 days whose title holds one of the instrument's words (USD/JPY: yen, JPY, BoJ, Bank of Japan; the page names them, `_shared/instrfeed.ts`), and its own alerts on it |
+
+A yield's every change, distance and volatility is in basis points of its level, never a per cent of it. A yield read
+from an official curve (US Treasury, Japan MOF, Bundesbank, ECB, Bank of England, Bank of Canada) names its publisher and
+the day it was published for. Its drivers and stress episodes join with a later increment, and the central banks' next
+meetings once the Monitor keeps their calendars: until then those places are empty, never filled with a guess.
 
 A figure a source does not give is shown as a dash. Nothing on the page is estimated; the two sums made on the
 page itself (net cash, free cash flow) say so where they stand. A Japanese company's table keeps the lines of

@@ -47,6 +47,15 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
     ["Short interest", "Tokyo: JPX short-position reports. United States: exchange-reported short interest, and FINRA's short-volume share of a day's trading, which is not short interest."],
     ["Next results (est.)", "A date estimated by Yahoo Finance, not confirmed by the company."],
   ] },
+  { title: "Instrument page", rows: [
+    ["Which page", "A currency, a yield, a commodity, a future or an index has a page of its own: open it from search, from a name or a chart's title on MARKETS and RATES & FX (on a computer the name is in teal and the whole row opens it), or with Open … page on a phone. An index with a page on EQUITIES (the Nikkei 225, TOPIX, the S&P 500 …) opens there."],
+    ["What it shows", "The chart; KEY DATA; PERFORMANCE over 1D to 36M; EVENTS, the calendar of its currencies; NEWS, its headlines and alerts. Nothing that belongs to a company: no market cap, shares, valuation, results, short interest, big moves or statements."],
+    ["Units", "A yield's changes, its distance from the 52-week high and low and from the 200-day average, its realised volatility and its largest moves are in basis points (bp) of its level, as on MARKETS; its level ends in %. A price's are in per cent."],
+    ["Key data", "Last, the day's change and the day's range, the previous close; the 52W range with its bar; σ vs 1M avg and vs 200D, as on MARKETS; realised volatility over 1M, 3M and 12M (a yield in bp a day and bp a year, a price in % a year); 3Y pctl, where today's volatility stands among its daily readings of the last three years (0% the calmest, 100% the most volatile; a dash where the history is shorter); the largest rise and the largest fall of the last 12 months, each with the day it ended (both days on hover)."],
+    ["Official yields", "A yield the Monitor reads from its publisher's daily file (US Treasury, Japan MOF, Bundesbank, ECB, Bank of England, Bank of Canada) is published once a day: no day's range and no charts within the day; its as-of is the day it was published for."],
+    ["Events", "The economic calendar of the instrument's currencies (both of a pair's, the quoting currency of anything else), five days back and eight ahead, High impact to start, as on NEWS. The central banks' next meetings join it once the Monitor keeps their calendars; until then the phone's Next meeting is a dash."],
+    ["News", "The headlines of the last 30 days that name the instrument, matched by whole words shown at the top of the panel (for USD/JPY: yen, JPY, BoJ, Bank of Japan), and the Monitor's own alerts on it. Fifteen at a time."],
+  ] },
   { title: "Watchlist", rows: [
     ["Adding a name", "Type part of a company's name or of its ticker and choose from the candidates; or use the star beside a name on its page."],
     ["What it adds", "Its results dates, its headlines, the research that mentions it, and alerts on it read from one-minute prices."],
@@ -65,6 +74,7 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
   ] },
   { title: "News", rows: [
     ["Headlines", "Under a bar for each day: the time, the category and the headline (the whole of it on hover if it runs past three lines), then the publisher and the companies it names; a company opens its page. Times are in SGT, as the panel says."],
+    ["Currency", "The calendar's Currency picker keeps one currency's events (JPY: Japan's). It offers the currencies the Countries choice leaves."],
   ] },
   { title: "Research", rows: [
     ["Daily", "The morning note, Monday to Saturday around 07:00 SGT: the news behind the overnight moves."],

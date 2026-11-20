@@ -11,11 +11,13 @@ import { StockNews } from "../components/StockNews";
 import { useApi } from "../lib/useApi";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtDate, fmtStamp } from "../lib/time";
-import { avgTurnover, avgVolume, MKT_CAP, NEWS, NEXT_RESULTS, PERIOD, SIGMA_WINDOW } from "../lib/labels";
+import { avgTurnover, avgVolume, LARGEST_FALL, MKT_CAP, NEWS, NEXT_RESULTS, PERIOD, REALISED_VOL, SIGMA_WINDOW } from "../lib/labels";
 import { chartMarks, finSections, fmtCount, fmtPc, fmtPp, fmtX, isSmallMove, moveRule, NO_DOC, siteOf, whyText, type MoveRow, type StockPage } from "../lib/stock";
 import { periodHolding } from "../lib/periods";
 import { chartRow, GuidanceLine, MoveText, profileOf, shortLine } from "./Asset";
 import { AssetPhoneLegacy } from "./AssetPhoneLegacy";
+import { InstrumentPhone } from "./InstrumentPhone";
+import { isInstrumentPage } from "../lib/instrument";
 
 /** A stock's own page for a phone (Shota, 18 Nov 2026): the same content as the desktop page (views/Asset.tsx),
  *  laid out as cards. The performance table is turned on its side (a row per horizon) so its four figures fit the
@@ -36,13 +38,15 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
   const [focus, setFocus] = useState<{ t: number; n: number } | null>(null);
   const a = useApi<StockPage>(symbol ? "stock" : null, { symbol }, Math.floor(tick / 5));
   if (a.error === "unknown action") return <AssetPhoneLegacy symbol={symbol} tick={tick} />;   // a server from before this page
-  const d = a.data && a.data.symbol ? a.data : null;
+  const d = a.data && a.data.symbol && a.data.symbol.toUpperCase() === symbol.toUpperCase() ? a.data : null;   // the answer for this address only: another name's, kept while this one loads or fails, is not shown under it
   const backBtn = <button type="button" className="mp-back" onClick={back}>&#8249; Back</button>;
   if (!d) return (
     <div className="mp"><header className="mp-head doc">{backBtn}</header>
-      <div className="mp-card gap">{!symbol ? <Empty title="No symbol">Use the search button at the top.</Empty> : a.error ? <Empty title="Not found">{a.error}</Empty> : <Empty title="Loading">{symbol}</Empty>}</div>
+      <div className="mp-card gap">{!symbol ? <Empty title="No symbol">Use the search button at the top.</Empty> : a.error && !a.loading ? <Empty title="Not found">{a.error}</Empty> : <Empty title="Loading">{symbol}</Empty>}</div>
     </div>
   );
+  // a currency, a yield, a commodity, a future or an index: its own page (I-4); a server from before sends a stock's answer
+  if (isInstrumentPage(d)) return <InstrumentPhone key={d.symbol} d={d} tick={tick} />;
   const row = chartRow(d), dec = row.decimals, ccy = d.currency;
   const f = d.fin, s = d.short, sh = shortLine(d), bms = d.benchmarks;
   const pp = fmtPp;   // a difference of two percentages, in points: +1.3, −0.6, 0.0
@@ -89,9 +93,9 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
             <KV k={avgTurnover(60)}>{money(d.turnover.d60.value, ccy)}</KV>
             <KV k="Volume today" sub={d.volume != null && d.turnover.d60.shares ? `${Math.round((d.volume / d.turnover.d60.shares) * 100)}% of avg (60d)` : undefined}>{fmtCount(d.volume)}</KV>
             <KV k={sh.label} sub={s?.kind === "jpx" ? `positions of 0.5% and above · ${fmtDate(s.d)}` : s?.kind === "finra" ? "not short interest" : undefined}>{sh.value}</KV>
-            <KV k="Volatility, 1M / 3M / 12M" sub="yearly figure from daily returns">{fmtPc(d.vol.m1, false, 0)} / {fmtPc(d.vol.m3, false, 0)} / {fmtPc(d.vol.m12, false, 0)}</KV>
+            <KV k={`${REALISED_VOL}, 1M / 3M / 12M`} sub="yearly figure from daily returns">{fmtPc(d.vol.m1, false, 0)} / {fmtPc(d.vol.m3, false, 0)} / {fmtPc(d.vol.m12, false, 0)}</KV>
             {bms.map((b, k) => <KV key={b.symbol} k={`Beta vs ${b.name}, 12M`}>{d.beta[k]?.beta == null ? "–" : d.beta[k].beta!.toFixed(2)}</KV>)}
-            <KV k="Largest fall, 12M" sub={d.drawdown.from ? `${fmtDate(d.drawdown.from)} to ${fmtDate(d.drawdown.to)}` : undefined}><span className={signCls(d.drawdown.pct, 1)}>{fmtPc(d.drawdown.pct)}</span></KV>
+            <KV k={LARGEST_FALL} sub={d.drawdown.from ? `${fmtDate(d.drawdown.from)} to ${fmtDate(d.drawdown.to)}` : undefined}><span className={signCls(d.drawdown.pct, 1)}>{fmtPc(d.drawdown.pct)}</span></KV>
             <KV k="P/E, last year">{fmtX(d.val.pe)}</KV>
             <KV k="P/B">{fmtX(d.val.pb, 2)}</KV>
             <KV k="Dividend yield, last year / guidance">{fmtPc(d.val.yield, false, 2)} / {fmtPc(d.val.yieldGuide, false, 2)}</KV>

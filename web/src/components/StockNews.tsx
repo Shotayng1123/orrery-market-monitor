@@ -15,14 +15,24 @@ const KIND: Record<FeedRow["kind"], string> = { headline: "Headline", alert: "Al
 function emptyText(symbol: string, filter: FeedFilter, days: number): string {
   return filter === "headlines" ? `No headlines name ${symbol} in the last ${days} days.` : filter === "alerts" ? `No alerts on ${symbol} in the last ${days} days.` : `No headlines or alerts name ${symbol} in the last ${days} days.`;
 }
+/** An instrument's headlines are matched by words (I-4): its empty list says which, or that it has none to match by. */
+function emptyMatched(name: string, words: string[], filter: FeedFilter, days: number): string {
+  const said = words.length > 1 ? `${words.slice(0, -1).join(", ")} or ${words[words.length - 1]}` : words[0];
+  const heads = words.length ? `no headline matched ${said}` : "the Monitor has no words to match headlines to it by";
+  if (filter === "alerts") return `No alerts on ${name} in the last ${days} days.`;
+  if (filter === "headlines") return words.length ? `No headline in the last ${days} days matched ${said}.` : `The Monitor has no words to match headlines to ${name} by.`;
+  return `In the last ${days} days ${heads}, and there was no alert on ${name}.`;
+}
 
-/** The list and its filter; `phone` draws the phone's rows (`.nw-row`) and toggles. */
-export function StockNews({ symbol, feed, phone = false }: { symbol: string; feed: StockFeed; phone?: boolean }) {
+/** The list and its filter; `phone` draws the phone's rows (`.nw-row`) and toggles. `matched` (an instrument's page):
+ *  the words its headlines were matched by, which its empty list names; `name` what the list is about. */
+export function StockNews({ symbol, feed, phone = false, matched, name }: { symbol: string; feed: StockFeed; phone?: boolean; matched?: string[]; name?: string }) {
   const [filter, setFilter] = useState<FeedFilter>("all");
   const [shown, setShown] = useState(FEED_STEP);
   const rows = feedRows(feed, filter), more = Math.min(FEED_STEP, rows.length - shown);
   const choose = (f: FeedFilter) => { setFilter(f); setShown(FEED_STEP); };
   const failed = feed.error ? <p className={phone ? "mp-note warn" : "finnote warn"}>Not everything could be read: {feed.error}.</p> : null;
+  const none = matched ? emptyMatched(name ?? symbol, matched, filter, feed.days) : emptyText(symbol, filter, feed.days);
   if (phone) return (
     <>
       <div className="mp-picks" id="st-news-f">{FILTERS.map(([f, label]) => <button type="button" key={f} className={`mp-tog${filter === f ? " on" : ""}`} aria-pressed={filter === f} onClick={() => choose(f)}>{label}</button>)}</div>
@@ -30,7 +40,7 @@ export function StockNews({ symbol, feed, phone = false }: { symbol: string; fee
         {rows.length ? rows.slice(0, shown).map((r) => {
           const body = <><span className="nw-meta"><span className="nb">{fmtWhen(r.at)}</span><b className={`snk ${r.kind}`}>{KIND[r.kind]}</b><span className="src">{r.source}</span></span><span className="nw-title">{decodeEntities(r.title)}</span></>;
           return r.url ? <a className="nw-row" key={r.key} data-kind={r.kind} href={r.url} target="_blank" rel="noreferrer">{body}</a> : <div className="nw-row plain" key={r.key} data-kind={r.kind}>{body}</div>;
-        }) : <Empty title={emptyText(symbol, filter, feed.days)} />}
+        }) : <Empty title={none} />}
       </div>
       {more > 0 && <button type="button" className="mp-more" id="st-news-more" onClick={() => setShown((n) => n + FEED_STEP)}>Show {more} more of {rows.length}</button>}
       {failed}
@@ -48,7 +58,7 @@ export function StockNews({ symbol, feed, phone = false }: { symbol: string; fee
             </div>
           ))}
         </div>
-      ) : <Empty title={emptyText(symbol, filter, feed.days)} />}
+      ) : <Empty title={none} />}
       {more > 0 && <ShowMore n={more} shown={shown} total={rows.length} onMore={() => setShown((x) => x + FEED_STEP)} id="st-news-more" />}
       {failed}
     </>
