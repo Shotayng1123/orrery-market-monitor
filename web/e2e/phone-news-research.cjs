@@ -47,8 +47,13 @@ const sizes = (p) => p.evaluate(() => { const vis = (el) => { const r = el.getBo
     const s2 = await sizes(p); ck(`piece: text ≥ 11px (smallest ${s2.minFont}px), tables included, nothing overflows sideways`, s2.minFont >= 11 && s2.overflowX <= 0, s2);
     await p.locator(".mp-back").tap(); await p.waitForSelector(".rs-row"); await p.waitForTimeout(400);
     const l = await p.evaluate(() => ({ y: Math.round(scrollY), hash: location.hash, read: document.querySelector(".rs-row.read .t")?.textContent?.trim() })); ck("All titles: the list where it was left, the piece just read marked", Math.abs(l.y - y0) <= 2 && l.hash === "#research" && l.read === title, { ...l, y0 });
-    await p.locator(".rs-row").nth(12).tap(); await p.waitForSelector(".mp-doc h1"); await p.waitForTimeout(300); await p.goBack(); await p.waitForSelector(".rs-row"); await p.waitForTimeout(400);
-    ck("the phone's own Back returns to the list at the same place", Math.abs((await p.evaluate(() => Math.round(scrollY))) - y0) <= 2);
+    // where the list stood before the tap, where the row was, and where the list came back to (printed if this fails)
+    const pre = await p.evaluate(() => { const r = document.querySelectorAll(".rs-row")[12].getBoundingClientRect(); return { yBefore: Math.round(scrollY), row12: [Math.round(r.top), Math.round(r.bottom)], vh: innerHeight }; });
+    await p.locator(".rs-row").nth(12).tap(); await p.waitForSelector(".mp-doc h1"); await p.waitForTimeout(300);
+    const read = await p.evaluate(() => ({ yReading: Math.round(scrollY), docH: document.documentElement.scrollHeight, opened: location.hash, hist: history.length }));
+    await p.goBack(); await p.waitForSelector(".rs-row"); const yAtList = await p.evaluate(() => Math.round(scrollY)); await p.waitForTimeout(400);
+    const gb = await p.evaluate(() => ({ y: Math.round(scrollY), hash: location.hash, listH: document.documentElement.scrollHeight, histAfter: history.length }));
+    ck("the phone's own Back returns to the list at the same place", Math.abs(gb.y - y0) <= 2, { dev, y0, ...pre, ...read, yAtList, ...gb });
     await p.locator(".mp-find").fill("weekly"); await p.waitForTimeout(300); const nf = await p.locator(".rs-row").count(); await p.locator(".rs-row").nth(1).tap(); await p.waitForSelector(".mp-doc h1"); await p.waitForTimeout(300);
     ck("a weekly report opens with its standfirst and sources", (await p.locator(".mp-doc .stand").count()) === 1 && (await p.locator(".mp-doc .src li").count()) > 5);
     await p.goBack(); await p.waitForSelector(".rs-row"); await p.waitForTimeout(300); ck(`search kept after reading (${nf} matches)`, (await p.locator(".mp-find").inputValue()) === "weekly" && (await p.locator(".rs-row").count()) === nf && nf === 6);
