@@ -10,7 +10,7 @@ export type AsOfKind = "close" | "print" | "published";
 /** The market table's row (`computeTable`, table.ts), as far as a watchlist row needs it. `source` is the
  *  instrument's provider ("yahoo", "treasury", "mof", "curve"). */
 export interface TableLike {
-  symbol: string; name: string; cls: string; group: string; currency: string; source?: string | null;
+  symbol: string; name: string; cls: string; group: string; currency: string; source?: string | null; decimals?: number | null;
   last: number | null; lastAt: string | null;
   pct: Partial<Record<string, number | null>>; chg?: Partial<Record<string, number | null>>;
   pos52?: number | null; vs200?: number | null;
@@ -23,6 +23,9 @@ export interface WatchTableRow {
   chg1d: number | null; chg1w: number | null; chg1m: number | null; chg3m: number | null; chg12m: number | null;
   vs50: null; vs200: number | null; vs200chg: number | null; pos52: number | null;
   mcap: null; earningsAt: null; earningsEst: null; isYield: boolean;
+  /** The instrument's own decimals (instruments.decimals), so the watchlist writes its level as every other screen
+   *  does (the designer's D-05; 20 Nov 2026): USD/JPY 158.400, not 158.21. A page from before ignores it. */
+  decimals: number | null;
 }
 
 /** A yield is compared in points, which MARKETS prints in bp; a bond future in the rates group is a price (table.ts). */
@@ -71,6 +74,7 @@ export function watchRowFromQuote(symbol: string, listedName: string | null, q: 
     chg1d: y ? move : null, chg1w: null, chg1m: null, chg3m: null, chg12m: null, vs200chg: null,
     vs50: null, vs200: null, pos52: null, mcap: y ? null : q?.marketCap ?? null,
     earningsAt: !y && q?.earningsAt ? new Date(q.earningsAt * 1000).toISOString() : null, earningsEst: y ? null : q?.earningsEst ?? null, isYield: y,
+    decimals: null,   // no instruments row: the page's own rule for a stock, three decimals for a yield
   };
 }
 
@@ -91,5 +95,6 @@ export function watchRowFromTable(t: TableLike): WatchTableRow {
     vs200: y ? null : t.vs200 ?? null,            // a price: per cent from its 200-day average
     vs200chg: y ? t.vs200 ?? null : null,         // a yield: points from its 200-day average (bp on the page)
     pos52: t.pos52 ?? null, mcap: null, earningsAt: null, earningsEst: null, isYield: y,
+    decimals: typeof t.decimals === "number" && Number.isInteger(t.decimals) && t.decimals >= 0 && t.decimals <= 8 ? t.decimals : null,
   };
 }

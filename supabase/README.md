@@ -110,7 +110,9 @@ How it works: the tick offers every alert not yet marked (`alerts.pushed_at`) to
 minute of the alert being written, whichever job wrote it. A device set to "My watchlist only" gets alerts on its
 account's watchlist names; more than four alerts at once arrive as one notification. A move carries a green (up) or
 red (down) round mark in front of its line: a phone draws notification text in its own colour, so that is how the
-colour gets there; headline alerts have no mark. Addresses the push service
+colour gets there; headline alerts have no mark. Under the line: the alert's kind and its time in Singapore, written
+as the page writes times ("Stock move · 18 Nov 10:05 SGT"; "11/18 10:05 SGT" until 20 Nov 2026, a day and month a
+reader in Japan or Singapore can read the wrong way round). Addresses the push service
 reports gone are deleted. The encryption and signing are in `functions/_shared/webpush.ts`, checked against the
 example of RFC 8291 in `sim/logic.test.ts`. On an iPhone, notifications exist only in the app added to the Home Screen
 (iOS 16.4 or later).
@@ -480,5 +482,9 @@ What the Monitor does about it:
   among them (the Cboe's ^IRX, ^FVX, ^TNX, ^TYX, or an index Yahoo names as a Treasury yield or bill; ^IRX, the 13-week
   bill, is the one the table lacks) is sent as a yield: `isYield`, no per-cent change, `chg1d` = last − previous
   close in points. A page older than the yield rows shows its 1D as a dash.
+  Since 20 Nov 2026 a market instrument's row also carries `decimals` (the instruments table's own), so the watchlist
+  writes its level as every other screen does (USD/JPY 158.400, not 158.21: the designer's D-05). A stock's row and a
+  plain quote's carry none: the page writes a stock with two decimals under 1,000 and none from 1,000, a yield with
+  three, as before. A page older than this ignores the field.
 - EQUITIES while a market is open (19 Nov 2026): the flow job keeps each constituent's quote price, its previous close and the time it printed (`constituent_stats.q_price`, `q_prev`, `q_time`). `api?action=index_stats` reads a row at its quote when the quote is from a later session than the row's booked close (`_shared/intraday.ts`), for the whole list or not at all: at least half the names must have such a quote. The 1D figures (movers, breadth, sectors, heat map) are then today's moves so far, at most ten to twenty minutes old, and the answer carries `live: { asOf, n }`; changes over longer periods stay measured to the last close, and the page says so.
 - Closing levels are held until the next session's first print: the quote is used only while its exchange-local date is newer than the last booked close.

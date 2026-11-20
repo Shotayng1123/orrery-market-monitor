@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import uPlot from "uplot";
-import { AXIS as SHARED_AXIS, boxHeight, zoomMove } from "../lib/chart";
+import { AXIS as SHARED_AXIS, boxHeight, TIME_VALUES, zoomMove } from "../lib/chart";
+import { fmtDate } from "../lib/time";
 
 export interface BreadthRow { d: string; n: number; adv: number; dec: number; above50: number; above200: number; new_hi: number; new_lo: number }
 const AXIS = SHARED_AXIS;
@@ -20,9 +21,9 @@ export function BreadthChart({ rows, height = 170 }: { rows: BreadthRow[]; heigh
       width: box.clientWidth || 300, height: boxHeight(box, height, 60),
       tzDate: (t) => uPlot.tzDate(new Date(t * 1e3), "UTC"),
       scales: { x: { time: true }, y: { range: [0, 100] } },
-      axes: [{ ...AXIS, space: 70 }, { ...AXIS, size: 48, values: (_u, vals) => vals.map((v) => `${v}%`) }],   // room for "100%" (34 px cut it to "00%")
+      axes: [{ ...AXIS, space: 70, values: TIME_VALUES }, { ...AXIS, size: 48, values: (_u, vals) => vals.map((v) => `${v}%`) }],   // room for "100%" (34 px cut it to "00%")
       series: [
-        { value: (_u, v) => (v == null ? "" : new Date(v * 1000).toISOString().slice(0, 10)) },
+        { value: (_u, v) => (v == null ? "" : fmtDate(v * 1000, "UTC")) },
         { label: "> 200d", stroke: "#1fd1c1", width: 1.2, points: { show: false } },
         { label: "> 50d", stroke: "#5aa7ff", width: 1, points: { show: false } },
         { label: "advancers 10d", stroke: "rgba(232,229,222,0.55)", width: 0.9, points: { show: false } },
@@ -35,7 +36,7 @@ export function BreadthChart({ rows, height = 170 }: { rows: BreadthRow[]; heigh
     u.hooks.setCursor = [...(u.hooks.setCursor ?? []), (uu: uPlot) => {
       const i = uu.cursor.idx; if (i == null || i < 0) { tip.style.display = "none"; return; }
       const f = (k: number) => { const v = uu.data[k][i] as number | null; return v == null ? "–" : `${v.toFixed(0)}%`; };
-      tip.textContent = `${rows[i].d}  >200d ${f(1)}  >50d ${f(2)}  adv 10d ${f(3)}`;
+      tip.textContent = `${fmtDate(rows[i].d)}  above 200D ${f(1)}  above 50D ${f(2)}  advancers 10d ${f(3)}`;
       tip.style.display = "block"; const w = uu.over.clientWidth, left = uu.cursor.left ?? 0, top = uu.cursor.top ?? 0;
       tip.style.left = `${left + 12 + tip.offsetWidth > w ? Math.max(0, left - 12 - tip.offsetWidth) : left + 12}px`; tip.style.top = `${Math.max(0, top - 26)}px`;
     }];
@@ -46,8 +47,8 @@ export function BreadthChart({ rows, height = 170 }: { rows: BreadthRow[]; heigh
   return (
     <div className="chartwrap">
       <div className="legend" style={{ padding: "0 0 2px" }}>
-        <span><span className="sw" style={{ borderTop: "2px solid #1fd1c1" }} />above 200d</span>
-        <span><span className="sw" style={{ borderTop: "2px solid #5aa7ff" }} />above 50d</span>
+        <span><span className="sw" style={{ borderTop: "2px solid #1fd1c1" }} />above 200D</span>
+        <span><span className="sw" style={{ borderTop: "2px solid #5aa7ff" }} />above 50D</span>
         <span><span className="sw" style={{ borderTop: "2px solid rgba(232,229,222,.6)" }} />advancers, 10-session average</span>
       </div>
       <div className="chartbox" ref={el} style={{ height }} />

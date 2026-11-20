@@ -66,7 +66,9 @@ async function touchDrag(p, x0, y, dx) {
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   await cdp.detach();
 }
-const dateIn = (t) => (/^(\d{4}-\d{2}-\d{2}) · /.exec(t || "") ?? [])[1] ?? null;
+// a read-out's date, "14 Sep 2026 · …" (the Monitor's one date format, I-5), as "2026-09-14" so dates compare as text
+const MONS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const dateIn = (t) => { const m = /^(\d{1,2}) ([A-Z][a-z]{2}) (\d{4}) · /.exec(t || ""); return m && MONS.includes(m[2]) ? `${m[3]}-${String(MONS.indexOf(m[2]) + 1).padStart(2, "0")}-${m[1].padStart(2, "0")}` : null; };
 // a height on the chart at `x` that is clear of every circle by `reach` px (a circle near the pointer shows its own
 // card instead of the day's figures: 9 px for a mouse, 22 px for a finger)
 async function clearY(p, sel, x, reach) {
@@ -102,7 +104,7 @@ const years = (a, z) => (Date.parse(z) - Date.parse(a)) / (365.25 * 86400e3);
     const sc = await signScan(p);
     ck(`no negative figure in green and no positive figure in red anywhere on the page (${sc.seen.up} green and ${sc.seen.dn} red figures read)`, sc.bad.length === 0 && sc.seen.up > 10 && sc.seen.dn > 10, sc.bad);
     const li = await p.evaluate(() => [...document.querySelectorAll("#st-movebox li")].map((e) => ({ role: e.getAttribute("role"), h: Math.round(e.getBoundingClientRect().height), go: e.querySelector(".dl .go")?.textContent ?? null, date: e.querySelector(".dl .d")?.textContent ?? null, links: [...e.querySelectorAll(".s a")].map((a) => Math.round(a.getBoundingClientRect().height)) })));
-    ck(`each move is a row to tap (${Math.min(...li.map((x) => x.h))} px at least), its date on a line of its own with "On the chart ›" at its right; a reason's sources ${Math.min(...li.flatMap((x) => x.links))} px tall`, li.length === 6 && li.every((x) => x.role === "button" && x.h >= 44 && x.go === "On the chart ›" && /^\d{4}-\d{2}-\d{2}$/.test(x.date)) && li.flatMap((x) => x.links).every((h) => h >= 44), li);
+    ck(`each move is a row to tap (${Math.min(...li.map((x) => x.h))} px at least), its date on a line of its own with "On the chart ›" at its right; a reason's sources ${Math.min(...li.flatMap((x) => x.links))} px tall`, li.length === 6 && li.every((x) => x.role === "button" && x.h >= 44 && x.go === "On the chart ›" && /^\d{1,2} [A-Z][a-z]{2} \d{4}$/.test(x.date)) && li.flatMap((x) => x.links).every((h) => h >= 44), li);
     const before = await p.evaluate(() => document.querySelector('.mp-picks select[aria-label="Period"]').value);
     // a source link opens the report and leaves the chart alone
     const src = p.locator("#st-movebox li", { hasText: "on the day" }).first().locator(".s a").first();
@@ -112,7 +114,7 @@ const years = (a, z) => (Date.parse(z) - Date.parse(a)) / (365.25 * 86400e3);
     const move = p.locator("#st-movebox li", { hasText: "−12.9%" });
     await move.scrollIntoViewIfNeeded(); await move.locator(".h").tap(); await p.waitForTimeout(500);
     const st = await p.evaluate(() => { const hero = document.querySelector(".mp-hero").getBoundingClientRect(), head = document.querySelector(".mp-head").getBoundingClientRect(), e = document.querySelector(".mp-hero .mvtip"); return { period: document.querySelector('.mp-picks select[aria-label="Period"]').value, heroTop: Math.round(hero.top), headBottom: Math.round(head.bottom), vh: innerHeight, card: e && getComputedStyle(e).display !== "none" ? e.innerText : null }; });
-    ck(`tapping "−12.9% on the day" sets PERIOD to ${st.period}, brings the chart up under the page's head (at ${st.heroTop} px, the head ends at ${st.headBottom}) and opens its card`, st.period === "3M" && st.heroTop >= st.headBottom - 1 && st.heroTop < st.vh * 0.3 && !!st.card && /^\d{4}-\d{2}-\d{2}\n−12\.9% on the day\nMock: a recall/.test(st.card), st);
+    ck(`tapping "−12.9% on the day" sets PERIOD to ${st.period}, brings the chart up under the page's head (at ${st.heroTop} px, the head ends at ${st.headBottom}) and opens its card`, st.period === "3M" && st.heroTop >= st.headBottom - 1 && st.heroTop < st.vh * 0.3 && !!st.card && /^\d{1,2} [A-Z][a-z]{2} \d{4}\n−12\.9% on the day\nMock: a recall/.test(st.card), st);
     const pd = await discs(p, ".mp-hero"), ring0 = pd.dn.length ? await ringAt(p, ".mp-hero", pd.dn[pd.dn.length - 1]) : 0;
     const cardBox = await p.evaluate(() => { const r = document.querySelector(".mp-hero .mvtip").getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom }; }), circle = pd.dn[pd.dn.length - 1];
     ck(`its circle is ringed (${ring0} ring pixels round it) and the card does not cover it`, ring0 > 20 && !!circle && !(circle.x > cardBox.l && circle.x < cardBox.r && circle.y > cardBox.t && circle.y < cardBox.b), { ring0, circle, cardBox });
@@ -135,7 +137,7 @@ const years = (a, z) => (Date.parse(z) - Date.parse(a)) / (365.25 * 86400e3);
     await p.touchscreen.tap(ov.x + ov.width * 0.3, y); await p.waitForTimeout(300);
     const rd1 = await p.locator(".mp-hero .rdout").textContent();
     const cx = await p.evaluate(() => { const x = document.querySelector(".mp-hero .u-cursor-x"), r = x.getBoundingClientRect(); return { left: r.left, off: x.classList.contains("u-off"), shown: getComputedStyle(x).display !== "none" }; });
-    ck(`a tap puts the crosshair on the tapped day (${Math.round(cx.left)} px, tapped at ${Math.round(ov.x + ov.width * 0.3)}) and the line under the chart reads "${rd1}"`, /daily closes/.test(idle) && /^\d{4}-\d{2}-\d{2} · [\d,]+(\.\d+)? · 12M [+\-−]\d+\.\d\dσ · vol \d/.test(rd1) && cx.shown && !cx.off && Math.abs(cx.left - (ov.x + ov.width * 0.3)) <= 2, { idle, rd1, cx });
+    ck(`a tap puts the crosshair on the tapped day (${Math.round(cx.left)} px, tapped at ${Math.round(ov.x + ov.width * 0.3)}) and the line under the chart reads "${rd1}"`, /daily closes/.test(idle) && /^\d{1,2} [A-Z][a-z]{2} \d{4} · [\d,]+(\.\d+)? · 12M [+\-−]?\d+\.\d\dσ · vol \d/.test(rd1) && cx.shown && !cx.off && Math.abs(cx.left - (ov.x + ov.width * 0.3)) <= 2, { idle, rd1, cx });
     await p.waitForTimeout(1500);
     ck("it stays until the next tap", (await p.locator(".mp-hero .rdout").textContent()) === rd1);
     await touchDrag(p, ov.x + ov.width * 0.5, y, 90); await p.waitForTimeout(400);
@@ -151,7 +153,7 @@ const years = (a, z) => (Date.parse(z) - Date.parse(a)) / (365.25 * 86400e3);
     const mo = await p.locator(".mp-item.open .u-over").boundingBox();
     await p.touchscreen.tap(mo.x + mo.width * 0.5, mo.y + mo.height * 0.5); await p.waitForTimeout(300);
     const mrd = await p.locator(".mp-item.open .rdout").textContent();
-    ck(`on MARKETS too: a tap on an instrument's chart reads "${mrd}"`, /^(\d{4}-\d{2}-\d{2}|\d{2}\/\d{2} \d{2}:\d{2} SGT) · [\d,]+(\.\d+)?/.test(mrd), mrd);
+    ck(`on MARKETS too: a tap on an instrument's chart reads "${mrd}"`, /^(\d{1,2} [A-Z][a-z]{2} \d{4}|\d{1,2} [A-Z][a-z]{2} \d{2}:\d{2} SGT) · [\d,]+(\.\d+)?%?/.test(mrd), mrd);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
 
   console.log("\n[5Y and 10Y on a stock's page (A-16): ten years in one view, on both layouts]");

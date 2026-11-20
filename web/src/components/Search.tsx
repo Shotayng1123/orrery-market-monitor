@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import { DEV_MOCK } from "../lib/useApi";
 import { mockAction } from "../lib/mock";
 import { openAsset } from "./CompanyCard";
+import { hitLine } from "../lib/labels";
 
 interface Hit { symbol: string; name: string; kind: string; note: string }
 
@@ -49,7 +50,7 @@ export function Search() {
           {busy && !hits.length && <div className="sitem mut">searching …</div>}
           {hits.map((h, i) => (
             <div key={h.symbol} className={`sitem${i === sel ? " on" : ""}`} onMouseEnter={() => setSel(i)} onMouseDown={(e) => { e.preventDefault(); go(h); }}>
-              <b>{h.symbol}</b><span className="nm">{h.name}</span><span className="mut">{[h.kind, h.note].filter(Boolean).join(" · ")}</span>
+              <b>{h.symbol}</b><span className="nm">{h.name}</span><span className="mut">{hitLine(h)}</span>
             </div>
           ))}
         </div>

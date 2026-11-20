@@ -52,7 +52,7 @@ const calRows = (p, phone) => p.evaluate((phone) => phone
     const ern = () => p.evaluate((phone) => [...document.querySelectorAll(phone ? ".ev-row.tap .ev-n" : "table.ernT tr.ecrow td.ev .lnk")].map((x) => x.textContent), phone);
     const ERN = phone ? ".ev-row.tap" : "table.ernT tr.ecrow";
     await until(p, ERN, S.earnings.filter((r) => r.mcapUsd >= 1e10).length); const e0 = await ern();
-    await choose(p, "Market cap", "all"); await until(p, ERN, S.earnings.length); const e1 = await ern();
+    await choose(p, "Mkt cap", "all"); await until(p, ERN, S.earnings.length); const e1 = await ern();
     await choose(p, "Region", "Asia"); await until(p, ERN, 1); const e2 = await ern();
     ck(`the earnings calendar: ${e0.length} companies of USD 10bn and more, ${e1.length} in all, a name in Japanese only, one of 40 characters and more, one in Asia`, e0.length >= 20 && e1.length === S.earnings.length && e1.length > e0.length && e1.includes(JP) && e1.some((n) => n.length >= 40) && e2.length === 1, { e0: e0.length, e1: e1.length, e2 });
     ck("nothing says the API is not configured; no page errors", (await noConfig(p)) && errs.length === 0, errs);
@@ -72,7 +72,8 @@ const calRows = (p, phone) => p.evaluate((phone) => phone
     console.log(`\n[RATES & FX: policy rates, ${name}]`);
     await p.goto(MOCK + "#rates", { waitUntil: "networkidle" }); await p.waitForSelector(phone ? ".pl-row" : '.panel[data-k="policy"] tbody tr');
     const pol = await p.evaluate((phone) => ({ banks: [...document.querySelectorAll(phone ? ".pl-row .n b" : '.panel[data-k="policy"] tbody tr td:first-child b')].map((x) => x.textContent), chips: document.querySelectorAll((phone ? ".mp-legacy" : '.panel[data-k="policy"]') + " .chips .chip-sm").length }), phone);
-    ck(`a row for every bank the server keeps (${pol.banks.join(" ")}), ${pol.chips} lines in the chart`, pol.banks.join() === S.policy.rows.map((r) => r.bank).join() && pol.chips === new Set(S.policy.history.map((r) => r.bank)).size, pol);
+    const BANK = { FED: "Fed", BOJ: "BoJ", BOE: "BoE", BOK: "BoK", PBOC: "PBoC" };   // central banks as the glossary writes them in text (I-5)
+    ck(`a row for every bank the server keeps (${pol.banks.join(" ")}), ${pol.chips} lines in the chart`, pol.banks.join() === S.policy.rows.map((r) => BANK[r.bank] ?? r.bank).join() && pol.chips === new Set(S.policy.history.map((r) => r.bank)).size, pol);
 
     console.log(`\n[WATCHLIST, ${name}]`);
     await p.goto(MOCK + "#watch", { waitUntil: "networkidle" }); await p.waitForSelector(phone ? ".mp-row.starred" : '.panel[data-k="wl"] tbody tr');

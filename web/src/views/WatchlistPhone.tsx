@@ -9,10 +9,11 @@ import { NotifyNudge } from "../components/Notify";
 import { useApi } from "../lib/useApi";
 import { useWatch } from "../lib/watch";
 import { fmtPct, signCls } from "../lib/fmt";
-import { asOfLine, asOfOf, asOfTitle, fmtClock, fmtStamp, SGT } from "../lib/time";
+import { asOfLine, asOfOf, asOfTitle, fmtClock, fmtDate, fmtWhen, SGT } from "../lib/time";
+import { classLabel, hitLine, PERIOD, RESULTS_AHEAD, TAB } from "../lib/labels";
 import { dayLabel, dayOf } from "./News";
 import { cellBp } from "./Market";
-import { day, decode, lastOf, sourcesOf, WINDOWS, type Feed, type WatchRow } from "./Watchlist";
+import { decode, lastOf, sourcesOf, WINDOWS, type Feed, type WatchRow } from "./Watchlist";
 
 /** WATCHLIST for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026): the user's own names as lines with one
  *  change (the period is picked at the top), then their results dates, alerts, headlines and research mentions.
@@ -20,10 +21,10 @@ import { day, decode, lastOf, sourcesOf, WINDOWS, type Feed, type WatchRow } fro
 type Key = (typeof WINDOWS)[number][0];
 const KEYS: PickOption<Key>[] = WINDOWS.map(([value, , label]) => ({ value, label }));
 /** The change a line shows: a yield's in bp (the change of its level), anything else's in per cent. */
-const change = (r: WatchRow, k: Key): { v: number | null; text: string } => {
-  if (!r.isYield) return { v: r[k], text: fmtPct(r[k], 1) };
+const change = (r: WatchRow, k: Key): { v: number | null; text: string; cls: string } => {
+  if (!r.isYield) return { v: r[k], text: fmtPct(r[k], 1), cls: signCls(r[k], 1) };
   const v = r[WINDOWS.find((x) => x[0] === k)![1]] ?? null;
-  return { v, text: cellBp(v) };
+  return { v, text: cellBp(v), cls: signCls(v == null ? null : v * 100, 1) };
 };
 
 export function WatchlistPhone({ tick }: { tick: number }) {
@@ -37,7 +38,7 @@ export function WatchlistPhone({ tick }: { tick: number }) {
   const ahead = rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3).sort((a, b) => a.earningsAt!.localeCompare(b.earningsAt!));
   const name = (s: string) => rows.find((r) => r.symbol === s)?.name ?? s;
   return (
-    <Screen title="Watchlist" sub={list.data ? `${rows.length} name${rows.length === 1 ? "" : "s"}` : list.error ? <span className="warn">{list.error}</span> : "loading…"} right={<Pick label="Change" value={k} options={KEYS} onChange={setK} />}>
+    <Screen title={TAB.watch} sub={list.data ? `${rows.length} name${rows.length === 1 ? "" : "s"}${rows.length ? " · times in SGT" : ""}` : list.error ? <span className="warn">{list.error}</span> : "loading…"} right={<Pick label={PERIOD} value={k} options={KEYS} onChange={setK} />}>
       <form className="mp-add" onSubmit={(e) => { e.preventDefault(); void box.submit(); }}>
         <input className="mp-find" id="wl-add" type="text" aria-label="Add a name to the watchlist" placeholder="Add: toyota, NVDA, 7203" value={box.text} autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck={false} onChange={(e) => box.setText(e.target.value)} />
         <button type="submit" className="mp-act">Add</button>
@@ -48,7 +49,7 @@ export function WatchlistPhone({ tick }: { tick: number }) {
           {box.busy && !box.hits.length && <div className="mp-cand none">Searching…</div>}
           {box.hits.map((h) => (
             <button type="button" className={`mp-cand${w.has(h.symbol) ? " have" : ""}`} key={h.symbol} onClick={() => void box.addHit(h)}>
-              <span className="w"><span className="n">{h.name}</span><span className="k"><b>{h.symbol}</b>{[h.kind, h.note].filter(Boolean).map((x) => ` · ${x}`).join("")}</span></span>
+              <span className="w"><span className="n">{h.name}</span><span className="k"><b>{h.symbol}</b>{hitLine(h) ? ` · ${hitLine(h)}` : ""}</span></span>
               <span className="a">{w.has(h.symbol) ? "In your list" : "Add"}</span>
             </button>
           ))}
@@ -63,20 +64,20 @@ export function WatchlistPhone({ tick }: { tick: number }) {
                 <Star symbol={r.symbol} name={r.name} />
                 <span className="mp-nm"><span className="n">{r.name}</span><span className="mp-st one">{r.symbol} · <span className="nb">{asOfLine(a)}</span></span></span>
                 <span className="mp-px">{lastOf(r)}</span>
-                <Move v={c.v} w={KEYS.find((x) => x.value === k)?.label}>{c.text}</Move>
+                <Move v={c.v} cls={c.cls} w={KEYS.find((x) => x.value === k)?.label}>{c.text}</Move>
               </div>
             );
-          }) : <Empty title={w.ready && list.data ? "Your watchlist is empty" : "Loading your watchlist"}>{list.error ?? (w.ready && list.data ? "Press the star beside a name on its page, in the screener or in the earnings calendar, or type part of a name or of a symbol above and choose from the list." : "")}</Empty>}
+          }) : <Empty title={w.ready && list.data ? "Your watchlist is empty" : "Loading your watchlist"}>{list.error ?? (w.ready && list.data ? "Press the star beside a name on its page, in the screener or in the results calendar, or type part of a name or of a symbol above and choose from the list." : "")}</Empty>}
         </div>
         {rows.length > 0 && <p className="mp-note" id="wl-src">{src ? `${/[,;]/.test(src) ? "Sources" : "Source"}: ${src}. ` : ""}A stock is at its last close, a market instrument at its last print; a yield's changes are in bp.</p>}
       </Section>
-      <Section title="Results ahead" aux="times in SGT">
+      <Section title={RESULTS_AHEAD} aux="times in SGT">
         {ahead.length ? ahead.map((r, i, arr) => (
           <Fragment key={r.symbol}>
             {(i === 0 || dayOf(r.earningsAt!) !== dayOf(arr[i - 1].earningsAt!)) && <div className="ev-day">{dayLabel(r.earningsAt!)}</div>}
             <div className="ev-row tap" role="button" tabIndex={0} onClick={() => openAsset(r.symbol)}>
               <span className="ev-t">{fmtClock(new Date(r.earningsAt!), SGT)}</span>
-              <span className="ev-m"><span className="ev-n">{r.name}</span><span className="ev-s">{r.symbol} · {r.sector ?? r.kind}</span></span>
+              <span className="ev-m"><span className="ev-n">{r.name}</span><span className="ev-s">{r.symbol} · {r.sector ?? classLabel(r.kind)}</span></span>
               <span className="ev-a sm">{r.earningsEst ? "est." : "confirmed"}</span>
             </div>
           </Fragment>
@@ -85,14 +86,14 @@ export function WatchlistPhone({ tick }: { tick: number }) {
       <Section title="Alerts on my names" aux={feed.data ? `${alerts.length} recent` : ""}>
         {rows.length > 0 && <NotifyNudge />}
         {alerts.length ? alerts.map((a) => {
-          const body = <><span className="nw-meta"><span>{fmtStamp(a.at)}</span>{a.pct != null && <b className={signCls(a.pct)}>{fmtPct(a.pct, 1)}</b>}</span><span className="nw-title">{a.msg}</span></>;
+          const body = <><span className="nw-meta"><span>{fmtWhen(a.at)}</span>{a.pct != null && <b className={signCls(a.pct, 1)}>{fmtPct(a.pct, 1)}</b>}</span><span className="nw-title">{a.msg}</span></>;
           return a.url ? <a className="nw-row" key={a.id} href={a.url} target="_blank" rel="noreferrer">{body}</a> : <div className="nw-row" key={a.id} role="button" tabIndex={0} onClick={() => openAsset(a.symbol)}>{body}</div>;
         }) : <Empty title="No alerts">{feed.error ?? "Moves beyond ±5% (large companies) or ±7%, buybacks, guidance changes and large deals on your names appear here."}</Empty>}
       </Section>
       <Section title="Headlines on my names" aux={feed.data ? `${news.length} in the feed` : ""}>
         {news.length ? news.slice(0, 30).map((it) => (
           <a className="nw-row" key={it.id} href={it.url} target="_blank" rel="noreferrer">
-            <span className="nw-meta"><b>{it.source}</b><span>{fmtStamp(it.publishedAt)}</span></span>
+            <span className="nw-meta"><b>{it.source}</b><span>{fmtWhen(it.publishedAt)}</span></span>
             <span className="nw-title">{decode(it.title)}</span>
             <span className="nw-tk">{it.tickers.filter((t) => w.has(t.s)).map((t) => <button type="button" key={t.s} onClick={(e) => { e.preventDefault(); e.stopPropagation(); openAsset(t.s); }}>{t.n}</button>)}</span>
           </a>
@@ -101,7 +102,7 @@ export function WatchlistPhone({ tick }: { tick: number }) {
       <Section title="In research" aux="pieces that mention my names">
         {research.length ? research.map((r) => (
           <button type="button" className="rs-row" key={r.key} onClick={() => { location.hash = `research/${encodeURIComponent(r.key)}`; }}>
-            <span className="meta"><span>{day(r.d)}</span><span>{r.symbols.map(name).join(" · ")}</span></span>
+            <span className="meta"><span>{fmtDate(r.d)}</span><span>{r.symbols.map(name).join(" · ")}</span></span>
             <span className="t">{r.title}</span>
           </button>
         )) : <Empty title="No mentions">{feed.error ?? "Daily notes and weekly reports that mention your names appear here."}</Empty>}

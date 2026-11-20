@@ -54,7 +54,7 @@ const heads = (p) => p.evaluate(() => [...document.querySelectorAll("table.fin t
     ck(`the panel: NEWS, "${head.aux}", chips ${head.chips.join(" · ")}`, head.title === "NEWS" && head.aux === "headlines and alerts naming 7203.T · 90 days · times in SGT" && head.chips.join() === "ALL*,HEADLINES,ALERTS", head);
     let rows = await newsRows(p, false);
     ck(`fifteen rows to start, newest first, the stand-in headlines and alerts that name 7203.T in their order (${t7203.length} in all)`, t7203.length > 15 && rows.length === 15 && rows.map((r) => r.title).join("|") === t7203.slice(0, 15).map((r) => r.title).join("|"), { rows: rows.map((r) => r.title), want: t7203.slice(0, 15).map((r) => r.title) });
-    ck("each row: the time in SGT, HEADLINE or ALERT, where it came from; then the headline or the alert", rows.every((r) => /^\d{1,2} [A-Z][a-z]{2} \d\d:\d\d · (HEADLINE|ALERT) · \S.+$/.test(r.meta) && r.meta.includes(r.kind === "alert" ? "ALERT" : "HEADLINE")) && rows.some((r) => r.kind === "alert") && rows.some((r) => r.kind === "headline"), rows.map((r) => r.meta));
+    ck("each row: the time in SGT (\"23:18\" today, \"19 Nov 23:18\" before: the panel\'s head says SGT), HEADLINE or ALERT, where it came from; then the headline or the alert", rows.every((r) => /^(\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d · (HEADLINE|ALERT) · \S.+$/.test(r.meta) && r.meta.includes(r.kind === "alert" ? "ALERT" : "HEADLINE")) && rows.some((r) => r.kind === "alert") && rows.some((r) => r.kind === "headline"), rows.map((r) => r.meta));
     ck("HEADLINE in the muted text colour, ALERT in the coral of titles (the designer's note); an alert from a headline names its kind and publisher, a move its exchange", rows.every((r) => r.tagCol === (r.kind === "alert" ? AMBER : TXT2)) && rows.some((r) => / · ALERT · buyback, Nikkei Asia$/.test(r.meta)) && rows.some((r) => / · ALERT · move, TSE$/.test(r.meta)), rows.map((r) => [r.meta, r.tagCol]));
     ck("a headline opens the publisher's page; a move alert, which has no page, is plain text", rows.filter((r) => r.kind === "headline").every((r, i) => r.href === t7203.filter((x) => x.kind === "headline")[i].url) && rows.filter((r) => r.kind === "alert" && /move,/.test(r.meta)).every((r) => r.href === null), rows.map((r) => [r.kind, r.href]));
     const more = await p.evaluate(() => document.querySelector("#st-news-more")?.innerText.replace(/\s+/g, " ").trim() ?? null);
@@ -82,7 +82,7 @@ const heads = (p) => p.evaluate(() => [...document.querySelectorAll("table.fin t
     const togs = await p.evaluate(() => [...document.querySelectorAll("#st-news-f .mp-tog")].map((e) => ({ t: e.textContent, on: e.classList.contains("on"), reach: Math.round(parseFloat(getComputedStyle(e, "::before").top) * -1 + e.getBoundingClientRect().height + parseFloat(getComputedStyle(e, "::before").bottom) * -1) })));
     ck(`All, Headlines, Alerts as the phone's toggles, each ${togs.map((x) => x.reach).join("/")} px to the finger`, togs.map((x) => `${x.t}${x.on ? "*" : ""}`).join() === "All*,Headlines,Alerts" && togs.every((x) => x.reach >= 44), togs);
     let rows = await newsRows(p, true);
-    ck("fifteen rows in the phone's grammar, the same rows in the same order as on the computer", rows.length === 15 && rows.map((r) => r.title).join("|") === t7203.slice(0, 15).map((r) => r.title).join("|") && rows.every((r) => /^\d{1,2} [A-Z][a-z]{2} \d\d:\d\d (HEADLINE|ALERT) \S/.test(r.meta)), rows.map((r) => r.meta).slice(0, 3));
+    ck("fifteen rows in the phone's grammar, the same rows in the same order as on the computer", rows.length === 15 && rows.map((r) => r.title).join("|") === t7203.slice(0, 15).map((r) => r.title).join("|") && rows.every((r) => /^(\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d (HEADLINE|ALERT) \S/.test(r.meta)), rows.map((r) => r.meta).slice(0, 3));
     const more = await p.locator("#st-news-more").textContent();
     await p.locator("#st-news-more").tap(); await p.waitForTimeout(250); rows = await newsRows(p, true);
     ck(`"${more}" shows the rest; nothing scrolls inside the section`, more === `Show ${Math.min(15, t7203.length - 15)} more of ${t7203.length}` && rows.length === t7203.length && (await noInnerBox(p, "#st-news")).length === 0, { more, n: rows.length });
@@ -112,17 +112,17 @@ const heads = (p) => p.evaluate(() => [...document.querySelectorAll("table.fin t
     if (phone) await p.locator("#st-view").selectOption("quarterly"); else await p.locator("#st-view .chip-sm").nth(1).click();
     await p.waitForTimeout(400); h = await heads(p);
     const q = Object.fromEntries(h.map((x) => [x.label, x]));
-    ck(`${dev} · 7203.T by quarter: the newest (2Q 3/27) and 2Q and 1Q 3/26 have no address (as EDINET DB gave Toyota's) and say so; 1Q 3/27 opens its 決算短信, with the day it was disclosed`, h.length === 12 && ["2Q 3/27", "2Q 3/26", "1Q 3/26"].every((k) => q[k] && q[k].href === null && /no document address from the source$/.test(q[k].thTip)) && q["1Q 3/27"].href === "https://example.com/mock-ir/7203T/2027_1q_summary.pdf" && q["1Q 3/27"].tip === "Open the 決算短信 PDF for 1Q 3/27, disclosed 4 Aug 2026 ↗" && q["4Q 3/26"].tip === "Open the 決算短信 PDF for 4Q 3/26, disclosed 8 May 2026 ↗", h.map((x) => [x.label, x.href, x.tip]));
-    const q1 = p.locator("table.fin thead th", { hasText: /^1Q 3\/27$/ });
+    ck(`${dev} · 7203.T by quarter: the newest (2Q FY3/27) and 2Q and 1Q FY3/26 have no address (as EDINET DB gave Toyota's) and say so; 1Q FY3/27 opens its 決算短信, with the day it was disclosed`, h.length === 12 && ["2Q FY3/27", "2Q FY3/26", "1Q FY3/26"].every((k) => q[k] && q[k].href === null && /no document address from the source$/.test(q[k].thTip)) && q["1Q FY3/27"].href === "https://example.com/mock-ir/7203T/2027_1q_summary.pdf" && q["1Q FY3/27"].tip === "Open the 決算短信 PDF for 1Q FY3/27, disclosed 4 Aug 2026 ↗" && q["4Q FY3/26"].tip === "Open the 決算短信 PDF for 4Q FY3/26, disclosed 8 May 2026 ↗", h.map((x) => [x.label, x.href, x.tip]));
+    const q1 = p.locator("table.fin thead th", { hasText: /^1Q FY3\/27$/ });
     const [pq] = await Promise.all([ctx.waitForEvent("page", { timeout: 8000 }), phone ? q1.tap() : q1.click()]);
-    ck(`${dev} · 1Q 3/27 opens that quarter's 決算短信 PDF`, pq.url() === "https://example.com/mock-ir/7203T/2027_1q_summary.pdf", pq.url()); await pq.close();
+    ck(`${dev} · 1Q FY3/27 opens that quarter's 決算短信 PDF`, pq.url() === "https://example.com/mock-ir/7203T/2027_1q_summary.pdf", pq.url()); await pq.close();
     // another Tokyo name whose newest 決算短信 does carry its address: its newest quarter and its guidance open it (A's added line)
     await go(p, "#asset/6758.T", "table.fin");
     if (phone) await p.locator("#st-view").selectOption("quarterly"); else await p.locator("#st-view .chip-sm").nth(1).click();
     await p.waitForTimeout(400); h = await heads(p);
     const newest = h[h.length - 1];
-    ck(`${dev} · 6758.T by quarter: the newest quarter's header (${newest.label}) opens that quarter's 決算短信 PDF`, newest.label === "2Q 3/27" && newest.href === "https://example.com/mock-ir/6758T/2027_2q_summary.pdf" && newest.tip === "Open the 決算短信 PDF for 2Q 3/27, disclosed 5 Nov 2026 ↗", newest);
-    const nq = p.locator("table.fin thead th", { hasText: /^2Q 3\/27$/ });
+    ck(`${dev} · 6758.T by quarter: the newest quarter's header (${newest.label}) opens that quarter's 決算短信 PDF`, newest.label === "2Q FY3/27" && newest.href === "https://example.com/mock-ir/6758T/2027_2q_summary.pdf" && newest.tip === "Open the 決算短信 PDF for 2Q FY3/27, disclosed 5 Nov 2026 ↗", newest);
+    const nq = p.locator("table.fin thead th", { hasText: /^2Q FY3\/27$/ });
     const [pn] = await Promise.all([ctx.waitForEvent("page", { timeout: 8000 }), phone ? nq.tap() : nq.click()]);
     ck(`${dev} · ${phone ? "tapping" : "clicking"} it opens the PDF`, pn.url() === newest.href, pn.url()); await pn.close();
     if (phone) await p.locator("#st-view").selectOption("annual"); else await p.locator("#st-view .chip-sm").nth(0).click();

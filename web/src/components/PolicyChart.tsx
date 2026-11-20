@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import uPlot from "uplot";
-import { AXIS as SHARED_AXIS, boxHeight, zoomMove } from "../lib/chart";
+import { AXIS as SHARED_AXIS, boxHeight, TIME_VALUES, zoomMove } from "../lib/chart";
+import { fmtDate } from "../lib/time";
+import { axisDecimals } from "../lib/fmt";
+import { bankName } from "../lib/labels";
 
 export interface PolicyStep { bank: string; d: string; rate: number }
 const COLORS: Record<string, string> = { FED: "#e8e5de", ECB: "#5aa7ff", BOE: "#ff6f61", BOJ: "#3fd07e", HKMA: "#b08cff", RBA: "#ffc53d", BOK: "#1fd1c1", PBOC: "#ff9f43", MAS: "#9aa8b8" };
@@ -37,8 +40,8 @@ export function PolicyChart({ steps, height = 260 }: { steps: PolicyStep[]; heig
       width: box.clientWidth || 300, height: boxHeight(box, height, 60),
       tzDate: (t) => uPlot.tzDate(new Date(t * 1e3), "UTC"),
       scales: { x: { time: true, range: () => [from, data.ts[data.ts.length - 1]] }, y: { range: (_u, min, max) => [Math.min(0, min) - 0.25, max + 0.25] } },
-      axes: [{ ...AXIS, space: 70 }, { ...AXIS, size: 42, values: (_u, vals) => vals.map((v) => v.toFixed(1)) }],
-      series: [{ value: (_u, v) => (v == null ? "" : new Date(v * 1000).toISOString().slice(0, 10)) }, ...banks.map((b) => ({ label: b, stroke: COLORS[b] ?? "#9aa8b8", width: b === "FED" ? 1.6 : 1.2, points: { show: false }, paths: uPlot.paths.stepped!({ align: 1 }), show: !hidden.has(b) }))],
+      axes: [{ ...AXIS, space: 70, values: TIME_VALUES }, { ...AXIS, size: 42, values: (_u, vals, _i, _sp, incr) => vals.map((v) => v.toFixed(axisDecimals(incr, 2))) }],
+      series: [{ value: (_u, v) => (v == null ? "" : fmtDate(v * 1000, "UTC")) }, ...banks.map((b) => ({ label: bankName(b), stroke: COLORS[b] ?? "#9aa8b8", width: b === "FED" ? 1.6 : 1.2, points: { show: false }, paths: uPlot.paths.stepped!({ align: 1 }), show: !hidden.has(b) }))],
       legend: { show: false },
       cursor: { drag: { x: false, y: false }, points: { show: false }, move: zoomMove },
     };
@@ -46,8 +49,8 @@ export function PolicyChart({ steps, height = 260 }: { steps: PolicyStep[]; heig
     const tip = document.createElement("div"); tip.className = "ctip"; tip.style.display = "none"; u.over.appendChild(tip);
     u.hooks.setCursor = [...(u.hooks.setCursor ?? []), (uu: uPlot) => {
       const i = uu.cursor.idx; if (i == null || i < 0) { tip.style.display = "none"; return; }
-      const parts = banks.map((b, k) => hidden.has(b) ? null : `${b} ${uu.data[k + 1][i] == null ? "–" : (uu.data[k + 1][i] as number).toFixed(2)}`).filter(Boolean);
-      tip.textContent = `${new Date((uu.data[0][i] as number) * 1000).toISOString().slice(0, 10)}  ${parts.join("  ")}`;
+      const parts = banks.map((b, k) => hidden.has(b) ? null : `${bankName(b)} ${uu.data[k + 1][i] == null ? "–" : `${(uu.data[k + 1][i] as number).toFixed(2)}%`}`).filter(Boolean);
+      tip.textContent = `${fmtDate((uu.data[0][i] as number) * 1000, "UTC")}  ${parts.join("  ")}`;
       tip.style.display = "block"; const w = uu.over.clientWidth, left = uu.cursor.left ?? 0, top = uu.cursor.top ?? 0;
       tip.style.left = `${left + 12 + tip.offsetWidth > w ? Math.max(0, left - 12 - tip.offsetWidth) : left + 12}px`; tip.style.top = `${Math.max(0, top - 26)}px`;
     }];
@@ -58,7 +61,7 @@ export function PolicyChart({ steps, height = 260 }: { steps: PolicyStep[]; heig
   return (
     <div className="chartwrap">
       <div className="chips" style={{ margin: "0 0 4px" }}>
-        {banks.map((b) => <span key={b} className={`chip-sm${hidden.has(b) ? "" : " on"}`} style={hidden.has(b) ? undefined : { background: COLORS[b], borderColor: COLORS[b], color: "#000" }} onClick={() => setHidden((h) => { const n = new Set(h); if (n.has(b)) n.delete(b); else n.add(b); return n; })}>{b}</span>)}
+        {banks.map((b) => <span key={b} className={`chip-sm${hidden.has(b) ? "" : " on"}`} style={hidden.has(b) ? undefined : { background: COLORS[b], borderColor: COLORS[b], color: "#000" }} onClick={() => setHidden((h) => { const n = new Set(h); if (n.has(b)) n.delete(b); else n.add(b); return n; })}>{bankName(b)}</span>)}
         <span className="mut chartnote" style={{ marginLeft: 8, fontSize: 10 }}>30 years · step lines on change dates · click a bank to hide it</span>
       </div>
       <div className="chartbox" ref={el} style={{ height }} />

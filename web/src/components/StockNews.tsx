@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Empty } from "./Panel";
 import { decodeEntities } from "./Headlines";
-import { FEED_STEP, feedRows, fmtDayTime, type FeedFilter, type FeedRow, type StockFeed } from "../lib/stock";
+import { FEED_STEP, feedRows, type FeedFilter, type FeedRow, type StockFeed } from "../lib/stock";
+import { fmtWhen } from "../lib/time";
 
 /** NEWS on a stock's page (I-3, 20 Nov 2026; the designer's I-3 note): the Monitor's own headlines that name the
  *  stock and its own alerts on it, newest first, with All · Headlines · Alerts (filings join with I-20). Each row:
- *  the time (SGT, said in the head), whether it is a headline or an alert, where it came from; under it the headline
+ *  the time (SGT, said in the head: "23:22" today, "19 Nov 23:22" before; lib/time.ts fmtWhen), whether it is a
+ *  headline or an alert, where it came from; under it the headline
  *  or the alert, wrapping. Fifteen rows, then "SHOW 15 MORE": never a box that scrolls inside the page. */
 const FILTERS: Array<[FeedFilter, string]> = [["all", "All"], ["headlines", "Headlines"], ["alerts", "Alerts"]];
 const KIND: Record<FeedRow["kind"], string> = { headline: "Headline", alert: "Alert" };
@@ -26,7 +28,7 @@ export function StockNews({ symbol, feed, phone = false }: { symbol: string; fee
       <div className="mp-picks" id="st-news-f">{FILTERS.map(([f, label]) => <button type="button" key={f} className={`mp-tog${filter === f ? " on" : ""}`} aria-pressed={filter === f} onClick={() => choose(f)}>{label}</button>)}</div>
       <div className="mp-card" id="st-news">
         {rows.length ? rows.slice(0, shown).map((r) => {
-          const body = <><span className="nw-meta"><span className="nb">{fmtDayTime(r.at)}</span><b className={`snk ${r.kind}`}>{KIND[r.kind]}</b><span className="src">{r.source}</span></span><span className="nw-title">{decodeEntities(r.title)}</span></>;
+          const body = <><span className="nw-meta"><span className="nb">{fmtWhen(r.at)}</span><b className={`snk ${r.kind}`}>{KIND[r.kind]}</b><span className="src">{r.source}</span></span><span className="nw-title">{decodeEntities(r.title)}</span></>;
           return r.url ? <a className="nw-row" key={r.key} data-kind={r.kind} href={r.url} target="_blank" rel="noreferrer">{body}</a> : <div className="nw-row plain" key={r.key} data-kind={r.kind}>{body}</div>;
         }) : <Empty title={emptyText(symbol, filter, feed.days)} />}
       </div>
@@ -41,7 +43,7 @@ export function StockNews({ symbol, feed, phone = false }: { symbol: string; fee
         <div className="snlist" id="st-news">
           {rows.slice(0, shown).map((r) => (
             <div className={`snrow ${r.kind}`} key={r.key} data-kind={r.kind}>
-              <div className="snm"><span className="nb">{fmtDayTime(r.at)}</span> · <span className={`snk ${r.kind}`}>{KIND[r.kind]}</span> · <span className="src">{r.source}</span></div>
+              <div className="snm"><span className="nb">{fmtWhen(r.at)}</span> · <span className={`snk ${r.kind}`}>{KIND[r.kind]}</span> · <span className="src">{r.source}</span></div>
               <div className="snt">{r.url ? <a href={r.url} target="_blank" rel="noreferrer">{decodeEntities(r.title)}</a> : decodeEntities(r.title)}</div>
             </div>
           ))}

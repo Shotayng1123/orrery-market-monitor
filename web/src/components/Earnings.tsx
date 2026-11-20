@@ -6,6 +6,7 @@ import { hideCard, money, openAsset, showCard } from "./CompanyCard";
 import { useApi } from "../lib/useApi";
 import { fmtClock, SGT } from "../lib/time";
 import { useRowCap } from "../lib/useRowCap";
+import { MKT_CAP } from "../lib/labels";
 
 export interface EarningsRow { symbol: string; name: string; sector: string | null; indices: string[]; mcapUsd: number | null; at: string; estimate: boolean }
 export const REGION = (r: EarningsRow): "US" | "Japan" | "Asia" => (r.indices.some((i) => i === "SP500" || i === "NDX") ? "US" : r.indices.some((i) => i === "NK225" || i === "TOPIX") ? "Japan" : "Asia");
@@ -14,7 +15,7 @@ export const SIZES: PickOption<"big" | "all">[] = [{ value: "big", label: "USD 1
 const dayOf = (t: string) => new Date(t).toLocaleDateString("en-CA", { timeZone: SGT });
 const dayLabel = (t: string) => new Date(t).toLocaleDateString("en-GB", { timeZone: SGT, weekday: "long", day: "numeric", month: "short" });
 
-/** Earnings calendar: index constituents reporting over the next three weeks, by day (Singapore time).
+/** The results calendar (earnings): index constituents reporting over the next three weeks, by day (Singapore time).
  *  Dates come from the quote feed; one marked "est." has not been confirmed by the company. */
 export function EarningsCalendar({ tick }: { tick: number }) {
   const e = useApi<{ rows: EarningsRow[]; source: string }>("earnings", { days: 21 }, Math.floor(tick / 30));
@@ -27,13 +28,13 @@ export function EarningsCalendar({ tick }: { tick: number }) {
     <>
       <div className="chips ernchips">
         <Pick label="Region" value={region} options={REGIONS} onChange={setRegion} />
-        <Pick label="Market cap" value={big ? "big" : "all"} options={SIZES} onChange={(v) => setBig(v === "big")} />
+        <Pick label={MKT_CAP} value={big ? "big" : "all"} options={SIZES} onChange={(v) => setBig(v === "big")} />
         <span className="mut" style={{ marginLeft: 4 }}>{rows.length} companies · times in SGT · est. = date not confirmed</span>
       </div>
       {rows.length ? (
         <div className="calwrap" ref={box}><table className="mini calT ernT">
           <colgroup><col className="tm" /><col className="st" /><col /><col className="ix" /><col className="mc" /></colgroup>
-          <thead><tr><th className="l">SGT</th><th /><th className="l">Company</th><th className="l">Sector</th><th>Mkt cap</th></tr></thead>
+          <thead><tr><th className="l">SGT</th><th /><th className="l">Company</th><th className="l">Sector</th><th>{MKT_CAP}</th></tr></thead>
           <tbody>{rows.map((r, i, arr) => (
             <Fragment key={r.symbol}>
               {(i === 0 || dayOf(r.at) !== dayOf(arr[i - 1].at)) && <tr className="cls"><td colSpan={5}>{dayLabel(r.at)}</td></tr>}
@@ -47,7 +48,7 @@ export function EarningsCalendar({ tick }: { tick: number }) {
             </Fragment>
           ))}</tbody>
         </table></div>
-      ) : <Empty title={e.data ? "No companies match" : "Loading earnings dates"}>{e.error ?? (e.data ? "Widen the region or size filter." : "")}</Empty>}
+      ) : <Empty title={e.data ? "No companies match" : "Loading results dates"}>{e.error ?? (e.data ? "Widen the region or size filter." : "")}</Empty>}
     </>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { fmtPct } from "../lib/fmt";
 
 // Squarified treemap (Bruls, Huizing, van Wijk) in two levels: sectors, then names. Tiles fill the box with
 // no gaps; each tile's area is its market-cap share. Solid white text; the shade deepens with the day's move.
@@ -39,7 +40,7 @@ function squarify<T extends { value: number }>(items: T[], rect: Rect): Array<{ 
 
 const UP_RGB = "63,208,126", DN_RGB = "255,77,66";
 const bg = (v: number | null) => (v == null ? "#2a2b30" : `rgba(${v >= 0 ? UP_RGB : DN_RGB},${(0.22 + Math.min(1, Math.abs(v) / 5) * 0.68).toFixed(3)})`);
-const fmtP = (v: number | null) => (v == null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`);
+const fmtP = (v: number | null) => fmtPct(v, 1);   // no sign on a move that rounds to zero (D-36)
 
 export function Treemap({ groups, height = 560, onEnter, onLeave, onClick }: { groups: TreeGroup[]; height?: number | "fill"; onEnter?: (id: string, e: React.MouseEvent) => void; onLeave?: () => void; onClick?: (id: string) => void }) {
   const box = useRef<HTMLDivElement>(null);

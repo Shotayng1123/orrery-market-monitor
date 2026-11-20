@@ -9,7 +9,8 @@ import { Section, Stat } from "../components/PhoneKit";
 import { useApi } from "../lib/useApi";
 import type { TableRow } from "../lib/types";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
-import { fmtStamp } from "../lib/time";
+import { fmtDate, fmtStamp } from "../lib/time";
+import { MKT_CAP } from "../lib/labels";
 import { marketOf, StatementTable, type AssetFull } from "./AssetLegacy";
 
 /** A stock's page for a phone as it was before 18 Nov 2026. Kept for a server that does not yet answer the `stock`
@@ -52,14 +53,14 @@ export function AssetPhoneLegacy({ symbol, tick }: { symbol: string; tick: numbe
       <Section title="Quote" aux={d.asOf ? `as of ${fmtStamp(d.asOf)}` : ""} card={false}>
         <div className="mp-card pad">
           <div className="mp-grid in">
-            <Stat k="Day" cls={signCls(d.pct)}>{fmtPct(d.pct, 2)}</Stat>
+            <Stat k="Day" cls={signCls(d.pct, 2)}>{fmtPct(d.pct, 2)}</Stat>
             <Stat k="Previous close">{fmtNum(d.prevClose, dec)}</Stat>
-            <Stat k="Market cap">{money(d.mcap, d.currency)}</Stat>
+            <Stat k={MKT_CAP}>{money(d.mcap, d.currency)}</Stat>
           </div>
           <table className="mp-t left kv"><tbody>
             <tr><td>Volume</td><td>{d.volume == null ? "–" : fmtNum(d.volume, 0)}</td></tr>
-            <tr><td>Average daily volume, 3 months</td><td>{d.adv3m == null ? "–" : fmtNum(d.adv3m, 0)}</td></tr>
-            <tr><td>Average daily volume, 10 days</td><td>{d.adv10d == null ? "–" : fmtNum(d.adv10d, 0)}</td></tr>
+            <tr><td>Avg daily volume (3M)</td><td>{d.adv3m == null ? "–" : fmtNum(d.adv3m, 0)}</td></tr>
+            <tr><td>Avg daily volume (10d)</td><td>{d.adv10d == null ? "–" : fmtNum(d.adv10d, 0)}</td></tr>
             <tr><td>Volume against the 3-month average</td><td>{d.volume != null && d.adv3m ? `${Math.round((d.volume / d.adv3m) * 100)}%` : "–"}</td></tr>
             <tr><td>Turnover (day)</td><td>{d.volume != null && d.price != null ? money(d.volume * d.price, d.currency) : "–"}</td></tr>
           </tbody></table>
@@ -70,8 +71,8 @@ export function AssetPhoneLegacy({ symbol, tick }: { symbol: string; tick: numbe
           {d.short ? (
             <table className="mp-t left kv"><tbody>
               {d.short.kind === "finra"
-                ? <tr><td>FINRA short-volume share · {d.short.d}</td><td>{(d.short.ratio * 100).toFixed(0)}%</td></tr>
-                : <><tr><td><b>Reported short positions (≥0.5%) · {d.short.d}</b></td><td><b>{(d.short.ratio * 100).toFixed(2)}%</b></td></tr>{d.short.holders.slice(0, 8).map((h) => <tr key={h.holder}><td>{h.holder} · {h.d}</td><td>{(h.ratio * 100).toFixed(2)}%</td></tr>)}</>}
+                ? <tr><td>FINRA short-volume share · {fmtDate(d.short.d)}</td><td>{(d.short.ratio * 100).toFixed(0)}%</td></tr>
+                : <><tr><td><b>Reported short positions (≥0.5%) · {fmtDate(d.short.d)}</b></td><td><b>{(d.short.ratio * 100).toFixed(2)}%</b></td></tr>{d.short.holders.slice(0, 8).map((h) => <tr key={h.holder}><td>{h.holder} · {fmtDate(h.d)}</td><td>{(h.ratio * 100).toFixed(2)}%</td></tr>)}</>}
             </tbody></table>
           ) : <Empty title="No short data">None reported for this name.</Empty>}
         </div>
@@ -82,7 +83,7 @@ export function AssetPhoneLegacy({ symbol, tick }: { symbol: string; tick: numbe
             <>
               <Wide><StatementTable rows={st.annual} title="Annual" ccy={st.currency} /></Wide>
               {f && <>
-                <div className="minih">Company guidance · FY ending {f.fiscalYearEnd ?? "–"}{f.disclosed ? ` · disclosed ${f.disclosed}` : ""}</div>
+                <div className="minih">Company guidance · year to {fmtDate(f.fiscalYearEnd)}{f.disclosed ? ` · disclosed ${fmtDate(f.disclosed)}` : ""}</div>
                 <table className="secT"><tbody>
                   <tr><td className="l">Revenue</td><td className="num">{money(f.revenue)}</td></tr><tr><td className="l">Operating income</td><td className="num">{money(f.op)}</td></tr>
                   <tr><td className="l">Net income</td><td className="num">{money(f.ni)}</td></tr><tr><td className="l">EPS / DPS</td><td className="num">{f.eps == null ? "–" : fmtNum(f.eps, 2)} / {f.dps == null ? "–" : fmtNum(f.dps, 2)}</td></tr>

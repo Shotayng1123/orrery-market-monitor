@@ -3,18 +3,20 @@ import { useEffect, useState } from "react";
 /** The legend behind the "?" in the header: what every column, colour and badge on the Monitor means, in one
  *  place and readable on a phone (the same explanations otherwise sit in hover tooltips, which a phone lacks). */
 const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
-  { title: "Market table", rows: [
+  { title: "Markets table", rows: [
     ["1D to 36M", "Change from the close at the start of that window to the last print. Per cent for prices, basis points (bp) for yields."],
     ["σ vs 1M avg", "How far the last print sits from its 21-session average, in standard deviations of those 21 closes (the 1M corridor on the charts). Beyond ±2 is an unusual level for the past month."],
     ["52W range", "Where the last print sits in its 52-week range: 0% is the low, 100% the high."],
-    ["vs 200d", "Distance from the 200-day average. Per cent for prices, bp for yields."],
+    ["vs 200D", "Distance from the 200-day average (vs 50D: the 50-day). Per cent for prices, bp for yields."],
+    ["Levels", "Each instrument is written with one precision on every screen, the chart and the notes: USD/JPY 158.400, EUR/USD 1.1143, the Nikkei 57,000.00, a stock 182.44 (under 1,000) or 3,121. A yield's level ends in %: UST 2Y 4.510%."],
     ["On a phone", "Every coloured change says what it covers on a line under the figure: its window (1D, 1W … 12M), or the measure a list is sorted by (MKT CAP, 52W RANGE …)."],
     ["Shaded cells", "Green for a rise, red for a fall; the stronger the colour, the larger the move. Shaded cells are lettered in white."],
     ["PROXY", "An instrument that stands in for another, for example the 1306.T ETF for TOPIX during the session."],
-    ["LIVE / CLOSED / ~15m", "Whether the instrument's market is open, and how delayed its feed is."],
+    ["LIVE / CLOSED / DELAYED ~15m", "Whether the instrument's market is open, and how delayed its feed is."],
   ] },
   { title: "Charts", rows: [
     ["Lines", "Grey is the rolling mean, blue the ±1σ band, amber the ±2σ band, over the σ window chosen at the top."],
+    ["Axes", "A daily chart's dates read 19 Nov, Nov or 2026, with the year under the first label of each year; an intraday chart's times are in SGT. The level axis uses as many decimals as its steps need, never more than the instrument's own."],
     ["PERIOD", "1D uses one-minute bars, 1W fifteen-minute bars, 1M hourly bars, 3M and longer daily closes. A stock's page also has 5Y and 10Y. Where the history starts later than the period, the change says \"since\" its first day and the line under the chart says where the history starts."],
     ["Moving back", "Drag a chart to the right to move back in time (the chart follows your hand), to the left to come forward again; double-click to return to the latest."],
     ["On a phone", "A tap on a chart puts its crosshair on that day, and the line under the chart gives the date, the level and the σ distance. It stays until the next tap; a sideways drag moves the chart as before."],
@@ -39,11 +41,11 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
     ["Their colour", "The circles and dots keep the turn's colour: a peak red, a bottom green. The figures are coloured by their sign, as everywhere else. A peak or a bottom appears once the price has turned that far from it, so the stretch still running has none yet."],
     ["The reason", "Looked up by web search for marks of the last twelve months: for a peak or a bottom, what ended the rise or the fall there. Shown only with the reports it rests on, which are linked. Otherwise the page says that no reliable report was found, or that the look-up is still under way."],
     ["Financials", "Tokyo-listed companies: EDINET DB (有価証券報告書 and 決算短信). Other companies: Yahoo Finance fundamentals; a line the source has no figure for in any period (R&D or buybacks, for example) is left out. The source and the date fetched are at the top of the panel."],
-    ["Column headers", "A header in teal opens the document behind that column, at the address the source gives: a year's 有価証券報告書 on EDINET (its document ID is in the tip), the 決算短信 PDF of the guidance or of a quarter. A plain header has no document address from the source; none is ever made up."],
+    ["Column headers", "A header in teal opens the document behind that column, at the address the source gives: a year's 有価証券報告書 on EDINET (its document ID is in the tip), the 決算短信 PDF of the guidance or of a quarter. A plain header has no document address from the source; none is ever made up. A year is named by the month and year it ends (FY3/26); a quarter by its number over its fiscal year (2Q, FY3/27), or by the month it ends (Sep, 2026)."],
     ["Fiscal year end · annual report", "Tokyo-listed companies: the month the fiscal year ends, the accounting standard and the latest 有価証券報告書, from EDINET DB's answer."],
     ["Earlier years", "Where the periods are wider than the screen they move under the line names, which stay put. They share the width equally and always come to rest whole, beside the names and at the right edge, so no part of a figure is left showing. It opens at the latest; ‹ earlier years, under the unit, goes back a screen."],
     ["Short interest", "Tokyo: JPX short-position reports. United States: exchange-reported short interest, and FINRA's short-volume share of a day's trading, which is not short interest."],
-    ["Next earnings (est.)", "A date estimated by Yahoo Finance, not confirmed by the company."],
+    ["Next results (est.)", "A date estimated by Yahoo Finance, not confirmed by the company."],
   ] },
   { title: "Watchlist", rows: [
     ["Adding a name", "Type part of a company's name or of its ticker and choose from the candidates; or use the star beside a name on its page."],
@@ -79,6 +81,8 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
     ["No new prices", "A red bar at the foot of the screen, and DATA ✕, when no market that is open has had a new price for more than twenty minutes beyond its feed's usual delay. The source has stopped sending; the figures on screen are as of the time the bar gives."],
     ["DATA ! · second path", "When the source stops answering the Monitor's server, a second machine (a job on GitHub) pulls the same prices and writes them until the server's own answers are current again. Prices stay current; the chip turns amber and its detail says since when."],
     ["The opening", "Five seconds while the data loads behind it. In the app on a phone's home screen, every time it is opened; in a browser tab and on a computer, once a day. A click, a tap or Esc ends it. Not shown while you are creating your account, or if your device is set to reduce motion."],
+    ["Dates and times", "A date is written 19 Nov 2026. A time is 19 Nov 23:18 SGT, or 23:18 alone for today in a panel that says its times are in SGT. Lists that span days carry a bar for each day."],
+    ["Zero", "A change that rounds to zero at the precision shown is written without a sign and in grey (0.0%, 0.0bp), never as −0.0%."],
     ["Keys", "1 to 6 switch tabs; / jumps to search; Esc leaves full screen."],
   ] },
 ];

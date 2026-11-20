@@ -26,7 +26,7 @@ async function tnxBoth(p) {
   await p.evaluate(() => { location.hash = "market"; }); await p.waitForSelector("table.mkt tbody tr:not(.cls)");
   const m = await p.evaluate(() => { const tr = [...document.querySelectorAll("table.mkt tbody tr:not(.cls)")].find((r) => r.children[0].textContent.startsWith("UST 10Y")); const c = [...tr.children].map((x) => x.textContent); return { last: c[1], d1: c[2], w1: c[3], m1: c[4], m3: c[5], m12: c[6], vs200: c[10] }; });
   await p.evaluate(() => { location.hash = "watch"; }); await p.waitForSelector('.panel[data-k="wl"] tbody tr');
-  const w = await p.evaluate(() => { const heads = [...document.querySelectorAll('.panel[data-k="wl"] thead th')].map((x) => x.textContent); const tr = [...document.querySelectorAll('.panel[data-k="wl"] tbody tr')].find((r) => r.querySelector("td.nm .mut").textContent === "^TNX"); const c = [...tr.children].map((x) => x.textContent), at = (h) => c[heads.indexOf(h)]; return { last: at("Last"), d1: at("1D"), w1: at("1W"), m1: at("1M"), m3: at("3M"), m12: at("12M"), vs200: at("vs 200d"), vs50: at("vs 50d") }; });
+  const w = await p.evaluate(() => { const heads = [...document.querySelectorAll('.panel[data-k="wl"] thead th')].map((x) => x.textContent); const tr = [...document.querySelectorAll('.panel[data-k="wl"] tbody tr')].find((r) => r.querySelector("td.nm .mut").textContent === "^TNX"); const c = [...tr.children].map((x) => x.textContent), at = (h) => c[heads.indexOf(h)]; return { last: at("Last"), d1: at("1D"), w1: at("1W"), m1: at("1M"), m3: at("3M"), m12: at("12M"), vs200: at("vs 200D"), vs50: at("vs 50D") }; });
   return { m, w };
 }
 
@@ -47,7 +47,7 @@ async function tnxBoth(p) {
     let day = utcDay(), r = await tnxBoth(p); if (utcDay() !== day) r = await tnxBoth(p);   // the mock's history is drawn per UTC day: read both again if the day turned in between
     const keys = ["d1", "w1", "m1", "m3", "m12", "vs200"];
     ck(`^TNX's 1D to 12M and vs 200D end in "bp" and equal MARKETS' UST 10Y row (${keys.map((k) => r.w[k]).join(" ")})`, keys.every((k) => /bp$/.test(r.w[k]) && r.w[k] === r.m[k]) && r.w.vs50 === "–", r);
-    ck(`its LAST is a yield level in % (${r.w.last}), MARKETS' level with the unit`, r.w.last === `${r.m.last}%`, r);
+    ck(`its LAST is a yield level in % (${r.w.last}), the same as MARKETS' (${r.m.last}): one precision, the unit on both`, r.w.last === r.m.last && /^\d\.\d{3}%$/.test(r.w.last), r);
     const w = await p.evaluate(() => { const pn = document.querySelector('.panel[data-k="wl"]'), body = pn.querySelector(".pbody"), br = body.getBoundingClientRect(), heads = [...pn.querySelectorAll("thead th")].map((x) => x.innerText);
       const rows = [...pn.querySelectorAll("tbody tr")].map((tr) => { const c = tr.querySelector("td.asof"), cr = c.getBoundingClientRect(); return { sym: tr.querySelector("td.nm .mut").textContent, asof: c.textContent, tip: c.title, whole: c.scrollWidth <= c.clientWidth && cr.left >= br.left - 1 && cr.right <= br.right + 1, r52: tr.children[heads.indexOf("52W RANGE")].textContent }; });
       return { heads, rows, aux: pn.querySelector(".aux").textContent, over: body.scrollWidth - body.clientWidth, span: getComputedStyle(pn).gridColumnEnd }; });
@@ -62,7 +62,7 @@ async function tnxBoth(p) {
     await p.goto(MOCK + "#watch", { waitUntil: "networkidle" }); await p.waitForSelector('.panel[data-k="wl"] tbody tr');
     const x = await p.evaluate(() => { const body = document.querySelector('.panel[data-k="wl"] .pbody'), br = body.getBoundingClientRect(); return [...body.querySelectorAll("td.asof")].map((c) => { const r = c.getBoundingClientRect(); return { t: c.textContent, whole: c.scrollWidth <= c.clientWidth && r.left >= br.left - 1 && r.right <= br.right + 1 }; }); });
     ck(`all ${x.length} as-of cells whole and in view`, x.length === 10 && x.every((c) => c.whole && (AS_DATE.test(c.t) || AS_PRINT.test(c.t))), x);
-    const t = await p.evaluate(() => { const heads = [...document.querySelectorAll('.panel[data-k="wl"] thead th')].map((h) => h.textContent), tr = [...document.querySelectorAll('.panel[data-k="wl"] tbody tr')].find((r) => r.querySelector("td.nm .mut").textContent === "^TNX"), c = [...tr.children].map((x) => x.textContent); return { last: c[heads.indexOf("Last")], cells: ["1D", "1W", "1M", "3M", "12M", "vs 200d"].map((h) => c[heads.indexOf(h)]) }; });
+    const t = await p.evaluate(() => { const heads = [...document.querySelectorAll('.panel[data-k="wl"] thead th')].map((h) => h.textContent), tr = [...document.querySelectorAll('.panel[data-k="wl"] tbody tr')].find((r) => r.querySelector("td.nm .mut").textContent === "^TNX"), c = [...tr.children].map((x) => x.textContent); return { last: c[heads.indexOf("Last")], cells: ["1D", "1W", "1M", "3M", "12M", "vs 200D"].map((h) => c[heads.indexOf(h)]) }; });
     ck(`^TNX's changes end in "bp" (${t.cells.join(" ")}) and its LAST in "%" (${t.last})`, t.cells.every((c) => /bp$/.test(c)) && /%$/.test(t.last), t);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
 
@@ -86,13 +86,13 @@ async function tnxBoth(p) {
     ck(`MARKETS: all ${ps.length} pills say "1D" under the figure, at ${Math.min(...ps.map((x) => x.px))}px or more, nothing cut`, ps.length >= 15 && ps.every((x) => x.w === "1D" && !x.cut && x.px >= 11), ps.filter((x) => x.w !== "1D" || x.cut).slice(0, 3));
     await p.locator(".mp-head .pick select").selectOption("1W"); await p.waitForTimeout(300); ps = await pills(p.locator(".mp-chg"));
     const ust = await p.locator(".mp-row", { hasText: "UST 10Y" }).first().locator(".mp-chg .fig").textContent();
-    ck(`Change -> 1W: every pill now says "1W"; UST 10Y's in bp (${ust})`, ps.every((x) => x.w === "1W") && /bp$/.test(ust), ps.filter((x) => x.w !== "1W").slice(0, 3));
+    ck(`Period -> 1W: every pill now says "1W"; UST 10Y's in bp (${ust})`, ps.every((x) => x.w === "1W") && /bp$/.test(ust), ps.filter((x) => x.w !== "1W").slice(0, 3));
     await p.locator(".mp-row", { hasText: "UST 10Y" }).first().tap(); await p.waitForSelector(".mp-item.open .mp-grid");
     const tiles = await p.evaluate(() => [...document.querySelectorAll(".mp-item.open .mp-grid")].pop().innerText.split("\n").filter(Boolean));
     ck(`the opened line's statistics: ${tiles.join(" · ")}`, tiles[0] === "σ vs 1M avg" && /^[+-]?\d+\.\dσ$|^–$/.test(tiles[1]) && tiles[2] === "52W range" && /^\d{1,3}%$/.test(tiles[3]) && /bp$/.test(tiles[5]), tiles);
     await p.evaluate(() => { location.hash = "rates"; }); await p.waitForSelector(".mp-sec .mp-row"); await p.waitForTimeout(300);
     await p.locator(".mp-head .pick select").selectOption("3M"); await p.waitForTimeout(300); ps = await pills(p.locator(".mp-chg"));
-    ck(`RATES & FX: Change -> 3M, all ${ps.length} pills say "3M"`, ps.length >= 6 && ps.every((x) => x.w === "3M" && !x.cut), ps.filter((x) => x.w !== "3M").slice(0, 3));
+    ck(`RATES & FX: Period -> 3M, all ${ps.length} pills say "3M"`, ps.length >= 6 && ps.every((x) => x.w === "3M" && !x.cut), ps.filter((x) => x.w !== "3M").slice(0, 3));
 
     await p.evaluate(() => { location.hash = "equities"; }); await p.waitForSelector(".mp-row.starred"); await p.waitForTimeout(500);
     const eq = async () => ({ index: await pills(sec(p, "NIKKEI 225").locator(".mp-chg")), drivers: await pills(sec(p, "Drivers").locator(".mp-chg")), sectors: await pills(sec(p, "Sector performance").locator(".mp-chg")), movers: await pills(sec(p, "Movers").locator(".mp-chg")), screener: await pills(sec(p, "Screener").locator(".mp-chg")) });
@@ -109,7 +109,7 @@ async function tnxBoth(p) {
     const fl = await sec(p, "Flow by sector").locator(".fl-row:not(.tot) .b").evaluateAll((es) => es.map((b) => [...b.querySelectorAll("small")].map((s) => s.textContent + ":" + parseFloat(getComputedStyle(s).fontSize)).join(",")));
     ck(`flow by sector: every figure labelled ("${fl[0]}")`, fl.length >= 5 && fl.every((x) => x === "net flow:11,1D:11"), fl.slice(0, 3));
     const sh = await sec(p, "Short interest").evaluate((s) => ({ heads: [...s.querySelectorAll("table.secT thead")].map((t) => [...t.querySelectorAll("th")].filter((th) => th.getBoundingClientRect().width > 0).map((th) => th.textContent).join(" · ")), px: Math.min(...[...s.querySelectorAll("table.secT th")].filter((th) => th.getBoundingClientRect().width > 0).map((th) => parseFloat(getComputedStyle(th).fontSize))), dates: [...s.querySelectorAll(".nb")].map((n) => ({ t: n.textContent, lines: n.getClientRects().length })) }));
-    ck(`short interest: headed tables (${sh.heads.join(" | ")}, at ${sh.px}px), and each of its ${sh.dates.length} dates on one line`, sh.heads.join(" | ") === "Name · Holders · % of shares | Sector · Turnover · Short %" && sh.px >= 11 && sh.dates.length >= 3 && sh.dates.every((d) => /^\d{4}-\d\d-\d\d$/.test(d.t) && d.lines === 1), sh);
+    ck(`short interest: headed tables (${sh.heads.join(" | ")}, at ${sh.px}px), and each of its ${sh.dates.length} dates on one line`, sh.heads.join(" | ") === "Name · Holders · % of shares | Sector · Turnover · Short %" && sh.px >= 11 && sh.dates.length >= 3 && sh.dates.every((d) => /^\d{1,2} [A-Z][a-z]{2} \d{4}$/.test(d.t) && d.lines === 1), sh);
 
     await p.evaluate(() => { location.hash = "market"; }); await p.waitForSelector(".mp-row"); await p.locator(".mp-head .pick select").selectOption("12M"); await p.waitForTimeout(300);
     const mk12 = await p.locator(".mp-row", { hasText: "UST 10Y" }).first().locator(".mp-chg .fig").textContent();
@@ -120,9 +120,9 @@ async function tnxBoth(p) {
     const tnx = lines.find((x) => x.st.startsWith("^TNX · ")), badLine = lines.filter((x) => { const [sym, ...rest] = x.st.split(" · "), as = rest.join(" · "); return STOCKS.includes(sym) ? !/^close \d{1,2} [A-Z][a-z]{2}$/.test(as) : !AS_PRINT.test(as); });
     ck(`WATCHLIST: every line says what it is as of ("${lines[0].st}", "${tnx?.st}"), whole`, lines.length === 10 && badLine.length === 0 && lines.every((x) => !x.cut), badLine);
     ck(`its pills say "1D"; ^TNX's level ends in % (${tnx?.px}) and its change is MARKETS' own in bp (${tnx?.fig})`, lines.every((x) => x.w === "1D") && /%$/.test(tnx?.px ?? "") && tnx?.fig === mk1, { tnx, mk1 });
-    await pick(p, "Change").locator("select").selectOption("pct12m"); await p.waitForTimeout(300);
+    await pick(p, "Period").locator("select").selectOption("pct12m"); await p.waitForTimeout(300);
     const l12 = await p.evaluate(() => [...document.querySelectorAll(".mp-row.starred")].map((r) => ({ st: r.querySelector(".mp-st").textContent, fig: r.querySelector(".mp-chg .fig").textContent, w: r.querySelector(".mp-chg .w").textContent })));
-    ck(`Change -> 12M: every pill says "12M"; ^TNX ${l12.find((x) => x.st.startsWith("^TNX"))?.fig}, as MARKETS' 12M`, l12.every((x) => x.w === "12M") && l12.find((x) => x.st.startsWith("^TNX"))?.fig === mk12, { l12: l12.slice(8), mk12 });
+    ck(`Period -> 12M: every pill says "12M"; ^TNX ${l12.find((x) => x.st.startsWith("^TNX"))?.fig}, as MARKETS' 12M`, l12.every((x) => x.w === "12M") && l12.find((x) => x.st.startsWith("^TNX"))?.fig === mk12, { l12: l12.slice(8), mk12 });
     ck(`the sources under the list ("${await p.locator("#wl-src").textContent()}")`, /^Source: Yahoo Finance\./.test(await p.locator("#wl-src").textContent()));
     if (dev === "iPhone 13") {   // no pill anywhere without its window: every tab and both kinds of stock page
       const seen = [];
@@ -145,7 +145,7 @@ async function tnxBoth(p) {
     if (a === "watch_syms") return ok({ symbols: OLD.map((x) => x.symbol) }); if (a === "watch_list") return ok({ rows: OLD }); if (a === "watch_feed") return ok({ alerts: [], news: [], research: [] }); return r.fallback(); }); };
   { const { ctx, p, errs } = await page(b, { viewport: { width: 1440, height: 900 } }); await oldRoutes(p);
     await p.goto(FAKE + "#watch", { waitUntil: "networkidle" }); await p.waitForSelector('.panel[data-k="wl"] tbody tr'); await p.waitForTimeout(300);
-    const o = await p.evaluate(() => { const heads = [...document.querySelectorAll('.panel[data-k="wl"] thead th')].map((x) => x.textContent); return Object.fromEntries([...document.querySelectorAll('.panel[data-k="wl"] tbody tr')].map((tr) => { const c = [...tr.children].map((x) => x.textContent), at = (h) => c[heads.indexOf(h)]; return [tr.querySelector("td.nm .mut").textContent, { asof: at("As of"), cells: ["1D", "1W", "1M", "3M", "12M", "vs 200d"].map(at), last: at("Last") }]; })); });
+    const o = await p.evaluate(() => { const heads = [...document.querySelectorAll('.panel[data-k="wl"] thead th')].map((x) => x.textContent); return Object.fromEntries([...document.querySelectorAll('.panel[data-k="wl"] tbody tr')].map((tr) => { const c = [...tr.children].map((x) => x.textContent), at = (h) => c[heads.indexOf(h)]; return [tr.querySelector("td.nm .mut").textContent, { asof: at("As of"), cells: ["1D", "1W", "1M", "3M", "12M", "vs 200D"].map(at), last: at("Last") }]; })); });
     ck(`computer: ^TNX's changes are dashes, none a per cent (${o["^TNX"].cells.join(" ")}); its level ${o["^TNX"].last}`, o["^TNX"].cells.every((c) => c === "–") && o["^TNX"].last === "4.859%", o["^TNX"]);
     ck(`a stock's date and a close stamped at midnight UTC read as closes ("${o["7203.T"].asof}", "${o["^N225"].asof}"); a print by its time ("${o["^TNX"].asof}"); prices keep their per cent`, o["7203.T"].asof === "18 Nov" && o["^N225"].asof === "18 Nov" && AS_PRINT.test(o["^TNX"].asof) && o["7203.T"].cells[0] === "+1.8%", o);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }

@@ -9,6 +9,12 @@ Real-time market numbers, flow and trending data for professional investors. Inf
 ## Rules that shape the code
 
 - Every number has a source and an as-of time; delayed feeds carry a badge; estimates are marked (E).
+- One precision per instrument (the instruments table's `decimals`, sent with each row) on every screen, the charts and
+  the notes; a yield's level ends in "%"; a figure that rounds to zero carries no sign. One date format ("19 Nov 2026")
+  and one time format ("19 Nov 23:18 SGT", or "23:18" for today in a panel that says its times are SGT); never
+  "11/19" or "2026-11-19". One word per idea: the glossary in `web/src/lib/labels.ts` (MARKETS, RATES & FX, Period,
+  FX, Rates, Mkt cap, Next results, Avg daily volume (60d) …), used by both layouts. Numbers in `web/src/lib/fmt.ts`,
+  dates and times in `web/src/lib/time.ts`.
 - Nothing is read from Orrery Analytics.
 - Default time zone: Singapore. The page refreshes every 60 s while any tracked market is open.
 - Sigma bands: rolling mean ± 1σ over 21 / 252 / 756 trading days (1M / 12M / 36M), ±2σ on toggle.
@@ -60,10 +66,12 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, about 1,280 checks in 26 suites): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, about 1,300 checks in 27 suites): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
-  window under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), the
+  window under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
+  format (`one-format`: USD/JPY with the same decimals in nine places on both layouts, a yield's level in "%", no
+  "11/19", "16-Nov-26", "2026-11-19" or "−0.0" on any screen or tooltip, the glossary's words alike on both layouts), the
   stock page (chart marks, performance, statements; its NEWS of headlines and alerts, the document behind each
   statements column, big moves in their sign's colours, a move opened on the phone's chart, a tap on a phone chart,
   5Y and 10Y, the two-column page and a server from before NEWS), the classic phone layout, the sign-in screen, creating an
@@ -95,8 +103,9 @@ Three sets, none of which needs the real API, the live database or a sign-in:
 - **Logic checks** (`sim/logic.test.ts`): exchange sessions, rolling bands, alert measures, the push encryption,
   the verification email for a new account, and every figure of the stock page (performance, ratios, statements
   as read from each source, big moves, the reading of a move's reason), and the second path for prices (when the
-  relay takes over and hands back, its timetable against the database's own), and where a statements table wider
-  than the screen comes to rest. `cd jobs && npx tsx ../sim/logic.test.ts`.
+  relay takes over and hands back, its timetable against the database's own), where a statements table wider
+  than the screen comes to rest, and the one formatting of figures, dates and words (`lib/fmt.ts`, `lib/time.ts`,
+  `lib/labels.ts`). `cd jobs && npx tsx ../sim/logic.test.ts`.
 - **Database checks** (`sim/sql`): the rules that live in database functions (the limits on verification emails;
   the queue for the reasons of big moves; the request for the second path),
   run with the migration file itself on PGlite, a Postgres inside Node. `cd sim/sql && npm ci && npm test`.

@@ -8,9 +8,10 @@ import { Screen, Section, usePlaceAtNext } from "../components/PhoneKit";
 import { useApi } from "../lib/useApi";
 import { useRowCap } from "../lib/useRowCap";
 import type { EconEvent, NewsItem } from "../lib/types";
-import { fmtClock, SGT } from "../lib/time";
+import { fmtClock, fmtWhen, SGT } from "../lib/time";
+import { categoryLabel, HEADLINES, MKT_CAP, RESULTS_CALENDAR, TAB } from "../lib/labels";
 import { fmtStampSafe } from "./shared";
-import { CAL_MODES, dayLabel, dayOf, decodeEntities, IMPACTS, MAJOR, NEWS_CATEGORIES, SCOPES } from "./News";
+import { CAL_MODES, CATEGORY_OPTIONS, dayLabel, dayOf, decodeEntities, IMPACTS, MAJOR, NEWS_CATEGORIES, SCOPES } from "./News";
 
 /** NEWS for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026): the calendar and the headlines of the desktop tab
  *  as lists at reading size. The calendar is a box of ten lines that scrolls inside itself and opens at the next
@@ -86,8 +87,8 @@ export function NewsPhone({ tick }: { tick: number }) {
   const heads = news.data?.rows ?? [];
   const macro = calMode === "macro";
   return (
-    <Screen title="News" sub="times in Singapore">
-      <Section title={macro ? "Economic calendar" : "Earnings calendar"} card={false}>
+    <Screen title={TAB.news} sub="times in SGT">
+      <Section title={macro ? "Economic calendar" : RESULTS_CALENDAR} card={false}>
         <div className="mp-picks">
           <Pick label="Type" value={calMode} options={CAL_MODES} onChange={setCalMode} />
           {macro ? <>
@@ -95,13 +96,13 @@ export function NewsPhone({ tick }: { tick: number }) {
             <Pick label="Countries" value={scope} options={SCOPES} onChange={setScope} />
           </> : <>
             <Pick label="Region" value={region} options={REGIONS} onChange={setRegion} />
-            <Pick label="Market cap" value={big ? "big" : "all"} options={SIZES} onChange={(v) => setBig(v === "big")} />
+            <Pick label={MKT_CAP} value={big ? "big" : "all"} options={SIZES} onChange={(v) => setBig(v === "big")} />
           </>}
         </div>
         <div className="mp-card">
           {macro
             ? (events.length ? <MacroList events={events} listKey={`${imp}|${scope}`} /> : <Empty title="No calendar loaded">{cal.error ?? "The calendar sync runs every hour."}</Empty>)
-            : (companies.length ? <EarningsList rows={companies} /> : <Empty title={ern.data ? "No companies match" : "Loading earnings dates"}>{ern.error ?? (ern.data ? "Widen the region or the market cap." : "")}</Empty>)}
+            : (companies.length ? <EarningsList rows={companies} /> : <Empty title={ern.data ? "No companies match" : "Loading results dates"}>{ern.error ?? (ern.data ? "Widen the region or the market cap." : "")}</Empty>)}
         </div>
         <p className="mp-note">
           {macro
@@ -109,13 +110,13 @@ export function NewsPhone({ tick }: { tick: number }) {
             : <>{companies.length} companies over three weeks · est. = date not confirmed by the company</>}
         </p>
       </Section>
-      <Section title="Headlines" aux={<Pick label="Category" value={cat} options={NEWS_CATEGORIES} onChange={(c) => { setCat(c); setShown(PAGE); }} />} card={false}>
+      <Section title={HEADLINES} aux={<Pick label="Category" value={cat} options={CATEGORY_OPTIONS} onChange={(c) => { setCat(c); setShown(PAGE); }} />} card={false}>
         {heads.length ? (
           <>
             <div className="mp-card">
               {heads.slice(0, shown).map((it) => (
                 <a className="nw-row" key={it.id} href={it.url} target="_blank" rel="noreferrer">
-                  <span className="nw-meta"><b>{it.source}</b><span>{fmtStampSafe(it.publishedAt)}</span>{cat === "All" && <span className="nw-cat">{it.category}</span>}</span>
+                  <span className="nw-meta"><b>{it.source}</b><span>{fmtWhen(it.publishedAt)}</span>{cat === "All" && <span className="nw-cat">{categoryLabel(it.category)}</span>}</span>
                   <span className="nw-title">{decodeEntities(it.title)}</span>
                   {it.tickers?.length > 0 && (
                     <span className="nw-tk">{it.tickers.slice(0, 3).map((t) => <button type="button" key={t.s} title={`Open ${t.n} (${t.s})`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); openAsset(t.s); }}>{t.n}</button>)}</span>

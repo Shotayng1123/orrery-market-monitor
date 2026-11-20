@@ -7,7 +7,7 @@ import { Screen } from "../components/PhoneKit";
 import { useApi } from "../lib/useApi";
 import type { Note, Report } from "../lib/types";
 import { fmtStampSafe } from "./shared";
-import { ddMmmYy, kindOf, KINDS, type Item, type Kind } from "./Research";
+import { kindOf, KINDS, pieceDate, type Item, type Kind } from "./Research";
 
 /** RESEARCH for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026). The tab opens on the titles, newest first; a
  *  tap opens the piece in their place, at reading size, and the phone's Back (or the button) returns to the list
@@ -24,7 +24,7 @@ export function ResearchPhone({ tick, sub, onSub }: { tick: number; sub?: string
     return [...a, ...b].sort((x, y) => y.sort.localeCompare(x.sort));
   }, [notes.data, reports.data]);
   const words = find.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const shown = items.filter((i) => (filter === "All" || i.kind === filter) && (!words.length || words.every((w) => `${i.title} ${ddMmmYy(i.d)} ${i.kind}`.toLowerCase().includes(w))));
+  const shown = items.filter((i) => (filter === "All" || i.kind === filter) && (!words.length || words.every((w) => `${i.title} ${pieceDate(i.d)} ${i.kind}`.toLowerCase().includes(w))));
   const has = (k: Kind) => items.some((i) => i.kind === k);
   const sel = sub ? items.find((i) => i.key === sub) ?? null : null;
   const reading = !!sel;
@@ -49,7 +49,7 @@ export function ResearchPhone({ tick, sub, onSub }: { tick: number; sub?: string
           {(r || n) && <button type="button" className="mp-act" title="Print this piece or save it as a PDF" onClick={() => window.print()}>PDF</button>}
         </header>
         <article className="mp-doc">
-          <div className="meta"><span className={`kchip k-${sel.kind.toLowerCase()}`}>{sel.kind}</span><span>{ddMmmYy(sel.d)}</span>{r?.meta?.author && <span>{r.meta.author}</span>}{n && <span>written {fmtStampSafe(n.generatedAt)}</span>}</div>
+          <div className="meta"><span className={`kchip k-${sel.kind.toLowerCase()}`}>{sel.kind}</span><span>{pieceDate(sel.d)}</span>{r?.meta?.author && <span>{r.meta.author}</span>}{n && <span>written {fmtStampSafe(n.generatedAt)}</span>}</div>
           <h1>{sel.title}</h1>
           {r ? (
             <div className="brnar report">
@@ -70,12 +70,12 @@ export function ResearchPhone({ tick, sub, onSub }: { tick: number; sub?: string
   }
   return (
     <Screen title="Research" sub={`${shown.length} of ${items.length} pieces`} right={<Pick<Kind | "All"> label="Kind" value={filter} options={[{ value: "All" }, ...KINDS.map((k) => ({ value: k, label: has(k) ? k : `${k} (to be added)`, disabled: !has(k) }))]} onChange={setFilter} />}>
-      <input className="mp-find" type="text" placeholder="Search titles, e.g. nvidia or nov-26" value={find} onChange={(e) => setFind(e.target.value)} />
+      <input className="mp-find" type="text" placeholder="Search titles, e.g. nvidia or 14 nov" value={find} onChange={(e) => setFind(e.target.value)} />
       {shown.length ? (
         <div className="mp-card">
           {shown.map((x) => (
             <button type="button" key={x.key} className={`rs-row${last === x.key ? " read" : ""}`} onClick={() => openRow(x.key)}>
-              <span className="meta"><span className={`kchip k-${x.kind.toLowerCase()}`}>{x.kind}</span><span>{ddMmmYy(x.d)}</span></span>
+              <span className="meta"><span className={`kchip k-${x.kind.toLowerCase()}`}>{x.kind}</span><span>{pieceDate(x.d)}</span></span>
               <span className="t">{x.title}</span>
             </button>
           ))}

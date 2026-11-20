@@ -7,11 +7,13 @@ export interface Note { title: string; body: string; hash: string; tag: string }
 
 const LABEL: Record<string, string> = { stock: "Stock move", index: "Index move", buyback: "Buyback", revision: "Guidance", mna: "M&A" };
 const sgt = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Singapore", hourCycle: "h23", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-/** "11/18 10:05 SGT", as the page writes its times. */
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "18 Nov 10:05 SGT", as the page writes its times (web/src/lib/time.ts fmtStamp; the designer's D-16, 20 Nov 2026:
+ *  it was "11/18 10:05 SGT", a day and month a reader in Japan or Singapore can read the wrong way round). */
 export function stampSgt(iso: string): string {
   const p: Record<string, string> = {};
   for (const x of sgt.formatToParts(new Date(iso))) if (x.type !== "literal") p[x.type] = x.value;
-  return `${p.month}/${p.day} ${p.hour}:${p.minute} SGT`;
+  return `${Number(p.day)} ${MON[Number(p.month) - 1]} ${p.hour}:${p.minute} SGT`;
 }
 /** Alerts raised from headlines about no listed company carry a made-up symbol ("news:123"): no page to open. */
 const hasPage = (symbol: string): boolean => !!symbol && !symbol.startsWith("news:");

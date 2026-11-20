@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { fmtPs, fmtRatio, fmtUnit, NO_DOC, periodDoc, type FinPeriod, type FinRow, type FinSection, type FinUnit } from "../lib/stock";
+import { fmtPs, fmtRatio, fmtUnit, NO_DOC, periodDoc, periodName, type FinPeriod, type FinRow, type FinSection, type FinUnit } from "../lib/stock";
+import { fmtDate } from "../lib/time";
 import { finBack, finFit, finRest } from "../lib/finscroll";
 import { zoomNow } from "../lib/prefs";
 
@@ -99,8 +100,9 @@ export function FinTable({ periods, sections, unit, currency }: { periods: FinPe
               {/* a press does not take the focus: focusing a control in the sticky names would scroll the box first */}
               {over && <button type="button" className="finprev nocsv" style={atStart ? { visibility: "hidden" } : undefined} onMouseDown={(e) => e.preventDefault()} onClick={back} title="Show the earlier periods">‹ earlier years</button>}</th>
             {periods.map((p) => {
-              const doc = periodDoc(p), what = [p.kind === "FC" ? "Company guidance" : p.kind === "Q" ? `Three months to ${p.end}` : `Year to ${p.end}`, p.std, p.note].filter(Boolean).join(" · ");
-              const label = <>{p.label}{p.kind === "FC" && <i>E</i>}</>;
+              const doc = periodDoc(p), what = [p.kind === "FC" ? "Company guidance" : p.kind === "Q" ? `Three months to ${fmtDate(p.end)}` : `Year to ${fmtDate(p.end)}`, p.std, p.note].filter(Boolean).join(" · ");
+              // a quarter's name on two lines ("2Q" over "FY3/27"), so the column is no wider than before
+              const n = periodName(p), label = <>{n.top}{n.sub && <> <span className="fy">{n.sub}</span></>}{p.kind === "FC" && <i>E</i>}</>;
               return (
                 <th key={p.key} className={[p.kind === "FC" ? "fc" : "", doc ? "doc" : ""].filter(Boolean).join(" ") || undefined} title={doc ? `${doc.tip} · ${what}` : `${what} · ${NO_DOC}`}>
                   {doc ? <a href={doc.href} target="_blank" rel="noreferrer" title={doc.tip}>{label}</a> : label}

@@ -132,7 +132,9 @@ export function mockCurve(country: string, ago: string | null): { country: strin
   const ca: Array<[string, number, number]> = [["2Y", 2, 3.17], ["3Y", 3, 3.26], ["5Y", 5, 3.39], ["7Y", 7, 3.48], ["10Y", 10, 3.67], ["30Y", 30, 4.02]];
   const src = country === "JP" ? jp : country === "DE" ? de : country === "EA" || country === "EB" ? de.filter(([, y]) => [1, 2, 3, 5, 7, 10, 15, 20, 30].includes(y)).map(([t, y, v]) => [t, y, v + (country === "EB" ? 0.35 : 0)] as [string, number, number]) : country === "GB" ? gb : country === "CA" ? ca : us;
   const mk = (shift: number, d: string): Curve => ({ country, date: d, source: country === "JP" ? "MOF (mock)" : "treasury.gov (mock)", points: src.map(([tenor, years, y]) => ({ tenor, years, yield: y + shift * (1 - years / 40) })) });
-  return { country, current: mk(0, new Date().toISOString().slice(0, 10)), ghost: ago ? mk(ago === "36M" ? -0.9 : ago === "12M" ? -0.35 : 0.12, "earlier") : null };
+  // the earlier curve is dated as the server dates it: the curve of that many months before today
+  const back = (months: number) => { const d = new Date(); d.setUTCMonth(d.getUTCMonth() - months); return d.toISOString().slice(0, 10); };
+  return { country, current: mk(0, new Date().toISOString().slice(0, 10)), ghost: ago ? mk(ago === "36M" ? -0.9 : ago === "12M" ? -0.35 : 0.12, back(({ "1M": 1, "3M": 3, "12M": 12, "36M": 36 } as Record<string, number>)[ago] ?? 1)) : null };
 }
 
 // ---- the stand-in rows (./standin.json, shared with web/e2e/standin.cjs) ----
@@ -209,7 +211,8 @@ function tableWatchRow(t: TableRow): WatchRow {
     asOf: pub ? (t.lastAt ?? "").slice(0, 10) || null : t.lastAt, asOfKind: pub ? "published" : "print", source: pub ?? "Yahoo Finance",
     pct1d: pc("d1"), pct1w: pc("w1"), pct1m: pc("m1"), pct3m: pc("m3"), pct12m: pc("m12"),
     chg1d: lvl("d1"), chg1w: lvl("w1"), chg1m: lvl("m1"), chg3m: lvl("m3"), chg12m: lvl("m12"),
-    vs50: null, vs200: y ? null : t.vs200 ?? null, vs200chg: y ? t.vs200 ?? null : null, pos52: t.pos52 ?? null, mcap: null, earningsAt: null, earningsEst: null, isYield: y };
+    vs50: null, vs200: y ? null : t.vs200 ?? null, vs200chg: y ? t.vs200 ?? null : null, pos52: t.pos52 ?? null, mcap: null, earningsAt: null, earningsEst: null, isYield: y,
+    decimals: t.decimals };   // the instrument's own, as the server sends since 20 Nov 2026 (I-5)
 }
 /** The server's rule for a quote that is a yield (supabase/functions/_shared/watchrow.ts isYieldQuote; a search hit
  *  carries no quote type, so the name alone stands for an index's). */

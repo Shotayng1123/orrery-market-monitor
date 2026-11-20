@@ -131,7 +131,7 @@ const finState = (p) => p.evaluate(() => {
     ck(`three columns side by side: the market's share with its chart, the largest positions, the share by sector with the margin balances`, s.cols.length === 3 && s.cols.every((c) => c.top === s.cols[0].top) && s.cols[0].left < s.cols[1].left && s.cols[1].left < s.cols[2].left, s.cols);
     ck(`the positions are headed ${s.heads.join(" · ")}; the sector column is ${s.secEm} em wide (9 or more), names in English cut at a word ("${s.sectors.find((x) => /…$/.test(x)) ?? s.sectors[0]}"); no cell narrower than its first character`, s.heads.join("|") === "Name|Sector|Holders|% of shares|Date" && s.secEm >= 9 && s.narrow.length === 0 && s.sectors.every((x) => /^[A-Za-z]/.test(x)) && s.sectors.every((x) => !/…$/.test(x) || !/\s…$/.test(x)), { heads: s.heads, secEm: s.secEm, narrow: s.narrow, sectors: s.sectors });
     ck(`the sources in English first, Japanese in brackets ("${s.aux}")`, /^JPX short-selling ratio \(空売り集計\) · short-position reports \(空売り残高報告\) · margin balances \(信用取引現在高\)$/.test(s.aux), s.aux);
-    ck(`the bar chart has its scale (${s.ys.join(" to ")}) and its first and last dates (${s.ax.join(" … ")})`, s.ys.length === 2 && s.ys.every((x) => /^\d+\.\d%$/.test(x)) && parseFloat(s.ys[0]) > parseFloat(s.ys[1]) && /^\d{4}-\d\d-\d\d$/.test(s.ax[0]) && /on \d{4}-\d\d-\d\d$/.test(s.ax[1]), { ys: s.ys, ax: s.ax });
+    ck(`the bar chart has its scale (${s.ys.join(" to ")}) and its first and last dates (${s.ax.join(" … ")})`, s.ys.length === 2 && s.ys.every((x) => /^\d+\.\d%$/.test(x)) && parseFloat(s.ys[0]) > parseFloat(s.ys[1]) && /^\d{1,2} [A-Z][a-z]{2} \d{4}$/.test(s.ax[0]) && /on \d{1,2} [A-Z][a-z]{2} \d{4}$/.test(s.ax[1]), { ys: s.ys, ax: s.ax });
     // D-46: the sector drawer's short column, Tokyo and US
     await p.locator(".panel[data-k='eq-sectors'] .lnk").first().click(); await p.waitForSelector(".drawer thead"); const jpHead = await p.evaluate(() => [...document.querySelectorAll(".drawer thead th")].pop().textContent); await p.keyboard.press("Escape");
     await go(p, "#equities/spx", ".panel[data-k='eq-sectors'] .lnk"); await p.locator(".panel[data-k='eq-sectors'] .lnk").first().click(); await p.waitForSelector(".drawer thead");
@@ -234,7 +234,7 @@ const finState = (p) => p.evaluate(() => {
     const { ctx, p, errs } = await page(b, opts, AUTO);
     await go(p, "#watch", "#alerts .alrt .one");
     const a = await lineParts(p);
-    ck(`${name}: "${said(a)}": the figure says what it is (the session's largest move, "intraday"), whole, as is the time; the whole message on hover ("${a.tip}")`, a.k?.whole && a.fig?.whole && a.q?.whole && a.q.t === "intraday" && a.t?.whole && /^\d\d\/\d\d \d\d:\d\d$/.test(a.t.t) && /^[+−-]?\d+\.\d%$/.test(a.fig.t) && !a.msgShown && /down 11\.2% intraday/.test(a.tip), a);
+    ck(`${name}: "${said(a)}": the figure says what it is (the session's largest move, "intraday"), whole, as is the time; the whole message on hover ("${a.tip}")`, a.k?.whole && a.fig?.whole && a.q?.whole && a.q.t === "intraday" && a.t?.whole && /^(\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d$/.test(a.t.t) && /^[+−-]?\d+\.\d%$/.test(a.fig.t) && !a.msgShown && /down 11\.2% intraday/.test(a.tip), a);
     ck("no page errors", errs.length === 0, errs); await ctx.close();
   }
   // every kind of latest alert, as the server words it, from the alerts list the stand-in server answers here
@@ -244,7 +244,7 @@ const finState = (p) => p.evaluate(() => {
       { what: "an index while its market is not trading: its 1D", sizes: [DESK.C1], row: mv({ symbol: "^N225", name: "Nikkei 225", kind: "index", pct: -3.4, market: "TSE", msg: "Nikkei 225 down 3.4%" }), ok: (a) => a.fig?.t === "-3.4%" && a.q?.t === "1D" && a.q.whole && !a.src },
       { what: "a stock measured at its official close: at close", sizes: [DESK.C1], row: mv({ symbol: "INTU", name: "Intuit Inc.", kind: "stock", pct: -7.2, market: "NYSE", msg: "Intuit Inc. down 7.2%" }), ok: (a) => a.fig?.t === "-7.2%" && a.q?.t === "at close" && a.q.whole && !a.src },
       { what: "a deal with a company: its kind and the company, no figure", sizes: [DESK.C1], row: company, ok: (a) => a.kd?.t === "M&A" && a.nm?.t === company.name && !a.fig && !a.q && !a.src },
-      { what: "a deal that names no company here: the headline's first words where the name goes, and the publisher it came from", sizes: [DESK.C1, DESK.C2], row: orphan, ok: (a) => a.kd?.t === "M&A" && a.nm?.t === orphan.msg.replace(/^M&A: /, "") && a.src?.t === `via ${orphan.market}` && a.src.whole && !a.fig && a.tip.endsWith(`(${orphan.market}) · ${a.t?.t} SGT`) },
+      { what: "a deal that names no company here: the headline's first words where the name goes, and the publisher it came from", sizes: [DESK.C1, DESK.C2], row: orphan, ok: (a) => a.kd?.t === "M&A" && a.nm?.t === orphan.msg.replace(/^M&A: /, "") && a.src?.t === `via ${orphan.market}` && a.src.whole && !a.fig && a.tip.includes(`(${orphan.market}) · `) && /· \d{1,2} [A-Z][a-z]{2} \d\d:\d\d SGT$/.test(a.tip) && a.tip.endsWith(` ${a.t?.t} SGT`) },   // the line's time ("02:09" today, "19 Nov 02:09" before) ends the tip's whole stamp ("20 Nov 02:09 SGT"; I-5)
     ];
     for (const c of CASES) for (const opts of c.sizes) {
       const { ctx, p, errs } = await page(b, opts, AUTO); await routes(p);

@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { DN, FLAT, fmtVol, SigmaChart, UP, type ChartMark, type SigmaWindow } from "./SigmaChart";
 import { useApi, DEV_MOCK } from "../lib/useApi";
 import type { Series, TableRow } from "../lib/types";
-import { fmtChg, fmtNum, fmtPct, isYield, signCls } from "../lib/fmt";
-import { fmtStamp, SGT } from "../lib/time";
+import { fmtChg, fmtLevel, fmtPct, fmtSigma, isYield, signCls } from "../lib/fmt";
+import { fmtDate, fmtStamp, fmtWhen, SGT } from "../lib/time";
+import { delayed } from "../lib/labels";
 import { marketById } from "../lib/sessions";
 import { Flash } from "./Flash";
 import { LONG_PERIODS, PERIOD_DAYS, type ChartPeriod } from "../lib/periods";
@@ -15,7 +16,6 @@ const PERIOD_KEY: Partial<Record<ChartPeriod, keyof TableRow["pct"]>> = { "1D": 
  *  The σ corridors are rolling statistics of daily closes, so they are drawn on the daily charts only. */
 export const INTRADAY = new Set<ChartPeriod>(["1D", "1W", "1M"]);
 const DAY = 86400;
-const isoDay = (t: number): string => new Date(t * 1000).toISOString().slice(0, 10);
 
 /** The visible window for 1D is the latest session: walk back from the last bar while the gap stays under 3 h. */
 function sessionWindow(points: Array<{ t: number }>): number {
@@ -60,7 +60,7 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
   // A daily history that starts inside the window (a young listing; a server from before 5Y and 10Y, which sends
   // five years for them): the change is then measured from the first close there is and says so, never as if it
   // covered the whole period.
-  const shortFrom = !intraday && points.length > 1 && known == null && points[0].t > points[points.length - 1].t - windowSec + 10 * DAY ? isoDay(points[0].t) : null;
+  const shortFrom = !intraday && points.length > 1 && known == null && points[0].t > points[points.length - 1].t - windowSec + 10 * DAY ? fmtDate(points[0].t * 1000, "UTC") : null;
   // A searched stock has no stored period anchors: its change over the period is read from the chart's own
   // history (the last point at or before the start of the window against the last print).
   const anchor = (() => {
@@ -72,8 +72,9 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
   })();
   const chg = isRate ? (row.last != null && anchor != null ? row.last - anchor : null) : (k ? row.pct[k] : undefined) ?? (anchor != null && anchor !== 0 && row.last != null ? (row.last / anchor - 1) * 100 : null);
   const color = chg == null || chg === 0 ? FLAT : chg > 0 ? UP : DN;
-  const z = (x: number | null) => (x == null ? "–" : (x > 0 ? "+" : "") + x.toFixed(2) + "σ");
-  const stamp = row.lastAt ? fmtStamp(row.lastAt, SGT).replace(" SGT", "") : "–";
+  const z = (x: number | null) => fmtSigma(x, 2);
+  const lvl = (v: number | null | undefined) => fmtLevel(v, row.decimals, isRate);   // the instrument's decimals; "%" after a yield
+  const stamp = fmtWhen(row.lastAt);   // "23:18" today, "19 Nov 23:18" before (the tooltip says SGT)
   // the idle read-out under a daily chart: what is drawn, and on 5Y and 10Y that the big-move circles cover the last
   // three years only (the designer's I-3 note)
   const daily = `daily closes · σ corridors${volume ? " · volume" : ""}${LONG_PERIODS.has(period) && marks?.length ? " · circles: last three years" : ""}${shortFrom ? ` · history from ${shortFrom}` : ""}`;
@@ -84,20 +85,20 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
         <span className="lbtxt" title={`${row.name} (${row.symbol})`}>{row.name}</span>
       </div>
       <div className="vl">
-        <span className="px"><Flash value={row.last}>{fmtNum(row.last, row.decimals)}{isRate && row.last != null ? "%" : ""}</Flash></span>
+        <span className="px"><Flash value={row.last}>{lvl(row.last)}</Flash></span>
         <span className="tags">
           {row.proxyFor && <span className="badge proxy" title={`${row.name} stands in for ${row.proxyFor}`}>PROXY</span>}
-          {row.live && m && m.delayMin > 0 && <span className="badge delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>~{m.delayMin}m</span>}
+          {row.live && m && m.delayMin > 0 && <span className="badge delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>{delayed(m.delayMin, true)}</span>}
           {DEV_MOCK && <span className="badge est">MOCK</span>}
-          <span className="asof" title="Source time of the last print, Singapore time"><span className={`st${row.live ? " live" : ""}`}>{row.live ? "LIVE" : "CLOSED"}</span> {stamp}</span>
+          <span className="asof" title={`Source time of the last print: ${fmtStamp(row.lastAt)}`}><span className={`st${row.live ? " live" : ""}`}>{row.live ? "LIVE" : "CLOSED"}</span> {stamp}</span>
         </span>
       </div>
-      <div className={`ch ${signCls(chg)}`}>{isRate ? fmtChg(chg, 3, true) : fmtPct(chg)} <span className="mut">{shortFrom ? `since ${shortFrom}` : period}{anchor != null ? ` · from ${fmtNum(anchor, row.decimals)}` : ""}</span></div>
+      <div className={`ch ${signCls(chg, isRate ? 3 : 2)}`}>{isRate ? fmtChg(chg, 3, true) : fmtPct(chg)} <span className="mut">{shortFrom ? `since ${shortFrom}` : period}{anchor != null ? ` · from ${lvl(anchor)}` : ""}</span></div>
       {points.length
-        ? <SigmaChart points={points} windowSec={windowSec} intraday={intraday} decimals={row.decimals} sigmaWindow={sigmaWindow} onReadout={setRd} onPan={setPan} color={color} fill={shape !== "wide"} height={shape === "wide" ? chartHeight : undefined} axes={axes} volume={volume} marks={marks} focus={focus} />
+        ? <SigmaChart points={points} windowSec={windowSec} intraday={intraday} decimals={row.decimals} pct={isRate} sigmaWindow={sigmaWindow} onReadout={setRd} onPan={setPan} color={color} fill={shape !== "wide"} height={shape === "wide" ? chartHeight : undefined} axes={axes} volume={volume} marks={marks} focus={focus} />
         : <div className="chartbox empty" style={shape === "wide" ? { height: chartHeight } : undefined}>{s.error ?? (s.loading || !seen ? "loading…" : "no history yet")}</div>}
       <div className="rdout mut" title="Click, hold and drag the chart to the right to go back in time, to the left to come forward; double-click returns to the latest">
-        {rd ? <>{intraday ? <>{fmtStamp(rd.t * 1000, SGT)} · {fmtNum(rd.v, row.decimals)}</> : <>{new Date(rd.t * 1000).toISOString().slice(0, 10)} · {fmtNum(rd.v, row.decimals)} · {WIN_LABEL[sigmaWindow]} {z(rd.z)}</>}{volume && rd.q != null ? <> · vol {fmtVol(rd.q)}</> : null}</>
+        {rd ? <>{intraday ? <>{fmtStamp(rd.t * 1000, SGT)} · {lvl(rd.v)}</> : <>{fmtDate(rd.t * 1000, "UTC")} · {lvl(rd.v)} · {WIN_LABEL[sigmaWindow]} {z(rd.z)}</>}{volume && rd.q != null ? <> · vol {fmtVol(rd.q)}</> : null}</>
           : <span style={{ opacity: .6 }}>{panLabel || (period === "1D" ? "1-minute bars · drag to pan" : intraday ? (s.data?.res === "15m" ? "15-minute bars · drag to pan" : "hourly bars · drag to pan") : `${daily} · drag to pan`)}</span>}
       </div>
     </div>

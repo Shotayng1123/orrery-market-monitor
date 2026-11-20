@@ -1,8 +1,8 @@
 // A stock's own page: the shape the server sends (action `stock`; built in supabase/functions/_shared/stock.ts
 // from fin.ts and stockstats.ts) and how its figures are written. Everything here is display: no figure is
 // worked out on the page except the two sums named in finSections (net cash, free cash flow).
-import { fmtNum } from "./fmt";
-import { partsIn, SGT } from "./time";
+import { fmtNum, fmtSigned } from "./fmt";
+import { fmtDate, fmtDayMon, fmtDayTime as dayTime } from "./time";
 
 export interface PerfRow { h: string; from: string | null; base: number | null; stock: number | null; bench: Array<number | null>; rel: Array<number | null> }
 export interface Benchmark { symbol: string; name: string; note: string | null }
@@ -61,30 +61,27 @@ export const whyText = (m: MoveRow): string => (m.status === "found" && m.cause 
 export function chartMarks(rows: MoveRow[]): Array<{ t: number; dir: 1 | -1; small: boolean; title: string; items: Array<{ text: string; why: string; pct: number; word: string | null; fig: string; rest: string }> }> {
   const by = new Map<string, MoveRow[]>();
   for (const r of rows) by.set(r.to, [...(by.get(r.to) ?? []), r]);
-  return [...by.entries()].map(([to, rs]) => ({ t: rs[0].t, dir: [...rs].sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0].dir, small: rs.every(isSmallMove), title: to, items: rs.map((r) => ({ text: r.text, why: whyText(r), pct: r.pct, ...moveParts(r) })) }));
+  return [...by.entries()].map(([to, rs]) => ({ t: rs[0].t, dir: [...rs].sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))[0].dir, small: rs.every(isSmallMove), title: fmtDate(to), items: rs.map((r) => ({ text: r.text, why: whyText(r), pct: r.pct, ...moveParts(r) })) }));
 }
 /** The site a source is on, for a short link label: "reuters.com". */
 export const siteOf = (url: string): string => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return url; } };
 
-const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const p2 = (n: number): string => String(n).padStart(2, "0");
-/** A date of the data as the page writes it (the designer's §3.2): "2026-11-05" -> "5 Nov 2026"; "–" for none. */
-export const fmtDay = (ymd: string | null | undefined): string => { const m = ymd ? /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd) : null; return m ? `${Number(m[3])} ${MON[Number(m[2]) - 1]} ${m[1]}` : "–"; };
-const dayMon = (ymd: string): string => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd); return m ? `${Number(m[3])} ${MON[Number(m[2]) - 1]}` : ymd; };
+/** A date of the data as the page writes it (the designer's §3.2; lib/time.ts fmtDate): "2026-11-05" -> "5 Nov 2026";
+ *  "–" for none. */
+export const fmtDay = (ymd: string | null | undefined): string => fmtDate(ymd);
+/** The day a move started from: "25 May", with its year when that is not the year the move ended in ("25 May 2025"),
+ *  so a turn that crossed a new year never reads as one of the same year. */
+const dayFrom = (ymd: string, end: string): string => (ymd.slice(0, 4) === end.slice(0, 4) ? fmtDayMon(ymd) : fmtDate(ymd));
 /** A time as the NEWS rows write it, in Singapore time (the panel's head says so): "19 Nov 23:22"; "–" for none. */
-export function fmtDayTime(t: string | null | undefined): string {
-  const d = t ? new Date(t) : null;
-  if (!d || Number.isNaN(d.getTime())) return "–";
-  const p = partsIn(SGT, d);
-  return `${p.d} ${MON[p.mo - 1]} ${p2(p.h)}:${p2(p.m)}`;
-}
+export const fmtDayTime = (t: string | null | undefined): string => dayTime(t);
 
 /** A big move in three parts, read from its fields (the designer's D-27 and the PMs' answer to Q3, 20 Nov 2026):
  *  the turn as a word (none for a day's move), the figure, and the rest of the sentence. On the page the figure
  *  takes the colour of its sign, as every figure on the Monitor does, and the turn's colour stays on the circle
  *  and the dot: a green "−24.1%" read as a rise. The server's own sentence (`text`) is the same words in one. */
 export function moveParts(m: Pick<MoveRow, "kind" | "pct" | "from" | "to">): { word: string | null; fig: string; rest: string } {
-  const fig = `${m.pct > 0 ? "+" : "\u2212"}${Math.abs(m.pct).toFixed(1)}%`;
+  const fig = fmtSigned(m.pct, 1, "%", "\u2212");
+  const dayMon = (ymd: string) => dayFrom(ymd, m.to);
   switch (m.kind) {
     case "d1": return { word: null, fig, rest: "on the day" };
     case "pk": return { word: "New high", fig, rest: `from the low of ${dayMon(m.from)}` };
@@ -94,6 +91,20 @@ export function moveParts(m: Pick<MoveRow, "kind" | "pct" | "from" | "to">): { w
     case "w1": return { word: null, fig, rest: `in five sessions (from ${dayMon(m.from)})` };
     default: return { word: null, fig, rest: m.pct < 0 ? `from the high of ${dayMon(m.from)} to the low of ${dayMon(m.to)}` : `from the low of ${dayMon(m.from)} to the high of ${dayMon(m.to)}` };
   }
+}
+
+/** A fiscal year by the month and year it ends, as the statements name it: "2026-03-31" -> "FY3/26"; "–" for none. */
+export const fyName = (end: string | null | undefined): string => { const m = end ? /^(\d{4})-(\d{2})/.exec(end) : null; return m ? `FY${Number(m[2])}/${m[1].slice(2)}` : "–"; };
+/** A statements column's name as the page writes it (I-5, 20 Nov 2026): a year "FY3/26"; a quarter "2Q FY3/27" (the
+ *  server sends "2Q 3/27", which also reads as the 27th of March) or, for a quarter known only by its last month,
+ *  "Sep 2026" (sent as "Sep 26", which also reads as the 26th of September). `top` and `sub` are its two lines in a
+ *  column's head, so the column is no wider than before. */
+export function periodName(p: Pick<FinPeriod, "kind" | "label">): { full: string; top: string; sub: string | null } {
+  const q = /^(\d)Q (\d{1,2})\/(\d{2})$/.exec(p.label);
+  if (q) return { full: `${q[1]}Q FY${q[2]}/${q[3]}`, top: `${q[1]}Q`, sub: `FY${q[2]}/${q[3]}` };
+  const m = p.kind === "Q" ? /^([A-Z][a-z]{2}) (\d{2})$/.exec(p.label) : null;
+  if (m) return { full: `${m[1]} 20${m[2]}`, top: m[1], sub: `20${m[2]}` };
+  return { full: p.label, top: p.label, sub: null };
 }
 
 /** What a statements column says when it opens no document (the designer's I-3 note). */
@@ -107,9 +118,10 @@ export function periodDoc(p: Pick<FinPeriod, "kind" | "label" | "doc" | "url" | 
   const href = typeof p.url === "string" && /^https?:\/\/[^\s"'<>]+$/i.test(p.url.trim()) ? p.url.trim() : null;
   if (!href) return null;
   const host = (() => { try { return new URL(href).hostname.toLowerCase(); } catch { return ""; } })();
-  if (p.kind === "FY" && p.doc) return { href, tip: `Open the 有価証券報告書 for ${p.label} ${/(^|\.)edinet-fsa\.go\.jp$/.test(host) ? "on EDINET" : `on ${host}`} (document ${p.doc}${p.filed ? `, filed ${fmtDay(p.filed)}` : ""}) \u2197` };
+  const name = periodName(p).full;
+  if (p.kind === "FY" && p.doc) return { href, tip: `Open the 有価証券報告書 for ${name} ${/(^|\.)edinet-fsa\.go\.jp$/.test(host) ? "on EDINET" : `on ${host}`} (document ${p.doc}${p.filed ? `, filed ${fmtDay(p.filed)}` : ""}) \u2197` };
   const when = p.filed ? `, disclosed ${fmtDay(p.filed)}` : "";
-  return { href, tip: p.kind === "FC" ? `Open the 決算短信 PDF${when} \u2197` : `Open the 決算短信 PDF for ${p.label}${when} \u2197` };
+  return { href, tip: p.kind === "FC" ? `Open the 決算短信 PDF${when} \u2197` : `Open the 決算短信 PDF for ${name}${when} \u2197` };
 }
 
 /** The NEWS panel of a stock's page (I-3, 20 Nov 2026): the Monitor's own headlines that name the stock and its own
@@ -160,14 +172,19 @@ export interface StockPage {
 
 const MINUS = "−";
 const neg = (s: string): string => s.replace(/^-/, MINUS);
+/** Without the plus sign, unless `sign` asks for it. */
+const unsign = (s: string, sign: boolean): string => (sign ? s : s.replace(/^\+/, ""));
 /** A statement figure in the company's unit: 45,095.3 (bn), 3,210 (m). Null is a dash, never a zero. */
 export const fmtUnit = (v: number | null | undefined, u: FinUnit): string => (v == null || !Number.isFinite(v) ? "–" : neg(fmtNum(v / u.div, u.dp)));
 /** A per-share figure: two decimals below 1,000, one above. */
 export const fmtPs = (v: number | null | undefined): string => (v == null || !Number.isFinite(v) ? "–" : neg(fmtNum(v, Math.abs(v) >= 1000 ? 1 : 2)));
-/** A ratio in per cent with one decimal; `sign` puts a plus on a rise. */
-export const fmtPc = (v: number | null | undefined, sign = false, dp = 1): string => (v == null || !Number.isFinite(v) ? "–" : `${sign && v > 0 ? "+" : ""}${neg(v.toFixed(dp))}%`);
-/** A ratio as a bare number for a table whose header already says per cent: 27.9, +7.9, −0.2. */
-export const fmtRatio = (v: number | null | undefined, sign = false): string => (v == null || !Number.isFinite(v) ? "–" : `${sign && v > 0 ? "+" : ""}${neg(v.toFixed(1))}`);
+/** A ratio in per cent with one decimal; `sign` puts a plus on a rise. One that rounds to zero is "0.0%", never
+ *  "−0.0%" (the designer's D-36). */
+export const fmtPc = (v: number | null | undefined, sign = false, dp = 1): string => (v == null || !Number.isFinite(v) ? "–" : unsign(fmtSigned(v, dp, "%", MINUS), sign));
+/** A ratio as a bare number for a table whose header already says per cent: 27.9, +7.9, −0.2 (and 0.0, never −0.0). */
+export const fmtRatio = (v: number | null | undefined, sign = false): string => (v == null || !Number.isFinite(v) ? "–" : unsign(fmtSigned(v, 1, "", MINUS), sign));
+/** A difference of two percentages, in points: +1.3, −0.6, 0.0. */
+export const fmtPp = (v: number | null | undefined): string => fmtSigned(v, 1, "", MINUS);
 /** A multiple: 15.2x. */
 export const fmtX = (v: number | null | undefined, dp = 1): string => (v == null || !Number.isFinite(v) ? "–" : `${v.toFixed(dp)}x`);
 /** A count of shares: 1.23bn, 456.7m, 89.1k. */

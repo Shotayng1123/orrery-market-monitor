@@ -1,3 +1,5 @@
+import { fmtDate } from "../lib/time";
+
 // A small bar chart (SVG) for daily histories: one bar per observation, hover shows the value and date. Its scale,
 // low and high, is written at the left, and its first and last dates under it (the designer's D-07, 19 Nov 2026:
 // the chart had neither).
@@ -15,10 +17,10 @@ export function Bars({ data, height = 110, fmt = (v: number) => v.toFixed(1), co
         <div className="barsy" aria-label="scale"><span title="the top of the scale">{fmt(hi)}</span><span title="the foot of the scale">{fmt(lo)}</span></div>
         <svg viewBox={`0 0 ${W} ${height}`} preserveAspectRatio="none" width="100%" height={height}>
           {baseline != null && <line x1={0} x2={W} y1={y(baseline)} y2={y(baseline)} stroke="#3a3b40" strokeWidth={0.4} strokeDasharray="1 1" />}
-          {data.map((p, i) => p.v == null ? null : <rect key={p.d} x={x(i)} y={Math.min(y(p.v), y(0))} width={bw} height={Math.abs(y(0) - y(p.v)) || 0.3} fill={i === n - 1 ? "#e8e5de" : color} opacity={i === n - 1 ? 1 : 0.85}><title>{`${p.d}  ${fmt(p.v)}`}</title></rect>)}
+          {data.map((p, i) => p.v == null ? null : <rect key={p.d} x={x(i)} y={Math.min(y(p.v), y(0))} width={bw} height={Math.abs(y(0) - y(p.v)) || 0.3} fill={i === n - 1 ? "#e8e5de" : color} opacity={i === n - 1 ? 1 : 0.85}><title>{`${fmtDate(p.d)}  ${fmt(p.v)}`}</title></rect>)}
         </svg>
       </div>
-      <div className="barsax"><span>{first.d}</span><span>{last.v == null ? "" : fmt(last.v)} on {last.d}</span></div>
+      <div className="barsax"><span>{fmtDate(first.d)}</span><span>{last.v == null ? "" : fmt(last.v)} on {fmtDate(last.d)}</span></div>
     </div>
   );
 }

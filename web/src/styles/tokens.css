@@ -721,8 +721,8 @@ table.repT th:nth-child(1){width:4.2em}
 table.repT th:nth-child(2){width:9em}
 table.repT td{white-space:normal;overflow-wrap:anywhere}
 
-/* RESEARCH list (Shota, 15 Nov): date as 15-Nov-26 on one line, the kind as a chip, daily notes and weekly reports together */
-table.repT col.dt{width:6.6em} table.repT col.kd{width:6.4em}
+/* RESEARCH list (Shota, 15 Nov): the date on one line ("16 Nov 2026" since I-5), the kind as a chip, daily notes and weekly reports together */
+table.repT col.dt{width:8.4em} table.repT col.kd{width:6.4em}   /* "16 Nov 2026" (I-5; was "16-Nov-26" in 6.6em) */
 table.repT th:nth-child(1),table.repT th:nth-child(2){width:auto}
 table.repT td.dt{white-space:nowrap;overflow-wrap:normal}
 .kchip{display:inline-block;border:1px solid var(--bord2);border-radius:3px;padding:0 6px;font-size:9.5px;letter-spacing:.06em;line-height:1.6;white-space:nowrap}
@@ -991,6 +991,8 @@ table.fin thead th:not(.l){scroll-snap-align:start;min-width:var(--fin-col,0px)}
 .finprev::before{content:"";position:absolute;inset:-15px -6px}   /* 44 px for a finger */
 table.fin{width:100%;border-collapse:separate;border-spacing:0;font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums}
 table.fin th{position:static;padding:6px 10px;text-align:right;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:none;white-space:nowrap;color:var(--txt2);background:#17181b;border-bottom:1px solid var(--bord2)}
+table.fin th .fy{display:block;font-weight:500;color:var(--mut)}   /* a quarter's fiscal year under its number: "2Q" over "FY3/27" (I-5) */
+table.fin th.doc .fy{color:inherit}
 table.fin th.fc{color:var(--amber)}
 table.fin th i{font-style:normal;font-size:8.5px;margin-left:2px;vertical-align:super}
 table.fin td{padding:4px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--bord)}

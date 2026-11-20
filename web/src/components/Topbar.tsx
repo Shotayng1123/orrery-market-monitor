@@ -8,13 +8,13 @@ import { setPhoneV2 } from "../lib/phone";
 import { askInstallHint, useInstall } from "../lib/install";
 import { openNotify } from "../lib/push";
 import { allStatuses, haveHolidays, type MarketId } from "../lib/sessions";
-import { fmtClock, fmtStamp, SGT, TZ_ABBR } from "../lib/time";
+import { fmtClock, fmtWhen, SGT, TZ_ABBR } from "../lib/time";
+import { TAB } from "../lib/labels";
 import { SIZES, type Prefs, type SizeKey } from "../lib/prefs";
 
 export type ViewId = "market" | "news" | "research" | "equities" | "rates" | "watch" | "asset";
-export const VIEWS: Array<{ id: ViewId; label: string }> = [
-  { id: "market", label: "MARKET" }, { id: "news", label: "NEWS" }, { id: "research", label: "RESEARCH" }, { id: "equities", label: "EQUITIES" }, { id: "rates", label: "RATES & CURRENCY" }, { id: "watch", label: "WATCHLIST" },
-];
+/** The tabs, in the glossary's words (lib/labels.ts): MARKETS · NEWS · RESEARCH · EQUITIES · RATES & FX · WATCHLIST. */
+export const VIEWS: Array<{ id: ViewId; label: string }> = (["market", "news", "research", "equities", "rates", "watch"] as const).map((id) => ({ id, label: TAB[id].toUpperCase() }));
 const CHIP_MARKETS: MarketId[] = ["TSE", "HKEX", "SSE", "KRX", "SGX", "LSE", "NYSE"];
 
 export interface TopbarProps {
@@ -72,7 +72,7 @@ export function Topbar(p: TopbarProps) {
           ))}
         </span>
         <span id="clock" title="Singapore time (default), Tokyo, New York"><b>{fmtClock(now, SGT, true)}</b> SGT · {fmtClock(now, "Asia/Tokyo")} JST · {fmtClock(now, "America/New_York")} ET</span>
-        <span id="upd" className="mut" title="When the last payload landed">{p.updatedAt ? `UPD ${fmtStamp(p.updatedAt)}` : ""}</span>
+        <span id="upd" className="mut" title="When the last payload landed, Singapore time">{p.updatedAt ? `UPD ${fmtWhen(p.updatedAt)} SGT` : ""}</span>
         <span id="nxt" className={`chip-sm${p.hit ? " hit" : nextIn == null ? " stale" : ""}`} title="Time to the next automatic refresh. Click to refresh now" onClick={p.onRefresh}>
           &#8635; {nextIn == null ? "–:––" : `${Math.floor(nextIn / 60)}:${String(nextIn % 60).padStart(2, "0")}`}
         </span>

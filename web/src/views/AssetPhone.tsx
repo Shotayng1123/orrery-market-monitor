@@ -10,8 +10,9 @@ import { JumpPick, Section, Stat } from "../components/PhoneKit";
 import { StockNews } from "../components/StockNews";
 import { useApi } from "../lib/useApi";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
-import { fmtStamp } from "../lib/time";
-import { chartMarks, finSections, fmtCount, fmtPc, fmtX, isSmallMove, moveRule, NO_DOC, siteOf, whyText, type MoveRow, type StockPage } from "../lib/stock";
+import { fmtDate, fmtStamp } from "../lib/time";
+import { avgTurnover, avgVolume, MKT_CAP, NEWS, NEXT_RESULTS, PERIOD, SIGMA_WINDOW } from "../lib/labels";
+import { chartMarks, finSections, fmtCount, fmtPc, fmtPp, fmtX, isSmallMove, moveRule, NO_DOC, siteOf, whyText, type MoveRow, type StockPage } from "../lib/stock";
 import { periodHolding } from "../lib/periods";
 import { chartRow, GuidanceLine, MoveText, profileOf, shortLine } from "./Asset";
 import { AssetPhoneLegacy } from "./AssetPhoneLegacy";
@@ -44,7 +45,7 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
   );
   const row = chartRow(d), dec = row.decimals, ccy = d.currency;
   const f = d.fin, s = d.short, sh = shortLine(d), bms = d.benchmarks;
-  const pp = (v: number | null) => (v == null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1).replace("-", "\u2212")}`);
+  const pp = fmtPp;   // a difference of two percentages, in points: +1.3, −0.6, 0.0
   const fs = f ? finSections(f, view) : null;
   const marks = d.moves.eligible ? chartMarks(d.moves.rows) : undefined;
   const prof = profileOf(f), feed = d.feed ?? null;   // a server from before 20 Nov 2026 sends no feed: no News section then
@@ -63,8 +64,8 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
         <h1>{d.name}</h1>
       </div>
       <div className="mp-picks">
-        <Pick label="Period" value={period} options={ASSET_PERIODS} onChange={setPeriod} />
-        <Pick label="σ window" value={sigmaWindow} options={WINDOWS} onChange={setSigmaWindow} />
+        <Pick label={PERIOD} value={period} options={ASSET_PERIODS} onChange={setPeriod} />
+        <Pick label={SIGMA_WINDOW} value={sigmaWindow} options={WINDOWS} onChange={setSigmaWindow} />
         <JumpPick dep={`${d.symbol}|${d.moves.eligible}|${!!f}|${!!feed}`} />
       </div>
       <div className="mp-card pad mp-hero"><ChartPanel row={row} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes volume marks={marks} focus={focus} /></div>
@@ -74,27 +75,27 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
       <Section title="Key data" aux={d.asOf ? `as of ${fmtStamp(d.asOf)}` : ""} card={false}>
         <div className="mp-card pad" id="st-key">
           <div className="mp-grid in">
-            <Stat k="Day" cls={signCls(d.pct)}>{fmtPct(d.pct, 2)}</Stat>
-            <Stat k="Market cap">{money(d.mcap, ccy)}</Stat>
+            <Stat k="Day" cls={signCls(d.pct, 2)}>{fmtPct(d.pct, 2)}</Stat>
+            <Stat k={MKT_CAP}>{money(d.mcap, ccy)}</Stat>
             <Stat k="P/E, guidance" title={d.val.basis ?? undefined}>{fmtX(d.val.peGuide)}</Stat>
-            <Stat k="52-week low">{fmtNum(d.range.lo, dec)}<span className="bar">{d.range.pos != null && <i style={{ left: `${d.range.pos}%` }} />}</span></Stat>
-            <Stat k="52-week high">{fmtNum(d.range.hi, dec)}</Stat>
-            <Stat k="From the high" cls={signCls(d.range.fromHi)}>{fmtPc(d.range.fromHi, true)}</Stat>
+            <Stat k="52W low" title={`Low on ${fmtDate(d.range.loDate)}`}>{fmtNum(d.range.lo, dec)}<span className="bar">{d.range.pos != null && <i style={{ left: `${d.range.pos}%` }} />}</span></Stat>
+            <Stat k="52W high" title={`High on ${fmtDate(d.range.hiDate)}`}>{fmtNum(d.range.hi, dec)}</Stat>
+            <Stat k="From 52W high" cls={signCls(d.range.fromHi, 1)}>{fmtPc(d.range.fromHi, true)}</Stat>
           </div>
           <table className="mp-t left kv"><tbody>
-            <KV k="Shares outstanding" sub={[d.shares.source, d.shares.asOf].filter(Boolean).join(" · ") || undefined}>{fmtCount(d.shares.outstanding)}</KV>
+            <KV k="Shares outstanding" sub={[d.shares.source, d.shares.asOf ? fmtDate(d.shares.asOf) : null].filter(Boolean).join(" · ") || undefined}>{fmtCount(d.shares.outstanding)}</KV>
             <KV k="Diluted shares" sub={d.shares.dilutedNote ?? undefined}>{fmtCount(d.shares.diluted)}</KV>
-            <KV k="Average daily volume, 60 sessions">{fmtCount(d.turnover.d60.shares)}</KV>
-            <KV k="Average daily value traded, 60 sessions">{money(d.turnover.d60.value, ccy)}</KV>
-            <KV k="Volume today" sub={d.volume != null && d.turnover.d60.shares ? `${Math.round((d.volume / d.turnover.d60.shares) * 100)}% of the 60-session average` : undefined}>{fmtCount(d.volume)}</KV>
-            <KV k={sh.label} sub={s?.kind === "jpx" ? `positions of 0.5% and above · ${s.d}` : s?.kind === "finra" ? "not short interest" : undefined}>{sh.value}</KV>
+            <KV k={avgVolume(60)}>{fmtCount(d.turnover.d60.shares)}</KV>
+            <KV k={avgTurnover(60)}>{money(d.turnover.d60.value, ccy)}</KV>
+            <KV k="Volume today" sub={d.volume != null && d.turnover.d60.shares ? `${Math.round((d.volume / d.turnover.d60.shares) * 100)}% of avg (60d)` : undefined}>{fmtCount(d.volume)}</KV>
+            <KV k={sh.label} sub={s?.kind === "jpx" ? `positions of 0.5% and above · ${fmtDate(s.d)}` : s?.kind === "finra" ? "not short interest" : undefined}>{sh.value}</KV>
             <KV k="Volatility, 1M / 3M / 12M" sub="yearly figure from daily returns">{fmtPc(d.vol.m1, false, 0)} / {fmtPc(d.vol.m3, false, 0)} / {fmtPc(d.vol.m12, false, 0)}</KV>
             {bms.map((b, k) => <KV key={b.symbol} k={`Beta vs ${b.name}, 12M`}>{d.beta[k]?.beta == null ? "–" : d.beta[k].beta!.toFixed(2)}</KV>)}
-            <KV k="Largest fall, 12M" sub={d.drawdown.from ? `${d.drawdown.from} to ${d.drawdown.to}` : undefined}><span className={signCls(d.drawdown.pct)}>{fmtPc(d.drawdown.pct)}</span></KV>
+            <KV k="Largest fall, 12M" sub={d.drawdown.from ? `${fmtDate(d.drawdown.from)} to ${fmtDate(d.drawdown.to)}` : undefined}><span className={signCls(d.drawdown.pct, 1)}>{fmtPc(d.drawdown.pct)}</span></KV>
             <KV k="P/E, last year">{fmtX(d.val.pe)}</KV>
             <KV k="P/B">{fmtX(d.val.pb, 2)}</KV>
             <KV k="Dividend yield, last year / guidance">{fmtPc(d.val.yield, false, 2)} / {fmtPc(d.val.yieldGuide, false, 2)}</KV>
-            <KV k="Next earnings" sub={d.earningsEst ? "estimated, not confirmed by the company" : undefined}>{d.earningsAt ? fmtStamp(d.earningsAt) : "–"}</KV>
+            <KV k={NEXT_RESULTS} sub={d.earningsEst ? "estimated, not confirmed by the company" : undefined}>{d.earningsAt ? fmtStamp(d.earningsAt) : "–"}</KV>
             {prof && <KV k="Fiscal year end · standard" sub={`有価証券報告書 ${prof.label} · EDINET DB`}>{prof.month} · {prof.std}</KV>}
             {prof && <KV k="Annual report" sub={prof.doc ? undefined : NO_DOC}>{prof.doc ? <a href={prof.doc.href} target="_blank" rel="noreferrer" id="st-yuho" title={prof.doc.tip}>有報 {prof.label} ↗</a> : `有報 ${prof.label}`}</KV>}
           </tbody></table>
@@ -106,14 +107,14 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
           <table className="mp-t perf" id="st-perf">
             <thead><tr><th /><th>Price then</th><th>{d.symbol}</th>{bms.map((b) => <th key={b.symbol}>vs {b.name}</th>)}</tr></thead>
             <tbody>{d.perf.map((r) => (
-              <tr key={r.h}><td>{r.h}</td><td className="mut">{fmtNum(r.base, dec)}</td><td className={signCls(r.stock)}>{fmtPc(r.stock, true)}</td>{bms.map((b, k) => <td key={b.symbol} className={signCls(r.rel[k])}>{pp(r.rel[k])}</td>)}</tr>
+              <tr key={r.h}><td>{r.h}</td><td className="mut">{fmtNum(r.base, dec)}</td><td className={signCls(r.stock, 1)}>{fmtPc(r.stock, true)}</td>{bms.map((b, k) => <td key={b.symbol} className={signCls(r.rel[k], 1)}>{pp(r.rel[k])}</td>)}</tr>
             ))}</tbody>
           </table>
           {bms.length > 0 && <>
             <p className="mp-note in">"vs" is the stock's change less the index's, in percentage points (plus = the stock did better).</p>
             <table className="mp-t perf idx" id="st-bench">
               <thead><tr><th />{bms.map((b) => <th key={b.symbol}>{b.name}</th>)}</tr></thead>
-              <tbody>{d.perf.map((r) => <tr key={r.h}><td>{r.h}</td>{bms.map((b, k) => <td key={b.symbol} className={signCls(r.bench[k])}>{fmtPc(r.bench[k], true)}</td>)}</tr>)}</tbody>
+              <tbody>{d.perf.map((r) => <tr key={r.h}><td>{r.h}</td>{bms.map((b, k) => <td key={b.symbol} className={signCls(r.bench[k], 1)}>{fmtPc(r.bench[k], true)}</td>)}</tr>)}</tbody>
             </table>
           </>}
           <p className="mp-note in">Price changes, dividends not included. Each row is the price now against the last close on or before the same day that long ago; an index is measured between the same two dates.</p>
@@ -122,7 +123,7 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
       </Section>
 
       {feed && (
-        <Section title="News" aux="headlines, alerts" card={false}>
+        <Section title={NEWS} aux="headlines, alerts" card={false}>
           <StockNews key={d.symbol} symbol={d.symbol} feed={feed} phone />
           <p className="mp-note">Headlines from the publishers' feeds the Monitor reads (as on News) that name {d.symbol}, and the Monitor's own alerts on it, over the last {feed.days} days. Times in SGT.</p>
         </Section>
@@ -138,7 +139,7 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
                 <li key={`${m.kind}${m.to}`} data-kind={m.kind} data-status={m.status} role="button" tabIndex={0} title="Open on the chart"
                   onClick={() => onChart(m)} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onChart(m); } }}>
                   <div className="h"><span className={`dot ${m.dir > 0 ? "up" : "dn"}${isSmallMove(m) ? " sm" : ""}`} /><MoveText m={m} /></div>
-                  <div className="dl"><span className="d">{m.to}</span><span className="go">On the chart ›</span></div>
+                  <div className="dl"><span className="d">{fmtDate(m.to)}</span><span className="go">On the chart ›</span></div>
                   <div className="w">{whyText(m)}</div>
                   {m.sources.length > 0 && <div className="s">{m.sources.map((x) => <a key={x.url} href={x.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{siteOf(x.url)}</a>)}</div>}
                 </li>
@@ -153,21 +154,21 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
         <div className="mp-card pad" id="st-short">
           {!s ? <Empty title="No short data">None reported for this name.</Empty> : s.kind === "jpx" ? (
             <table className="mp-t left kv"><tbody>
-              <KV k={<b>Reported positions (0.5% and above)</b>} sub={s.d}><b>{(s.ratio * 100).toFixed(2)}%</b></KV>
-              <KV k="Shares" sub={s.daysToCover != null ? `${s.daysToCover.toFixed(1)} days of 60-session volume` : undefined}>{fmtCount(s.shares)}</KV>
-              {s.holders.slice(0, 8).map((h) => <KV key={h.holder} k={h.holder} sub={h.d}>{(h.ratio * 100).toFixed(2)}%</KV>)}
+              <KV k={<b>Reported positions (0.5% and above)</b>} sub={fmtDate(s.d)}><b>{(s.ratio * 100).toFixed(2)}%</b></KV>
+              <KV k="Shares" sub={s.daysToCover != null ? `${s.daysToCover.toFixed(1)} days of avg daily volume (60d)` : undefined}>{fmtCount(s.shares)}</KV>
+              {s.holders.slice(0, 8).map((h) => <KV key={h.holder} k={h.holder} sub={fmtDate(h.d)}>{(h.ratio * 100).toFixed(2)}%</KV>)}
             </tbody></table>
           ) : s.kind === "interest" ? (
             <table className="mp-t left kv"><tbody>
-              <KV k="Shares short" sub={s.d ?? undefined}>{fmtCount(s.shares)}</KV>
+              <KV k="Shares short" sub={s.d ? fmtDate(s.d) : undefined}>{fmtCount(s.shares)}</KV>
               <KV k="Per cent of float">{fmtPc(s.pctFloat)}</KV>
               <KV k="Per cent of shares outstanding">{fmtPc(s.pctOut)}</KV>
               <KV k="Days to cover">{s.daysToCover == null ? "–" : s.daysToCover.toFixed(1)}</KV>
-              <KV k="A month earlier" sub={s.priorDate ?? undefined}>{fmtCount(s.prior)}</KV>
-              {s.finra && <KV k="FINRA short-volume share" sub={`${s.finra.d} · not short interest`}>{(s.finra.ratio * 100).toFixed(0)}%</KV>}
+              <KV k="A month earlier" sub={s.priorDate ? fmtDate(s.priorDate) : undefined}>{fmtCount(s.prior)}</KV>
+              {s.finra && <KV k="FINRA short-volume share" sub={`${fmtDate(s.finra.d)} · not short interest`}>{(s.finra.ratio * 100).toFixed(0)}%</KV>}
             </tbody></table>
           ) : (
-            <table className="mp-t left kv"><tbody><KV k="FINRA short-volume share" sub={`${s.d} · the share of the day's volume sold short, not short interest`}>{(s.ratio * 100).toFixed(0)}%</KV></tbody></table>
+            <table className="mp-t left kv"><tbody><KV k="FINRA short-volume share" sub={`${fmtDate(s.d)} · the share of the day's volume sold short, not short interest`}>{(s.ratio * 100).toFixed(0)}%</KV></tbody></table>
           )}
         </div>
       </Section>
@@ -180,7 +181,7 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
               {view === "annual" ? <GuidanceLine f={f} /> : <div className="finguide">Single quarters (three months each), not year to date.</div>}
               {fs.periods.length ? <FinTable periods={fs.periods} sections={fs.sections} unit={f.unit} currency={f.currency} /> : <Empty title={view === "annual" ? "No annual statements" : "No quarterly statements"}>{d.finNote ?? "The source has none for this name."}</Empty>}
             </div>
-            {f.asOf && <p className="mp-note">Fetched {f.asOf}.</p>}
+            {f.asOf && <p className="mp-note">Fetched {fmtDate(f.asOf)}.</p>}
             {f.notes.map((n) => <p key={n} className="mp-note">{n}</p>)}
           </>
         ) : <div className="mp-card pad"><Empty title="No statements">{d.finNote ?? "Statements are available for equities only."}</Empty></div>}

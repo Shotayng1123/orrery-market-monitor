@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef } from "react";
 import uPlot from "uplot";
-import { AXIS as SHARED_AXIS, boxHeight, insideEl, zoomMove } from "../lib/chart";
+import { AXIS as SHARED_AXIS, boxHeight, insideEl, TIME_VALUES, zoomMove } from "../lib/chart";
 import { termMode, zoomNow } from "../lib/prefs";
 import "uplot/dist/uPlot.min.css";
 import { rollingBands } from "../lib/stats";
 import type { SeriesPoint } from "../lib/types";
-import { fmtStamp, SGT } from "../lib/time";
+import { fmtDate, fmtDayTime, fmtStamp, SGT } from "../lib/time";
+import { axisDecimals, fmtSigma } from "../lib/fmt";
 
 // Orrery Analytics tile grammar: one line on black, green or red by the sign of the change, no axes.
 // The σ corridors are thin monochrome lines, told apart by dash pattern (1M solid, 12M dashed, 36M dotted),
@@ -35,7 +36,8 @@ export interface SigmaChartProps {
   points: SeriesPoint[];          // full series including history behind the window (for bands and panning)
   windowSec?: number;             // width of the visible window in seconds; defaults to the whole series
   intraday?: boolean;             // one-minute or hourly bars: evenly spaced, no bands, SGT labels
-  decimals?: number;
+  decimals?: number;              // the instrument's own (lib/fmt.ts); the axis uses no more than its ticks need
+  pct?: boolean;                  // a yield: its level ends in "%" in the read-outs
   sigmaWindow?: SigmaWindow;      // the one rolling window drawn: mean, ±1σ and ±2σ
   height?: number;                // fixed height; ignored when fill is set
   fill?: boolean;                 // take the container's height (square and large tiles)
@@ -50,7 +52,7 @@ export interface SigmaChartProps {
 
 const nf = (d: number) => new Intl.NumberFormat("en-GB", { minimumFractionDigits: d, maximumFractionDigits: d });
 
-export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, sigmaWindow = "m12", height = 160, fill = false, axes = false, color = FLAT, volume = false, marks, onReadout, onPan, focus }: SigmaChartProps) {
+export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, pct = false, sigmaWindow = "m12", height = 160, fill = false, axes = false, color = FLAT, volume = false, marks, onReadout, onPan, focus }: SigmaChartProps) {
   const el = useRef<HTMLDivElement>(null);
   const panRef = useRef(0);   // bars back from the latest, kept across rebuilds
   // The marks as their content, not as the array they arrive in. A page hands over a fresh array on every one of
@@ -116,10 +118,12 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
     }
     const volAt = hasVol ? series.length : -1;   // the volume column's place in the data
     if (hasVol) series.push({ label: "vol", scale: "vol", stroke: "rgba(0,0,0,0)", fill: VOL, width: 0, paths: uPlot.paths.bars!({ size: [0.7, 14] }), points: { show: false } });
-    const axisFmt = (v: number) => (Math.abs(v) >= 1000 ? nf(0).format(v) : fmt.format(v));
+    // the y axis: the fewest decimals its ticks need, never more than the instrument's (the designer's D-05 note:
+    // 158.400 over ticks of 159.5 and 159.0); room for the widest label it could write
+    const axisFmt = (v: number, incr: number) => nf(axisDecimals(incr, decimals)).format(v);
     const ys = points.map((p) => p.v);
     const yMax = Math.max(...ys), yMin = Math.min(...ys);
-    const axisSize = 16 + Math.max(axisFmt(yMax).length, axisFmt(yMin).length, 4) * 7.3;   // 12px mono digits are 7.2px wide; room for the tick and gap
+    const axisSize = 16 + Math.max(fmt.format(yMax).length, fmt.format(yMin).length, 4) * 7.3;   // 12px mono digits are 7.2px wide; room for the tick and gap
     // the visible window: the bars within windowSec of the latest one; panning moves it by whole bars
     const xsAll = data[0] as number[];
     const nAll = xsAll.length, lastT = ts[nAll - 1];
@@ -133,8 +137,10 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
     // the period is switched to 1D (found 17 Nov 2026 on the charts that show axes).
     if (i0 >= i1) i0 = i1 - 1;
     const winN = Math.max(1, i1 - i0);
-    const hourly = intraday && (ts[nAll - 1] - ts[Math.max(0, nAll - 2)]) >= 1800;
-    const xLabel = (x: number) => { const t = intraday ? ts[Math.min(nAll - 1, Math.max(0, Math.round(x)))] : x; if (t == null) return ""; return intraday ? fmtStamp(t * 1000, SGT).replace(" SGT", "").slice(hourly ? 0 : 6) : new Date(t * 1000).toISOString().slice(0, 7); };
+    // an intraday axis is bars, not time: each label is its bar's time in Singapore ("23:18"), with its day when the
+    // view spans more than a day ("19 Nov 23:00"; the chart's read-out says SGT)
+    const days = intraday && lastT - ts[i0] > 86400;
+    const xLabel = (x: number) => { const t = ts[Math.min(nAll - 1, Math.max(0, Math.round(x)))]; if (t == null) return ""; const s = fmtDayTime(t * 1000, SGT); return days ? s : s.slice(s.lastIndexOf(" ") + 1); };
     const size = () => ({ width: box.clientWidth || 300, height: fill ? Math.max(termMode() ? 24 : 60, box.clientHeight) : boxHeight(box, height) });
     const opts: uPlot.Options = {
       ...size(),
@@ -143,7 +149,7 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
       scales: { x: { time: !intraday, range: () => [xsAll[i0], xsAll[i1]] }, y: { range: (_u, min, max) => { const pad = (max - min) * 0.03 || Math.abs(max) * 0.002 || 1; return [min - pad, max + pad]; } },   // a flat window still gets a height
         ...(hasVol ? { vol: { range: (_u: uPlot, _min: number, max: number) => [0, (max > 0 ? max : 1) / VOL_SHARE] as [number, number] } } : {}) },
       axes: axes
-        ? [{ ...AXIS, space: 80, ...(intraday ? { values: (_u, vals) => vals.map(xLabel) } : {}) }, { ...AXIS, size: axisSize, values: (_u, vals) => vals.map(axisFmt) }]
+        ? [{ ...AXIS, space: 80, values: intraday ? (_u, vals) => vals.map(xLabel) : TIME_VALUES }, { ...AXIS, size: axisSize, values: (_u, vals, _i, _sp, incr) => vals.map((v) => axisFmt(v, incr)) }]
         : [{ show: false }, { show: false }],
       series,
       legend: { show: false },
@@ -176,8 +182,8 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
           if (crossOn) crossRef.current = ts[i];
           onReadout?.({ t: ts[i], v, z: zsel, q });
           // the price at the pointer: time and level, plus the σ distance of the selected window on daily charts
-          const when = intraday ? fmtStamp(ts[i] * 1000, SGT) : new Date(ts[i] * 1000).toISOString().slice(0, 10);
-          tip.textContent = `${when}  ${fmt.format(v)}${zsel == null ? "" : `  ${zsel >= 0 ? "+" : ""}${zsel.toFixed(2)}σ`}${q == null ? "" : `  vol ${fmtVol(q)}`}`;
+          const when = intraday ? fmtStamp(ts[i] * 1000, SGT) : fmtDate(ts[i] * 1000, "UTC");
+          tip.textContent = `${when}  ${fmt.format(v)}${pct ? "%" : ""}${zsel == null ? "" : `  ${fmtSigma(zsel, 2)}`}${q == null ? "" : `  vol ${fmtVol(q)}`}`;
           if (crossOn) { tip.style.display = "none"; return; }   // a finger reads the line under the chart, not a tip under the finger
           tip.style.display = "block";
           const w = u.over.clientWidth, left = u.cursor.left ?? 0, top = u.cursor.top ?? 0;
@@ -322,7 +328,7 @@ export function SigmaChart({ points, windowSec, intraday = false, decimals = 2, 
     over.addEventListener("dblclick", onDbl);
     return () => { ro.disconnect(); if (ringTimer) clearTimeout(ringTimer); over.removeEventListener("pointerdown", onDown); over.removeEventListener("pointermove", onMove); over.removeEventListener("pointerup", onUp); over.removeEventListener("pointercancel", onUp); over.removeEventListener("dblclick", onDbl); u.destroy(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prepared, windowSec, intraday, decimals, height, fill, axes, color, hasVol, marksKey, focusKey]);
+  }, [prepared, windowSec, intraday, decimals, pct, height, fill, axes, color, hasVol, marksKey, focusKey]);
 
   return <div className={`chartbox${fill ? " fill" : ""}`} ref={el} style={fill ? undefined : { height }} />;
 }

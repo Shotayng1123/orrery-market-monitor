@@ -5,13 +5,16 @@ import type { EconEvent, NewsItem } from "../lib/types";
 import { fmtClock, SGT } from "../lib/time";
 import { zoomNow } from "../lib/prefs";
 import { fmtStampSafe } from "./shared";
+import { categoryLabel, HEADLINES, RESULTS, RESULTS_CALENDAR } from "../lib/labels";
 import { EarningsCalendar } from "../components/Earnings";
 import { HeadlineList } from "../components/Headlines";
 import { Pick, type PickOption } from "../components/Pick";
 import { useRowCap } from "../lib/useRowCap";
 
 export const NEWS_CATEGORIES = ["All", "US Equities", "JP Equities", "Asia Equities", "DM Rates", "EM Rates", "Currency", "Macro", "Commodities"] as const;
-export const CAL_MODES: PickOption<"macro" | "earnings">[] = [{ value: "macro", label: "Macro" }, { value: "earnings", label: "Earnings" }];
+/** The categories as the picker shows them: the server's value, in the glossary's word ("Currency" reads FX). */
+export const CATEGORY_OPTIONS: PickOption<(typeof NEWS_CATEGORIES)[number]>[] = NEWS_CATEGORIES.map((c) => ({ value: c, label: categoryLabel(c) }));
+export const CAL_MODES: PickOption<"macro" | "earnings">[] = [{ value: "macro", label: "Macro" }, { value: "earnings", label: RESULTS }];
 export const IMPACTS: PickOption<"high" | "hm" | "all">[] = [{ value: "high", label: "High" }, { value: "hm", label: "High + Medium" }, { value: "all", label: "All" }];
 export const SCOPES: PickOption<"major" | "all">[] = [{ value: "major", label: "Major" }, { value: "all", label: "All" }];
 export const dayOf = (t: string) => new Date(t).toLocaleDateString("en-CA", { timeZone: SGT });
@@ -63,7 +66,7 @@ export function NewsView({ tick }: { tick: number }) {
   }, [events.length, imp, scope, nextIdx, calMode]);
   return (
     <>
-      <Panel no="01" title={calMode === "macro" ? "ECONOMIC CALENDAR" : "EARNINGS CALENDAR"} span={6} aux={<span className="chips" style={{ margin: 0 }}><Pick label="Type" value={calMode} options={CAL_MODES} onChange={setCalMode} />{calMode === "macro" && <><Pick label="Impact" value={imp} options={IMPACTS} onChange={setImp} /><Pick label="Countries" value={scope} options={SCOPES} onChange={setScope} /><span className="mut" style={{ marginLeft: 4 }}>times in SGT{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""}</span></>}</span>}>
+      <Panel no="01" title={calMode === "macro" ? "ECONOMIC CALENDAR" : RESULTS_CALENDAR.toUpperCase()} span={6} aux={<span className="chips" style={{ margin: 0 }}><Pick label="Type" value={calMode} options={CAL_MODES} onChange={setCalMode} />{calMode === "macro" && <><Pick label="Impact" value={imp} options={IMPACTS} onChange={setImp} /><Pick label="Countries" value={scope} options={SCOPES} onChange={setScope} /><span className="mut" style={{ marginLeft: 4 }}>times in SGT{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""}</span></>}</span>}>
         {calMode === "earnings" ? <EarningsCalendar tick={tick} /> : events.length ? (
           <div className="calwrap" ref={calBox}><table className="mini calT">
             <colgroup><col className="tm" /><col className="cy" /><col /><col className="dot" /><col className="nv" /><col className="nv" /><col className="nv" /></colgroup>
@@ -84,7 +87,7 @@ export function NewsView({ tick }: { tick: number }) {
         ) : <Empty title="No calendar loaded">{cal.error ?? "The calendar sync runs every hour."}</Empty>}
       </Panel>
       {/* "Headlines" (the designer's glossary, §3.1): the publishers' items, one wording on both layouts */}
-      <Panel no="02" title="HEADLINES" span={6} k="headlines" aux={<span className="chips" style={{ margin: 0 }}><Pick label="Category" value={cat} options={NEWS_CATEGORIES} onChange={setCat} /><span className="mut" style={{ marginLeft: 4 }}>times in SGT</span></span>}>
+      <Panel no="02" title={HEADLINES.toUpperCase()} span={6} k="headlines" aux={<span className="chips" style={{ margin: 0 }}><Pick label="Category" value={cat} options={CATEGORY_OPTIONS} onChange={setCat} /><span className="mut" style={{ marginLeft: 4 }}>times in SGT</span></span>}>
         {news.data?.rows.length ? <HeadlineList rows={news.data.rows} /> : <Empty title="No headlines">{news.error ?? "The news job runs every ten minutes."}</Empty>}
       </Panel>
     </>

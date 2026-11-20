@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useApi } from "../lib/useApi";
 import type { Alert } from "../lib/types";
-import { fmtStamp } from "../lib/time";
+import { fmtStamp, fmtWhen } from "../lib/time";
 import { fmtPct, signCls } from "../lib/fmt";
 import { openAsset } from "./CompanyCard";
 import { openNotify } from "../lib/push";
@@ -54,22 +54,22 @@ export function Alerts({ tick }: { tick: number }) {
       <span className={`alrt${latest ? (lit ? " new" : fresh ? " fresh" : "") : " none"}`} onClick={toggle} title={latest ? `${latest.msg}${isNews(latest) && latest.market ? ` (${latest.market})` : ""} · ${fmtStamp(latest.at)}\n\n${RULES}` : RULES}>
         <span className="k">{lit ? "NEW ALERT" : "ALERT"}</span>
         {latest ? <>
-          <span className={`msg ${signCls(latest.pct)}`}>{latest.msg}</span>
+          <span className={`msg ${signCls(latest.pct, 1)}`}>{latest.msg}</span>
           <span className="one">
             {isNews(latest) && <span className="kd">{KIND_LABEL[latest.kind]}</span>}
             <span className="nm">{orphan ? alertHeadline(latest.msg) : latest.name}</span>
-            {!isNews(latest) && latest.pct != null && <span className={`fig ${signCls(latest.pct)}`}>{fmtPct(latest.pct, 1)}</span>}
+            {!isNews(latest) && latest.pct != null && <span className={`fig ${signCls(latest.pct, 1)}`}>{fmtPct(latest.pct, 1)}</span>}
             {!isNews(latest) && latest.pct != null && word && <span className="q">{word}</span>}
             {orphan && latest.market && <span className="src">via {latest.market}</span>}
           </span>
-          <span className="t">{fmtStamp(latest.at).replace(" SGT", "")}</span>
+          <span className="t">{fmtWhen(latest.at)}</span>
         </> : <span className="mut">{a.error ? "unavailable" : "no excessive moves"}</span>}
       </span>
       {open && (
         <div className="aldrop">
           <div className="minih">Last {rows.length} alerts · stock ±5% intraday (large companies) or ±7% · index ±3% · buybacks and guidance (USD 5bn+ companies) · M&A (USD 1bn+)<span className="lnk alntf" title="Get these alerts as notifications on this device" onClick={() => { setOpen(false); openNotify(); }}>Notifications…</span></div>
           {rows.length ? (
-            <table className="secT"><tbody>{rows.map((r) => <tr key={r.id}><td className="l mut num">{fmtStamp(r.at)}</td><td className="l">{isNews(r) && r.url ? <><a href={r.url} target="_blank" rel="noreferrer" title="Open the article">{r.msg}</a>{hasPage(r) && <span className="lnk alpg" title={`Open ${r.name}`} onClick={() => { setOpen(false); openAsset(r.symbol); }}> ›</span>}</> : hasPage(r) ? <span className="lnk" title={`Open ${r.name}`} onClick={() => { setOpen(false); openAsset(r.symbol); }}>{r.msg}</span> : r.msg}</td><td className="l mut">{isNews(r) ? KIND_LABEL[r.kind] : r.kind === "index" ? "index" : r.market}</td><td className={`num ${signCls(r.pct)}`}>{isNews(r) || r.pct == null ? "" : fmtPct(r.pct, 1)}</td></tr>)}</tbody></table>
+            <table className="secT"><tbody>{rows.map((r) => <tr key={r.id}><td className="l mut num">{fmtStamp(r.at)}</td><td className="l">{isNews(r) && r.url ? <><a href={r.url} target="_blank" rel="noreferrer" title="Open the article">{r.msg}</a>{hasPage(r) && <span className="lnk alpg" title={`Open ${r.name}`} onClick={() => { setOpen(false); openAsset(r.symbol); }}> ›</span>}</> : hasPage(r) ? <span className="lnk" title={`Open ${r.name}`} onClick={() => { setOpen(false); openAsset(r.symbol); }}>{r.msg}</span> : r.msg}</td><td className="l mut">{isNews(r) ? KIND_LABEL[r.kind] : r.kind === "index" ? "index" : r.market}</td><td className={`num ${signCls(r.pct, 1)}`}>{isNews(r) || r.pct == null ? "" : fmtPct(r.pct, 1)}</td></tr>)}</tbody></table>
           ) : <div className="empty">No excessive moves recorded yet.</div>}
         </div>
       )}

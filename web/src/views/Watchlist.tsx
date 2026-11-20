@@ -8,8 +8,9 @@ import { Star } from "../components/Star";
 import { hideCard, money, openAsset, showCard } from "../components/CompanyCard";
 import { useApi } from "../lib/useApi";
 import { useWatch } from "../lib/watch";
-import { fmtNum, fmtPct, signCls } from "../lib/fmt";
-import { asOfCell, asOfOf, asOfTitle, fmtClock, fmtStamp, SGT, type AsOfKind } from "../lib/time";
+import { fallbackDecimals, fmtLevel, fmtPct, signCls } from "../lib/fmt";
+import { asOfCell, asOfOf, asOfTitle, fmtDate, fmtDayTime, fmtWhen, type AsOfKind } from "../lib/time";
+import { classLabel, hitLine, MKT_CAP, NEXT_RESULTS, RESULTS_AHEAD, VS_200D, VS_50D } from "../lib/labels";
 import { cellBp, changeShade, RANGE_52W, RANGE_52W_TIP } from "./Market";
 
 /** A row of the watch_list route. Since 19 Nov 2026 a market instrument's row also carries the change of its level
@@ -23,11 +24,16 @@ export interface WatchRow {
   vs50: number | null; vs200: number | null; pos52: number | null; mcap: number | null; earningsAt: string | null; earningsEst: boolean | null; isYield: boolean;
   chg1d?: number | null; chg1w?: number | null; chg1m?: number | null; chg3m?: number | null; chg12m?: number | null; vs200chg?: number | null;
   asOfKind?: AsOfKind | null; source?: string | null;
+  /** The instrument's own decimals (the instruments table), for a market instrument; since 20 Nov 2026. A stock and an
+   *  older server's rows have none: the page's rule for them (lib/fmt.ts). */
+  decimals?: number | null;
 }
 /** The windows of a watchlist row: its per-cent field for a price, its level field for a yield, its label. */
 export const WINDOWS = [["pct1d", "chg1d", "1D"], ["pct1w", "chg1w", "1W"], ["pct1m", "chg1m", "1M"], ["pct3m", "chg3m", "3M"], ["pct12m", "chg12m", "12M"]] as const;
-/** A yield's level as MARKETS prints it, "4.859%". */
-export const lastOf = (r: WatchRow) => `${fmtNum(r.last, r.last != null && r.last >= 1000 ? 0 : r.isYield ? 3 : 2)}${r.isYield && r.last != null ? "%" : ""}`;
+/** A row's level as every screen prints it (the designer's D-05): a market instrument with its own decimals, as on
+ *  MARKETS ("158.400", "4.859%"); a stock by the stocks' rule; without decimals from the server (one older than
+ *  20 Nov 2026) the same rules the instruments table follows (lib/fmt.ts fallbackDecimals). */
+export const lastOf = (r: WatchRow) => fmtLevel(r.last, r.decimals ?? fallbackDecimals(r.last, r.isYield ? "yield" : r.kind === "Currency" ? "fx" : "other"), r.isYield);
 /** The sources of the rows on screen, for the panel's head: "Yahoo Finance; yields: US Treasury, Japan MOF". */
 export function sourcesOf(rows: WatchRow[]): string {
   const all = [...new Set(rows.map((r) => r.source).filter((s): s is string => !!s))];
@@ -41,7 +47,6 @@ export interface Feed {
 }
 const UP = "63,208,126", DN = "255,77,66";
 const shade = (v: number | null, full: number) => (v == null || v === 0 ? undefined : `rgba(${v > 0 ? UP : DN},${(Math.min(1, Math.abs(v) / full) * 0.5).toFixed(3)})`);
-export const day = (t: string) => new Date(t).toLocaleDateString("en-GB", { timeZone: SGT, weekday: "short", day: "numeric", month: "short" });
 export const decode = (t: string) => t.replace(/&amp;/g, "&").replace(/&#x([0-9a-f]+);/gi, (_m, h: string) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_m, d: string) => String.fromCodePoint(Number(d)));
 
 /** WATCHLIST: the user's own names in one place: their figures, the earnings dates ahead, and what has happened
@@ -72,12 +77,12 @@ export function WatchlistView({ tick }: { tick: number }) {
   const rows = list.data?.rows ?? [];
   // an answer without one of its lists (an older server, a stand-in feed) shows that panel empty: it must not blank the page
   const alerts = feed.data?.alerts ?? [], news = feed.data?.news ?? [], research = feed.data?.research ?? [];
-  const cell = (v: number | null | undefined, full: number) => <td className={`num ${signCls(v)}`} style={{ background: shade(v ?? null, full) }}>{fmtPct(v, 1)}</td>;
+  const cell = (v: number | null | undefined, full: number) => <td className={`num ${signCls(v, 1)}`} style={{ background: shade(v ?? null, full) }}>{fmtPct(v, 1)}</td>;
   // a yield's changes in bp with MARKETS' own figures and tints (full at 50bp; 75bp from the 200-day average)
-  const bp = (v: number | null | undefined, full: number) => <td className={`num ${signCls(v)}`} style={{ background: changeShade(v ?? null, full) }}>{cellBp(v)}</td>;
+  const bp = (v: number | null | undefined, full: number) => <td className={`num ${signCls(v == null ? null : v * 100, 1)}`} style={{ background: changeShade(v ?? null, full) }}>{cellBp(v)}</td>;
   const ahead = rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3).sort((a, b) => a.earningsAt!.localeCompare(b.earningsAt!));
   const name = (s: string) => rows.find((r) => r.symbol === s)?.name ?? s;
-  const how = "Press the star beside a name on its own page, in the screener or in the earnings calendar, or type part of a name or of a symbol above (toyota, nvid, 7203, ^N225) and choose from the list.";
+  const how = "Press the star beside a name on its own page, in the screener or in the results calendar, or type part of a name or of a symbol above (toyota, nvid, 7203, ^N225) and choose from the list.";
   const sources = sourcesOf(rows);
   return (
     <>
@@ -97,7 +102,7 @@ export function WatchlistView({ tick }: { tick: number }) {
                 {box.busy && !box.hits.length && <div className="sitem mut">searching …</div>}
                 {box.hits.map((h, i) => (
                   <div key={h.symbol} className={`sitem${i === box.sel ? " on" : ""}${w.has(h.symbol) ? " have" : ""}`} title={w.has(h.symbol) ? "Already in your list" : `Add ${h.name} (${h.symbol})`} onMouseEnter={() => box.setSel(i)} onMouseDown={(e) => { e.preventDefault(); void box.addHit(h); }}>
-                    <b>{h.symbol}</b><span className="nm">{h.name}</span><span className="mut">{[h.kind, h.note].filter(Boolean).join(" · ")}</span><span className="act">{w.has(h.symbol) ? "in your list" : "+ add"}</span>
+                    <b>{h.symbol}</b><span className="nm">{h.name}</span><span className="mut">{hitLine(h)}</span><span className="act">{w.has(h.symbol) ? "in your list" : "+ add"}</span>
                   </div>
                 ))}
               </div>
@@ -108,14 +113,14 @@ export function WatchlistView({ tick }: { tick: number }) {
         </div>
         {rows.length ? (
           <table className="secT wlT">
-            <thead><tr><th /><th className="l">Name</th><th className="l">Sector / kind</th><th>Last</th><th className="l asof" title="What the row's figures are as of, in SGT: the date of a close or of an official yield's publication, the time of today's last print">As of</th><th>1D</th><th>1W</th><th>1M</th><th>3M</th><th>12M</th><th title="% for prices, bp for yields">vs 50d</th><th title="% for prices, bp for yields">vs 200d</th><th title={RANGE_52W_TIP}>{RANGE_52W}</th><th>Mkt cap</th><th className="l">Earnings</th></tr></thead>
+            <thead><tr><th /><th className="l">Name</th><th className="l">Sector / kind</th><th>Last</th><th className="l asof" title="What the row's figures are as of, in SGT: the date of a close or of an official yield's publication, the time of today's last print">As of</th><th>1D</th><th>1W</th><th>1M</th><th>3M</th><th>12M</th><th title="% for prices, bp for yields">{VS_50D}</th><th title="% for prices, bp for yields">{VS_200D}</th><th title={RANGE_52W_TIP}>{RANGE_52W}</th><th>{MKT_CAP}</th><th className="l" title="The company's next results date, in SGT; est. = estimated, not confirmed by the company">{NEXT_RESULTS}</th></tr></thead>
             <tbody>{rows.map((r) => {
               const a = asOfOf(r.asOf, r.asOfKind);
               return (
                 <tr key={r.symbol}>
                   <td className="l"><Star symbol={r.symbol} name={r.name} /></td>
                   <td className="l nm" title={`${r.name} (${r.symbol})`}><span className="lnk" onMouseEnter={(e) => showCard(r.symbol, e)} onMouseLeave={hideCard} onClick={() => openAsset(r.symbol)}>{r.name}</span> <span className="mut">{r.symbol}</span></td>
-                  <td className="l mut">{r.sector ?? r.kind}</td>
+                  <td className="l mut">{r.sector ?? classLabel(r.kind)}</td>
                   <td className="num"><b>{lastOf(r)}</b></td>
                   <td className="l mut asof" title={asOfTitle(a, r.source)}>{asOfCell(a)}</td>
                   {r.isYield
@@ -123,7 +128,7 @@ export function WatchlistView({ tick }: { tick: number }) {
                     : <>{cell(r.pct1d, 4)}{cell(r.pct1w, 8)}{cell(r.pct1m, 12)}{cell(r.pct3m, 20)}{cell(r.pct12m, 50)}{cell(r.vs50, 10)}{cell(r.vs200, 20)}</>}
                   <td className="num mut">{r.pos52 == null ? "–" : `${Math.round(r.pos52)}%`}</td>
                   <td className="num mut">{r.mcap == null ? "–" : money(r.mcap, r.ccy)}</td>
-                  <td className="l mut">{r.earningsAt ? `${day(r.earningsAt)}${r.earningsEst ? " est." : ""}` : "–"}</td>
+                  <td className="l mut">{r.earningsAt ? `${fmtDate(r.earningsAt)}${r.earningsEst ? " est." : ""}` : "–"}</td>
                 </tr>
               );
             })}</tbody>
@@ -138,14 +143,14 @@ export function WatchlistView({ tick }: { tick: number }) {
           Under 1,100 CSS px of layout, and in the one-screen layout, the panels follow each other. */}
       <div className="pcols">
         <div className="pcol w4">
-          <Panel no="02" title="RESULTS AHEAD" span={4} k="wl-earn" aux="my names · SGT">
+          <Panel no="02" title={RESULTS_AHEAD.toUpperCase()} span={4} k="wl-earn" aux="my names · times in SGT">
             {ahead.length ? (
-              <table className="secT"><tbody>{ahead.map((r) => <tr key={r.symbol}><td className="l mut num">{day(r.earningsAt!)} {fmtClock(new Date(r.earningsAt!), SGT)}</td><td className="l wrap"><span className="lnk" onClick={() => openAsset(r.symbol)}>{r.name}</span></td><td className="l mut">{r.earningsEst ? "est." : "confirmed"}</td></tr>)}</tbody></table>
+              <table className="secT"><tbody>{ahead.map((r) => <tr key={r.symbol}><td className="l mut num">{fmtDayTime(r.earningsAt)}</td><td className="l wrap"><span className="lnk" onClick={() => openAsset(r.symbol)}>{r.name}</span></td><td className="l mut">{r.earningsEst ? "est." : "confirmed"}</td></tr>)}</tbody></table>
             ) : <Empty title="No dates ahead">{rows.length ? "None of your names has a results date in the feed." : "Add names to see their results dates."}</Empty>}
           </Panel>
           <Panel no="04" title="ALERTS ON MY NAMES" span={4} k="wl-alerts" aux={feed.data ? `${alerts.length} recent · times in SGT` : ""}>
             {alerts.length ? (
-              <table className="secT wlal"><tbody>{alerts.slice(0, shownA).map((a) => <tr key={a.id}><td className="l mut num">{fmtStamp(a.at).replace(" SGT", "")}</td><td className="l wrap">{a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.msg}</a> : <span className="lnk" onClick={() => openAsset(a.symbol)}>{a.msg}</span>}</td><td className={`num ${signCls(a.pct)}`}>{a.pct == null ? "" : fmtPct(a.pct, 1)}</td></tr>)}</tbody></table>
+              <table className="secT wlal"><tbody>{alerts.slice(0, shownA).map((a) => <tr key={a.id}><td className="l mut num">{fmtWhen(a.at)}</td><td className="l wrap">{a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.msg}</a> : <span className="lnk" onClick={() => openAsset(a.symbol)}>{a.msg}</span>}</td><td className={`num ${signCls(a.pct, 1)}`}>{a.pct == null ? "" : fmtPct(a.pct, 1)}</td></tr>)}</tbody></table>
             ) : <Empty title="No alerts">{feed.error ?? "Moves beyond ±5% (large companies) or ±7%, buybacks, guidance changes and large deals on your names appear here."}</Empty>}
             {alerts.length > shownA && <ShowMore id="wl-alerts-more" n={Math.min(WL_ALERTS, alerts.length - shownA)} shown={shownA} total={alerts.length} onMore={() => setShownA((n) => n + WL_ALERTS)} />}
           </Panel>
@@ -157,7 +162,7 @@ export function WatchlistView({ tick }: { tick: number }) {
           </Panel>
           <Panel no="05" title="IN RESEARCH" span={8} k="wl-research" aux="pieces that mention my names">
             {research.length ? (
-              <table className="secT"><tbody>{research.map((r) => <tr key={r.key}><td className="l mut num">{day(r.d)}</td><td className="l wrap"><span className="lnk" onClick={() => { location.hash = `research/${encodeURIComponent(r.key)}`; }}>{r.title}</span><div className="mut" style={{ fontSize: 10 }}>{r.symbols.map(name).join(" · ")}</div></td></tr>)}</tbody></table>
+              <table className="secT"><tbody>{research.map((r) => <tr key={r.key}><td className="l mut num">{fmtDate(r.d)}</td><td className="l wrap"><span className="lnk" onClick={() => { location.hash = `research/${encodeURIComponent(r.key)}`; }}>{r.title}</span><div className="mut" style={{ fontSize: 10 }}>{r.symbols.map(name).join(" · ")}</div></td></tr>)}</tbody></table>
             ) : <Empty title="No mentions">{feed.error ?? "Daily notes and weekly reports that mention your names appear here."}</Empty>}
           </Panel>
         </div>

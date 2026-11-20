@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { fmtClock, SGT } from "../lib/time";
 import { openAsset } from "./CompanyCard";
+import { categoryLabel } from "../lib/labels";
 
 /** A headline as the routes send it: NEWS (`news`) gives its category, a watchlist's feed (`watch_feed`) does not. */
 export interface Headline { id: number; publishedAt: string; source: string; title: string; url: string; category?: string | null; tickers?: Array<{ s: string; n: string }> | null }
@@ -28,7 +29,7 @@ export function HeadlineList({ rows, named, free = false }: { rows: Headline[]; 
             <div className="nwrow">
               <span className="nwt">{valid(it.publishedAt) ? fmtClock(new Date(it.publishedAt), SGT) : "–"}</span>
               <div className="nwb">
-                <div className="nwh" title={title}>{it.category && <span className="nwc cat">{it.category}</span>}<a href={it.url} target="_blank" rel="noreferrer">{title}</a></div>
+                <div className="nwh" title={title}>{it.category && <span className="nwc cat">{categoryLabel(it.category)}</span>}<a href={it.url} target="_blank" rel="noreferrer">{title}</a></div>
                 <div className="nwm"><span className="nwsrc">{it.source}</span>{chips.length > 0 && <span className="nwtk">{chips.map((t) => <span key={t.s} className="tk" title={`Open ${t.n} (${t.s})`} onClick={() => openAsset(t.s)}>{t.n}</span>)}</span>}</div>
               </div>
             </div>
