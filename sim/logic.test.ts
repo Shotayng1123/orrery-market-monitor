@@ -22,7 +22,7 @@ import { ALERTS, COMPANY, FIRST, PHILOSOPHY, PHONE, TABS, WELCOME_SUBJECT, welco
 import { FEED_LATE_MIN, OWN_SHORT_MIN, barDayEnd, barSettled, feedState, fxTrading, silence, stoppedBeforeClose, type Print } from "../supabase/functions/_shared/feedhealth.ts";
 import { OWN_FRESH_MIN, RELAY_BEAT_MAX_S, RELAY_CRON, RELAY_JOBS, RELAY_LATE_MIN, RELAY_OK_RUN, RELAY_WAIT_MIN, beatFresh, cronDue, current, newerOnly, reading, relayAct, relayJobsDue, usable, type RelayView } from "../supabase/functions/_shared/relay.ts";
 import { CBOE_YIELDS, closeDay, isYieldQuote, isYieldRow, sourceName, watchRowFromQuote, watchRowFromTable, type QuoteLike } from "../supabase/functions/_shared/watchrow.ts";
-import { alertFigWord, alertHeadline } from "../web/src/lib/alertline.ts";
+import { alertFigWord, alertHeadline, sigmaNoteLine } from "../web/src/lib/alertline.ts";
 import { asOfCell, asOfLine, asOfOf, asOfTitle, rowAsOfTitle, rowSource, tileStamp } from "../web/src/lib/time.ts";
 import { finBack, finFit, finRest } from "../web/src/lib/finscroll.ts";
 import { sectorShort } from "../web/src/lib/sectors.ts";
@@ -39,15 +39,15 @@ import { FEED_ALERTS, FEED_DAYS, FEED_NEWS, INSTR_HISTORY_DAYS, INSTRUMENT_COLS,
 import { MOCK_WORDS, mockCcys } from "../web/src/lib/mockInstr.ts";
 import { calendarRows, currencyOptions, eventCcy } from "../web/src/lib/calendar.ts";
 import { checkRoll, contractName, fromReading, isFuture, knownFrom, monthWord, QUOTE_SOURCE, rollDay, rollSegments, rollViews, tradeDate, type RollRow } from "../supabase/functions/_shared/futures.ts";
-import { dailyChanges, dayWords, LISTED_ALERTS, listed, moveWords, SIGMA_CLASSES, SIGMA_LIST, SIGMA_MIN, SIGMA_N, SIGMA_RAISE, sessionDay, sigmaCandidate, sigmaMsg, sigmaNote, sigmaStats, sigmaWrites, usableSd, zDay } from "../supabase/functions/_shared/sigma.ts";
+import { dailyChanges, dayWords, LISTED_ALERTS, listed, moveWords, SIGMA_CLASSES, SIGMA_LIST, SIGMA_MIN, SIGMA_N, SIGMA_RAISE, sessionDay, sigmaCandidate, sigmaMsg, sigmaNote, sigmaStats, sigmaWrites, usableSd, z1mOf, zDay } from "../supabase/functions/_shared/sigma.ts";
 import { ALERT_KINDS, DEFAULT_KINDS, prefsFromBody, PUSH_LINE, PUSH_LINES, sigmaReaches } from "../supabase/functions/_shared/pushrules.ts";
 import { futuresInfo } from "../supabase/functions/_shared/instrstats.ts";
 import { commonWindow, moveLine, moversInSigma, sigmaTip, sortBySigma, STRIP_N } from "../web/src/lib/movers.ts";
 import { codeOf, monthOf, rollWords } from "../web/src/lib/futures.ts";
-import { contractLine, lastRollLine, rollMarks, rollsOutLine, SERIES_LINE } from "../web/src/lib/instrument.ts";
+import { contractLine, contractSource, lastRollLine, rollMarks, rollsOutLine, SERIES_LINE } from "../web/src/lib/instrument.ts";
 import { mockSegments } from "../web/src/lib/mockInstr.ts";
 import type { TableRow } from "../web/src/lib/types.ts";
-import { byResultsDay, fmtResultsDate, listingCity, listingTz, RESULTS_NOTE, resultsDay, resultsDayLabel, resultsStatus, resultsStatusShort, resultsTip, resultsWords } from "../web/src/lib/results.ts";
+import { byResultsDay, calendarFlag, fmtResultsDate, jpxDated, listingCity, listingTz, MARKS_NOTE, RESULTS_NOTE, resultsDay, resultsDayLabel, resultsMark, resultsStatus, resultsStatusShort, resultsTip, resultsWords } from "../web/src/lib/results.ts";
 import { opensAtTop } from "../web/src/lib/nav.ts";
 import { readFileSync as readText, readdirSync as listDir } from "node:fs";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
@@ -1455,6 +1455,55 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const R = (view: string, sub = "") => ({ view, sub });
     ck("a page opened from a list starts at its top: a name's page from any tab or from another name's; an index's page on EQUITIES from another tab", opensAtTop(R("market"), R("asset", "USDJPY=X")) && opensAtTop(R("watch"), R("asset", "GC=F")) && opensAtTop(R("asset", "NVDA"), R("asset", "7203.T")) && opensAtTop(null, R("asset", "NVDA")) && opensAtTop(R("market"), R("equities", "nk225")) && opensAtTop(R("news"), R("equities", "sp500")));
     ck("and nothing else: the same name again, another index from EQUITIES' own picker, a tab of its own, a piece of RESEARCH (it places itself)", !opensAtTop(R("asset", "NVDA"), R("asset", "NVDA")) && !opensAtTop(R("equities", "topix"), R("equities", "nk225")) && !opensAtTop(R("market"), R("equities")) && !opensAtTop(R("market"), R("news")) && !opensAtTop(R("research"), R("research", "note:2026-11-20")) && !opensAtTop(R("market"), R("asset")));
+  }
+
+  console.log("\n[Z] fixes after the check of round 3a (20 Nov 2026): σ vs 1M avg never across a change of contract (F1), a σ move's line on WATCHLIST (F3), the results calendar's flag as the source gives it (F4), a Tokyo date's mark (S5), the contract's source (S2)");
+  {
+    const D = 86400, ymd = (t: number) => new Date(t * 1000).toISOString().slice(0, 10);
+    // 120 weekday closes from 1 Jun 2026, about 1% a day; a series ending on a Thursday so the next session is a weekday
+    const raw: Bar[] = []; let v = 80;
+    for (let i = 0, t = Date.parse("2026-06-01T00:00:00Z") / 1000; raw.length < 120; t += D) { const wd = new Date(t * 1000).getUTCDay(); if (wd === 0 || wd === 6) continue; v *= 1 + (((i++ * 7919) % 97) / 97 - 0.5) * 0.02; raw.push({ t, c: v }); }
+    while (new Date(raw[raw.length - 1].t * 1000).getUTCDay() !== 4) raw.pop();
+    const lastBar = raw[raw.length - 1], next = lastBar.t + D;   // the next session: a Friday
+    // a 5% step 14 sessions back, as BZ=F's seeded roll of 2 Nov (its change of contract not known) is 14 sessions before 20 Nov
+    const k = raw.length - 14, stepped = raw.map((b, i) => (i >= k ? { ...b, c: b.c * 1.05 } : b)), rd = ymd(raw[k].t), clean = raw.map((b) => ({ ...b, c: b.c * 1.05 }));
+    const def: InstrumentDef = { symbol: "BZ=F", name: "Brent crude", cls: "Commodities", grp: "cmdty", market: "NYMEX", currency: "USD", decimals: 2, provider: "yahoo" };
+    const lastS = stepped[stepped.length - 1].c * 1.001;
+    const tableRow: RowLike = { symbol: "BZ=F", name: "Brent crude", cls: "Commodities", group: "cmdty", market: "NYMEX", currency: "USD", decimals: 2, order: 1, last: lastS, lastAt: new Date((next + 14 * 3600) * 1000).toISOString(), live: true, source: "yahoo", closes: { d1: stepped[stepped.length - 1].c }, closeDates: { d1: ymd(lastBar.t) }, pct: { d1: 0.1 }, chg: { d1: 0 }, z1m: null, pos52: 50, vs200: null };
+    const quote = (price: number): QuoteLike => ({ name: "Brent Crude Oil", quoteType: "FUTURE", currency: "USD", exchange: "NYM", price, prevClose: null, time: next + 14 * 3600, open: null, high: null, low: null });
+    const fig = (o: { row?: RowLike | null; bars: Bar[]; price: number; rolls: Array<{ d: string; prevClose: number | null }> }) => instrumentFigures({ symbol: "BZ=F", def, row: o.row ?? null, quote: quote(o.price), bars: o.bars, yieldQuote: false, now: (next + 15 * 3600) * 1000, rolls: o.rolls });
+    const rawZ = seriesStats(stepped, lastS, "price").z1m;
+    const withTable = fig({ row: tableRow, bars: stepped, price: lastS, rolls: [{ d: rd, prevClose: null }] });
+    ck(`F1: a future whose market-table row has no σ vs 1M avg (a change of contract not known among its 21 closes): its page shows none either, not the ${rawZ?.toFixed(2)} the raw closes give across the step`, withTable.z1m === null && rawZ != null && Math.abs(rawZ) > 0.3, { page: withTable.z1m, rawZ });
+    ck("a Monitor instrument's σ vs 1M avg is the table's own where it gives one", fig({ row: { ...tableRow, z1m: 1.23 }, bars: stepped, price: lastS, rolls: [] }).z1m === 1.23);
+    // no table row (the market table could not be read): the page works it out by the database's rule
+    const cleanZ = seriesStats(clean, lastS, "price").z1m;
+    const measured = fig({ bars: stepped, price: lastS, rolls: [{ d: rd, prevClose: raw[k - 1].c * 1.05 }] }), unmeasured = fig({ bars: stepped, price: lastS, rolls: [{ d: rd, prevClose: null }] });
+    ck(`without the table's row: across a measured roll σ vs 1M avg is that of the series with the step taken out (${measured.z1m?.toFixed(4)} = ${cleanZ?.toFixed(4)}); across a roll not measured, none`, measured.z1m != null && cleanZ != null && Math.abs(measured.z1m - cleanZ) < 1e-9 && Math.abs(measured.z1m - (rawZ ?? 0)) > 0.1 && unmeasured.z1m === null, { measured: measured.z1m, cleanZ, unmeasured: unmeasured.z1m });
+    // a roll on the print's own session, after the newest booked close: the print is the new contract's
+    const lastNew = lastBar.c * 1.05 * 1.002, today = ymd(next);
+    const todayM = fig({ bars: raw, price: lastNew, rolls: [{ d: today, prevClose: lastBar.c * 1.05 }] }), todayU = fig({ bars: raw, price: lastNew, rolls: [{ d: today, prevClose: null }] });
+    const wantToday = seriesStats(raw.map((b) => ({ ...b, c: b.c * 1.05 })), lastNew, "price").z1m;
+    ck(`a roll today, after the newest booked close: the booked closes on the new contract's level (${todayM.z1m?.toFixed(4)} = ${wantToday?.toFixed(4)}); not measured, none (it would read ${seriesStats(raw, lastNew, "price").z1m?.toFixed(1)} against the old contract)`, todayM.z1m != null && wantToday != null && Math.abs(todayM.z1m - wantToday) < 1e-9 && todayU.z1m === null, { m: todayM.z1m, wantToday, u: todayU.z1m });
+    ck("a roll older than the 21 closes changes nothing; a roll after the print's session is not the print's", fig({ bars: stepped, price: lastS, rolls: [{ d: ymd(raw[k - 30].t), prevClose: null }] }).z1m === seriesStats(stepped, lastS, "price").z1m && fig({ bars: raw, price: lastBar.c, rolls: [{ d: ymd(next + 3 * D), prevClose: null }] }).z1m === seriesStats(raw, lastBar.c, "price").z1m);
+    // the market table's own rule (table.ts): a roll after the newest booked close sets the closes on the new level by f; not known, none
+    const m21 = 100, s21 = 2;
+    ck("the market table's σ vs 1M avg (z1mOf): (print − mean) / σ; a roll today measured: on the new contract's level; not measured: none, as the database gives none for a booked one", z1mOf(104, m21, s21) === 2 && Math.abs((z1mOf(107.1, m21, s21, 1.05) ?? 0) - (107.1 - 105) / 2.1) < 1e-12 && z1mOf(104, m21, s21, null) === null && z1mOf(104, m21, 0) === null && z1mOf(null, m21, s21) === null && z1mOf(104, null, s21) === null);
+    // F3: a σ move on WATCHLIST says what it is, its window and source
+    ck(`F3: a σ move's second line on WATCHLIST: "${sigmaNoteLine({ note: "σ of 63 daily changes to 19 Nov 2026 · Yahoo Finance" })}"; without a note its kind alone`, sigmaNoteLine({ note: "σ of 63 daily changes to 19 Nov 2026 · Yahoo Finance" }) === "σ move · σ of 63 daily changes to 19 Nov 2026 · Yahoo Finance" && sigmaNoteLine({ note: null }) === "σ move" && sigmaNoteLine({}) === "σ move");
+    // F4: the results calendar's flag
+    ck("F4: the calendar's flag from a server that sends it as the source gives it: true est., false confirmed, null not said; from a server before (a missing flag sent as false): false is not said, never confirmed", calendarFlag(true, true) === true && calendarFlag(false, true) === false && calendarFlag(null, true) === null && calendarFlag(true, undefined) === true && calendarFlag(false, undefined) === null && calendarFlag(false, false) === null && resultsStatusShort(calendarFlag(false, undefined), "NVDA") === "–" && resultsStatusShort(calendarFlag(false, true), "NVDA") === "conf.");
+    // S5: a Tokyo company's date is est. until JPX's own calendar is read (A-30)
+    const tip7203 = resultsTip("7203.T", false), tipNk = resultsTip("JP1", null, ["NK225"]);
+    ck(`S5: a Tokyo company's Yahoo date is marked est. whatever Yahoo's flag (7203.T: "${resultsWords(false, "7203.T")}", "${resultsStatusShort(false, "7203.T")}"); a US company's keeps Yahoo's ("${resultsWords(false, "NVDA")}")`, jpxDated("7203.T") && jpxDated("JP1", ["NK225"]) && !jpxDated("NVDA") && !jpxDated("TM") && resultsMark(false, "7203.T") === true && resultsMark(null, "6758.T") === true && resultsMark(false, "NVDA") === false && resultsMark(null, "NVDA") === null && resultsMark(false) === false && resultsWords(false, "7203.T") === "est. (Yahoo Finance)" && resultsStatus(false, "JP1", ["NK225"]) === "est." && resultsStatusShort(false, "7203.T") === "est." && resultsWords(false, "NVDA") === "confirmed (Yahoo Finance)" && resultsStatusShort(null, "NVDA") === "–");
+    ck(`its tooltip says why, and what Yahoo marks: "…${tip7203.split("; ")[1]?.split(". No time")[0]}"`, /; marked est\.: a Tokyo company's date is confirmed by JPX's results calendar \(決算発表予定日\), which the Monitor does not read yet \(Yahoo marks it confirmed\)\. No time of day/.test(tip7203) && /\(Yahoo gives no mark\)\. No time of day/.test(tipNk) && /the day in New York, where the company is listed; confirmed, as Yahoo marks it\./.test(resultsTip("NVDA", false)), { tip7203, tipNk });
+    ck(`the line under a list of marks: "${MARKS_NOTE}"`, /^conf\. or est\. as Yahoo marks the date; a Tokyo company's est\. until JPX's own calendar is read$/.test(MARKS_NOTE));
+    // S4: a future's 1D in σ says from when its changes of contract are left out (a change before the record stays in)
+    const futRow = { symbol: "CL=F", name: "WTI crude", cls: "Commodities", group: "cmdty", market: "NYMEX", currency: "USD", decimals: 2, order: 36, last: 80, lastAt: "2026-11-20T14:00:00Z", live: true, source: "yahoo", closes: { d1: 79 }, closeDates: { d1: "2026-11-19" }, pct: { d1: 1.27 }, chg: { d1: 1 }, z1d: 0.9, sd1d: 1.4, zFrom: "2026-08-20", zTo: "2026-11-19", zN: 63, z1m: 0.1, pos52: 40, vs200: 1, marketTab: true, chart: true, contract: "CLF27.NYM", roll: null } as unknown as TableRow;
+    const ftip = sigmaTip(futRow), xtip = sigmaTip({ ...futRow, symbol: "USDJPY=X", name: "USD/JPY", cls: "Currency", contract: null } as TableRow);
+    ck(`S4: a future's 1D in σ says its changes of contract are left out only from when the Monitor records them ("…${ftip.split(" · ").pop()}"); a currency's says nothing of contracts`, /its changes of contract are left out from when the Monitor records them; any before stay in \(its page says from when\)$/.test(ftip) && !/contract/.test(xtip), { ftip, xtip });
+    // S2: the contract's source and when it was read, under it on both layouts
+    ck(`S2: under a future's contract: "${contractSource({ source: "Yahoo Finance (unofficial) quote: the contract it names (underlyingSymbol)", seenAt: "2026-11-20T17:38:00Z" })}"`, contractSource({ source: "Yahoo Finance (unofficial) quote: the contract it names (underlyingSymbol)", seenAt: "2026-11-20T17:38:00Z" }) === "Yahoo Finance (unofficial) · read 21 Nov 01:38 SGT" && contractSource({ source: "Yahoo Finance (unofficial) quote: x", seenAt: null }) === "Yahoo Finance (unofficial)");
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

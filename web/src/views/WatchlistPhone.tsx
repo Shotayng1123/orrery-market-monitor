@@ -8,12 +8,13 @@ import { Move, Screen, Section } from "../components/PhoneKit";
 import { NotifyNudge } from "../components/Notify";
 import { useApi } from "../lib/useApi";
 import { useWatch } from "../lib/watch";
-import { fmtPct, signCls } from "../lib/fmt";
+import { fmtPct, fmtSigma, signCls } from "../lib/fmt";
+import { sigmaNoteLine } from "../lib/alertline";
 import { asOfLine, asOfOf, asOfTitle, fmtDate, fmtWhen } from "../lib/time";
 import { classLabel, hitLine, PERIOD, RESULTS_AHEAD, TAB } from "../lib/labels";
-import { byResultsDay, RESULTS_NOTE, resultsDayLabel, resultsStatusShort } from "../lib/results";
+import { byResultsDay, MARKS_NOTE, RESULTS_NOTE, resultsDayLabel, resultsStatusShort } from "../lib/results";
 import { cellBp } from "./Market";
-import { decode, lastOf, sourcesOf, WINDOWS, type Feed, type WatchRow } from "./Watchlist";
+import { decode, lastOf, sourcesOf, WINDOWS, WL_ALERTS_EMPTY, type Feed, type WatchRow } from "./Watchlist";
 
 /** WATCHLIST for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026): the user's own names as lines with one
  *  change (the period is picked at the top), then their results dates, alerts, headlines and research mentions.
@@ -78,20 +79,22 @@ export function WatchlistPhone({ tick }: { tick: number }) {
             <Fragment key={r.symbol}>
               {(i === 0 || r.day !== arr[i - 1].day) && <div className="ev-day">{resultsDayLabel(r.day)}</div>}
               <div className="ev-row tap" role="button" tabIndex={0} onClick={() => openAsset(r.symbol)}>
-                <span className="ev-t">{resultsStatusShort(r.earningsEst)}</span>
+                <span className="ev-t">{resultsStatusShort(r.earningsEst, r.symbol)}</span>
                 <span className="ev-m"><span className="ev-n">{r.name}</span><span className="ev-s">{r.symbol} · {r.sector ?? classLabel(r.kind)}</span></span>
               </div>
             </Fragment>
           )) : <Empty title="No dates ahead">{rows.length ? "None of your names has a results date in the feed." : "Add names to see their results dates."}</Empty>}
         </div>
-        {ahead.length > 0 && <p className="mp-note" id="wl-results-note">{RESULTS_NOTE} · conf. or est., as the source marks the date.</p>}
+        {ahead.length > 0 && <p className="mp-note" id="wl-results-note">{RESULTS_NOTE} · {MARKS_NOTE}.</p>}
       </Section>
       <Section title="Alerts on my names" aux={feed.data ? `${alerts.length} recent` : ""}>
         {rows.length > 0 && <NotifyNudge />}
         {alerts.length ? alerts.map((a) => {
-          const body = <><span className="nw-meta"><span>{fmtWhen(a.at)}</span>{a.pct != null && <b className={signCls(a.pct, 1)}>{fmtPct(a.pct, 1)}</b>}</span><span className="nw-title">{a.msg}</span></>;
-          return a.url ? <a className="nw-row" key={a.id} href={a.url} target="_blank" rel="noreferrer">{body}</a> : <div className="nw-row" key={a.id} role="button" tabIndex={0} onClick={() => openAsset(a.symbol)}>{body}</div>;
-        }) : <Empty title="No alerts">{feed.error ?? "Moves beyond ±5% (large companies) or ±7%, buybacks, guidance changes and large deals on your names appear here."}</Empty>}
+          // a σ move: its σ beside the time (a yield's has no per cent), what it is and its window and source under it (F3)
+          const sg = a.kind === "sigma", v = sg ? a.sigma ?? null : a.pct;
+          const body = <><span className="nw-meta"><span>{fmtWhen(a.at)}</span>{v != null && <b className={signCls(v, 1)}>{sg ? fmtSigma(v) : fmtPct(v, 1)}</b>}</span><span className="nw-title">{a.msg}</span>{sg && <span className="nw-note">{sigmaNoteLine(a)}</span>}</>;
+          return a.url ? <a className="nw-row" key={a.id} data-kind={a.kind} href={a.url} target="_blank" rel="noreferrer">{body}</a> : <div className="nw-row" key={a.id} data-kind={a.kind} role="button" tabIndex={0} onClick={() => openAsset(a.symbol)}>{body}</div>;
+        }) : <Empty title="No alerts">{feed.error ?? WL_ALERTS_EMPTY}</Empty>}
       </Section>
       <Section title="Headlines on my names" aux={feed.data ? `${news.length} in the feed` : ""}>
         {news.length ? news.slice(0, 30).map((it) => (

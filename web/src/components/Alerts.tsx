@@ -6,6 +6,7 @@ import { fmtPct, fmtSigma, signCls } from "../lib/fmt";
 import { openAsset } from "./CompanyCard";
 import { openNotify } from "../lib/push";
 import { alertFigWord, alertHeadline } from "../lib/alertline";
+import { Sig } from "./Sig";
 
 const SEEN_KEY = "om_alert_seen";
 const NEW_FOR_MS = 30 * 60e3;   // an alert nobody has opened stays lit for half an hour after it was raised
@@ -58,7 +59,7 @@ export function Alerts({ tick }: { tick: number }) {
         {latest ? <>
           <span className={`msg ${signCls(isSigma(latest) ? latest.sigma : latest.pct, 1)}`}>{latest.msg}</span>
           <span className="one">
-            {(isNews(latest) || isSigma(latest)) && <span className="kd">{KIND_LABEL[latest.kind]}</span>}
+            {(isNews(latest) || isSigma(latest)) && <span className="kd"><Sig>{KIND_LABEL[latest.kind]}</Sig></span>}
             <span className="nm">{orphan ? alertHeadline(latest.msg) : latest.name}</span>
             {isSigma(latest) && latest.sigma != null && <span className={`fig ${signCls(latest.sigma, 1)}`}>{fmtSigma(latest.sigma)}</span>}
             {!isNews(latest) && !isSigma(latest) && latest.pct != null && <span className={`fig ${signCls(latest.pct, 1)}`}>{fmtPct(latest.pct, 1)}</span>}
@@ -70,7 +71,8 @@ export function Alerts({ tick }: { tick: number }) {
       </span>
       {open && (
         <div className="aldrop">
-          <div className="minih">Last {rows.length} alerts · stock ±5% intraday (large companies) or ±7% · index ±3% · σ moves from 2.5σ · buybacks and guidance (USD 5bn+ companies) · M&A (USD 1bn+)<span className="lnk alntf" title="Get these alerts as notifications on this device" onClick={() => { setOpen(false); openNotify(); }}>Notifications…</span></div>
+          {/* the head is upper-cased (.minih): every σ in it stays σ, never the sum sign Σ (the designer's D-11) */}
+          <div className="minih"><Sig>{`Last ${rows.length} alerts · stock ±5% intraday (large companies) or ±7% · index ±3% · σ moves from 2.5σ · buybacks and guidance (USD 5bn+ companies) · M&A (USD 1bn+)`}</Sig><span className="lnk alntf" title="Get these alerts as notifications on this device" onClick={() => { setOpen(false); openNotify(); }}>Notifications…</span></div>
           {rows.length ? (
             <table className="secT"><tbody>{rows.map((r) => <tr key={r.id} data-kind={r.kind}><td className="l mut num">{fmtStamp(r.at)}</td><td className="l">{isNews(r) && r.url ? <><a href={r.url} target="_blank" rel="noreferrer" title="Open the article">{r.msg}</a>{hasPage(r) && <span className="lnk alpg" title={`Open ${r.name}`} onClick={() => { setOpen(false); openAsset(r.symbol); }}> ›</span>}</> : hasPage(r) ? <span className="lnk" title={`Open ${r.name}`} onClick={() => { setOpen(false); openAsset(r.symbol); }}>{r.msg}</span> : r.msg}{isSigma(r) && r.note && <small className="alnote">{r.note}</small>}</td><td className="l mut">{isNews(r) || isSigma(r) ? KIND_LABEL[r.kind] : r.kind === "index" ? "index" : r.market}</td><td className={`num ${signCls(isSigma(r) ? r.sigma : r.pct, 1)}`}>{isNews(r) ? "" : isSigma(r) ? fmtSigma(r.sigma) : r.pct == null ? "" : fmtPct(r.pct, 1)}</td></tr>)}</tbody></table>
           ) : <div className="empty">No excessive moves recorded yet.</div>}

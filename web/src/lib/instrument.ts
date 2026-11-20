@@ -148,6 +148,9 @@ export function contractLine(f: FuturesInfo | undefined, today: string = partsIn
   const past = !!f.expires && f.expires < today;
   return `${f.month ?? f.contract} (${codeOf(f.contract)})${f.expires ? ` · ${past ? "expired" : "expires"} ${fmtDate(f.expires)}` : ""}`;
 }
+/** Whose word the contract is, and when it was read, under it on both layouts (the owner's P3: a named month is
+ *  labelled Yahoo Finance (unofficial); the reviewer's S2): "Yahoo Finance (unofficial) · read 21 Nov 01:38 SGT". */
+export const contractSource = (f: Pick<FuturesInfo, "source" | "seenAt">): string => `${f.source.replace(/ quote:.*$/, "")}${f.seenAt ? ` · read ${fmtStamp(f.seenAt)}` : ""}`;
 /** "20 Nov 2026 · from Dec 2026, +3.00% change of contract"; "none since <date>" when the record holds none. */
 export function lastRollLine(f: FuturesInfo | undefined): string {
   const r = f?.lastRoll;

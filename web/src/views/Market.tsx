@@ -124,8 +124,10 @@ function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
               const c = r.closes[p.key];
               const v = isRate ? (c != null && r.last != null ? r.last - c : null) : r.pct[p.key];
               const cell = <td key={p.key} className={`num ${signCls(isRate && v != null ? v * 100 : v, isRate ? 1 : 2)}${p.key === "d1" ? " grp" : ""}`} style={{ background: changeShade(v, isRate ? 0.5 : 10) }} title={c != null ? `from ${levelOf(r, c)} on ${fmtDate(r.closeDates[p.key])}${p.key === "d1" && r.roll?.step != null ? ` (${monthOf(r.roll.to)}'s own close: ${rollTip(r)})` : ""}` : ""}>{isRate ? cellBp(v) : cellPct(v)}</td>;
-              // 1D IN σ right after 1D: "+2.7σ", shaded full at ±4σ (the designer's I-6 note)
-              return p.key === "d1" ? <Fragment key={p.key}>{cell}<td className={`num z ${signCls(r.z1d, 1)}`} style={{ background: changeShade(r.z1d ?? null, 4) }} title={sigmaTip(r)}>{fmtSigma(r.z1d)}</td></Fragment> : cell;
+              // 1D IN σ right after 1D: "+2.7σ", shaded full at ±4σ (the designer's I-6 note). A roll day's mark is beside
+              // the name; in the one-screen layout an R after this figure instead (the stylesheet's, so the cell's text
+              // stays the figure), as the narrow name cell would put the DELAYED badge behind an ellipsis (the reviewer's S3)
+              return p.key === "d1" ? <Fragment key={p.key}>{cell}<td className={`num z ${signCls(r.z1d, 1)}${r.roll ? " rolled" : ""}`} style={{ background: changeShade(r.z1d ?? null, 4) }} title={sigmaTip(r)}>{fmtSigma(r.z1d)}</td></Fragment> : cell;
             })}
             <td className={`num grp ${signCls(r.z1m, 1)}`} style={{ background: changeShade(r.z1m ?? null, 3) }}>{fmtSigma(r.z1m)}</td>
             <td className="num" style={{ background: r.pos52 == null ? undefined : levelShade(r.pos52, 0, 100) }}>{r.pos52 == null ? "–" : `${Math.round(r.pos52)}%`}</td>
@@ -175,10 +177,11 @@ export function CurvePanel({ period, tick }: { period: ChartPeriod; tick: number
  *  the change and the level under it. At the alert line (2.5σ) a cell gets an amber border; under 1.5σ it is lettered
  *  muted. The closes each figure is worked out from are on the cell's tooltip; the line under the strip names the window
  *  most of them share. */
-function SigmaStrip({ rows, loading }: { rows: TableRow[]; loading: boolean }) {
+function SigmaStrip({ rows, loading, asOf }: { rows: TableRow[]; loading: boolean; asOf: string | null }) {
   const top = moversInSigma(rows), win = commonWindow(top);
+  // the head names when its figures are as of, as the phone's does (the designer's §3.3; the reviewer's S1)
   return (
-    <Panel no="01" k="sigma" title={upperSigma(MOVERS_SIGMA)} aux={<>today's change ÷ σ of daily changes, 63 sessions · official-curve yields once their day is booked{DEV_MOCK && <span className="badge est">MOCK</span>}</>}>
+    <Panel no="01" k="sigma" title={upperSigma(MOVERS_SIGMA)} aux={<>today's change ÷ σ of daily changes, 63 sessions · official-curve yields once their day is booked{asOf ? <> · <span id="mk-sigma-asof">as of {fmtStampSafe(asOf)}</span></> : null}{DEV_MOCK && <span className="badge est">MOCK</span>}</>}>
       {top.length ? (
         <>
           <div className="sgstrip" id="mk-sigma">
@@ -193,7 +196,7 @@ function SigmaStrip({ rows, loading }: { rows: TableRow[]; loading: boolean }) {
               );
             })}
           </div>
-          <div className="mut finnote sgnote" id="mk-sigma-note">{"\u2020"} worked out here from the daily closes the Monitor stores{win ? `, mostly ${fmtDate(win.from)} – ${fmtDate(win.to)}` : ""} (each cell's own window on its tooltip); a future's change of contract is left out.</div>
+          <div className="mut finnote sgnote" id="mk-sigma-note">{"\u2020"} worked out here from the daily closes the Monitor stores{win ? `, mostly ${fmtDate(win.from)} – ${fmtDate(win.to)}` : ""} (each cell's own window on its tooltip); a future's changes of contract are left out from when the Monitor records them, and any before stay in (a future's page says from when).</div>
         </>
       ) : loading ? <div className="empty sgempty">loading…</div> : <Empty title={rows.length ? "No moves in σ yet" : "Awaiting the data feed"}>{rows.length ? "The server sends each instrument's σ of daily changes with the table once its update is deployed." : null}</Empty>}
     </Panel>
@@ -212,7 +215,7 @@ export function MarketView({ tick }: { tick: number }) {
   const selector = <PeriodBar period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} />;
   return (
     <>
-      <SigmaStrip rows={rows} loading={!table.data && !table.error} />
+      <SigmaStrip rows={rows} loading={!table.data && !table.error} asOf={table.data?.asOf ?? null} />
       <Panel no="02" k="mkt" title="MARKETS" aux={table.data ? <>as of {fmtStampSafe(table.data.asOf)} · Yahoo Finance, US Treasury, MOF{DEV_MOCK && <span className="badge est">MOCK</span>}</> : table.error ? <span className="warn">{table.error}</span> : "loading…"}>
         {rows.length ? <MarketsTable rows={rows} /> : <Empty title="Awaiting the data feed">{table.error ?? "The market table fills once the Monitor backend is deployed and its first daily history run has completed."}</Empty>}
       </Panel>

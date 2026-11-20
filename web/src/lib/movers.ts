@@ -40,8 +40,9 @@ export function moveLine(r: TableRow): string {
   return `${y ? cellBp(v) : cellPct(v)} · ${fmtLevel(r.last, r.decimals, y)}`;
 }
 /** What a 1D IN σ figure is, for its cell and strip tooltip: the σ, the closes it is worked out from, and, for an official
- *  yield, the day it was measured on (it is published a day late); for a future across a roll, the change of contract
- *  left out. */
+ *  yield, the day it was measured on (it is published a day late); for a future, that its changes of contract are left
+ *  out only from when the Monitor records them (a change before its record stays in the 63 sessions: the reviewer's S4),
+ *  and across a roll today, the change of contract left out. */
 export function sigmaTip(r: TableRow): string {
   if (!ok(r.z1d)) {
     if (r.roll && r.roll.step == null) return `A change of contract today (to ${monthOf(r.roll.to)}): the source does not give the new contract's close before it, so the day has no σ`;
@@ -53,6 +54,7 @@ export function sigmaTip(r: TableRow): string {
   const sdTxt = ok(sd) ? (y ? `${(sd * 100).toFixed(1)}bp` : `${sd.toFixed(2)}%`) : "–";
   const parts = [`The day's change over the σ of the ${r.zN ?? 63} daily changes before it (${sdTxt} a day), worked out † from the daily closes of ${fmtDate(r.zFrom)} – ${fmtDate(r.zTo)} (${rowSource(r)})`];
   if (isOfficialRow(r) && r.lastAt) parts.push(`measured on ${fmtDate(r.lastAt.slice(0, 10))}'s close (published a day late)`);
+  if (/=F$/.test(r.symbol)) parts.push("its changes of contract are left out from when the Monitor records them; any before stay in (its page says from when)");
   if (r.roll && r.roll.step != null) parts.push(`a change of contract today: ${r.roll.step >= 0 ? "+" : ""}${r.roll.step.toFixed(2)}% from ${monthOf(r.roll.from)} to ${monthOf(r.roll.to)}, left out (the day is the change within ${monthOf(r.roll.to)})`);
   return parts.join(" · ");
 }

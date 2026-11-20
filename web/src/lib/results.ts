@@ -6,8 +6,9 @@
 // time is the company's announced release time, so no screen writes one (A's rule: a time of day only where the
 // source states the company's). What is left is the day, and it is the day in the company's own market: NVIDIA's
 // 17 Nov in New York is 05:00 on the 18th in Singapore, and "18 Nov" would be a day the company never named.
-// Tokyo's dates from JPX's 決算発表予定日, with "confirmed", come later (I-26); a plain date ("2027-02-04") is
-// already read as written.
+// Tokyo's dates from JPX's 決算発表予定日, with "confirmed", come later (I-26); until then Yahoo's date for a Tokyo
+// company is marked "est." whatever Yahoo's own flag says (A-30: "Yahoo's date is used only where JPX has no row yet,
+// marked est. (Yahoo)"; the reviewer's S5). A plain date ("2027-02-04") is already read as written.
 import { fmtDate, partsIn } from "./time";
 
 /** The time zone of the market a symbol is listed on, by its Yahoo suffix; a name without one is a US listing,
@@ -69,17 +70,31 @@ export function byResultsDay<T>(rows: readonly T[], at: (r: T) => string | null 
   return out.sort((a, b) => a.day.localeCompare(b.day) || t(a) - t(b));
 }
 
-/** Yahoo's flag, in the designer's words: "est." (estimated, not confirmed by the company), "confirmed", or null
- *  where the source does not say. */
-export const resultsStatus = (est: boolean | null | undefined): "est." | "confirmed" | null => (est === true ? "est." : est === false ? "confirmed" : null);
+/** A Tokyo company's results date is confirmed by JPX's 決算発表予定日 alone (A-30), which the Monitor does not read yet
+ *  (I-26): until then Yahoo's date for it is an estimate, whatever Yahoo's own flag says. */
+export const jpxDated = (symbol: string, indices?: readonly string[] | null): boolean => listingTz(symbol, indices) === "Asia/Tokyo";
+/** The mark a date carries: Yahoo's own flag (true: estimated, false: confirmed, null: not said) for a company listed
+ *  outside Tokyo; true for a Tokyo company's (jpxDated). Without a symbol, Yahoo's flag as it is. */
+export const resultsMark = (est: boolean | null | undefined, symbol?: string, indices?: readonly string[] | null): boolean | null => (symbol != null && jpxDated(symbol, indices) ? true : est ?? null);
+/** The mark in the designer's words: "est." (estimated, not confirmed by the company), "confirmed", or null where the
+ *  source does not say. */
+export const resultsStatus = (est: boolean | null | undefined, symbol?: string, indices?: readonly string[] | null): "est." | "confirmed" | null => { const m = resultsMark(est, symbol, indices); return m === true ? "est." : m === false ? "confirmed" : null; };
 /** The same for a narrow column: "est.", "conf." or a dash. */
-export const resultsStatusShort = (est: boolean | null | undefined): string => (est === true ? "est." : est === false ? "conf." : "–");
+export const resultsStatusShort = (est: boolean | null | undefined, symbol?: string, indices?: readonly string[] | null): string => resultsStatus(est, symbol, indices)?.replace("confirmed", "conf.") ?? "–";
 /** What follows the date in KEY DATA: "est. (Yahoo Finance)", "confirmed (Yahoo Finance)", or the source alone. */
-export const resultsWords = (est: boolean | null | undefined, source = RESULTS_SOURCE): string => { const s = resultsStatus(est); return s ? `${s} (${source})` : source; };
-/** The tooltip of a results date: whose day it is, from whom, and why it has no time of day. */
+export const resultsWords = (est: boolean | null | undefined, symbol?: string, indices?: readonly string[] | null, source = RESULTS_SOURCE): string => { const s = resultsStatus(est, symbol, indices); return s ? `${s} (${source})` : source; };
+/** The tooltip of a results date: whose day it is, from whom, its mark and why, and why it has no time of day. */
 export function resultsTip(symbol: string, est: boolean | null | undefined, indices?: readonly string[] | null, source = RESULTS_SOURCE): string {
-  const status = est === true ? "; estimated by Yahoo, not confirmed by the company" : est === false ? "; confirmed, as Yahoo marks it" : "";
+  const yahoo = est === true ? "Yahoo marks it estimated" : est === false ? "Yahoo marks it confirmed" : "Yahoo gives no mark";
+  const status = jpxDated(symbol, indices) ? `; marked est.: a Tokyo company's date is confirmed by JPX's results calendar (決算発表予定日), which the Monitor does not read yet (${yahoo})`
+    : est === true ? "; estimated by Yahoo, not confirmed by the company" : est === false ? "; confirmed, as Yahoo marks it" : "";
   return `The next results as ${source} gives them: the day in ${listingCity(symbol, indices)}, where the company is listed${status}. No time of day: the source gives a time with the date but does not say that it is the company's release time.`;
 }
+/** What a list of marks says under it (both layouts): whose mark each is. */
+export const MARKS_NOTE = "conf. or est. as Yahoo marks the date; a Tokyo company's est. until JPX's own calendar is read";
+/** The results calendar's flag as a page reads the `earnings` route (the reviewer's F4): since 20 Nov 2026 the server
+ *  sends Yahoo's flag as Yahoo gives it, null where it gives none, and says so (`estimateAsGiven`); a server from before
+ *  turned a missing flag into false, so its false is read as not said (a dash), never as confirmed. */
+export const calendarFlag = (estimate: boolean | null | undefined, asGiven: boolean | null | undefined): boolean | null => (estimate === true ? true : estimate === false && asGiven === true ? false : null);
 /** One line for a list of results dates: whose days they are and why there is no time. */
 export const RESULTS_NOTE = `${RESULTS_SOURCE} · each company's day in its own market · no time of day: the source states no release time`;

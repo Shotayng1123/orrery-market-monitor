@@ -6,7 +6,12 @@
 //   - the one-screen layout (the strip is the first row, names and σ on one line) and text size XL (two rows of five);
 //   - MARKETS on a phone: Movers in σ first, a row of 132 x 76 cards that moves sideways, the third cut at the edge, the
 //     as-of in its head, the install hint under it; an opened row's 1D in σ;
-//   - the header's alert list: the stand-in 2.7σ USD/JPY move with its σ, its window and its source;
+//   - the header's alert list: the stand-in 2.7σ USD/JPY move with its σ, its window and its source; WATCHLIST's alerts on
+//     my names, both layouts: a σ move with its kind, window and source under its line and its σ as its figure (a yield's
+//     too), and one under 2.5σ not listed (the server's rule; the reviewer's F3, 20 Nov 2026);
+//   - the strip's head names its as-of (S1); a future's tooltip says its changes of contract are left out from when the
+//     Monitor records them (S4); in the one-screen layout a roll day's mark is an R after its 1D in σ, so the name cell
+//     keeps its DELAYED badge whole (S3); gold's contract says Yahoo Finance (unofficial) on screen on a computer (S2);
 //   - gold's page, both layouts: its contract, its last roll, the line saying what the series is and that the rolls are
 //     left out, the roll marked on its chart; its realised vol and largest fall those of the series with the step taken out;
 //   - a server from before 20 Nov 2026 (rows without σ, contract or roll): MARKETS says so in the strip's place, the
@@ -50,12 +55,12 @@ const AMBER = "rgb(255, 111, 97)", D = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
     await go(p, "#market", "table.mkt tbody tr:not(.cls)");
     const rows = (await table(p)).filter((r) => r.marketTab !== false), s = await stripView(p), t = await tableView(p);
     const want = rows.filter((r) => r.z1d != null).sort((a, b2) => Math.abs(b2.z1d) - Math.abs(a.z1d) || a.order - b2.order).slice(0, 10);
-    ck(`panel 01 is "${s?.title}" (the σ lower case), above MARKETS: "${s?.aux}"`, !!s && s.no === "01" && s.title === "MOVERS IN σ" && /today's change ÷ σ of daily changes, 63 sessions · official-curve yields once their day is booked/.test(s.aux) && (await p.locator('.panel[data-k="mkt"]').getAttribute("data-no")) === "02", s);
+    ck(`panel 01 is "${s?.title}" (the σ lower case), above MARKETS: "${s?.aux}", its as-of named as on the phone (S1)`, !!s && s.no === "01" && s.title === "MOVERS IN σ" && /today's change ÷ σ of daily changes, 63 sessions · official-curve yields once their day is booked · as of \d{1,2} [A-Z][a-z]{2} \d\d:\d\d SGT/.test(s.aux) && (await p.locator('.panel[data-k="mkt"]').getAttribute("data-no")) === "02", s);
     ck(`ten cells in one row, the largest |σ| first (${s?.cells.map((c) => `${c.nm} ${c.z}`).join(", ")})`, s.cells.length === 10 && new Set(s.cells.map((c) => c.top)).size === 1 && s.cells.every((c, i) => c.z === fmtS(want[i].z1d)) && s.cells.every((c) => /^[+-]?\d+\.\dσ$/.test(c.z)), { got: s.cells.map((c) => c.z), want: want.map((r) => fmtS(r.z1d)) });
     ck("each cell: a name, its σ in its sign's colour, the day's change and the level under it, whole; a link to the instrument's page", s.cells.every((c, i) => /^#(asset|equities)\//.test(c.href) && c.whole && /^[+-]?\d[\d,.]*(%|bp) · [\d,.]+%?$/.test(c.mv) && (want[i].z1d > 0.05 ? /\bup\b/.test(c.zCls) : want[i].z1d < -0.05 ? /\bdn\b/.test(c.zCls) : true)), s.cells);
     const usd = s.cells.find((c) => c.nm === "USD/JPY");
     ck(`USD/JPY's 2.7σ day leads, at the alert line: an amber border ("${usd?.z}", ${usd?.border}); under 1.5σ a cell is muted (${s.cells.filter((c) => c.quiet).length} of 10)`, s.cells[0].nm === "USD/JPY" && usd.z === "+2.7σ" && usd.hot && usd.border === AMBER && s.cells.filter((c) => !c.hot).every((c) => c.border !== AMBER) && s.cells.every((c) => c.quiet === (Math.abs(parseFloat(c.z)) < 1.5)), s.cells.map((c) => [c.nm, c.z, c.hot, c.quiet]));
-    ck(`the line under it: "${s.note}"`, new RegExp(`^† worked out here from the daily closes the Monitor stores, mostly ${D} – ${D} \\(each cell's own window on its tooltip\\); a future's change of contract is left out\\.$`).test(s.note ?? ""), s.note);
+    ck(`the line under it: "${s.note}"`, new RegExp(`^† worked out here from the daily closes the Monitor stores, mostly ${D} – ${D} \\(each cell's own window on its tooltip\\); a future's changes of contract are left out from when the Monitor records them, and any before stay in \\(a future's page says from when\\)\\.$`).test(s.note ?? ""), s.note);
     ck(`1D IN σ right after 1D, the σ kept lower case under the upper-cased header (${t.heads.slice(1, 5).join(" · ")})`, t.heads[2] === "1D" && t.heads[3] === "1D IN σ" && t.sortCase === "none" && t.heads.length === 12, t.heads);
     // the table's rows in its own order: by `order`, grouped by class in the order the classes first come
     const ordered = [...rows].sort((a, b2) => a.order - b2.order), clsOrder = [...new Set(ordered.map((r) => r.cls))], inTable = clsOrder.flatMap((c) => ordered.filter((r) => r.cls === c));
@@ -69,6 +74,9 @@ const AMBER = "rgb(255, 111, 97)", D = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
     const gold = t.rows.find((x) => x.name === "Gold"), gr = rows.find((r) => r.symbol === "GC=F");
     const naive = (gr.last / (gr.closes.d1 / (1 + gr.roll.step / 100)) - 1) * 100, within = gr.pct.d1, naiveZ = naive / gr.sd1d;
     ck(`gold's stand-in roll (${gr.roll.from} to ${gr.roll.to}, +${gr.roll.step.toFixed(2)}%): its name carries ROLL, its 1D is the change within the new contract (${gold.d1}), its σ ${gold.z}; across the change of contract it would read ${naive.toFixed(2)}% and ${naiveZ.toFixed(1)}σ`, gold.badges.includes("ROLL") && /left out of the 1D, its σ and the alerts/.test(gold.rollTip) && gold.d1 === `${within >= 0 ? "+" : "-"}${Math.abs(within).toFixed(2)}%` && Math.abs(naiveZ) >= 2.5 && Math.abs(gr.z1d) < 1.5 && gold.z === fmtS(gr.z1d) && /new contract|own close/.test(gold.d1tip), { gold, naive, naiveZ });
+    ck(`a future's 1D in σ says its changes of contract are left out from when the Monitor records them (S4): "…${gold.ztip.split(" · ").find((x) => /records them/.test(x)) ?? ""}"`, /its changes of contract are left out from when the Monitor records them; any before stay in \(its page says from when\)/.test(gold.ztip) && !/records them/.test(usdRow.ztip), { gold: gold.ztip, usd: usdRow.ztip });
+    const mark = await p.evaluate(() => { const tr = [...document.querySelectorAll("table.mkt tbody tr:not(.cls)")].find((t) => t.children[0].querySelector("a")?.textContent === "Gold"), z = tr?.querySelector("td.z"); return z ? { after: getComputedStyle(z, "::after").content, cls: z.className } : null; });
+    ck(`the scrolling layout marks the roll beside the name only: no R after its 1D in σ (${mark?.after})`, !!mark && /\brolled\b/.test(mark.cls) && (mark.after === "none" || mark.after === "normal"), mark);
     const sg = s.cells.find((c) => c.nm === "Gold");
     ck(`its jump is not among the movers in σ (${sg ? `gold there at its own ${sg.z}` : "gold not there"}), and no stand-in alert names gold`, (!sg || (sg.z === fmtS(gr.z1d) && !sg.hot)) && !S.alerts.some((a) => a.symbol === "GC=F") && !S.watch.feed.alerts.some((a) => a.symbol === "GC=F" && a.kind === "sigma"), sg);
     // sorting by |σ| within each class bar, and back
@@ -90,6 +98,12 @@ const AMBER = "rgb(255, 111, 97)", D = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
     await go(p, "#market", ".sgcell");
     const s = await stripView(p);
     const g = await p.evaluate(() => { const pos = (k) => { const e = document.querySelector(`.panel[data-k="${k}"]`); if (!e) return null; const r = e.getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right) }; }; return { sel: (() => { const r = document.querySelector("#grid > .c12:not(.panel)").getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom) }; })(), strip: pos("sigma"), mkt: pos("mkt"), eq: pos("mk-eq"), vh: innerHeight, sy: document.documentElement.scrollHeight - innerHeight }; });
+    // S3: a roll day's mark leaves the narrow name cell for an R after its 1D in σ, so the badge beside the name (DELAYED
+    // while gold's market is open) stays whole; whether it is open does not matter to the check
+    const gc = await p.evaluate(() => { const tr = [...document.querySelectorAll("table.mkt tbody tr:not(.cls)")].find((t) => t.children[0].querySelector("a")?.textContent === "Gold"); if (!tr) return null;
+      const name = tr.children[0], z = tr.querySelector("td.z"), roll = name.querySelector(".badge.roll");
+      return { badges: [...name.querySelectorAll(".badge")].filter((x) => getComputedStyle(x).display !== "none").map((x) => x.textContent), rollShown: !!roll && getComputedStyle(roll).display !== "none", nameWhole: name.scrollWidth <= name.clientWidth + 1, mark: getComputedStyle(z, "::after").content, zText: z.innerText, zWhole: z.scrollWidth <= z.clientWidth + 1, zTip: z.title }; });
+    ck(`compact: gold's roll day is an R after its 1D in σ ("${gc?.zText}" ${gc?.mark}), whole, with the change of contract on its tooltip; its name cell keeps ${JSON.stringify(gc?.badges)}, whole (S3)`, !!gc && !gc.rollShown && gc.mark === '"R"' && gc.zWhole && gc.nameWhole && !gc.badges.includes("ROLL") && /^[+-]?\d+\.\dσ$/.test(gc.zText) && /a change of contract today/.test(gc.zTip), gc);
     ck(`compact: the strip is the first row under the picks (${g.strip.top}–${g.strip.bottom} px, ${s.h} px tall), the ten names and σ on one line each, the table and the charts under it`, g.strip.top >= g.sel.bottom - 1 && s.h <= 64 && s.cells.length === 10 && s.cells.every((c) => !c.mvShown && c.h <= 24) && g.mkt.top >= g.strip.bottom - 1 && g.eq.top >= g.strip.bottom - 1 && g.mkt.left < g.eq.left, { g, h: s.h, cells: s.cells.map((c) => c.h) });
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
   { const { ctx, p, errs } = await page(b, { viewport: { width: 1440, height: 900 } }, XL);
@@ -127,9 +141,25 @@ const AMBER = "rgb(255, 111, 97)", D = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
     const row = await p.evaluate(() => { const tr = document.querySelector('.aldrop tbody tr[data-kind="sigma"]'); return tr ? { msg: tr.children[1].querySelector(".lnk")?.textContent ?? null, note: tr.querySelector(".alnote")?.textContent ?? null, kind: tr.children[2].textContent, fig: tr.children[3].textContent, cls: tr.children[3].className } : null; });
     const sa = S.alerts.find((a) => a.kind === "sigma");
     ck(`on the list: "${row?.msg}", its kind "${row?.kind}", its σ "${row?.fig}" in its sign's colour, and its window and source under it ("${row?.note}")`, !!row && row.msg === sa.msg && row.kind === "σ move" && row.fig === "+2.7σ" && /\bup\b/.test(row.cls) && row.note === sa.note && /Yahoo Finance/.test(row.note) && /63 daily changes/.test(row.note), row);
-    await p.locator('.aldrop tbody tr[data-kind="sigma"] .lnk').click(); await p.waitForTimeout(500);
+    await p.locator('.aldrop tbody tr[data-kind="sigma"] .lnk').first().click(); await p.waitForTimeout(500);
     ck("a tap on it opens USD/JPY's page", (await p.evaluate(() => location.hash)) === "#asset/USDJPY%3DX");
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+
+  console.log("\n[WATCHLIST's alerts on my names: a σ move with its kind, window, source and σ; from 2.5σ (the reviewer's F3)]");
+  for (const [name, opts] of [["computer 1440x900", { viewport: { width: 1440, height: 900 } }], ["iPhone 13", devices["iPhone 13"]]]) {
+    const desk = name.startsWith("computer"), { ctx, p, errs } = await page(b, opts, desk ? AUTO : null);
+    await go(p, "#watch", desk ? '.panel[data-k="wl-alerts"] tbody tr' : ".nw-row[data-kind]");
+    const feed = await p.evaluate(async () => { const { mockAction } = await import("/orrery-market-monitor/src/lib/mock.ts"); return mockAction("watch_feed").alerts; });
+    const rows = await p.evaluate((dk) => (dk
+      ? [...document.querySelectorAll('.panel[data-k="wl-alerts"] tbody tr')].map((tr) => ({ kind: tr.dataset.kind, msg: tr.children[1].querySelector(".lnk, a")?.textContent ?? null, note: tr.querySelector(".alnote")?.innerText ?? null, fig: tr.children[2].textContent, cls: tr.children[2].className }))
+      : [...document.querySelectorAll(".mp-sec .nw-row[data-kind]")].map((r) => ({ kind: r.dataset.kind, msg: r.querySelector(".nw-title")?.textContent ?? null, note: r.querySelector(".nw-note")?.innerText ?? null, fig: r.querySelector(".nw-meta b")?.textContent ?? null, cls: r.querySelector(".nw-meta b")?.className ?? "" }))), desk);
+    const sgs = S.alerts.filter((a) => a.kind === "sigma"), usd = sgs.find((a) => a.symbol === "USDJPY=X" && Math.abs(a.sigma) >= 2.5), tnx = sgs.find((a) => a.symbol === "^TNX"), low = sgs.find((a) => Math.abs(a.sigma) < 2.5);
+    const ru = rows.find((r) => r.msg === usd.msg), rt = rows.find((r) => r.msg === tnx.msg);
+    ck(`${name}: USD/JPY's σ move "${ru?.msg}" says "${ru?.note}" under it, and its figure is its σ "${ru?.fig}"`, !!ru && ru.kind === "sigma" && ru.note === `σ move · ${usd.note}` && /Yahoo Finance/.test(ru.note) && /63 daily changes/.test(ru.note) && ru.fig === "+2.7σ" && /\bup\b/.test(ru.cls), ru);
+    ck(`${name}: a yield's σ move, which has no per cent ("${rt?.msg}"), shows its σ "${rt?.fig}" and the same line under it`, !!rt && rt.kind === "sigma" && rt.fig === "-2.6σ" && /\bdn\b/.test(rt.cls) && rt.note === `σ move · ${tnx.note}`, rt);
+    ck(`${name}: a σ move under 2.5σ ("${low.msg}") is not listed, as the server lists them: the feed holds ${feed.length}, newest first, none under the line; other alerts carry no σ line`, !rows.some((r) => r.msg === low.msg) && feed.length === 40 && !feed.some((a) => a.kind === "sigma" && Math.abs(a.sigma) < 2.5) && feed.every((a, i) => i === 0 || Date.parse(a.at) <= Date.parse(feed[i - 1].at)) && feed.some((a) => a.msg === usd.msg) && feed.some((a) => a.msg === tnx.msg) && rows.filter((r) => r.kind !== "sigma").every((r) => r.note === null), { n: feed.length, low: low.msg });
+    ck(`${name}: no page errors`, errs.length === 0, errs); await ctx.close();
+  }
 
   console.log("\n[gold's page: its contract, its roll, the rolls left out]");
   for (const [name, opts] of [["computer 1440x900", { viewport: { width: 1440, height: 900 } }], ["iPhone 13", devices["iPhone 13"]]]) {
@@ -137,14 +167,14 @@ const AMBER = "rgb(255, 111, 97)", D = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
     await go(p, "#asset/GC%3DF", "#in-key");
     const d = await p.evaluate(async () => { const { mockAction } = await import("/orrery-market-monitor/src/lib/mock.ts"); const a = mockAction("stock", { symbol: "GC=F" }), s = mockAction("series", { symbol: "GC=F", range: "10Y" });
       const ctr = document.querySelector("#in-contract")?.closest("tr");
-      return { contract: document.querySelector("#in-contract")?.textContent ?? null, contractSrc: ctr ? `${ctr.title} ${ctr.querySelector("small")?.textContent ?? ""}` : null, roll: document.querySelector("#in-roll")?.textContent ?? null, rolls: document.querySelector("#in-rolls")?.textContent ?? null, volTxt: [...document.querySelectorAll("#in-key tr")].find((tr) => /Realised vol/.test(tr.cells[0].textContent))?.cells[1].innerText ?? null, fallTxt: [...document.querySelectorAll("#in-key tr")].find((tr) => /Largest fall/.test(tr.cells[0].textContent))?.cells[1].innerText ?? null,
+      return { contract: document.querySelector("#in-contract")?.textContent ?? null, contractSrc: ctr ? `${ctr.title} ${ctr.querySelector("small")?.textContent ?? ""}` : null, contractShown: ctr ? ctr.innerText : null, roll: document.querySelector("#in-roll")?.textContent ?? null, rolls: document.querySelector("#in-rolls")?.textContent ?? null, volTxt: [...document.querySelectorAll("#in-key tr")].find((tr) => /Realised vol/.test(tr.cells[0].textContent))?.cells[1].innerText ?? null, fallTxt: [...document.querySelectorAll("#in-key tr")].find((tr) => /Largest fall/.test(tr.cells[0].textContent))?.cells[1].innerText ?? null,
         fut: a.instrument.futures, vol: a.instrument.vol, fall: a.instrument.fall, pts: s.points.map((x) => ({ t: x.t, v: x.v })).slice(-1300) }; });
     // the same series with the step taken out by hand: every close before the roll day on the new contract's level
     const rollT = Date.parse(d.fut.lastRoll.d + "T00:00:00Z") / 1000, clean = d.pts.map((x) => ({ t: x.t, v: x.t < rollT ? x.v * 1.03 : x.v }));
     const lr = (xs) => xs.slice(1).map((x, i) => Math.log(x.v / xs[i].v)), sdv = (xs) => { const m = xs.reduce((a, x) => a + x, 0) / xs.length; return Math.sqrt(xs.reduce((a, x) => a + (x - m) ** 2, 0) / (xs.length - 1)); };
     const ann = (xs, n) => sdv(lr(xs).slice(-n)) * Math.sqrt(252) * 100;
     const v3 = ann(clean, 63), v3step = ann(d.pts, 63);
-    ck(`${name}: the contract's source is labelled unofficial, as the owner asked for Yahoo's named contracts ("${(d.contractSrc ?? "").trim().slice(0, 70)}…")`, /Yahoo Finance \(unofficial\)/.test(d.contractSrc ?? ""), d.contractSrc);
+    ck(`${name}: the contract's source is labelled unofficial on screen, under it, as the owner asked for Yahoo's named contracts (S2: "${(d.contractShown ?? "").replace(/\s+/g, " ").trim().slice(0, 110)}")`, /Yahoo Finance \(unofficial\)/.test(d.contractSrc ?? "") && /Yahoo Finance \(unofficial\) · read \d{1,2} [A-Z][a-z]{2} \d\d:\d\d SGT/.test(d.contractShown ?? ""), d.contractShown);
     ck(`${name}: the contract the last price is from ("${d.contract}") and the last change of contract ("${d.roll}")`, new RegExp(`^Feb 2027 \\(GCG27\\) · expires ${D}$`).test(d.contract ?? "") && d.fut.expires > new Date().toISOString().slice(0, 10) && new RegExp(`^${D} · from Dec 2026, \\+3\\.00% change of contract$`).test(d.roll ?? ""), d);
     ck(`${name}: the line says what the series is and that its rolls are left out ("${(d.rolls ?? "").slice(0, 120)}…")`, /^A front-month series \(Yahoo's =F\): on a roll day it moves to the next contract, and that step is not a move\. Rolls left out of realised vol and its percentile, σ vs 1M avg, the largest rise and fall and the 1D in σ: 1 since /.test(d.rolls ?? "") && /Changes of contract before .* are not known to the Monitor/.test(d.rolls ?? ""), d.rolls);
     ck(`${name}: its realised vol over 3M (${d.vol.m3.ann.toFixed(3)}% ann.) is that of the series with the step taken out (${v3.toFixed(3)}%), not the stepped series' (${v3step.toFixed(3)}%); KEY DATA writes it ("${d.volTxt?.split("\n")[0]}")`, Math.abs(d.vol.m3.ann - v3) < 1e-6 && Math.abs(v3step - v3) > 0.2 && (d.volTxt ?? "").includes(d.vol.m3.ann.toFixed(1)), { page: d.vol.m3.ann, v3, v3step });

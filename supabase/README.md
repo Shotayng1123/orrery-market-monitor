@@ -140,7 +140,8 @@ is kept).
   (`scanSigmaAlerts`) for every currency, yield, commodity, volatility index, future and coin at 2σ or beyond; one row
   per instrument and session (a currency pair's FX day; a future's CME trade date, so an evening's move from 18:00 New
   York is the next session's), rewritten only when the move grows. `api?action=alerts` and the watchlist's feed list them
-  from 2.5σ; an instrument's own page lists all of its own.
+  from 2.5σ, each with its σ and its note (WATCHLIST draws the kind and the note under the line); an instrument's own page
+  lists all of its own.
 - **Futures** (`fut_contracts`, `fut_rolls`; `_shared/futures.ts`). Every minute the tick (and the relay on GitHub,
   with the same code) asks Yahoo's v7 quote, in one request, which named contract each open future's =F series is on
   (`underlyingSymbol`) and that contract's previous close, and records the session's contract (CME's trade date, which
@@ -150,7 +151,9 @@ is kept).
   that day: when it is the old contract's (Yahoo rewrote ZQ=F's close of 19 Nov 2026 so), the roll moves a session later.
   A roll day's 1D is the change within the new contract (the row carries `roll`, and `contract` names the contract); the
   database leaves the change of contract out of the 63-session σ and sets σ vs 1M avg's closes on the new contract's
-  level (a roll whose change of contract is not known leaves its day out, and σ vs 1M avg across it is none). A future not
+  level (a roll whose change of contract is not known leaves its day out, and σ vs 1M avg across it is none; the table
+  gives none either on the day of a roll after the newest booked close whose change is not known, and an instrument's
+  page shows the table's own σ vs 1M avg, none included, never one worked out across the step). A future not
   read in a minute raises no σ alert in it; a quote that has not moved for a week (TIO=F's, in the probe) is not read.
   The migration seeds what the source probe of 20 Nov 2026 read (`yahoo_futures`, run 44737367820): each future's
   contract that day, its five measured rolls of that day, and the ten earlier rolls of its six months, dated but not

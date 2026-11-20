@@ -101,7 +101,7 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
             <KV k="P/B">{fmtX(d.val.pb, 2)}</KV>
             <KV k="Dividend yield, last year / guidance">{fmtPc(d.val.yield, false, 2)} / {fmtPc(d.val.yieldGuide, false, 2)}</KV>
             {/* A-30: the day as the source gives it, in the company's own market, and no time of day (lib/results.ts) */}
-            <KV k={NEXT_RESULTS} sub={d.earningsAt ? <span id="st-results-src">{resultsWords(d.earningsEst)}</span> : undefined}><span id="st-results">{d.earningsAt ? fmtResultsDate(d.earningsAt, d.symbol) : "–"}</span></KV>
+            <KV k={NEXT_RESULTS} sub={d.earningsAt ? <span id="st-results-src">{resultsWords(d.earningsEst, d.symbol)}</span> : undefined}><span id="st-results">{d.earningsAt ? fmtResultsDate(d.earningsAt, d.symbol) : "–"}</span></KV>
             {prof && <KV k="Fiscal year end · standard" sub={`有価証券報告書 ${prof.label} · EDINET DB`}>{prof.month} · {prof.std}</KV>}
             {prof && <KV k="Annual report" sub={prof.doc ? undefined : prof.none}>{prof.doc ? <a href={prof.doc.href} target="_blank" rel="noreferrer" id="st-yuho" title={prof.doc.tip}>有報 {prof.label} ↗</a> : `有報 ${prof.label}`}</KV>}
           </tbody></table>

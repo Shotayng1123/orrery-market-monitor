@@ -3,7 +3,7 @@
 import { fxDay, isFxPair } from "./fx.ts";
 import { db, type InstrumentRow } from "./db.ts";
 import { localDate, marketById, marketState, partsIn, type Holidays } from "./sessions.ts";
-import { usableSd, zDay } from "./sigma.ts";
+import { usableSd, z1mOf, zDay } from "./sigma.ts";
 import { isFuture, rollDay, tradeDate } from "./futures.ts";
 
 type PeriodKey = "d1" | "w1" | "m1" | "m3" | "m12" | "m36";
@@ -115,10 +115,12 @@ export async function computeTable(now: Date = new Date()): Promise<{ rows: Tabl
       chg[p] = c != null && last != null ? last - c : null;
     }
     const st = sBy.get(i.symbol);
-    // a roll today, after the newest booked close: the booked closes are set on the new contract's level as the
-    // database sets those before a booked roll (times the new contract's own close over the series')
-    const f = rr && useQuote && rr.prev_close != null && a?.last_close ? rr.prev_close / a.last_close : 1;
-    const z1m = st && st.mean21 != null && st.sd21 && last != null ? (last - st.mean21 * f) / (st.sd21 * f) : null;
+    // σ vs 1M avg across a roll (B-27): a roll today, after the newest booked close, sets the booked closes on the new
+    // contract's level as the database sets those before a booked roll (times the new contract's own close over the
+    // series'); a day across a change of contract that is not known has none, as the database gives none for a booked
+    // one (the reviewer's F1: with f = 1 the print was set against the old contract's 21 closes)
+    const f = !rr ? 1 : rr.prev_close == null || !(rr.prev_close > 0) ? null : useQuote ? (a?.last_close ? rr.prev_close / a.last_close : null) : 1;
+    const z1m = z1mOf(last, st?.mean21, st?.sd21, f);
     // the day in σ: a print after the last booked close against the 63 changes up to that close; a day that is the
     // last booked close itself (a closed market, an official yield) against the 63 before it (sigma.ts)
     const own = useQuote, sd = usableSd(own ? st?.sd63 : st?.sd63x, own ? st?.n63 : st?.n63x);

@@ -13,7 +13,7 @@ import type { EconEvent, TableRow } from "../lib/types";
 import { fmtLevel, fmtSigma, signCls } from "../lib/fmt";
 import { fmtClock, fmtDate, fmtStamp, SGT } from "../lib/time";
 import { EVENTS, LARGEST_FALL, LARGEST_RISE, LEVEL_THEN, NEWS, NEXT_MEETING, RANGE_52W, REALISED_VOL, SIGMA_1M, VS_200D, WORKED } from "../lib/labels";
-import { asOfWords, calSource, ccyWords, contractLine, distCls, distText, impactOk, lastAndDay, lastRollLine, matchedWords, moveCls, moveText, noEvents, perfNote, periodsOf, rollMarks, rollsOutLine, SERIES_LINE, sourceNote, volLine, volTip, workedLine, workedOut, type ImpactPick, type InstrumentInfo, type InstrumentPage, type KeyLine } from "../lib/instrument";
+import { asOfWords, calSource, ccyWords, contractLine, contractSource, distCls, distText, impactOk, lastAndDay, lastRollLine, matchedWords, moveCls, moveText, noEvents, perfNote, periodsOf, rollMarks, rollsOutLine, SERIES_LINE, sourceNote, volLine, volTip, workedLine, workedOut, type ImpactPick, type InstrumentInfo, type InstrumentPage, type KeyLine } from "../lib/instrument";
 import { dayLabel, dayOf, IMPACTS } from "./News";
 import { SIGMA_1M_TIP } from "./Market";
 
@@ -113,7 +113,7 @@ export function InstrumentView({ d, tick }: { d: InstrumentPage; tick: number })
               <table className="secT kvT" id="in-key"><tbody>
                 <KV k="Day's range" title={i.official ? "A yield published once a day has no prices within the day" : i.session?.at ? `${i.source}: the session's low and high, as of ${fmtStamp(i.session.at)}` : "No session figures from the source"}>{i.session && i.session.low != null && i.session.high != null ? `${lvl(i.session.low)} – ${lvl(i.session.high)}` : "–"}</KV>
                 <KV k="Previous close" title={row.roll?.step != null ? `the new contract's own close of ${fmtDate(i.prev.date)}: today is a change of contract` : i.prev.date ? `the close of ${fmtDate(i.prev.date)}` : undefined}>{lvl(i.prev.level)}</KV>
-                {fut && <KV k="Contract" title={`The named contract the last price is from, as ${fut.source}${fut.seenAt ? `, read ${fmtStamp(fut.seenAt)}` : ""}`}><span id="in-contract">{contractLine(fut)}</span></KV>}
+                {fut && <KV k="Contract" title={`The named contract the last price is from, as ${fut.source}${fut.seenAt ? `, read ${fmtStamp(fut.seenAt)}` : ""}`}><span id="in-contract">{contractLine(fut)}</span><small className="vl2" id="in-contract-src">{contractSource(fut)}</small></KV>}
                 {fut && <KV k="Last change of contract" title={fut.lastRoll ? `${fut.lastRoll.fromMonth ?? "a contract no longer listed"} to ${fut.lastRoll.toMonth}; ${fut.lastRoll.source}` : "No roll in the Monitor's record"}><span id="in-roll">{lastRollLine(fut)}</span></KV>}
                 <KV k={keyLabel(i, RANGE_52W, "range52")} title={`The lowest and highest of the last 252 closes: low ${fmtDate(r52.loDate)}, high ${fmtDate(r52.hiDate)}; ${r52.pos == null ? "–" : `${Math.round(r52.pos)}%`} of the way up, as on MARKETS`}>
                   <span className="rng"><span>{lvl(r52.lo)}</span><span className="bar">{r52.pos != null && <i style={{ left: `${Math.max(0, Math.min(100, r52.pos))}%` }} />}</span><span>{lvl(r52.hi)}</span></span>

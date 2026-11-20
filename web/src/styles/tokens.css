@@ -553,6 +553,10 @@ body.term table.mkt{min-width:0;height:100%}
 body.term table.mkt td{padding:0 3px}
 body.term table.mkt th{padding:1px 3px}
 body.term table.mkt tr.cls td{height:1%}
+/* a roll day in the one-screen layout: ROLL leaves the narrow name cell, where it put DELAYED behind an ellipsis, for a
+   one-letter mark after the 1D in σ (the reviewer's S3); the scrolling layout keeps ROLL beside the name */
+body.term table.mkt td:first-child .badge.roll{display:none}
+body.term table.mkt td.z.rolled::after{content:"R";display:inline-block;margin-left:2px;padding:0 2px;border:1px solid var(--bord2);border-radius:2px;font-size:7.5px;line-height:1.3;color:var(--txt2);vertical-align:middle}
 
 /* RATES & CURRENCY: FX table and pairs, the curves at most four to a row, then policy rates and yields */
 body.term #grid[data-view="rates"] .panel[data-k="fx"]{grid-column:span 4}
@@ -1751,7 +1755,8 @@ table.mkt th.sortable:hover,table.mkt th.sortable.on{color:var(--amber)}
 /* a roll's card on the chart: a hollow diamond for its dot (B-27) */
 .mvtip .t .dot.roll{width:7px;height:7px;border-radius:0;transform:rotate(45deg);background:transparent;border:1.5px solid var(--txt2);margin-right:7px}
 /* a σ move in the alert list: its window and source under its line (I-6) */
-.aldrop .alnote{display:block;color:var(--mut);font-size:10px;line-height:1.3;white-space:normal}
+.aldrop .alnote,table.wlal .alnote{display:block;color:var(--mut);font-size:10px;line-height:1.3;white-space:normal}
+.nw-note{color:var(--mut);font-size:12px;line-height:1.3}   /* a σ move's kind, window and source under its line (WATCHLIST, phone) */
 /* the notifications window: which kinds reach this device, and its σ line (I-6, the designer's I-6 note) */
 .ntf-kinds{margin:10px 0 12px}
 .ntf-kinds>.k{color:var(--mut);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}

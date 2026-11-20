@@ -429,15 +429,18 @@ async function earnings(days: number) {
   const from = new Date(Date.now() - 86400e3).toISOString(), to = new Date(Date.now() + days * 86400e3).toISOString();
   const rows = await selectAll<EarnRow>(() => db.from("constituent_stats").select("idx,symbol,name,sector,mcap,earnings_at,earnings_est").gte("earnings_at", from).lte("earnings_at", to).order("earnings_at").order("symbol"));
   const fx = await loadUniverse().then((u) => u.fx).catch(() => null);
-  const seen = new Map<string, { symbol: string; name: string; sector: string | null; indices: string[]; mcapUsd: number | null; at: string; estimate: boolean }>();
+  const seen = new Map<string, { symbol: string; name: string; sector: string | null; indices: string[]; mcapUsd: number | null; at: string; estimate: boolean | null }>();
   for (const r of rows) {
     const e = seen.get(r.symbol);
     if (e) { if (!e.indices.includes(r.idx)) e.indices.push(r.idx); continue; }
     const ccy = CCY[r.idx];
     const mcapUsd = r.mcap == null || !ccy ? null : ccy === "USD" ? r.mcap : fx ? r.mcap / fx[ccy] : null;
-    seen.set(r.symbol, { symbol: r.symbol, name: r.name, sector: r.sector, indices: [r.idx], mcapUsd, at: r.earnings_at, estimate: r.earnings_est === true });
+    // Yahoo's flag as Yahoo gives it: null where it gives none (the reviewer's F4; before 20 Nov 2026 a missing flag was
+    // sent as false, which a page now writes as "conf."). A page from before reads null as false did, as no mark
+    seen.set(r.symbol, { symbol: r.symbol, name: r.name, sector: r.sector, indices: [r.idx], mcapUsd, at: r.earnings_at, estimate: r.earnings_est ?? null });
   }
-  return { rows: [...seen.values()], source: "Yahoo Finance earnings dates; an estimated date has not been confirmed by the company" };
+  // `estimateAsGiven` tells a page that false is Yahoo's own "confirmed" (web/src/lib/results.ts calendarFlag)
+  return { rows: [...seen.values()], source: "Yahoo Finance earnings dates; an estimated date has not been confirmed by the company", estimateAsGiven: true };
 }
 
 // ---------- watchlist ----------

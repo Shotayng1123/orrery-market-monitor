@@ -8,9 +8,10 @@ import { Star } from "../components/Star";
 import { hideCard, money, openAsset, showCard } from "../components/CompanyCard";
 import { useApi } from "../lib/useApi";
 import { useWatch } from "../lib/watch";
-import { fallbackDecimals, fmtLevel, fmtPct, signCls } from "../lib/fmt";
+import { fallbackDecimals, fmtLevel, fmtPct, fmtSigma, signCls } from "../lib/fmt";
+import { sigmaNoteLine } from "../lib/alertline";
 import { asOfCell, asOfOf, asOfTitle, fmtDate, fmtWhen, type AsOfKind } from "../lib/time";
-import { byResultsDay, fmtResultsDate, RESULTS_SOURCE, resultsStatus, resultsTip } from "../lib/results";
+import { byResultsDay, fmtResultsDate, RESULTS_SOURCE, resultsMark, resultsStatus, resultsTip } from "../lib/results";
 import { classLabel, hitLine, MKT_CAP, NEXT_RESULTS, RESULTS_AHEAD, VS_200D, VS_50D } from "../lib/labels";
 import { cellBp, changeShade, RANGE_52W, RANGE_52W_TIP } from "./Market";
 
@@ -42,7 +43,9 @@ export function sourcesOf(rows: WatchRow[]): string {
   return [...market, ...(official.length ? [`yields: ${official.join(", ")}`] : [])].join("; ");
 }
 export interface Feed {
-  alerts: Array<{ id: number; at: string; symbol: string; name: string; kind: string; pct: number | null; msg: string; url: string | null }>;
+  /** A σ move (I-6) carries its size in σ and its window and source (`note`); a server before 20 Nov 2026 sends no σ
+   *  move, and neither field. */
+  alerts: Array<{ id: number; at: string; symbol: string; name: string; kind: string; pct: number | null; msg: string; url: string | null; sigma?: number | null; note?: string | null }>;
   news: Array<{ id: number; publishedAt: string; source: string; title: string; url: string; tickers: Array<{ s: string; n: string }> }>;
   research: Array<{ key: string; d: string; kind: string; title: string; symbols: string[] }>;
 }
@@ -56,6 +59,8 @@ export const decode = (t: string) => t.replace(/&amp;/g, "&").replace(/&#x([0-9a
 /** How many alerts and headlines WATCHLIST shows before "SHOW n MORE" (D-48: at the feed's own lengths, 40 alerts
  *  and 60 headlines, the results dates fell two screens down). */
 export const WL_ALERTS = 10, WL_NEWS = 15;
+/** What ALERTS ON MY NAMES holds, said where it has nothing yet (both layouts). */
+export const WL_ALERTS_EMPTY = "Moves beyond ±5% (large companies) or ±7%, index moves beyond ±3%, σ moves from 2.5σ, buybacks, guidance changes and large deals on your names appear here.";
 export function WatchlistView({ tick }: { tick: number }) {
   const w = useWatch();
   const [shownA, setShownA] = useState(WL_ALERTS), [shownN, setShownN] = useState(WL_NEWS);
@@ -130,7 +135,7 @@ export function WatchlistView({ tick }: { tick: number }) {
                     : <>{cell(r.pct1d, 4)}{cell(r.pct1w, 8)}{cell(r.pct1m, 12)}{cell(r.pct3m, 20)}{cell(r.pct12m, 50)}{cell(r.vs50, 10)}{cell(r.vs200, 20)}</>}
                   <td className="num mut">{r.pos52 == null ? "–" : `${Math.round(r.pos52)}%`}</td>
                   <td className="num mut">{r.mcap == null ? "–" : money(r.mcap, r.ccy)}</td>
-                  <td className="l mut" title={r.earningsAt ? resultsTip(r.symbol, r.earningsEst) : undefined}>{r.earningsAt ? `${fmtResultsDate(r.earningsAt, r.symbol)}${r.earningsEst ? " est." : ""}` : "–"}</td>
+                  <td className="l mut" title={r.earningsAt ? resultsTip(r.symbol, r.earningsEst) : undefined}>{r.earningsAt ? `${fmtResultsDate(r.earningsAt, r.symbol)}${resultsMark(r.earningsEst, r.symbol) ? " est." : ""}` : "–"}</td>
                 </tr>
               );
             })}</tbody>
@@ -147,13 +152,15 @@ export function WatchlistView({ tick }: { tick: number }) {
         <div className="pcol w4">
           <Panel no="02" title={RESULTS_AHEAD.toUpperCase()} span={4} k="wl-earn" aux={<span title="Each company's day in its own market (Tokyo, New York …), as the source gives it. No time of day: the source gives a time with the date but does not say that it is the company's release time.">my names · {RESULTS_SOURCE} · dates only</span>}>
             {ahead.length ? (
-              <table className="secT"><tbody>{ahead.map((r) => <tr key={r.symbol} title={resultsTip(r.symbol, r.earningsEst)}><td className="l mut num">{fmtDate(r.day)}</td><td className="l wrap"><span className="lnk" onClick={() => openAsset(r.symbol)}>{r.name}</span></td><td className="l mut">{resultsStatus(r.earningsEst) ?? "–"}</td></tr>)}</tbody></table>
+              <table className="secT"><tbody>{ahead.map((r) => <tr key={r.symbol} title={resultsTip(r.symbol, r.earningsEst)}><td className="l mut num">{fmtDate(r.day)}</td><td className="l wrap"><span className="lnk" onClick={() => openAsset(r.symbol)}>{r.name}</span></td><td className="l mut">{resultsStatus(r.earningsEst, r.symbol) ?? "–"}</td></tr>)}</tbody></table>
             ) : <Empty title="No dates ahead">{rows.length ? "None of your names has a results date in the feed." : "Add names to see their results dates."}</Empty>}
           </Panel>
           <Panel no="04" title="ALERTS ON MY NAMES" span={4} k="wl-alerts" aux={feed.data ? `${alerts.length} recent · times in SGT` : ""}>
             {alerts.length ? (
-              <table className="secT wlal"><tbody>{alerts.slice(0, shownA).map((a) => <tr key={a.id}><td className="l mut num">{fmtWhen(a.at)}</td><td className="l wrap">{a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.msg}</a> : <span className="lnk" onClick={() => openAsset(a.symbol)}>{a.msg}</span>}</td><td className={`num ${signCls(a.pct, 1)}`}>{a.pct == null ? "" : fmtPct(a.pct, 1)}</td></tr>)}</tbody></table>
-            ) : <Empty title="No alerts">{feed.error ?? "Moves beyond ±5% (large companies) or ±7%, buybacks, guidance changes and large deals on your names appear here."}</Empty>}
+              // a σ move (I-6) says what it is, and its window and source, under its line, and its figure is its σ (a
+              // yield's has no per cent), as the header's list writes it (the reviewer's F3)
+              <table className="secT wlal"><tbody>{alerts.slice(0, shownA).map((a) => { const sg = a.kind === "sigma"; return <tr key={a.id} data-kind={a.kind}><td className="l mut num">{fmtWhen(a.at)}</td><td className="l wrap">{a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.msg}</a> : <span className="lnk" onClick={() => openAsset(a.symbol)}>{a.msg}</span>}{sg && <small className="alnote">{sigmaNoteLine(a)}</small>}</td><td className={`num ${signCls(sg ? a.sigma : a.pct, 1)}`}>{sg ? fmtSigma(a.sigma) : a.pct == null ? "" : fmtPct(a.pct, 1)}</td></tr>; })}</tbody></table>
+            ) : <Empty title="No alerts">{feed.error ?? WL_ALERTS_EMPTY}</Empty>}
             {alerts.length > shownA && <ShowMore id="wl-alerts-more" n={Math.min(WL_ALERTS, alerts.length - shownA)} shown={shownA} total={alerts.length} onMore={() => setShownA((n) => n + WL_ALERTS)} />}
           </Panel>
         </div>

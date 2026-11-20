@@ -14,7 +14,7 @@
 // from. A yield read from an official curve has no quote at all: no session, no day's range. Anything else (an index,
 // a pair or a future found by search) is worked out from its quote and Yahoo's daily closes, with the table's rules.
 import { barOnOrBefore, maxDrawdown, monthsBack, perfRows, range52w, realisedVol, type Bar } from "./stockstats.ts";
-import { contractName, rollSegments, rollViews, type RollLite, type RollView } from "./futures.ts";
+import { contractName, rollSegments, rollViews, tradeDate, type RollLite, type RollView } from "./futures.ts";
 
 export type Units = "yield" | "price";
 export type PeriodKey = "d1" | "w1" | "m1" | "m3" | "m12" | "m36";
@@ -99,14 +99,27 @@ export function swings(bars: Bar[], units: Units, months = 12, rolls: RollLite[]
   return { rise, fall };
 }
 
+/** σ vs 1M avg's 21 closes, by the database's rule (fn_table_stats, and table.ts for a roll since the newest booked
+ *  close): the last 21 booked closes; a future's set on its newest contract's level (futures.ts rollSegments: the closes
+ *  before a roll times the new contract's own close over the series'), and none at all where a change of contract among
+ *  them, or since the last of them, is not known (B-27: σ vs 1M avg is never measured across a change of contract). */
+function closes21(bars: Bar[], rolls: RollLite[]): number[] {
+  if (!rolls.length || !bars.length) return bars.slice(-21).map((b) => b.c);
+  const lastD = iso(bars[bars.length - 1].t);
+  if (rolls.some((r) => r.d > lastD && !(r.prevClose != null && r.prevClose > 0))) return [];
+  const segs = rollSegments(bars, rolls);
+  return (segs[segs.length - 1] ?? []).slice(-21).map((b) => b.c);
+}
+
 /** The statistics the market table keeps (fn_table_stats), worked out the same way for a series it does not keep:
  *  the last 21 closes' mean and sample deviation (σ vs 1M avg), the highest and lowest of the last 252 closes (the 52W
  *  range, with the dates here), and the mean of the last 200 (vs 200D: points for a yield, per cent for a price). The
- *  last print is set against them; the closes are the booked ones. */
+ *  last print is set against them; the closes are the booked ones. A future's σ vs 1M avg leaves its changes of
+ *  contract out as the table's does (B-27): `rolls` are those up to the last print's session (closes21). */
 export interface SeriesStats { z1m: number | null; pos52: number | null; hi: number | null; hiDate: string | null; lo: number | null; loDate: string | null; vs200: number | null }
-export function seriesStats(bars: Bar[], last: number | null, units: Units): SeriesStats {
+export function seriesStats(bars: Bar[], last: number | null, units: Units, rolls: RollLite[] = []): SeriesStats {
   const mean = (xs: number[]) => xs.reduce((a, x) => a + x, 0) / xs.length;
-  const c21 = bars.slice(-21).map((b) => b.c), c200 = bars.slice(-200).map((b) => b.c), b252 = bars.slice(-252);
+  const c21 = closes21(bars, rolls), c200 = bars.slice(-200).map((b) => b.c), b252 = bars.slice(-252);
   let z1m: number | null = null;
   if (ok(last) && c21.length === 21) { const m = mean(c21), sd = Math.sqrt(c21.reduce((a, x) => a + (x - m) ** 2, 0) / 20); z1m = sd > 0 ? (last - m) / sd : null; }
   let hi: Bar | null = null, lo: Bar | null = null;
@@ -232,7 +245,10 @@ export function instrumentFigures(i: InstrumentInput): InstrumentFigures {
       pct[k] = base != null && last != null && base !== 0 ? (last / base - 1) * 100 : null;
       chg[k] = base != null && last != null ? last - base : null;
     }
-    const st = seriesStats(booked, last, units);
+    // a future's σ vs 1M avg against the closes on the contract its print is on (B-27): the rolls up to the print's
+    // session (CME's trade date), or up to the last booked close where there is no print
+    const printDay = !i.rolls?.length ? null : !official && q?.price != null && q.time != null ? tradeDate(q.time) : lastBar ? iso(lastBar.t) : null;
+    const st = seriesStats(booked, last, units, (i.rolls ?? []).filter((r) => printDay == null || r.d <= printDay));
     row = { symbol, name: def?.name ?? q?.name ?? symbol, cls, group, market: def?.market ?? (cls === "Currency" || cls === "Crypto" ? "FX" : "NYSE"), currency: def?.currency ?? q?.currency ?? "", decimals: def?.decimals ?? quoteDecimals(units, cls, last), ...(def?.proxy_for ? { proxyFor: def.proxy_for } : {}), order: 0,
       last, lastAt, live: false, source: def?.provider ?? "yahoo", closes, closeDates, pct, chg, z1m: st.z1m, pos52: st.pos52, vs200: st.vs200 };
   }
@@ -258,7 +274,10 @@ export function instrumentFigures(i: InstrumentInput): InstrumentFigures {
     session: official || !q ? null : { open: q.open ?? null, low: q.low ?? null, high: q.high ?? null, at: q.time ? new Date(q.time * 1000).toISOString() : null },
     // the position as MARKETS has it (a print beyond the range reads past 0 or 100; the page's bar stops at the ends)
     range52: { lo: st.lo, loDate: st.loDate, hi: st.hi, hiDate: st.hiDate, pos, fromHi: change(last, st.hi, units), fromLo: change(last, st.lo, units) },
-    z1m: row.z1m ?? st.z1m, vs200: row.vs200 ?? st.vs200,
+    // σ vs 1M avg is MARKETS' own (the table's row, or the row made the same way above): where the table gives none
+    // (a future's 21 closes hold a change of contract that is not known) the page shows none, never a figure worked out
+    // across it from the raw closes (the reviewer's F1, 20 Nov 2026)
+    z1m: row.z1m ?? null, vs200: row.vs200 ?? st.vs200,
     vol: { m1: volStat(booked, 21, units, rolls), m3: volStat(booked, 63, units, rolls), m12: volStat(booked, 252, units, rolls) },
     rise, fall,
     perf: PERIOD_KEYS.map((k) => ({ h: LABEL[k], from: row.closeDates[k] ?? null, base: lev(k), chg: chgOf(k) })),

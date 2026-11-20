@@ -58,6 +58,12 @@ export function sigmaStats(closes: Array<{ d: string; close: number }>, units: U
 export const usableSd = (sd: number | null | undefined, n: number | null | undefined): number | null => (fin(sd) && sd > 0 && (n ?? 0) >= SIGMA_MIN ? sd : null);
 /** The day's move in σ: its change (own units) over the σ of the changes before it. */
 export const zDay = (chg: number | null | undefined, sd: number | null | undefined): number | null => (fin(chg) && fin(sd) && sd > 0 ? chg / sd : null);
+/** σ vs 1M avg (the market table's): the last print against the mean and sample deviation of the last 21 booked closes
+ *  (fn_table_stats), those closes set on a future's new contract's level by `f` where it rolled after the newest of
+ *  them (its own close before the roll over the series': table.ts, B-27); none where `f` is not known (null), as the
+ *  database gives none across a booked roll whose change of contract is not known. */
+export const z1mOf = (last: number | null | undefined, mean21: number | null | undefined, sd21: number | null | undefined, f: number | null = 1): number | null =>
+  fin(last) && fin(mean21) && fin(sd21) && sd21 > 0 && fin(f) && f > 0 ? (last - mean21 * f) / (sd21 * f) : null;
 
 // ---- σ alerts ----
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

@@ -3,8 +3,8 @@ import { Empty } from "../components/Panel";
 import { Pick } from "../components/Pick";
 import { Star } from "../components/Star";
 import { money, openAsset } from "../components/CompanyCard";
-import { calendarDays, REGION, REGIONS, resultsPast, SIZES, type EarningsRow } from "../components/Earnings";
-import { RESULTS_NOTE, resultsDayLabel, resultsStatusShort } from "../lib/results";
+import { calendarDays, earningsRows, REGION, REGIONS, resultsPast, SIZES, type EarningsAnswer, type EarningsRow } from "../components/Earnings";
+import { MARKS_NOTE, RESULTS_NOTE, resultsDayLabel, resultsStatusShort } from "../lib/results";
 import { Screen, Section, usePlaceAtNext } from "../components/PhoneKit";
 import { useApi } from "../lib/useApi";
 import { useRowCap } from "../lib/useRowCap";
@@ -59,7 +59,7 @@ function EarningsList({ rows }: { rows: EarningsRow[] }) {
         <Fragment key={r.symbol}>
           {(i === 0 || r.day !== arr[i - 1].day) && <div className="ev-day">{resultsDayLabel(r.day)}</div>}
           <div className={`ev-row tap${resultsPast(r) ? " past" : ""}`} role="button" tabIndex={0} title={`${r.name} (${r.symbol}) · ${r.indices.join(", ")}`} onClick={() => openAsset(r.symbol)}>
-            <span className="ev-t">{resultsStatusShort(r.estimate)}<small>{r.symbol}</small></span>
+            <span className="ev-t">{resultsStatusShort(r.estimate, r.symbol, r.indices)}<small>{r.symbol}</small></span>
             <span className="ev-m">
               <span className="ev-n">{r.name}</span>
               <span className="ev-s">{r.sector ?? "–"}</span>
@@ -83,10 +83,10 @@ export function NewsPhone({ tick }: { tick: number }) {
   const [cat, setCat] = useState<(typeof NEWS_CATEGORIES)[number]>("All");
   const [shown, setShown] = useState(PAGE);
   const cal = useApi<{ rows: EconEvent[] }>("calendar", undefined, Math.floor(tick / 5));   // the calendar syncs hourly, the headlines every ten minutes
-  const ern = useApi<{ rows: EarningsRow[]; source: string }>(calMode === "earnings" ? "earnings" : null, { days: 21 }, Math.floor(tick / 30));
+  const ern = useApi<EarningsAnswer>(calMode === "earnings" ? "earnings" : null, { days: 21 }, Math.floor(tick / 30));
   const news = useApi<{ rows: NewsItem[] }>("news", { category: cat === "All" ? undefined : cat, n: 150 }, Math.floor(tick / 5));
   const { events, ccy, ccys } = useMemo(() => calendarRows(cal.data?.rows ?? [], imp, scope, ccyPick), [cal.data, imp, scope, ccyPick]);
-  const companies = useMemo(() => (ern.data?.rows ?? []).filter((r) => (region === "All" || REGION(r) === region) && (!big || (r.mcapUsd ?? 0) >= 1e10)), [ern.data, region, big]);
+  const companies = useMemo(() => earningsRows(ern.data).filter((r) => (region === "All" || REGION(r) === region) && (!big || (r.mcapUsd ?? 0) >= 1e10)), [ern.data, region, big]);
   const upcoming = events.some((e) => Date.parse(e.at) > Date.now());
   const heads = news.data?.rows ?? [];
   const macro = calMode === "macro";
@@ -112,7 +112,7 @@ export function NewsPhone({ tick }: { tick: number }) {
         <p className="mp-note">
           {macro
             ? <>{events.length} events{cal.data?.rows[0]?.source === "fxstreet" ? " · FXStreet" : cal.data?.rows.length ? " · ForexFactory" : ""}{cal.data && !upcoming ? " · no upcoming events in the feed yet" : ""} · scroll inside the box for more</>
-            : <span id="ern-note">{companies.length} companies over three weeks · {RESULTS_NOTE} · conf. or est., as the source marks the date</span>}
+            : <span id="ern-note">{companies.length} companies over three weeks · {RESULTS_NOTE} · {MARKS_NOTE}</span>}
         </p>
       </Section>
       <Section title={HEADLINES} aux={<Pick label="Category" value={cat} options={CATEGORY_OPTIONS} onChange={(c) => { setCat(c); setShown(PAGE); }} />} card={false}>

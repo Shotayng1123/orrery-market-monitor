@@ -2,7 +2,9 @@
 // a yield on the watchlist moves in bp, the same figures as MARKETS; every phone change pill says its window; MOVERS
 // has headed columns; σ is never a capital Σ and the 52-week column is a range in %, under one name everywhere; every
 // watchlist row says what it is as of; the phone's EQUITIES figures carry labels. Also: the page still reads a server
-// older than these changes (it never shows a yield's change in per cent).
+// older than these changes (it never shows a yield's change in per cent). And σ is never a capital Σ where a σ move is
+// the newest alert: the header's line and its list, as painted (innerText), on a computer, in the one-screen layout and
+// on a phone (the reviewer's F2, 20 Nov 2026).
 // Run from web/:  node e2e/run.cjs units-labels   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
 const { routes } = require("./harness.cjs");
@@ -154,6 +156,21 @@ async function tnxBoth(p) {
     const o = await p.evaluate(() => [...document.querySelectorAll(".mp-row.starred")].map((r) => ({ st: r.querySelector(".mp-st").textContent, fig: r.querySelector(".mp-chg .fig").textContent, w: r.querySelector(".mp-chg .w").textContent })));
     ck(`phone: ^TNX's pill is a dash with its window, the Nikkei 225's line reads its close (${o.map((x) => `${x.st}: ${x.fig} ${x.w}`).join("; ")})`, o.length === 3 && o[2].fig === "–" && o[2].w === "1D" && o[1].st === "^N225 · close 18 Nov" && o[0].st === "7203.T · close 18 Nov", o);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+
+  console.log("\n[a σ move as the newest alert: the header's line and its list keep σ lower case (the reviewer's F2)]");
+  { const now = Date.now(), at = (min) => new Date(now - min * 60e3).toISOString();
+    const rows = [{ id: 902, at: at(5), d: at(5).slice(0, 10), symbol: "USDJPY=X", name: "USD/JPY", kind: "sigma", pct: 1.57, price: 158.4, market: "FX", msg: "USD/JPY +1.6% · 2.7σ · 158.400", url: null, sigma: 2.7, note: "σ of 63 daily changes to 19 Nov 2026 · Yahoo Finance (stand-in)" },
+      { id: 901, at: at(65), d: at(65).slice(0, 10), symbol: "^N225", name: "Nikkei 225", kind: "index", pct: -3.4, price: 57434.77, market: "TSE", msg: "Nikkei 225 down 3.4%", url: null }];
+    for (const [name, opts, prefs, hash] of [["computer 1440x900", { viewport: { width: 1440, height: 900 } }, null, "#news"], ["computer 1280x720, one screen", { viewport: { width: 1280, height: 720 } }, { size: "AUTO", compact: true, v: 2 }, "#news"], ["iPhone 13", { ...devices["iPhone 13"] }, null, "?phone=new#news"]]) {
+      const { ctx, p, errs } = await page(b, opts, prefs); await routes(p);
+      await p.route("**/fakeapi?*", (r) => (new URL(r.request().url()).searchParams.get("action") === "alerts" ? r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ rows }) }) : r.fallback()));
+      await p.goto(FAKE + hash, { waitUntil: "networkidle" }); await p.waitForSelector("#alerts .alrt"); await p.evaluate(() => document.fonts.ready); await p.waitForTimeout(300);
+      const line = (await p.locator("#alerts .alrt").innerText()).replace(/\s+/g, " ").trim();
+      await p.locator("#alerts .alrt").click(); await p.waitForSelector(".aldrop .minih");
+      const head = (await p.locator(".aldrop .minih").innerText()).replace(/\s+/g, " ").trim(), list = await p.locator(".aldrop").innerText();
+      ck(`${name}: the line, a σ move newest, reads "${line}"; the list's head "${head.slice(0, 100)}…"; no capital Σ in either`, !/Σ/.test(line) && /2\.7σ/.test(line) && (name.startsWith("iPhone") || /σ MOVE/.test(line)) && !/Σ/.test(list) && /σ MOVES FROM 2\.5σ/.test(head), { line, head });
+      ck(`${name}: no page errors`, errs.length === 0, errs); await ctx.close();
+    } }
 
   console.log("\n[the legend]");
   { const { ctx, p, errs } = await page(b, { viewport: { width: 1440, height: 900 } });

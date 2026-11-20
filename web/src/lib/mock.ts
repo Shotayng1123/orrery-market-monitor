@@ -299,11 +299,19 @@ function watchList(): { rows: WatchRow[] } {
     return { ...none, symbol: w.symbol, name: w.name, kind: "Stock", ccy: jp ? "JPY" : "USD", last: Math.round((jp ? 800 + r() * 6000 : 20 + r() * 400) * 100) / 100, asOf: day, asOfKind: "close", source: "Yahoo Finance", pct1d: p, pct1w: p * 1.7, pct1m: p * -2.3, pct3m: p * 4.1, pct12m: p * 9.6, vs50: p * 1.2, vs200: p * 3, pos52: 50 + p * 10 };
   }) };
 }
-/** watch_feed: the alerts on the listed symbols, the headlines that name one, the pieces that mention one. */
+/** The lists everyone reads show a σ move from 2.5σ, as the server's routes ask for them (LISTED_ALERTS in
+ *  supabase/functions/_shared/sigma.ts: "kind.neq.sigma,sigma.gte.2.5,sigma.lte.-2.5"); every other kind as it is. */
+const listedAlert = (a: { kind: string; sigma?: number | null }): boolean => a.kind !== "sigma" || Math.abs(a.sigma ?? 0) >= 2.5 - 1e-9;
+/** watch_feed: the alerts on the listed symbols, the headlines that name one, the pieces that mention one. The alerts
+ *  as the server's route reads its one table (supabase/functions/api/index.ts watchFeed): WATCHLIST's stand-in rows and
+ *  the σ moves of the header's list (I-6), from 2.5σ (the reviewer's F3), newest first, at most 40. */
 function watchFeed(): Feed {
-  const f = SI().watch.feed, syms = new Set(watchGet().map((w) => w.symbol));
+  const S = SI(), f = S.watch.feed, syms = new Set(watchGet().map((w) => w.symbol));
   if (!syms.size) return { alerts: [], news: [], research: [] };
-  return { alerts: f.alerts.filter((a) => syms.has(a.symbol)), news: f.news.filter((n) => n.tickers.some((t) => syms.has(t.s))),
+  type A = { id: number; at: string; symbol: string; kind: string; sigma?: number | null };
+  const sigma = (S.alerts as unknown as A[]).filter((a) => a.kind === "sigma").map((a) => ({ ...a, id: a.id + 2000 }));
+  const alerts = [...(f.alerts as unknown as A[]), ...sigma].filter((a) => syms.has(a.symbol) && listedAlert(a)).sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 40);
+  return { alerts, news: f.news.filter((n) => n.tickers.some((t) => syms.has(t.s))),
     research: f.research.map((r) => ({ ...r, symbols: r.symbols.filter((s) => syms.has(s)) })).filter((r) => r.symbols.length > 0) } as unknown as Feed;
 }
 
@@ -358,7 +366,7 @@ function emptyAnswer(action: string, params: Record<string, string | number | bo
     case "breadth_history": return { idx, rows: [] };
     case "jp_shorts": return { idx: String(params?.idx ?? "NK225"), market: [], sectorsAsOf: null, sectors: [], positions: { asOf: null, names: 0, covered: 0, top: [], avgRatio: null, history: [], namesHistory: [] }, margin: [] };
     case "policy_history": return { rows: [], sources: {} };
-    case "earnings": return { rows: [], source: SI().earningsSource };
+    case "earnings": return { rows: [], source: SI().earningsSource, estimateAsGiven: true };
     case "watch_syms": return mockWatchSyms();
     case "watch_list": return watchList();
     case "watch_feed": return watchFeed();
@@ -386,8 +394,8 @@ export function mockAction(action: string, params: Record<string, string | numbe
     case "note": return { note: noteOf(params?.d ? String(params.d) : null) };
     case "reports": return { rows: S.reports.slice(0, num(params?.n, 100, 1, 1000)) };
     case "report": return { report: reportOf(Number(params?.id)) };
-    case "earnings": return { rows: S.earnings as unknown as EarningsRow[], source: S.earningsSource };
-    case "alerts": return { rows: (S.alerts as unknown as Alert[]).slice(0, num(params?.n, 20, 1, 50)) };
+    case "earnings": return { rows: S.earnings as unknown as EarningsRow[], source: S.earningsSource, estimateAsGiven: true };   // as the server since 20 Nov 2026
+    case "alerts": return { rows: (S.alerts as unknown as Alert[]).filter(listedAlert).slice(0, num(params?.n, 20, 1, 50)) };   // σ moves from 2.5σ, as the server's route
     case "watch_syms": return mockWatchSyms();
     case "watch_list": return watchList();
     case "watch_feed": return watchFeed();

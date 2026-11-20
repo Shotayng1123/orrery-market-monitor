@@ -393,11 +393,13 @@
     {"id":8,"at":"{h:-0.7}","d":"{h:-0.7|day}","symbol":"^SOX","name":"PHLX Semiconductor (SOX)","kind":"index","pct":-4.11,"price":9390.25,"market":"NYSE","msg":"PHLX Semiconductor (SOX) down 4.11%","url":null},
     {"id":7,"at":"{h:-1.6}","d":"{h:-1.6|day}","symbol":"MU","name":"Micron Technology","kind":"stock","pct":-9.8,"price":795.23,"market":"NYSE","msg":"Micron Technology down 9.8% intraday","url":null},
     {"id":6,"at":"{h:-3}","d":"{h:-3|day}","symbol":"7203.T","name":"Toyota Motor Corp","kind":"buyback","pct":null,"price":null,"market":"Nikkei Asia","msg":"Buyback: Toyota to buy back up to ¥1.2tn of its own shares (stand-in)","url":"https://example.com/alert/buyback"},
+    {"id":11,"at":"{h:-4}","d":"{h:-4|day}","symbol":"^TNX","name":"UST 10Y yield","kind":"sigma","pct":null,"price":4.859,"market":"NYSE","msg":"UST 10Y yield -12.4bp · 2.6σ · 4.859%","url":null,"sigma":-2.6,"note":"σ of 63 daily changes to the last close · Yahoo Finance (stand-in)"},
     {"id":5,"at":"{h:-5.2}","d":"{h:-5.2|day}","symbol":"7182.T","name":"ゆうちょ銀行","kind":"revision","pct":null,"price":null,"market":"Nikkei Asia","msg":"Guidance: ゆうちょ銀行 raises its full-year profit forecast on higher yen rates (stand-in)","url":"https://example.com/alert/guidance"},
     {"id":4,"at":"{h:-8}","d":"{h:-8|day}","symbol":"AVGO","name":"Broadcom Inc.","kind":"mna","pct":null,"price":12000000000,"market":"WSJ Markets","msg":"M&A: Broadcom agrees to buy a networking software maker for about USD 12bn (stand-in)","url":"https://example.com/alert/mna"},
     {"id":3,"at":"{h:-9.5}","d":"{h:-9.5|day}","symbol":"news:4512","name":"M&A","kind":"mna","pct":null,"price":2100000000,"market":"FT Markets","msg":"M&A: Two regional lenders agree to merge in a USD 2.1bn deal (stand-in)","url":"https://example.com/alert/mna-2"},
     {"id":2,"at":"{h:-11}","d":"{h:-11|day}","symbol":"7203.T","name":"TOYOTA MOTOR CORP.","kind":"stock","pct":16.7,"price":3533,"market":"TSE","msg":"TOYOTA MOTOR CORP. up 16.7% intraday","url":null},
-    {"id":1,"at":"{h:-25}","d":"{h:-25|day}","symbol":"^N225","name":"Nikkei 225","kind":"index","pct":-3.4,"price":57434.77,"market":"TSE","msg":"Nikkei 225 down 3.4%","url":null}
+    {"id":1,"at":"{h:-25}","d":"{h:-25|day}","symbol":"^N225","name":"Nikkei 225","kind":"index","pct":-3.4,"price":57434.77,"market":"TSE","msg":"Nikkei 225 down 3.4%","url":null},
+    {"id":12,"at":"{h:-26}","d":"{h:-26|day}","symbol":"USDJPY=X","name":"USD/JPY","kind":"sigma","pct":-1.18,"price":156.95,"market":"FX","msg":"USD/JPY -1.2% · 2.2σ · 156.950","url":null,"sigma":-2.2,"note":"σ of 63 daily changes to the last close · Yahoo Finance (stand-in)"}
   ],
   "watch": {
     "start": ["7203.T","NVDA","6758.T","7182.T","AVGO","^N225","^SOX","USDJPY=X","^TNX","GC=F"],
