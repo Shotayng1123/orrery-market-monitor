@@ -1,16 +1,21 @@
-// HELD FOR THE OWNER. Every read of jpx.co.jp the paper portfolio's plan still wants, in one probe that asks nothing
-// until the owner answers (P-0b, 21 Nov 2026).
+// Every read of jpx.co.jp the paper portfolio's plan still wants, in one probe (P-0b, 21 Nov 2026). Two of its three
+// parts are released by the owner; the third is still held.
 //
 // The owner's answer of 21 Nov 2026 (SGT) on publishers' terms: do without JPX's new files (the TOPIX weight file, 品貸料,
 // margin balances by name, the OSE settlement and volume pages, the 決算発表予定日 workbook). JPX's terms, as the probe of
 // 20 Nov read them in full, bar "secondary use and redistribution" whatever the purpose and ask readers to refrain from
 // automated retrieval that could mean high frequency or high load (C/probes/pf_bench.log l.331, l.337). Whether that
-// answer also covers the rest of JPX's site was asked the same day and is not answered: UNTIL IT IS, NO PROBE AND NO
-// NEW JOB SENDS A REQUEST TO jpx.co.jp (lib.ts refuses the host; only this file can lift that, part by part).
-// The files the owner's answer names are never read here, whatever the switches say.
+// answer also covers the rest of JPX's site was asked the same day, with three things named: (i) JPX's rule pages (tick
+// sizes, daily price limits, the closing auction's times), (ii) its market-holiday calendar, (iii) the weekly trading by
+// type of investors and the monthly TOPIX PER and PBR; options (a) rules and holidays yes, statistics no, (b) none,
+// (c) all. The owner's answer, about 18:00 SGT that day, in the owner's words: "(c) all." So `rules` and `calendar`
+// below are released. `etfList` (2559's row on JPX's list of listed ETFs) was not among the three things named, so it
+// stays held until the owner is asked about it; (iii)'s two statistics files are not read by this probe.
+// lib.ts refuses jpx.co.jp to every other probe; only this file lifts that, part by part.
+// The files the owner's first answer names are never read here, whatever the switches say.
 //
-// To run a part once the owner has said yes to it: set its switch below to true, in a commit whose message quotes
-// the owner's answer, and run the probe. With every switch false it prints what it would read and makes no request.
+// To run a held part once the owner has said yes to it: set its switch below to true, in a commit whose message quotes
+// the owner's answer, and run the probe. A part whose switch is false makes no request.
 //
 // It prints ONLY the values the plan needs: numbers, dates, clock times, each page's own title and date, and the row
 // and column labels a number needs to be read (a cell is cut at 40 characters, a line at 220). Never a page's text.
@@ -28,14 +33,14 @@
 //     Monitor holds from 1 Nov 2026 to 31 Jan 2027 (migrations 20261107000002 and 20261107000010) whether a line of
 //     the page names that day. This was section 3 of sessions_check until 21 Nov 2026.
 // Requests: at most 13, all to jpx.co.jp, 3 s apart (its robots.txt first): rules 8, etfList 1, calendar 2; its
-// robots.txt is asked once more if it answers 429 (so 14 at the very most). None while the three switches are off.
+// robots.txt is asked once more if it answers 429 (so 14 at the very most). With etfList held: at most 12.
 // Runtime: deno (the document on tick classes may be a PDF; under node it is only measured).
-//   Actions > source-probe > Run workflow: probe = pf_jpx, runtime = deno   (ONLY after the owner's answer)
+//   Actions > source-probe > Run workflow: probe = pf_jpx, runtime = deno
 import { readFileSync } from "node:fs";
 import { bytes, head, liftJpxHold, linksOf, masked, page, pause, pdfPages, requestsMade, robots, tablesOf, textLines, titleOf, type Page, type Robots } from "./lib.ts";
 
-/** THE OWNER'S ANSWER, part by part. All false: asked on 21 Nov 2026, not answered. */
-const OWNER_HAS_RELEASED = { rules: false, etfList: false, calendar: false };
+/** THE OWNER'S ANSWER, part by part. rules and calendar: "(c) all", 21 Nov 2026, about 18:00 SGT. etfList: not asked yet. */
+const OWNER_HAS_RELEASED = { rules: true, etfList: false, calendar: true };
 
 const MAX = 13, GAP = 3000, JPX = "https://www.jpx.co.jp";
 const DOMESTIC = `${JPX}/english/equities/trading/domestic`;
