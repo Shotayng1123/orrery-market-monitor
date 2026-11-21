@@ -5,7 +5,8 @@ import type { Series, TableRow } from "../lib/types";
 import { fmtChg, fmtLevel, fmtPct, fmtSigma, isYield, signCls } from "../lib/fmt";
 import { fmtDate, fmtStamp, SGT, tileStamp } from "../lib/time";
 import { delayed } from "../lib/labels";
-import { marketById } from "../lib/sessions";
+import { marketOf } from "../lib/sessions";
+import { rowSession } from "../lib/opens";
 import { pageHash } from "../lib/indices";
 import { Flash } from "./Flash";
 import { LONG_PERIODS, PERIOD_DAYS, type ChartPeriod } from "../lib/periods";
@@ -55,7 +56,7 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
   const [pan, setPan] = useState(0);
   const k = PERIOD_KEY[period], known = k ? row.closes[k] : undefined;
   const isRate = isYield(row);
-  const m = marketById(row.market);
+  const m = marketOf(row.market);
   const points = s.data?.points ?? [];
   const windowSec = period === "1D" ? sessionWindow(points) : PERIOD_DAYS[period] * DAY;
   const intraday = INTRADAY.has(period);
@@ -79,7 +80,11 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
   // "LIVE 13:35 SGT", "CLOSED 19 Nov 13:35 SGT": a tile's panel does not say its times are in SGT, so the tile does
   // (R2B-06); "PUBLISHED 19 Nov 2026" for an official yield and "CLOSED 19 Nov 2026" for a booked close, which have a
   // date and no time of day (R2B-01: they read "19 Nov 08:00", midnight UTC in SGT). The tooltip names the source.
-  const stamp = tileStamp(row);
+  // Beside CLOSED, when the instrument's market next opens, in SGT ("opens 22:30 SGT"; the owner's request of 20 Nov
+  // 2026; lib/opens.ts). A large tile has room for it after the stamp. A small one puts it under the stamp, at the right
+  // of the change's line, so the tile gains no line; where the two do not fit on that line it goes under, whole.
+  const ses = rowSession(row), stamp = tileStamp(row, new Date(), ses.now);
+  const opens = ses.note ? <span className={`opens ${ses.note.kind}`} title={ses.note.tip}>{ses.note.text}</span> : null;
   // the idle read-out under a daily chart: what is drawn, and on 5Y and 10Y that the big-move circles cover the last
   // three years only (the designer's I-3 note)
   const daily = `daily closes · σ corridors${volume ? " · volume" : ""}${LONG_PERIODS.has(period) && marks?.length ? " · circles: last three years" : ""}${shortFrom ? ` · history from ${shortFrom}` : ""}`;
@@ -97,9 +102,10 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
           {row.live && m && m.delayMin > 0 && <span className="badge delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>{delayed(m.delayMin, true)}</span>}
           {DEV_MOCK && <span className="badge est">MOCK</span>}
           <span className="asof" title={stamp.tip}><span className={`st${stamp.label === "LIVE" ? " live" : ""}`}>{stamp.label}</span> {stamp.text}</span>
+          {shape === "large" && opens}
         </span>
       </div>
-      <div className={`ch ${signCls(chg, isRate ? 3 : 2)}`}>{isRate ? fmtChg(chg, 3, true) : fmtPct(chg)} <span className="mut">{shortFrom ? `since ${shortFrom}` : period}{anchor != null ? ` · from ${lvl(anchor)}` : ""}</span></div>
+      <div className={`ch ${signCls(chg, isRate ? 3 : 2)}`}><span className="chv">{isRate ? fmtChg(chg, 3, true) : fmtPct(chg)} <span className="mut">{shortFrom ? `since ${shortFrom}` : period}{anchor != null ? ` · from ${lvl(anchor)}` : ""}</span></span>{shape !== "large" && opens}</div>
       {points.length
         ? <SigmaChart points={points} windowSec={windowSec} intraday={intraday} decimals={row.decimals} pct={isRate} sigmaWindow={sigmaWindow} onReadout={setRd} onPan={setPan} color={color} fill={shape !== "wide"} height={shape === "wide" ? chartHeight : undefined} axes={axes} volume={volume} marks={marks} focus={focus} />
         : <div className="chartbox empty" style={shape === "wide" ? { height: chartHeight } : undefined}>{s.error ?? (s.loading || !seen ? "loading…" : "no history yet")}</div>}

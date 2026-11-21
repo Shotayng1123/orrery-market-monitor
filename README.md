@@ -57,6 +57,14 @@ back, so they always cross a midnight in Singapore and show their day bars at an
 browser (`om_mock_watch`), so stars and the add box work; `?mock=empty` in the address shows every tab with no rows.
 None of it is in a production build.
 
+The local copy's clock can be set: `om_mock_now` in the browser's storage, an ISO time (`2026-11-24T02:45:00Z` is
+Tue 24 Nov 2026, 10:45 SGT), starts the page's clock at that moment on each load (`web/src/lib/mockclock.ts`), and the
+stand-in market rows then follow the session table: a market that is shut is CLOSED with its last print at its
+close, one in its regular hours is live. So a closed market, a midday break, a holiday or an early close can be
+looked at whatever the hour (the red bar at the top says the clock is set). Without it the clock is the machine's
+and the rows keep fixed states (FX and the futures live, the rest not), so the browser checks see the same rows
+at any hour. The holidays it passes over are the Monitor's own calendar rows, not stand-ins.
+
 ## Deploy
 
 1. Repository Settings › Pages › Source: **GitHub Actions**.
@@ -70,7 +78,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, about 1,630 checks in 32 suites): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, about 1,870 checks in 34 suites): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -111,13 +119,18 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   layout join it once they are fixed. `nothing-cut` checks the designer's findings behind it one by one (whole
   columns at both edges of a phone's statements, pressed back and swiped, short interest at its natural height, chart titles, long headlines under day
   bars, phone search, the watchlist's two columns at the feed's real lengths, curve labels, the header's alert line for every kind of alert),
-  in ways that hold at any time of day.
+  in ways that hold at any time of day; and when a closed market opens (`opens`: beside every CLOSED, on both
+  layouts and at ten window sizes, at set moments of a set clock: a Friday evening, a weekend, a holiday, a midday
+  break, an early close, a session's first minutes on a delayed feed; `layout-guard-closed`: the layout guard again
+  with the clock on a weekend, when every closed market's line carries its opening).
   `cd web && npm run e2e` starts the test servers it needs and runs them all (about twelve minutes, three suites at
   a time); `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
   A suite that fails once is tried again; when the second try passes, the lines that failed the first time are
   printed all the same, so a check that fails only now and then can be found from the publish job's log.
   Needs Playwright's browser once: `npx playwright install chromium`.
-- **Logic checks** (`sim/logic.test.ts`): exchange sessions, rolling bands, alert measures, the push encryption,
+- **Logic checks** (`sim/logic.test.ts`): exchange sessions (the page's and the server's copies give the same
+  state for every market, and when a closed market next opens: across each change of clocks, a Friday close, a
+  midday break, a holiday, an early close, a market that never closes), rolling bands, alert measures, the push encryption,
   the verification email for a new account, and every figure of the stock page (performance, ratios, statements
   as read from each source, big moves, the reading of a move's reason), every figure of an instrument's page (its
   units, volatility and percentile, largest moves, the table's anchors and statistics for a name it does not keep, the
@@ -153,6 +166,23 @@ when the server's functions or migrations change.
 | Constituents | Wikipedia lists (S&P 500, Nikkei 225), checked monthly |
 
 TOPIX has no Yahoo ticker: the `1306.T` ETF stands in for the live level (badge PROXY) and the official JPX close is used for daily figures.
+
+### When a closed market opens (since 2026-11-21)
+
+Wherever the Monitor says CLOSED it says when that market next opens, in SGT: "opens 22:30 SGT" when that is today
+in Singapore, "opens 23 Nov 22:30 SGT" on another day. Nothing is fetched for it.
+
+| On the page | Where it comes from |
+|---|---|
+| The time | The start of the market's next regular session in the session table (`web/src/lib/sessions.ts`; the server keeps the same table in `supabase/functions/_shared/sessions.ts`, and `sim/logic.test.ts` checks that the two agree). Each market's hours are in its own time zone, so a change of clocks there moves the time by itself: New York opens at 22:30 SGT in its winter and 21:30 SGT in its summer |
+| Holidays | The rows of `sessions_cal`, which the page receives with `health`: Tokyo's from JPX's calendar and New York's from NYSE's, each for 2026 and 2027, checked against the publishers' own pages on 7 Nov 2026 (migration `20261107000010`). A next open passes over them |
+| Early closes | New York's, at 13:00 there: 27 Nov and 24 Dec 2026, 26 Nov 2027, 3 Jul and 24 Nov 2028, as NYSE's page "Holidays & Trading Hours" gave them to the source-probe `pf_rules` on 20 Nov 2026 (its lines are quoted in the session table). After one the market is CLOSED on the page and on the server |
+| ", scheduled" | Every other market (Hong Kong, Shanghai, Seoul, Taipei, Mumbai, Singapore, Sydney, Frankfurt, Zurich, London, São Paulo, Mexico City, CME Globex, FX), New York and Tokyo after 31 Dec 2027, and any market when the calendar did not load: the Monitor does not hold those holidays, so the time is the timetable's and says so; on a local holiday the market stays shut |
+| LAST PRINT, "open since 08:00 SGT" | A row that is not live while its market is in its regular hours (a delayed feed's first minutes of a session, a feed that has stopped, a holiday the Monitor does not hold) is not called CLOSED |
+| A stock's page | The stock route sends no live state: the page reads it from the session table and the quote's own time (the exchange from the symbol's suffix, as the server's alerts do), so the chart says LIVE in the exchange's hours and CLOSED with the opening outside them. A stock on an exchange the table does not keep (`MC.PA`) says neither |
+
+The words are made in `web/src/lib/opens.ts`. A midday break gives the afternoon's start; crypto, which never closes,
+and an official yield, published once a day, have no such line.
 
 ### Moves in σ (MARKETS, since 2026-11-20)
 

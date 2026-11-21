@@ -16,12 +16,20 @@ import { EVENTS, LARGEST_FALL, LARGEST_RISE, LEVEL_THEN, NEWS, NEXT_MEETING, RAN
 import { asOfWords, calSource, ccyWords, contractLine, contractSource, distCls, distText, impactOk, lastAndDay, lastRollLine, matchedWords, moveCls, moveText, noEvents, perfNote, periodsOf, rollMarks, rollsOutLine, SERIES_LINE, sourceNote, volLine, volTip, workedLine, workedOut, type ImpactPick, type InstrumentInfo, type InstrumentPage, type KeyLine } from "../lib/instrument";
 import { dayLabel, dayOf, IMPACTS } from "./News";
 import { SIGMA_1M_TIP } from "./Market";
+import { pageLive, symbolMarket } from "../lib/opens";
 
 /** The chart tile's row: MARKETS' own, refreshed every minute, for a Monitor instrument (so its last print and its
  *  day agree with MARKETS to the minute); the page's answer otherwise. */
 export function useLiveRow(d: InstrumentPage, tick: number): TableRow {
   const t = useApi<{ rows: TableRow[] }>(d.instrument.monitor ? "table" : null, undefined, tick);
-  return t.data?.rows.find((r) => r.symbol === d.symbol) ?? d.instrument.row;
+  const row = t.data?.rows.find((r) => r.symbol === d.symbol) ?? d.instrument.row;
+  // A Monitor instrument's row carries its market and whether it is live, as MARKETS has them. For any other name the
+  // server sends a market it did not look up (New York for an index or a future from the search) and never live: the
+  // page keeps only the market the symbol itself gives (a pair trades the FX week, a coin never stops), reads live
+  // from the session table, and of the rest says neither CLOSED nor when it opens (lib/opens.ts)
+  if (d.instrument.monitor) return row;
+  const market = symbolMarket(d.symbol) ?? "";
+  return { ...row, market, live: pageLive(market, row.lastAt) };
 }
 function KV({ k, children, title, cls }: { k: ReactNode; children: ReactNode; title?: string; cls?: string }) {
   return <tr title={title}><td className="l">{k}</td><td className={`num${cls ? ` ${cls}` : ""}`}>{children}</td></tr>;

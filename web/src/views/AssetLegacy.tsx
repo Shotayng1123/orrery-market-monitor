@@ -7,14 +7,16 @@ import { money, StatementSummary, type AssetLite, type StatementRow } from "../c
 import { useApi } from "../lib/useApi";
 import { Star } from "../components/Star";
 import type { TableRow } from "../lib/types";
-import type { MarketId } from "../lib/sessions";
+import { stockMarket, type MarketId } from "../lib/sessions";
+import { pageLive } from "../lib/opens";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtDate, fmtStamp } from "../lib/time";
 import { MKT_CAP } from "../lib/labels";
 
 export interface AssetFull extends AssetLite { adv10d: number | null; series: unknown }
 
-export const marketOf = (symbol: string): MarketId => (/\.T$/.test(symbol) ? "TSE" : /\.KS$/.test(symbol) ? "KRX" : /\.HK$/.test(symbol) ? "HKEX" : /\.SS$|\.SZ$/.test(symbol) ? "SSE" : /\.L$/.test(symbol) ? "LSE" : /\.SI$/.test(symbol) ? "SGX" : "NYSE");
+/** The exchange whose hours a stock keeps (lib/sessions.ts stockMarket); "" where the Monitor keeps none for it. */
+export const stockMarketOf = (symbol: string): MarketId | "" => stockMarket(symbol) ?? "";
 
 export function StatementTable({ rows, title, ccy }: { rows: StatementRow[]; title: string; ccy: string | null }) {
   if (!rows.length) return null;
@@ -50,7 +52,7 @@ export function AssetViewLegacy({ symbol, tick }: { symbol: string; tick: number
   const d = a.data;
   if (!symbol) return <Panel no="01" title="ASSET" span={12}><Empty title="No symbol">Use the search box at the top right.</Empty></Panel>;
   if (!d) return <Panel no="01" title={symbol.toUpperCase()} span={12}>{a.error ? <Empty title="Not found">{a.error}</Empty> : <Empty title="Loading">{symbol}</Empty>}</Panel>;
-  const row: TableRow = { symbol: d.symbol, name: d.name, cls: "Equities", market: marketOf(d.symbol), currency: d.currency ?? "", decimals: d.price != null && d.price >= 1000 ? 0 : 2, group: "equity", order: 0, last: d.price, lastAt: d.asOf, live: false, closes: { d1: d.prevClose }, closeDates: {}, pct: { d1: d.pct } };
+  const row: TableRow = { symbol: d.symbol, name: d.name, cls: "Equities", market: stockMarketOf(d.symbol), currency: d.currency ?? "", decimals: d.price != null && d.price >= 1000 ? 0 : 2, group: "equity", order: 0, last: d.price, lastAt: d.asOf, live: pageLive(stockMarketOf(d.symbol), d.asOf), closes: { d1: d.prevClose }, closeDates: {}, pct: { d1: d.pct } };
   const st = d.statements;
   const f = st?.forecast;
   return (

@@ -8,6 +8,7 @@ import { setPhoneV2 } from "../lib/phone";
 import { askInstallHint, useInstall } from "../lib/install";
 import { openNotify } from "../lib/push";
 import { allStatuses, haveHolidays, type MarketId } from "../lib/sessions";
+import { marketSession } from "../lib/opens";
 import { fmtClock, fmtWhen, SGT, TZ_ABBR } from "../lib/time";
 import { TAB } from "../lib/labels";
 import { SIZES, type Prefs, type SizeKey } from "../lib/prefs";
@@ -65,11 +66,15 @@ export function Topbar(p: TopbarProps) {
       <Search />
       <span className="bmq">
         <span id="mktstat" title={`Regular sessions, each in its exchange's local time${hol}`}>
-          {statuses.map((s) => (
-            <span key={s.market.id} className={`mk ${s.state.toLowerCase()}`} title={`${s.market.name} ${s.state} at ${s.local} ${TZ_ABBR[s.market.tz] ?? ""}`}>
-              {s.market.id}<span className="lt">{s.state === "OPEN" ? s.local : s.state === "BREAK" ? "BRK" : s.state === "HOLIDAY" ? "HOL" : "–"}</span>
-            </span>
-          ))}
+          {statuses.map((s) => {
+            // a market that is shut says when it next opens, in SGT (lib/opens.ts; the owner's request of 20 Nov 2026)
+            const opens = s.state === "OPEN" ? null : marketSession(s.market.id, now).note;
+            return (
+              <span key={s.market.id} className={`mk ${s.state.toLowerCase()}`} title={`${s.market.name} ${s.state} at ${s.local} ${TZ_ABBR[s.market.tz] ?? ""}${opens ? ` · ${opens.text}` : ""}`}>
+                {s.market.id}<span className="lt">{s.state === "OPEN" ? s.local : s.state === "BREAK" ? "BRK" : s.state === "HOLIDAY" ? "HOL" : "–"}</span>
+              </span>
+            );
+          })}
         </span>
         <span id="clock" title="Singapore time (default), Tokyo, New York"><b>{fmtClock(now, SGT, true)}</b> SGT · {fmtClock(now, "Asia/Tokyo")} JST · {fmtClock(now, "America/New_York")} ET</span>
         <span id="upd" className="mut" title="When the last payload landed, Singapore time">{p.updatedAt ? `UPD ${fmtWhen(p.updatedAt)} SGT` : ""}</span>

@@ -16,7 +16,8 @@ import { commonWindow, moveLine, moversInSigma, sigmaTip, SIGMA_LINE, SIGMA_QUIE
 import { codeOf, monthOf } from "../lib/futures";
 import { Flash } from "../components/Flash";
 import { PERIODS, type Curve, type TableRow } from "../lib/types";
-import { marketById } from "../lib/sessions";
+import { marketOf } from "../lib/sessions";
+import { rowStateWords } from "../lib/opens";
 import { filterCurve } from "../lib/curveTenors";
 import { shortName } from "../lib/short";
 import { Sig } from "../components/Sig";
@@ -33,7 +34,7 @@ export const upperSigma = (s: string): string => s.replace(/[^σ]+/g, (x) => x.t
 /** A future's day across a change of contract (B-27): what the ROLL mark beside its name says. */
 export const rollTip = (r: TableRow): string => !r.roll ? "" : `A change of contract on ${fmtDate(r.roll.d)}: Yahoo's front-month series moved ${r.roll.from ? `from ${monthOf(r.roll.from)} (${codeOf(r.roll.from)}) ` : ""}to ${monthOf(r.roll.to)} (${codeOf(r.roll.to)}). ${r.roll.step != null ? `The 1D is the change within ${monthOf(r.roll.to)}; the change of contract (${r.roll.step >= 0 ? "+" : ""}${r.roll.step.toFixed(2)}%) is not a move and is left out of the 1D, its σ and the alerts.` : "The source does not give the new contract's close before it: the 1D is the series' own, across the change of contract, and has no σ."}`;
 function Badges({ r }: { r: TableRow }) {
-  const m = marketById(r.market);
+  const m = marketOf(r.market);
   return (
     <>
       {r.roll && <span className="badge roll" title={rollTip(r)}>ROLL</span>}
@@ -115,9 +116,10 @@ function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
       <tr className="cls"><td colSpan={6 + PERIODS.length}><span>{classLabel(cls)}</span></td></tr>
       {rs.map((r) => {
         const isRate = isYield(r);
-        // every row opens its instrument's page (the designer's D-15, B-23): the name a teal link, the row a pointer
+        // every row opens its instrument's page (the designer's D-15, B-23): the name a teal link, the row a pointer.
+        // Its tooltip says whether its market is open, and when a closed one next opens, in SGT (lib/opens.ts)
         return (
-          <tr key={r.symbol} className={`click${r.live ? " live" : ""}`} title={`${r.symbol} · ${rowAsOfTitle(r)}${r.live ? " · market open" : ""} · open its page`} onClick={(e) => { if (!(e.target as HTMLElement).closest("a")) openAsset(r.symbol); }}>
+          <tr key={r.symbol} className={`click${r.live ? " live" : ""}`} title={`${r.symbol} · ${rowAsOfTitle(r)}${rowStateWords(r)} · open its page`} onClick={(e) => { if (!(e.target as HTMLElement).closest("a")) openAsset(r.symbol); }}>
             <td className="l" title={`${r.name} (${r.symbol})`}><a className="lnk" href={`#${pageHash(r.symbol)}`}>{shortName(r.symbol, r.name)}</a><Badges r={r} /></td>
             <td className="num"><Flash value={r.last}><b>{levelOf(r, r.last)}</b></Flash></td>
             {PERIODS.map((p) => {

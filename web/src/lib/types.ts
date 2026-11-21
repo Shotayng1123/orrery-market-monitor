@@ -12,7 +12,7 @@ export interface Instrument {
   symbol: string;          // provider symbol, e.g. ^N225
   name: string;            // display name
   cls: AssetClass;
-  market: MarketId;        // session used for OPEN / delay
+  market: MarketId | "";   // session used for OPEN / delay; "" where the Monitor keeps no hours for it (a stock on an exchange outside its table)
   currency: string;
   decimals: number;
   proxyFor?: string;       // e.g. "TOPIX" when the symbol is an ETF standing in for the index

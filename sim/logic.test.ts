@@ -49,6 +49,8 @@ import { mockSegments } from "../web/src/lib/mockInstr.ts";
 import type { TableRow } from "../web/src/lib/types.ts";
 import { byResultsDay, calendarFlag, fmtResultsDate, jpxDated, listingCity, listingTz, MARKS_NOTE, RESULTS_NOTE, resultsDay, resultsDayLabel, resultsMark, resultsStatus, resultsStatusShort, resultsTip, resultsWords } from "../web/src/lib/results.ts";
 import { opensAtTop } from "../web/src/lib/nav.ts";
+import { hoursText, marketSession, pageLive, PAGE_FRESH_MIN, rowSession, rowStateWords, shutLine, shutMarkets, symbolMarket, type Cal } from "../web/src/lib/opens.ts";
+import { mockHolidays, printAt } from "../web/src/lib/mock.ts";
 import { readFileSync as readText, readdirSync as listDir } from "node:fs";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 
@@ -1504,6 +1506,140 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck(`S4: a future's 1D in σ says its changes of contract are left out only from when the Monitor records them ("…${ftip.split(" · ").pop()}"); a currency's says nothing of contracts`, /its changes of contract are left out from when the Monitor records them; any before stay in \(its page says from when\)$/.test(ftip) && !/contract/.test(xtip), { ftip, xtip });
     // S2: the contract's source and when it was read, under it on both layouts
     ck(`S2: under a future's contract: "${contractSource({ source: "Yahoo Finance (unofficial) quote: the contract it names (underlyingSymbol)", seenAt: "2026-11-20T17:38:00Z" })}"`, contractSource({ source: "Yahoo Finance (unofficial) quote: the contract it names (underlyingSymbol)", seenAt: "2026-11-20T17:38:00Z" }) === "Yahoo Finance (unofficial) · read 21 Nov 01:38 SGT" && contractSource({ source: "Yahoo Finance (unofficial) quote: x", seenAt: null }) === "Yahoo Finance (unofficial)");
+  }
+
+  console.log("\n[AA] when a closed market opens (the owner's request of 20 Nov 2026): the next open from the session table, in each market's own time zone");
+  {
+    const u = (iso: string) => new Date(iso), z = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 16) + "Z" : null);
+    // the calendar the Monitor holds: the rows its two migrations write, read here from the files themselves
+    const cal: Record<string, string[]> = {};
+    for (const f of ["20261107000002_seed.sql", "20261107000010_holidays_verified.sql"]) for (const m of readText(new URL(`../supabase/migrations/${f}`, import.meta.url), "utf8").matchAll(/\('(TSE|NYSE)',\s*'(\d{4}-\d{2}-\d{2})'/g)) (cal[m[1]] ??= []).includes(m[2]) || cal[m[1]].push(m[2]);
+    for (const k of Object.keys(cal)) cal[k].sort();
+    const H: web.HolidayMap = { TSE: new Set(cal.TSE), NYSE: new Set(cal.NYSE) }, HS = { TSE: new Set(cal.TSE), NYSE: new Set(cal.NYSE) };
+    const OK: Cal = { holidays: H, state: "ok" };
+    const next = (id: web.MarketId, iso: string, c: Cal = OK) => web.nextOpen(web.marketById(id), u(iso), c.holidays, c.state);
+    const ses = (id: string, iso: string, c: Cal = OK) => marketSession(id, u(iso), c);
+
+    // --- the two copies of the table, and the calendar ---
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+    const byId = (ms: Array<{ id: string }>) => [...ms].sort((a, b) => a.id.localeCompare(b.id));
+    ck(`the page's and the server's session tables are the same ${web.MARKETS.length} markets: zone, sessions, days and feed delay`, same(byId(web.MARKETS), byId(srv.MARKETS)));
+    ck(`their early closes are the same (${Object.entries(web.EARLY_CLOSES).map(([k, v]) => `${k}: ${Object.keys(v!).join(", ")}`).join("; ")}), all at 13:00 local`, same(web.EARLY_CLOSES, srv.EARLY_CLOSES) && Object.values(web.EARLY_CLOSES.NYSE!).every((x) => x === 13 * 60) && same(Object.keys(web.EARLY_CLOSES.NYSE!), ["2026-11-27", "2026-12-24", "2027-11-26", "2028-07-03", "2028-11-24"]), web.EARLY_CLOSES);
+    ck(`and whose holidays the Monitor holds: ${Object.entries(web.HOLIDAY_SOURCES).map(([k, v]) => `${k} from ${v!.publisher}, read ${v!.read}, to ${v!.through}`).join("; ")}`, same(web.HOLIDAY_SOURCES, srv.HOLIDAY_SOURCES) && same(Object.keys(web.HOLIDAY_SOURCES).sort(), ["NYSE", "TSE"]));
+    ck(`the calendar's rows (${cal.TSE.length} for Tokyo, ${cal.NYSE.length} for New York) are every one inside what is held, and no other market has any`, cal.TSE.length === 36 && cal.NYSE.length === 20 && [...cal.TSE, ...cal.NYSE].every((d) => d >= "2026-01-01" && d <= "2027-12-31") && Object.keys(cal).length === 2, { tse: cal.TSE.length, nyse: cal.NYSE.length });
+    ck("the two days the round asked about are in it: Tokyo shut on Mon 23 Nov 2026, New York on Thu 26 Nov 2026", cal.TSE.includes("2026-11-23") && cal.NYSE.includes("2026-11-26"));
+    // NYSE's page as the source-probe pf_rules printed it on 20 Nov 2026 (run 44737850579), its four rows word for word:
+    //   "Juneteenth National Independence Day | Friday, June 19 | Friday, June 18 (Juneteenth National Independence Day observed) | Monday, June 19 |"
+    //   "Independence Day | Friday, July 3 (Independence Day observed) | Monday, July 5 (Independence Day observed) | Tuesday, July 4** |"
+    //   "Thanksgiving Day | Thursday, November 26*** | Thursday, November 25*** | Thursday, November 23*** |"
+    //   "Christmas Day | Friday, December 25**** | Friday, December 24 (Christmas Day observed) | Monday, December 25 |"
+    const printed = ["2026-06-19", "2027-06-18", "2026-07-03", "2027-07-05", "2026-11-26", "2027-11-25", "2026-12-25", "2027-12-24"];
+    ck("the eight days of 2026 and 2027 that NYSE's page gave the probe of 20 Nov 2026 are rows of the calendar (Thanksgiving 2026 among them), and its early closes fall on none of them", printed.every((d) => cal.NYSE.includes(d)) && Object.keys(web.EARLY_CLOSES.NYSE!).every((d) => !cal.NYSE.includes(d) && [1, 2, 3, 4, 5].includes(new Date(d + "T12:00:00Z").getUTCDay())), printed.filter((d) => !cal.NYSE.includes(d)));
+    ck("the local copy passes over the same days: its calendar is those rows, from two days back on, as the server's health sends them", same(mockHolidays(Date.parse("2026-01-01T00:00:00Z")), cal) && same(mockHolidays(Date.parse("2026-11-21T00:00:00Z")), { TSE: cal.TSE.filter((d) => d >= "2026-11-19"), NYSE: cal.NYSE.filter((d) => d >= "2026-11-19") }));
+    // every market, every half hour, over the weeks that hold a change of clocks, a holiday or an early close
+    let diff = 0, seen = 0; const where: string[] = [];
+    for (const [from, to] of [["2026-03-05", "2026-03-11"], ["2026-10-22", "2026-11-04"], ["2026-11-19", "2026-12-02"], ["2026-12-23", "2027-01-05"], ["2027-03-11", "2027-03-17"], ["2027-03-25", "2027-03-31"]]) {
+      for (let t = Date.parse(from + "T00:00:00Z"); t < Date.parse(to + "T00:00:00Z"); t += 30 * 60e3) for (const m of web.MARKETS) {
+        const a = web.marketStatus(m, new Date(t), H).state, b = srv.marketState(srv.marketById(m.id)!, new Date(t), HS); seen++;
+        if (a !== b) { diff++; if (where.length < 4) where.push(`${m.id} ${new Date(t).toISOString()} ${a}/${b}`); }
+      }
+    }
+    ck(`the two copies give the same state for every market at every half hour of six such stretches (${seen} readings)`, diff === 0 && seen > 30000, where);
+    const syms = ["7203.T", "0700.HK", "005930.KS", "035720.KQ", "600519.SS", "000001.SZ", "2330.TW", "RELIANCE.NS", "D05.SI", "BHP.AX", "SAP.DE", "NESN.SW", "SHEL.L", "PETR4.SA", "WALMEX.MX", "NVDA", "BRK-B", "MC.PA", "RY.TO", "^N225", "USDJPY=X", "GC=F", "BTC-USD", ""];
+    ck("a stock's exchange is read from its symbol the same way on the page and on the server; an exchange outside the table (Paris, Toronto) gives none", syms.every((x) => web.stockMarket(x) === stockMarket(x)) && web.stockMarket("MC.PA") === null && web.stockMarket("RY.TO") === null && web.stockMarket("7203.T") === "TSE" && web.stockMarket("NVDA") === "NYSE", syms.filter((x) => web.stockMarket(x) !== stockMarket(x)));
+
+    // --- the owner's moment ---
+    const own = next("NYSE", "2026-11-20T13:16:00Z"), ownS = ses("NYSE", "2026-11-20T13:16:00Z");
+    ck(`Fri 20 Nov 2026, 21:16 SGT: New York is shut and opens at 22:30 SGT, 09:30 there since its clocks went back on 1 Nov ("${ownS.note?.text}")`, z(own?.at) === "2026-11-20T14:30Z" && own!.firm && ownS.now === "closed" && ownS.note?.text === "opens 22:30 SGT" && !ownS.note.scheduled, { at: z(own?.at), text: ownS.note?.text });
+    ck(`its tooltip says whose calendar: "${ownS.note?.tip}"`, ownS.note?.tip === "New York: regular session 09:30–16:00 ET. Next opens 20 Nov 22:30 SGT. Holidays and early closes: NYSE's calendar.", ownS.note?.tip);
+
+    // --- the changes of clocks, by each market's own zone ---
+    const dst: Array<[web.MarketId, string, string, string]> = [
+      ["NYSE", "2026-03-05T22:00:00Z", "2026-03-06T14:30Z", "the Friday before New York's clocks go forward on 8 Mar 2026: 22:30 SGT"],
+      ["NYSE", "2026-03-06T22:00:00Z", "2026-03-09T13:30Z", "the Monday after: 21:30 SGT"],
+      ["NYSE", "2026-10-29T21:00:00Z", "2026-10-30T13:30Z", "the Friday before they go back on 1 Nov 2026: 21:30 SGT"],
+      ["NYSE", "2026-10-30T21:00:00Z", "2026-11-02T14:30Z", "the Monday after: 22:30 SGT"],
+      ["NYSE", "2027-03-11T22:00:00Z", "2027-03-12T14:30Z", "the Friday before they go forward on 14 Mar 2027: 22:30 SGT"],
+      ["NYSE", "2027-03-12T22:00:00Z", "2027-03-15T13:30Z", "the Monday after: 21:30 SGT"],
+      ["XETRA", "2026-10-22T18:00:00Z", "2026-10-23T07:00Z", "Frankfurt, the Friday before Europe's clocks go back on 25 Oct 2026: 15:00 SGT"],
+      ["XETRA", "2026-10-23T18:00:00Z", "2026-10-26T08:00Z", "the Monday after: 16:00 SGT"],
+      ["LSE", "2026-10-22T18:00:00Z", "2026-10-23T07:00Z", "London, the Friday before: 15:00 SGT"],
+      ["LSE", "2026-10-23T18:00:00Z", "2026-10-26T08:00Z", "the Monday after: 16:00 SGT"],
+      ["SIX", "2026-10-23T18:00:00Z", "2026-10-26T08:00Z", "Zurich, the Monday after: 16:00 SGT"],
+      ["XETRA", "2027-03-25T18:00:00Z", "2027-03-26T08:00Z", "Frankfurt, the Friday before they go forward on 28 Mar 2027: 16:00 SGT"],
+      ["XETRA", "2027-03-26T18:00:00Z", "2027-03-29T07:00Z", "the Monday after: 15:00 SGT"],
+      ["LSE", "2027-03-25T18:00:00Z", "2027-03-26T08:00Z", "London, the Friday before: 16:00 SGT"],
+      ["LSE", "2027-03-26T18:00:00Z", "2027-03-29T07:00Z", "the Monday after: 15:00 SGT"],
+      ["ASX", "2026-10-02T08:00:00Z", "2026-10-04T23:00Z", "Sydney, across its own change on 4 Oct 2026 (10:00 there): Mon 07:00 SGT"],
+    ];
+    for (const [id, at0, want, what] of dst) { const n = next(id, at0); ck(`${what} (${id} after ${at0.slice(0, 16)}Z -> ${z(n?.at)})`, z(n?.at) === want, { got: z(n?.at), want }); }
+    ck("a market with no change of clocks keeps its hour all year: Tokyo opens at 08:00 SGT in March, July and November", ["2026-03-09T10:00:00Z", "2026-07-14T10:00:00Z", "2026-11-17T10:00:00Z"].every((t) => next("TSE", t)!.at.toISOString().slice(11, 16) === "00:00"));
+
+    // --- a Friday close ---
+    const fri = next("NYSE", "2026-11-20T21:00:00Z"), cme = next("CME", "2026-11-20T22:00:00Z"), cmeS = next("CME", "2026-07-17T21:00:00Z"), fx = next("FX", "2026-11-20T22:00:00Z");
+    ck(`New York after Friday's close opens on Monday (${z(fri?.at)} = 23 Nov 22:30 SGT)`, z(fri?.at) === "2026-11-23T14:30Z" && fri!.firm);
+    ck(`CME Globex after Friday 17:00 New York opens on Sunday evening there: Mon 07:00 SGT in winter (${z(cme?.at)}), Mon 06:00 SGT in summer (${z(cmeS?.at)}); scheduled, its holidays are not held`, z(cme?.at) === "2026-11-22T23:00Z" && z(cmeS?.at) === "2026-07-19T22:00Z" && !cme!.firm && !cmeS!.firm);
+    ck(`CME's daily break ends at 18:00 New York the same day (${z(next("CME", "2026-11-24T22:30:00Z")?.at)}), and a Sunday before 18:00 opens that evening`, z(next("CME", "2026-11-24T22:30:00Z")?.at) === "2026-11-24T23:00Z" && next("CME", "2026-11-24T22:30:00Z")!.why === "break" && z(next("CME", "2026-11-22T15:00:00Z")?.at) === "2026-11-22T23:00Z");
+    ck(`FX after Saturday 06:00 SGT opens on Monday at 05:00 SGT (${z(fx?.at)}), scheduled; on Monday at 04:00 SGT it opens that day`, z(fx?.at) === "2026-11-22T21:00Z" && !fx!.firm && z(next("FX", "2026-11-22T20:00:00Z")?.at) === "2026-11-22T21:00Z" && next("FX", "2026-11-22T21:30:00Z") === null);
+
+    // --- a midday break ---
+    const brk: Array<[web.MarketId, string, string]> = [["TSE", "2026-11-24T02:45:00Z", "2026-11-24T03:30Z"], ["HKEX", "2026-11-24T04:30:00Z", "2026-11-24T05:00Z"], ["SSE", "2026-11-24T04:00:00Z", "2026-11-24T05:00Z"], ["SGX", "2026-11-24T04:30:00Z", "2026-11-24T05:00Z"]];
+    for (const [id, at0, want] of brk) { const n = next(id, at0), s0 = ses(id, at0); ck(`${web.marketById(id).name} in its midday break opens for the afternoon the same day ("${s0.note?.text}")`, web.marketStatus(web.marketById(id), u(at0), H).state === "BREAK" && z(n?.at) === want && n!.why === "break" && s0.now === "closed" && /^opens \d\d:\d\d SGT(, scheduled)?$/.test(s0.note?.text ?? ""), { got: z(n?.at), text: s0.note?.text }); }
+    ck(`Tokyo's is said plainly, Hong Kong's as scheduled: "${ses("TSE", "2026-11-24T02:45:00Z").note?.text}", "${ses("HKEX", "2026-11-24T04:30:00Z").note?.text}"; the tooltip says "In its midday break."`, ses("TSE", "2026-11-24T02:45:00Z").note?.text === "opens 11:30 SGT" && ses("HKEX", "2026-11-24T04:30:00Z").note?.text === "opens 13:00 SGT, scheduled" && / In its midday break\. /.test(ses("TSE", "2026-11-24T02:45:00Z").note?.tip ?? ""));
+
+    // --- a market that never closes ---
+    ck("crypto never closes: no next open and no line at any hour of a week", Array.from({ length: 7 * 24 }, (_, k) => u(new Date(Date.parse("2026-11-16T00:30:00Z") + k * 3600e3).toISOString())).every((t) => web.nextOpen(web.marketById("CRYPTO"), t, H, "ok") === null && marketSession("CRYPTO", t, OK).note === null && marketSession("CRYPTO", t, OK).now === "unknown"));
+    ck("a market that is open has no next open, only since when its session began", next("NYSE", "2026-11-20T15:00:00Z") === null && next("TSE", "2026-11-20T01:00:00Z") === null && z(web.openSince(web.marketById("TSE"), u("2026-11-24T00:05:00Z"), H, "ok")?.at) === "2026-11-24T00:00Z" && z(web.openSince(web.marketById("TSE"), u("2026-11-24T04:00:00Z"), H, "ok")?.at) === "2026-11-24T03:30Z" && z(web.openSince(web.marketById("FX"), u("2026-11-24T15:00:00Z"), H, "ok")?.at) === "2026-11-22T21:00Z" && z(web.openSince(web.marketById("CME"), u("2026-11-24T15:00:00Z"), H, "ok")?.at) === "2026-11-23T23:00Z" && web.openSince(web.marketById("NYSE"), u("2026-11-20T13:16:00Z"), H, "ok") === null);
+
+    // --- holidays: no opening is promised on a day the calendar gives as shut ---
+    const tk = next("TSE", "2026-11-20T08:00:00Z"), tkS = ses("TSE", "2026-11-23T01:00:00Z"), ny = next("NYSE", "2026-11-25T21:30:00Z"), ye = next("TSE", "2026-12-30T08:00:00Z");
+    ck(`Tokyo after Friday 20 Nov's close opens on Tue 24 Nov at 08:00 SGT, not on Monday the 23rd, a holiday in JPX's calendar (${z(tk?.at)}; passed over: ${tk?.skipped})`, z(tk?.at) === "2026-11-24T00:00Z" && tk!.firm && same(tk!.skipped, ["2026-11-23"]));
+    ck(`on that Monday at 10:00 Tokyo time it is a holiday there, and the line reads "${tkS.note?.text}"; the tooltip "${tkS.note?.tip}"`, web.marketStatus(web.marketById("TSE"), u("2026-11-23T01:00:00Z"), H).state === "HOLIDAY" && tkS.now === "closed" && tkS.note?.text === "opens 24 Nov 08:00 SGT" && tkS.note.tip === "Tokyo: regular session 09:00–11:30, 12:30–15:30 JST. Shut today: a holiday in JPX's calendar. Next opens 24 Nov 08:00 SGT. Holidays: JPX's calendar.");
+    ck(`New York after Wednesday 25 Nov's close opens on Friday the 27th, not on Thanksgiving (${z(ny?.at)}; passed over: ${ny?.skipped}); the tooltip names the day`, z(ny?.at) === "2026-11-27T14:30Z" && ny!.firm && same(ny!.skipped, ["2026-11-26"]) && /26 Nov 2026: a holiday in NYSE's calendar\. Next opens 27 Nov 22:30 SGT\./.test(ses("NYSE", "2026-11-25T21:30:00Z").note?.tip ?? ""));
+    ck(`Tokyo after 30 Dec 2026 opens on Mon 4 Jan 2027: 31 Dec and 1 Jan are holidays there, then a weekend (${z(ye?.at)}; passed over: ${ye?.skipped})`, z(ye?.at) === "2027-01-04T00:00Z" && ye!.firm && same(ye!.skipped, ["2026-12-31", "2027-01-01"]));
+    const hk = ses("HKEX", "2026-11-20T13:16:00Z"), far = ses("NYSE", "2027-12-31T22:00:00Z"), none = ses("NYSE", "2026-11-20T13:16:00Z", { holidays: {}, state: "none" }), bare = ses("NYSE", "2026-11-20T13:16:00Z", { holidays: {}, state: "ok" });
+    ck(`a market whose holidays the Monitor does not hold is given its scheduled time, and says so: "${hk.note?.text}" ("${hk.note?.tip}")`, hk.note?.text === "opens 23 Nov 09:30 SGT, scheduled" && hk.note.scheduled && hk.note.tip === "Hong Kong: regular session 09:30–12:00, 13:00–16:00 HKT. Scheduled to open 23 Nov 09:30 SGT. The Monitor does not hold this market's holidays: on one the market stays shut.");
+    ck(`so is every market but Tokyo and New York: ${web.MARKETS.filter((m) => m.id !== "CRYPTO" && ses(m.id, "2026-11-21T02:00:00Z").note?.scheduled).map((m) => m.id).join(" ")}`, same(web.MARKETS.filter((m) => m.id !== "CRYPTO" && ses(m.id, "2026-11-21T02:00:00Z").note?.scheduled).map((m) => m.id).sort(), web.MARKETS.map((m) => m.id).filter((id) => !["TSE", "NYSE", "CRYPTO"].includes(id)).sort()) && !ses("TSE", "2026-11-21T02:00:00Z").note!.scheduled && !ses("NYSE", "2026-11-21T02:00:00Z").note!.scheduled);
+    ck(`after the last day held, New York's too: "${far.note?.text}" ("…${far.note?.tip.split(". ").slice(-1)[0]}")`, far.note?.text === "opens 3 Jan 22:30 SGT, scheduled" && /The Monitor holds NYSE's calendar to 31 Dec 2027: on a holiday after it the market stays shut\.$/.test(far.note.tip));
+    ck(`and when the calendar did not come, or carries no row for the market: "${none.note?.text}" ("…${none.note?.tip.split(". ").slice(-1)[0]}")`, none.note?.text === "opens 22:30 SGT, scheduled" && /could not be loaded/.test(none.note.tip) && bare.note?.text === "opens 22:30 SGT, scheduled");
+    const wait: Cal = { holidays: {}, state: "wait" };
+    ck("while the calendar is still on its way, Tokyo and New York get no line yet (today could be a holiday there), and are not called open on their hours alone; Hong Kong has its scheduled line at once", ses("NYSE", "2026-11-20T13:16:00Z", wait).note === null && ses("NYSE", "2026-11-20T13:16:00Z", wait).now === "closed" && ses("TSE", "2026-11-23T01:00:00Z", wait).note === null && ses("TSE", "2026-11-23T01:00:00Z", wait).now === "unknown" && ses("HKEX", "2026-11-20T13:16:00Z", wait).note?.text === "opens 23 Nov 09:30 SGT, scheduled");
+
+    // --- an early close ---
+    const N = web.marketById("NYSE"), SN = srv.marketById("NYSE")!;
+    const st2 = (iso: string) => [web.marketStatus(N, u(iso), H).state, srv.marketState(SN, u(iso), HS)].join("/");
+    ck(`Fri 27 Nov 2026, the day after Thanksgiving: New York is open at 12:59 there and closed from 13:00, on the page and on the server (${st2("2026-11-27T17:59:00Z")}, ${st2("2026-11-27T18:00:00Z")}, ${st2("2026-11-27T20:00:00Z")}); on Fri 20 Nov it is open at 13:05 (${st2("2026-11-20T18:05:00Z")})`, st2("2026-11-27T17:59:00Z") === "OPEN/OPEN" && st2("2026-11-27T18:00:00Z") === "CLOSED/CLOSED" && st2("2026-11-27T20:00:00Z") === "CLOSED/CLOSED" && st2("2026-11-20T18:05:00Z") === "OPEN/OPEN");
+    const ec = next("NYSE", "2026-11-27T18:05:00Z"), ecS = ses("NYSE", "2026-11-27T18:05:00Z");
+    ck(`after it the next open is Monday's ("${ecS.note?.text}"), and the tooltip says why: "${ecS.note?.tip}"`, z(ec?.at) === "2026-11-30T14:30Z" && ec!.why === "early" && ecS.note?.text === "opens 30 Nov 22:30 SGT" && / Closed early today, at 13:00 ET \(NYSE's calendar\)\. /.test(ecS.note.tip));
+    ck("the server reads New York for 45 minutes after the early close, as after any close, and not after 16:00 that day", srv.recentlyClosed(SN, u("2026-11-27T18:30:00Z"), 45, HS) && !srv.recentlyClosed(SN, u("2026-11-27T18:50:00Z"), 45, HS) && !srv.recentlyClosed(SN, u("2026-11-27T21:10:00Z"), 45, HS) && srv.recentlyClosed(SN, u("2026-11-20T21:10:00Z"), 45, HS) && scanDue(SN, u("2026-11-27T18:10:00Z"), HS) && !scanDue(SN, u("2026-11-27T19:30:00Z"), HS));
+    ck("the other early closes the page of NYSE gave: 24 Dec 2026 and 26 Nov 2027 close at 13:00; 24 Dec 2027 is a holiday in the calendar, not a half day", st2("2026-12-24T18:10:00Z") === "CLOSED/CLOSED" && st2("2026-12-24T17:30:00Z") === "OPEN/OPEN" && st2("2027-11-26T18:10:00Z") === "CLOSED/CLOSED" && st2("2027-12-24T15:00:00Z") === "HOLIDAY/HOLIDAY");
+
+    // --- the words, in the Monitor's own time format ---
+    ck(`today in Singapore the time alone, another day with its date: "${ses("NYSE", "2026-11-20T13:16:00Z").note?.text}", "${ses("NYSE", "2026-11-20T23:20:00Z").note?.text}", "${ses("TSE", "2026-11-20T15:59:00Z").note?.text}"`, ses("NYSE", "2026-11-20T13:16:00Z").note?.text === "opens 22:30 SGT" && ses("NYSE", "2026-11-20T23:20:00Z").note?.text === "opens 23 Nov 22:30 SGT" && ses("TSE", "2026-11-20T15:59:00Z").note?.text === "opens 24 Nov 08:00 SGT");
+    ck(`"today" is Singapore's day, not the market's: on Tue 24 Nov at 06:30 SGT (Monday 17:30 in New York) CME reads "${ses("CME", "2026-11-23T22:30:00Z").note?.text}"; at 23:59 SGT Tokyo's next morning has its date ("${ses("TSE", "2026-11-24T15:59:00Z").note?.text}"), a minute later none ("${ses("TSE", "2026-11-24T16:00:00Z").note?.text}")`, ses("CME", "2026-11-23T22:30:00Z").note?.text === "opens 07:00 SGT, scheduled" && ses("TSE", "2026-11-24T15:59:00Z").note?.text === "opens 25 Nov 08:00 SGT" && ses("TSE", "2026-11-24T16:00:00Z").note?.text === "opens 08:00 SGT");
+    ck(`a market's hours in its own time: "${hoursText(web.marketById("TSE"))}", "${hoursText(web.marketById("NYSE"))}", "${hoursText(web.marketById("ASX"))}", "${hoursText(web.marketById("FX"))}"`, hoursText(web.marketById("TSE")) === "09:00–11:30, 12:30–15:30 JST" && hoursText(web.marketById("NYSE")) === "09:30–16:00 ET" && hoursText(web.marketById("ASX")) === "10:00–16:00 Sydney time" && hoursText(web.marketById("FX")) === "Monday 05:00 to Saturday 06:00 SGT");
+
+    // --- what a row says ---
+    const row = (o: Partial<TableRow>) => ({ symbol: "^GSPC", market: "NYSE", live: false, source: "yahoo", lastAt: "2026-11-19T21:00:00Z", ...o }) as TableRow;
+    const at1 = u("2026-11-20T13:16:00Z"), s1 = rowSession(row({}), at1, OK), st1 = tileStamp(row({}), at1, s1.now);
+    ck(`a row that is not live while its market is shut says ${st1.label} ${st1.text} and "${s1.note?.text}"; its tooltip "${rowStateWords(row({}), at1, OK)}"`, st1.label === "CLOSED" && st1.text === "05:00 SGT" && s1.note?.text === "opens 22:30 SGT" && rowStateWords(row({}), at1, OK) === " · market closed · opens 22:30 SGT");
+    const at2 = u("2026-11-24T00:05:00Z"), jp = row({ symbol: "^N225", market: "TSE", lastAt: "2026-11-20T06:30:00Z" }), s2 = rowSession(jp, at2, OK), stp = tileStamp(jp, at2, s2.now);
+    ck(`a row that is not live in its market's regular hours (Tokyo five minutes after its open, on a feed twenty minutes behind) is not called closed: ${stp.label} ${stp.text} and "${s2.note?.text}"; tooltip "${rowStateWords(jp, at2, OK)}"`, stp.label === "LAST PRINT" && stp.text === "20 Nov 14:30 SGT" && s2.now === "open" && s2.note?.kind === "since" && s2.note.text === "open since 08:00 SGT" && rowStateWords(jp, at2, OK) === " · no new print · open since 08:00 SGT" && /this feed is delayed about 20 minutes/.test(s2.note.tip));
+    ck("the same for a booked close (LAST CLOSE with its date), and for a market the table does not keep (no line at all)", tileStamp(row({ lastAt: "2026-11-19T00:00:00Z" }), u("2026-11-20T15:00:00Z"), "open").label === "LAST CLOSE" && tileStamp(row({ lastAt: "2026-11-19T00:00:00Z" }), u("2026-11-20T15:00:00Z"), "open").text === "19 Nov 2026" && tileStamp(row({ lastAt: "2026-11-19T00:00:00Z" }), at1, "closed").label === "CLOSED" && rowSession(row({ market: "TSX" as never }), at1, OK).now === "unknown" && rowSession(row({ market: "TSX" as never }), at1, OK).note === null && tileStamp(row({}), at1, "unknown").label === "LAST PRINT" && rowStateWords(row({ market: "" }), at1, OK) === "");
+    ck("a live row, and an official yield (published once a day: no session), get no line; the yield's stamp stays PUBLISHED", rowSession(row({ live: true }), at1, OK).note === null && rowStateWords(row({ live: true }), at1, OK) === " · market open" && rowSession(row({ symbol: "JGB10Y", market: "TSE", source: "mof", lastAt: "2026-11-19T00:00:00Z" }), at1, OK).note === null && rowStateWords(row({ symbol: "JGB10Y", market: "TSE", source: "mof" }), at1, OK) === "" && tileStamp(row({ symbol: "JGB10Y", market: "TSE", source: "mof", lastAt: "2026-11-19T00:00:00Z" }), at1, "unknown").label === "PUBLISHED");
+    ck("without a session the stamp is as before (CLOSED for a row that is not live): the rule's default", tileStamp(row({}), at1).label === "CLOSED" && tileStamp(row({ live: true, lastAt: "2026-11-20T13:15:00Z" }), at1).label === "LIVE");
+    // a stock's page and an instrument outside the table: live read by the page
+    ck(`a stock's quote is live by the page's reading in its exchange's hours while it is no older than its feed's delay plus ${PAGE_FRESH_MIN} minutes; never outside them, on a holiday, after an early close, or for a booked close`, pageLive("NYSE", "2026-11-20T15:00:00Z", u("2026-11-20T15:20:00Z"), H) && !pageLive("NYSE", "2026-11-20T15:00:00Z", u("2026-11-20T15:31:00Z"), H) && pageLive("TSE", "2026-11-20T01:00:00Z", u("2026-11-20T01:45:00Z"), H) && !pageLive("NYSE", "2026-11-20T13:10:00Z", at1, H) && !pageLive("TSE", "2026-11-23T01:00:00Z", u("2026-11-23T01:05:00Z"), H) && !pageLive("NYSE", "2026-11-27T18:00:00Z", u("2026-11-27T18:05:00Z"), H) && !pageLive("NYSE", "2026-11-20T00:00:00Z", u("2026-11-20T15:00:00Z"), H) && !pageLive("", "2026-11-20T15:00:00Z", u("2026-11-20T15:01:00Z"), H) && !pageLive("NYSE", null, at1, H));
+    ck("a name outside the Monitor's table keeps only the market its symbol gives: a pair the FX week, a coin none that closes, a stock its exchange; an index or a future from the search none", symbolMarket("EURGBP=X") === "FX" && symbolMarket("BTC-USD") === "CRYPTO" && symbolMarket("7203.T") === "TSE" && symbolMarket("NVDA") === "NYSE" && symbolMarket("^AXJO") === null && symbolMarket("FGBL=F") === null && symbolMarket("MC.PA") === null);
+    // WATCHLIST's line
+    const shut = shutMarkets(["NYSE", "TSE", "NYSE", "FX", "CRYPTO", null, "HKEX"], u("2026-11-20T23:20:00Z"), OK);
+    ck(`a list of names says once for each market that is shut when it opens, the soonest first: "${shutLine(shut)}"`, shutLine(shut) === "FX opens 23 Nov 05:00 SGT, scheduled · Hong Kong opens 23 Nov 09:30 SGT, scheduled · New York opens 23 Nov 22:30 SGT · Tokyo opens 24 Nov 08:00 SGT" && shutLine(shutMarkets(["NYSE", "FX"], u("2026-11-20T15:00:00Z"), OK)) === "");
+
+    // --- the local copy at a set clock (om_mock_now): its rows by the session table ---
+    web.setHolidays({ TSE: cal.TSE, NYSE: cal.NYSE } as Parameters<typeof web.setHolidays>[0]);
+    const pr = (id: string, iso: string) => printAt(id, Date.parse(iso));
+    ck(`at the owner's moment the stand-in S&P 500 is not live, its last print at Thursday's close (${pr("NYSE", "2026-11-20T13:16:00Z")?.lastAt}); the Nikkei's at Friday's (${pr("TSE", "2026-11-20T13:16:00Z")?.lastAt}); a future is live on a print ten minutes old`, same(pr("NYSE", "2026-11-20T13:16:00Z"), { live: false, lastAt: "2026-11-19T21:00:00.000Z" }) && same(pr("TSE", "2026-11-20T13:16:00Z"), { live: false, lastAt: "2026-11-20T06:30:00.000Z" }) && same(pr("CME", "2026-11-20T13:16:00Z"), { live: true, lastAt: "2026-11-20T13:06:00.000Z" }) && pr("TSX", "2026-11-20T13:16:00Z") === null);
+    ck(`five minutes after Tokyo's open on Tue 24 Nov its stand-in print is still Friday's close, the Monday being a holiday (${pr("TSE", "2026-11-24T00:05:00Z")?.lastAt}); twenty-five minutes after, it is live`, same(pr("TSE", "2026-11-24T00:05:00Z"), { live: false, lastAt: "2026-11-20T06:30:00.000Z" }) && same(pr("TSE", "2026-11-24T00:25:00Z"), { live: true, lastAt: "2026-11-24T00:05:00.000Z" }) && same(pr("TSE", "2026-11-24T02:45:00Z"), { live: false, lastAt: "2026-11-24T02:30:00.000Z" }) && same(pr("NYSE", "2026-11-27T18:30:00Z"), { live: false, lastAt: "2026-11-27T18:00:00.000Z" }));
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

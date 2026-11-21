@@ -553,6 +553,14 @@ What the Monitor does about it:
   stores nothing.
 - Spot-check the table against the exchange: Nikkei 225 close on JPX/Nikkei, S&P 500 on S&P DJI, USD/JPY on a bank page, UST 10Y on treasury.gov for the same date.
 - Holidays: `sessions_cal` rows are `verified = false` until checked against each exchange's published calendar; the DATA chip says so.
+  The table holds Tokyo's and New York's for 2026 and 2027 (checked on 7 Nov 2026 against JPX's and NYSE's pages), and no
+  other market's. The page says when a closed market next opens from the session table and these rows, and marks the
+  time "scheduled" for a market whose holidays are not here (README, "When a closed market opens").
+- Early closes: `_shared/sessions.ts` keeps New York's 13:00 closes of 2026 to 2028 as NYSE's page gave them on 20 Nov
+  2026 (the lines are quoted there). After one, `marketState` is CLOSED: the table's rows stop being live at 13:00 and
+  the minute job reads New York's instruments for 45 minutes more, as after any close. The daily history's own
+  half-day rule (`feedhealth.ts`, `nyseHalfDay`) is older and separate; the paper portfolio's P-2 moves the dates into
+  `sessions_cal.early_close`.
 
 ## Notes
 

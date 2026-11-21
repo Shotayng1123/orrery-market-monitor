@@ -9,7 +9,8 @@ import { PolicyChart, type PolicyStep } from "../components/PolicyChart";
 import { useApi } from "../lib/useApi";
 import type { Curve, TableRow } from "../lib/types";
 import { fmtChg, fmtLevel, fmtPct, fmtStampSafe, signCls } from "./shared";
-import { datesIn, fmtDate } from "../lib/time";
+import { datesIn, fmtDate, rowAsOfTitle } from "../lib/time";
+import { rowStateWords } from "../lib/opens";
 import { bankName, dottedLine, FX, FX_CHARTS, YIELD_CHARTS } from "../lib/labels";
 import { levelOf } from "./Market";
 import { PERIODS } from "../lib/types";
@@ -20,12 +21,13 @@ import { openAsset } from "../components/CompanyCard";
 
 export interface PolicyRow { bank: string; name: string; rateLabel: string; rate: number | null; asOf: string | null; lastChange: string | null; nextMeeting: string | null; sourceUrl: string | null; sourceNote: string | null }
 
-/** Every pair opens its own page (the designer's D-15, B-23): the name a teal link, the whole row a pointer. */
+/** Every pair opens its own page (the designer's D-15, B-23): the name a teal link, the whole row a pointer. Its
+ *  tooltip gives its as-of and source, as a MARKETS row's does, and when the FX week opens while it is shut. */
 function FxTable({ rows }: { rows: TableRow[] }) {
   return (
     <table className="mini">
       <thead><tr><th className="l">Pair</th><th>Last</th>{PERIODS.map((p) => <th key={p.key}>{p.label} %</th>)}</tr></thead>
-      <tbody>{rows.map((r) => <tr key={r.symbol} className="click" title={`${r.name} (${r.symbol}): open its page`} onClick={(e) => { if (!(e.target as HTMLElement).closest("a")) openAsset(r.symbol); }}><td className="l"><a className="lnk" href={`#${pageHash(r.symbol)}`}>{r.name}</a></td><td className="num"><b>{levelOf(r, r.last)}</b></td>{PERIODS.map((p) => <td key={p.key} className={`num ${signCls(r.pct[p.key], 2)}`}>{fmtPct(r.pct[p.key])}</td>)}</tr>)}</tbody>
+      <tbody>{rows.map((r) => <tr key={r.symbol} className="click" title={`${r.name} (${r.symbol}) · ${rowAsOfTitle(r)}${rowStateWords(r)} · open its page`} onClick={(e) => { if (!(e.target as HTMLElement).closest("a")) openAsset(r.symbol); }}><td className="l"><a className="lnk" href={`#${pageHash(r.symbol)}`}>{r.name}</a></td><td className="num"><b>{levelOf(r, r.last)}</b></td>{PERIODS.map((p) => <td key={p.key} className={`num ${signCls(r.pct[p.key], 2)}`}>{fmtPct(r.pct[p.key])}</td>)}</tr>)}</tbody>
     </table>
   );
 }

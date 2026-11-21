@@ -8,10 +8,11 @@ import { Move, Screen } from "../components/PhoneKit";
 import { useApi, DEV_MOCK } from "../lib/useApi";
 import { fmtPct, fmtSigma, fmtStampSafe, isYield, signCls } from "./shared";
 import { PERIODS, type PeriodKey, type TableRow } from "../lib/types";
-import { marketById } from "../lib/sessions";
+import { marketOf } from "../lib/sessions";
+import { rowSession, rowStateWords } from "../lib/opens";
 import { shortName } from "../lib/short";
 import { cellBp, cellPct, CurvePanel, levelOf, RANGE_52W, RANGE_52W_TIP, rollTip, SIGMA_1D_TIP, SIGMA_1M, SIGMA_1M_TIP } from "./Market";
-import { fmtDate, rowAsOfTitle } from "../lib/time";
+import { asOfLine, fmtDate, isOfficialRow, rowAsOf, rowAsOfTitle } from "../lib/time";
 import { classLabel, delayed, MOVERS_SIGMA, PERIOD, SIGMA_1D, TAB, VS_200D } from "../lib/labels";
 import { commonWindow, moveLine, moversInSigma, sigmaTip, SIGMA_LINE, SIGMA_QUIET } from "../lib/movers";
 import { pageHash } from "../lib/indices";
@@ -39,11 +40,19 @@ const fmtMove = (r: TableRow, v: number | null) => (isYield(r) ? cellBp(v) : cel
 const moveCls = (r: TableRow, v: number | null) => (isYield(r) ? signCls(v == null ? null : v * 100, 1) : signCls(v, 2));
 const level = (r: TableRow) => levelOf(r, r.last);   // the instrument's decimals, "%" after a yield, as on every screen
 
+/** A line's state under its name: Live or Delayed ~20m; Closed with when its market next opens, in SGT ("opens 22:30
+ *  SGT"; the owner's request of 20 Nov 2026, lib/opens.ts); "No new print" with since when its session is open, where
+ *  the row is not live in its market's regular hours; "Published" with its date for an official yield, which has no
+ *  session; for a market the session table does not keep, what the figure is as of. The opening goes under the state,
+ *  whole, where the two do not fit on one line. */
 function Status({ r }: { r: TableRow }) {
-  const m = marketById(r.market);
+  const m = marketOf(r.market), ses = rowSession(r), pub = isOfficialRow(r) ? rowAsOf(r) : null;
   return (
     <span className="mp-st">
-      {r.live ? (m && m.delayMin > 0 ? <span className="delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>{delayed(m.delayMin)}</span> : <span className="live">Live</span>) : <span>Closed</span>}
+      {r.live ? (m && m.delayMin > 0 ? <span className="delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>{delayed(m.delayMin)}</span> : <span className="live">Live</span>)
+        : pub ? <span className="pub" title={rowAsOfTitle(r)}>Published {fmtDate(pub.ymd)}</span>
+        : <span className="state">{ses.now === "closed" ? "Closed" : ses.now === "open" ? "No new print" : asOfLine(rowAsOf(r))}</span>}
+      {ses.note && <span className={`opens ${ses.note.kind}`} title={ses.note.tip}>{ses.note.text}</span>}
       {r.roll && <span className="roll" title={rollTip(r)}>Roll</span>}
       {r.proxyFor && <span title={`${r.name} stands in for ${r.proxyFor}`}>via {r.symbol}</span>}
     </span>
@@ -60,7 +69,7 @@ function Detail({ r, period, tick, sigmaWindow, head = false }: { r: TableRow; p
   const rate = isYield(r);
   return (
     <div className="mp-det">
-      <div className="mp-full">{r.name} · {r.symbol} · {rowAsOfTitle(r)}</div>
+      <div className="mp-full">{r.name} · {r.symbol} · {rowAsOfTitle(r)}{rowStateWords(r)}</div>
       <ChartPanel row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} axes chartHeight={head ? HEAD_CHART : undefined} />
       <div className="mp-grid">
         {PERIODS.map((p) => { const v = move(r, p.key); return <div key={p.key} className={p.label === period ? "cur" : undefined}><span className="k">{p.label}</span><span className={`v ${moveCls(r, v)}`}>{fmtMove(r, v)}</span></div>; })}
@@ -76,15 +85,16 @@ function Detail({ r, period, tick, sigmaWindow, head = false }: { r: TableRow; p
   );
 }
 
-/** One instrument as a line: name and status, the last level, the change over `period`. Opened, it shows the chart,
- *  every period and the statistics under the line. `fixed` keeps it open and makes the line a plain heading (the
+/** One instrument as a line: name and status, the last level, the change over `period`. The status runs under the name
+ *  and the level together (`.mp-row.inst`), so "Closed" and when its market opens fit on one line. Opened, it shows the
+ *  chart, every period and the statistics under the line. `fixed` keeps it open and makes the line a plain heading (the
  *  index at the top of EQUITIES). Shared by every phone tab that lists instruments from the market table. */
 export function InstrumentRow({ r, period, tick, open, onToggle, fixed = false, sigmaWindow }: { r: TableRow; period: ChartPeriod; tick: number; open: boolean; onToggle?: () => void; fixed?: boolean; sigmaWindow?: SigmaWindow }) {
   const v = move(r, KEY[period]);
   const line = <><span className="mp-nm"><span className="n">{shortName(r.symbol, r.name)}</span><Status r={r} /></span><span className="mp-px"><Flash value={r.last}>{level(r)}</Flash></span><Move v={v} cls={moveCls(r, v)} w={period}>{fmtMove(r, v)}</Move></>;
   return (
     <div className={`mp-item${open || fixed ? " open" : ""}`}>
-      {fixed ? <div className="mp-row fixed">{line}</div> : <button type="button" className="mp-row" aria-expanded={open} onClick={onToggle}>{line}</button>}
+      {fixed ? <div className="mp-row inst fixed">{line}</div> : <button type="button" className="mp-row inst" aria-expanded={open} onClick={onToggle}>{line}</button>}
       {(open || fixed) && <Detail r={r} period={period} tick={tick} sigmaWindow={sigmaWindow} head={fixed} />}
     </div>
   );

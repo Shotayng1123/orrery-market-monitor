@@ -1,4 +1,5 @@
-// Exchange sessions for the server side (same rules as web/src/lib/sessions.ts; keep the two in step).
+// Exchange sessions for the server side (same rules as web/src/lib/sessions.ts; keep the two in step:
+// sim/logic.test.ts compares the two tables, their early closes and their states).
 export type MarketId = "TSE" | "HKEX" | "SSE" | "KRX" | "TWSE" | "NSE" | "SGX" | "ASX" | "XETRA" | "SIX" | "LSE" | "NYSE" | "B3" | "BMV" | "CME" | "FX" | "CRYPTO";
 export type MarketState = "OPEN" | "BREAK" | "CLOSED" | "HOLIDAY";
 export interface Market { id: MarketId; name: string; tz: string; sessions: Array<[number, number]>; days: number[]; delayMin: number }
@@ -28,6 +29,30 @@ export const MARKETS: Market[] = [
 ];
 export const marketById = (id: string): Market | undefined => MARKETS.find((m) => m.id === id);
 
+// ---- what the Monitor knows of each market's calendar, and from whom (20 Nov 2026; the page's copy says more) ----
+// Holidays are rows of `sessions_cal` (loadHolidays in table.ts): Tokyo's and New York's for 2026 and 2027, checked
+// against JPX's and NYSE's own pages on 7 Nov 2026 (migration 20261107000010). No other market's are held.
+export interface HolidaySource { publisher: string; page: string; read: string; through: string }
+export const HOLIDAY_SOURCES: Partial<Record<MarketId, HolidaySource>> = {
+  TSE: { publisher: "JPX", page: "https://www.jpx.co.jp/english/corporate/about-jpx/calendar/index.html", read: "2026-11-07", through: "2027-12-31" },
+  NYSE: { publisher: "NYSE", page: "https://www.nyse.com/trade/hours-calendars", read: "2026-11-07", through: "2027-12-31" },
+};
+// Early closes: the minute (local time) a market's regular session ends on a day it closes early. NYSE's, as its page
+// "Holidays & Trading Hours" gave them to the source-probe `pf_rules` on 20 Nov 2026, 12:41 UTC (run 44737850579):
+//   "** Each market will close early at 1:00 p.m. (1:15 p.m. for eligible options) on Monday, July 3, 2028. …"
+//   "*** Each market will close early at 1:00 p.m. (1:15 p.m. for eligible options) on Friday, November 27, 2026,
+//    Friday, November 26, 2027, and Friday, November 24, 2028 (the day after Thanksgiving). …"
+//   "**** Each market will close early at 1:00 p.m. (1:15 p.m. for eligible options) on Thursday, December 24, 2026. …"
+// "All times are Eastern Time." After an early close the market is CLOSED here: its rows stop being LIVE, and the
+// minute job reads it for 45 minutes more, as after any close. No other market's early closes are known here. The
+// paper portfolio's P-2 moves these into the database (`sessions_cal.early_close`).
+export const EARLY_CLOSES: Partial<Record<MarketId, Record<string, number>>> = {
+  NYSE: { "2026-11-27": hm(13), "2026-12-24": hm(13), "2027-11-26": hm(13), "2028-07-03": hm(13), "2028-11-24": hm(13) },
+};
+/** The minute (local time) the market's regular session ends on the local date `ymd`: an early close where one is
+ *  known, otherwise the end of its last session. */
+export const dayEnd = (m: Market, ymd: string): number => EARLY_CLOSES[m.id]?.[ymd] ?? m.sessions[m.sessions.length - 1][1];
+
 export interface TzParts { wd: number; y: number; mo: number; d: number; h: number; m: number; ymd: string }
 const WD: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 const cache = new Map<string, Intl.DateTimeFormat>();
@@ -56,17 +81,18 @@ export function marketState(m: Market, now: Date, holidays: Holidays = {}): Mark
   }
   if (!m.days.includes(p.wd)) return "CLOSED";
   if (holidays[m.id]?.has(p.ymd)) return "HOLIDAY";
-  const first = m.sessions[0][0], last = m.sessions[m.sessions.length - 1][1];
+  const first = m.sessions[0][0], last = dayEnd(m, p.ymd);   // an early close ends the day's last session sooner
   if (minute < first || minute >= last) return "CLOSED";
-  for (const [a, b] of m.sessions) if (minute >= a && minute < b) return "OPEN";
+  for (const [a, b] of m.sessions) if (minute >= a && minute < Math.min(b, last)) return "OPEN";
   return "BREAK";
 }
 
-/** True within `graceMin` minutes after the regular close (the official closing level often posts late). */
+/** True within `graceMin` minutes after the regular close, or after an early close on a day that has one (the
+ *  official closing level often posts late). */
 export function recentlyClosed(m: Market, now: Date, graceMin = 45, holidays: Holidays = {}): boolean {
   if (m.id === "FX" || m.id === "CME") return false;
   const p = partsIn(m.tz, now), minute = p.h * 60 + p.m;
   if (!m.days.includes(p.wd) || holidays[m.id]?.has(p.ymd)) return false;
-  const last = m.sessions[m.sessions.length - 1][1];
+  const last = dayEnd(m, p.ymd);   // on a day that closes early, the grace runs from the early close
   return minute >= last && minute < last + graceMin;
 }

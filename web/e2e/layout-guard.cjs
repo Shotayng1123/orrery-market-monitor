@@ -32,6 +32,8 @@
 // at the other windows D-51 named: 1366x768 and 1536x864 at L, 1680x1050 at XL. EQUITIES joins at L with I-9: there
 // its breadth chart is laid over its table's figures and FLOW BY SECTOR and SCREENER scroll sideways (C/backlog.md).
 // XL text and the one-screen (COMPACT) layout join when increment I-9 fixes them (the designer's D-06 and D-21).
+// With GUARD_CLOCK set, the same guard runs with the local copy's clock at that moment (layout-guard-closed: a weekend,
+// when each closed market's line carries when it opens).
 // Run from web/:  node e2e/run.cjs layout-guard   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
 const MOCK = "http://localhost:5179/orrery-market-monitor/";
@@ -245,7 +247,9 @@ const clean = (x) => !x.ox && !x.cut.length && !x.canvas.length && !x.sideways.l
 const open = async (b, s) => {
   const ctx = await b.newContext(s.ctx);
   // every chart asks for its line at once, as if scrolled into view, so each one is measured drawn
-  await ctx.addInitScript((pr) => { try { if (pr) localStorage.setItem("om_prefs", JSON.stringify(pr)); } catch {} try { window.IntersectionObserver = undefined; } catch {} }, s.prefs || null);
+  // GUARD_CLOCK (an ISO time) sets the local copy's clock (om_mock_now, lib/mockclock.ts): layout-guard-closed runs the
+  // guard on a weekend, when every line that says CLOSED carries its longest "opens …" (21 Nov 2026)
+  await ctx.addInitScript(([pr, at]) => { try { if (pr) localStorage.setItem("om_prefs", JSON.stringify(pr)); if (at) localStorage.setItem("om_mock_now", at); } catch {} try { window.IntersectionObserver = undefined; } catch {} }, [s.prefs || null, process.env.GUARD_CLOCK || null]);
   const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message)); return { ctx, p, errs };
 };
 

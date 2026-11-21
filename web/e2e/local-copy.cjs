@@ -160,8 +160,10 @@ const calRows = (p, phone) => p.evaluate((phone) => phone
     ck("the local copy answers with the rows the browser checks use (calendar, headlines, notes, reports, earnings, alerts from 2.5σ as the server lists them, policy rates)", JSON.stringify(m.cal) === JSON.stringify(t(S.calendar)) && JSON.stringify(m.news) === JSON.stringify(t(S.news)) && JSON.stringify(m.notes) === JSON.stringify(t(S.notes)) && JSON.stringify(m.reports) === JSON.stringify(t(S.reports)) && JSON.stringify(m.earnings) === JSON.stringify(S.earnings.map((r) => r.symbol)) && JSON.stringify(m.alerts) === JSON.stringify(S.alerts.filter((r) => r.kind !== "sigma" || Math.abs(r.sigma) >= 2.5).map((r) => r.msg)) && JSON.stringify(m.banks) === JSON.stringify(S.policy.rows.map((r) => r.bank)), { cal: m.cal.length, news: m.news.length, notes: m.notes.length });
     await ctx.close(); }
   { const js = fs.readdirSync(DIST).filter((f) => f.endsWith(".js")).map((f) => fs.readFileSync(path.join(DIST, f), "utf8")).join("\n");
-    // I-6 and B-27's stand-ins too: the 2.7σ alert's note and the stand-in futures' contracts (lib/mock.ts)
-    const marks = [H120, T110, LONG, JP, ZEW, "om_mock_watch", "Nippon Stand-in Heavy Industries", "σ of 63 daily changes to the last close", "GCG27.CMX", "GCZ26.CMX", "NKDZ26.CME"].filter((s) => js.includes(s));
+    // I-6 and B-27's stand-ins too: the 2.7σ alert's note and the stand-in futures' contracts (lib/mock.ts); and the
+    // local copy's clock and its copy of the holiday calendar (lib/mockclock.ts; the live page takes the calendar from
+    // the server's health answer, so a day of it such as 22 Mar 2027 is in no script)
+    const marks = [H120, T110, LONG, JP, ZEW, "om_mock_watch", "Nippon Stand-in Heavy Industries", "σ of 63 daily changes to the last close", "GCG27.CMX", "GCZ26.CMX", "NKDZ26.CME", "om_mock_now", "2027-03-22"].filter((s) => js.includes(s));
     ck(`the site as published (a production build) carries none of the stand-in rows (${js.length} characters of script searched)`, js.length > 100000 && marks.length === 0, marks); }
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

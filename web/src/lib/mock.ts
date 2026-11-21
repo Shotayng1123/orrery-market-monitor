@@ -8,10 +8,13 @@
 //   om_mock_watch in the storage      the stand-in watchlist of this browser (the star, the add box and removal work)
 //   om_mock_bare = "a,b"              those actions answered as one the mock does not know ({ rows: [] })
 //   om_mock_stale = "1", om_mock_live = "1"   a stopped price feed; EQUITIES while its market is open (below)
+//   om_mock_now = an ISO time         the page's clock starts there (lib/mockclock.ts) and the market rows follow the
+//                                     session table at that moment: a closed market, a midday break, a holiday
 import { mockStock } from "./mockStock";
 import { mockInstrument, rowFromBars } from "./mockInstr";
 import standin from "./standin.json";
 import { isYield } from "./fmt";
+import { marketOf, marketStatus, stockMarket, type MarketId } from "./sessions";
 import type { TableRow, Health, Curve, Series, Alert, EconEvent, NewsItem, Note, Report, PeriodKey } from "./types";
 import type { Feed, WatchRow } from "../views/Watchlist";
 import type { EarningsRow } from "../components/Earnings";
@@ -59,6 +62,43 @@ const PUBLISHED: Record<string, string> = { UST2Y: "US Treasury", UST3M: "US Tre
 /** The instruments table's provider of each, as the market table sends it in `source` (the seeds: UST2Y "treasury",
  *  JGB10Y "mof", the rest of the official yields "curve"; every other instrument "yahoo"). */
 const providerOf = (symbol: string): string => (symbol === "UST2Y" ? "treasury" : symbol === "JGB10Y" ? "mof" : PUBLISHED[symbol] ? "curve" : "yahoo");
+
+// ---- the holiday calendar, and the rows at a set clock (the owner's request of 20 Nov 2026: when a closed market opens) ----
+/** The holidays the local copy passes over: the rows of the server's `sessions_cal` as its two migrations write them
+ *  (20261107000002_seed.sql and 20261107000010_holidays_verified.sql: Tokyo's and New York's for 2026 and 2027, checked
+ *  against JPX's and NYSE's own pages on 7 Nov 2026), so the local copy shows what the live Monitor shows. They are the
+ *  Monitor's own calendar, not stand-ins; sim/logic.test.ts checks them against the two files, row for row. */
+const HOLIDAYS: Partial<Record<MarketId, string[]>> = {
+  TSE: ["2026-01-01", "2026-01-02", "2026-01-12", "2026-02-11", "2026-02-23", "2026-03-20", "2026-04-29", "2026-05-04", "2026-05-05", "2026-05-06", "2026-07-20", "2026-08-11", "2026-09-21", "2026-09-22", "2026-09-23", "2026-10-12", "2026-11-03", "2026-11-23", "2026-12-31",
+    "2027-01-01", "2027-01-11", "2027-02-11", "2027-02-23", "2027-03-22", "2027-04-29", "2027-05-03", "2027-05-04", "2027-05-05", "2027-07-19", "2027-08-11", "2027-09-20", "2027-09-23", "2027-10-11", "2027-11-03", "2027-11-23", "2027-12-31"],
+  NYSE: ["2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25",
+    "2027-01-01", "2027-01-18", "2027-02-15", "2027-03-26", "2027-05-31", "2027-06-18", "2027-07-05", "2027-09-06", "2027-11-25", "2027-12-24"],
+};
+/** The calendar as the server's `health` sends it: the days from two days back on. */
+export function mockHolidays(now: number = Date.now()): Partial<Record<MarketId, string[]>> {
+  const from = new Date(now - 2 * 86400e3).toISOString().slice(0, 10);
+  return Object.fromEntries(Object.entries(HOLIDAYS).map(([k, v]) => [k, v.filter((d) => d >= from)]));
+}
+/** Whether the local copy's clock is set (`om_mock_now`, lib/mockclock.ts): the market rows then follow the session
+ *  table at the page's clock. Without it they keep their fixed states (FX and the futures live, the rest not), so
+ *  that the browser checks see the same rows at any hour. */
+export const clockSet = (): boolean => { try { return Number.isFinite(Date.parse(localStorage.getItem("om_mock_now") ?? "")); } catch { return false; } };
+const QUARTER = 15 * 60e3;
+const lastOpen = new Map<string, number>();
+/** A stand-in print by the session table at `now`: live with a print as old as the feed's delay while the market has
+ *  been in its regular hours that long; otherwise not live, its last print at the end of the last session before
+ *  (every session starts and ends on a quarter hour). */
+export function printAt(market: string | null | undefined, now: number): { live: boolean; lastAt: string } | null {
+  const m = marketOf(market);
+  if (!m) return null;
+  const open = (t: number) => marketStatus(m, new Date(t)).state === "OPEN";
+  const t = now - m.delayMin * 60e3;
+  if (open(now) && open(t)) return { live: true, lastAt: new Date(t).toISOString() };
+  const from = Math.floor((open(now) ? t : now) / QUARTER) * QUARTER, key = `${m.id}|${from}`;
+  let end = lastOpen.get(key);
+  if (end == null) { end = from; for (let k = 1; k <= 14 * 96; k++) if (open(from - k * QUARTER)) { end = from - (k - 1) * QUARTER; break; } lastOpen.set(key, end); }
+  return { live: false, lastAt: new Date(end).toISOString() };
+}
 
 function rng(seed: number): () => number {
   let s = seed >>> 0 || 1;
@@ -137,6 +177,7 @@ function hourlySeries(symbol: string, days: number, perHour = 1): Array<{ t: num
 }
 
 export function mockTable(): { rows: TableRow[]; asOf: string } {
+  const atClock = clockSet();
   const rows: TableRow[] = MASTER.map((m) => {
     const s = dailySeries(m.symbol, 800);
     const last = m.base;
@@ -157,8 +198,10 @@ export function mockTable(): { rows: TableRow[]; asOf: string } {
     const fut = MOCK_CONTRACTS[m.symbol];
     // as the server's table (table.ts): a print's own time; an official yield, which has no quote, stamped with the
     // date it was published for at midnight UTC ("<date>T00:00:00Z": a date, no time of day; the reviewer's R2B-01)
-    const lastAt = source === "yahoo" ? new Date().toISOString() : `${new Date(s[s.length - 1].t * 1000).toISOString().slice(0, 10)}T00:00:00Z`;
-    return { ...m, proxyFor: m.proxyFor, last, lastAt, source, live: source === "yahoo" && (m.market === "FX" || m.market === "CME"), closes, closeDates, pct,
+    // with the clock set (om_mock_now), a print by the session table at that moment; without, the fixed states
+    const pr = source === "yahoo" && atClock ? printAt(m.market, Date.now()) : null;
+    const lastAt = pr ? pr.lastAt : source === "yahoo" ? new Date().toISOString() : `${new Date(s[s.length - 1].t * 1000).toISOString().slice(0, 10)}T00:00:00Z`;
+    return { ...m, proxyFor: m.proxyFor, last, lastAt, source, live: pr ? pr.live : source === "yahoo" && (m.market === "FX" || m.market === "CME"), closes, closeDates, pct,
       z1m: sd > 0 ? (last - mu) / sd : null, pos52: hi > lo ? ((last - lo) / (hi - lo)) * 100 : null, vs200: rate ? last - m200 : (last / m200 - 1) * 100,
       z1d: sdz > 0 ? day / sdz : null, sd1d: sdz, zFrom: new Date(s[L - 64].t * 1000).toISOString().slice(0, 10), zTo: new Date(s[L - 1].t * 1000).toISOString().slice(0, 10), zN: 63,
       contract: fut?.contract ?? null, roll: roll ? { d: roll.d, from: roll.from, to: roll.to, step: roll.step } : null };
@@ -340,10 +383,12 @@ function instrumentAnswer(sym: string): unknown {
   const def = known ?? { symbol: sym, name: sym, cls: /=X$/.test(sym) ? "Currency" : /=F$/.test(sym) ? "Futures" : /-USD$/.test(sym) ? "Crypto" : "Equities", group: /=X$|-USD$/.test(sym) ? "fx" : /=F$/.test(sym) ? "cmdty" : "equity", market: /=X$/.test(sym) ? "FX" : "NYSE", currency: "USD", decimals: 2, order: 0, base: 57000, vol: 0.013 } as (typeof MASTER)[number];
   const pts = dailySeries(sym, 1300), bars = pts.map((p) => ({ t: p.t, c: p.v })), pub = PUBLISHED[sym] ?? null;
   const tableRow = MASTER.some((m) => m.symbol === sym) ? mockTable().rows.find((r) => r.symbol === sym) ?? null : null;
-  const lastAt = pub ? `${new Date(pts[pts.length - 1].t * 1000).toISOString().slice(0, 10)}T00:00:00Z` : new Date().toISOString();
+  // with the clock set (om_mock_now), a Monitor instrument outside the stand-in table prints by the session table too
+  const pr = !pub && known && clockSet() ? printAt(def.market, Date.now()) : null;
+  const lastAt = pub ? `${new Date(pts[pts.length - 1].t * 1000).toISOString().slice(0, 10)}T00:00:00Z` : pr ? pr.lastAt : new Date().toISOString();
   // the table's own row (as the server sends it, so the page, its chart and MARKETS agree), or one made the table's way;
   // an official yield's figure is its last published close
-  const row = tableRow ?? rowFromBars(def, bars.slice(0, -1), def.base, lastAt);   // the walk's last point is the print
+  const row = tableRow ?? { ...rowFromBars(def, bars.slice(0, -1), def.base, lastAt), live: pr?.live ?? false };   // the walk's last point is the print
   const fut = known ? MOCK_CONTRACTS[sym] : undefined, roll = sym === MOCK_ROLL.symbol ? mockRoll(pts) : null;
   const futures = fut ? { contract: fut.contract, expires: inDays(fut.expiresIn), since: new Date(pts[Math.max(0, pts.length - 1 - fut.since)].t * 1000).toISOString().slice(0, 10), rolls: roll ? [{ d: roll.d, from: roll.from, to: roll.to, prevClose: roll.prevClose }] : [] } : null;
   return mockInstrument({ ...row, lastAt: pub ? lastAt : row.lastAt, live: pub ? false : row.live, source: providerOf(sym) }, bars, { official: pub, monitor: !!known, futures, calendar: S.calendar as unknown as EconEvent[], news: S.news as unknown as NewsItem[], alerts: [...(S.watch.feed.alerts as unknown as Alert[]).map((a) => ({ ...a, id: a.id + 1000 })), ...(S.alerts as unknown as Alert[])], now: Date.now() });
@@ -376,7 +421,7 @@ function emptyAnswer(action: string, params: Record<string, string | number | bo
 
 // `om_mock_stale` = "1" in the browser's storage: the answer of a server whose price feed stopped 99 minutes ago
 const mockFeed = (): Health["feed"] => { let stale = false; try { stale = localStorage.getItem("om_mock_stale") === "1"; } catch { /* no storage */ } return stale ? { expected: true, ok: false, newest: new Date(Date.now() - 99 * 60e3).toISOString(), symbol: "USDJPY=X", lateMin: 99 } : { expected: true, ok: true, newest: new Date(Date.now() - 60e3).toISOString(), symbol: "USDJPY=X", lateMin: 1 }; };
-export const mockHealth = (): Health => ({ ok: true, at: new Date().toISOString(), tick: { lastAt: new Date().toISOString(), ageMin: 1, ok: true, note: "mock" }, daily: { lastAt: new Date().toISOString(), ok: true, note: "mock" }, feed: mockFeed(), sources: [{ name: "mock", lastOk: new Date().toISOString(), lastError: null }], holidays: {}, holidaysVerified: false });
+export const mockHealth = (): Health => ({ ok: true, at: new Date().toISOString(), tick: { lastAt: new Date().toISOString(), ageMin: 1, ok: true, note: "mock" }, daily: { lastAt: new Date().toISOString(), ok: true, note: "mock" }, feed: mockFeed(), sources: [{ name: "mock", lastOk: new Date().toISOString(), lastError: null }], holidays: mockHolidays(), holidaysVerified: true });
 
 export function mockAction(action: string, params: Record<string, string | number | boolean | undefined> | undefined): unknown {
   if (bare(action)) return { rows: [] };
@@ -423,7 +468,10 @@ export function mockAction(action: string, params: Record<string, string | numbe
     case "stock": {
       const sym = String(params?.symbol ?? "7203.T");
       if (isInstrumentSymbol(sym)) return instrumentAnswer(sym);   // a currency, a yield, a commodity, a future or an index (I-4)
-      const pts = dailySeries(sym, 300); return { ...mockStock(sym, pts[pts.length - 1].v, pts), feed: stockFeed(sym) };   // the price the mock chart ends at, and its days for the marks
+      const pts = dailySeries(sym, 300), st = mockStock(sym, pts[pts.length - 1].v, pts);   // the price the mock chart ends at, and its days for the marks
+      // with the clock set (om_mock_now), its quote's time by its exchange's hours: its last close while that is shut
+      const pr = clockSet() ? printAt(stockMarket(sym), Date.now()) : null;
+      return { ...st, ...(pr ? { asOf: pr.lastAt } : {}), feed: stockFeed(sym) };
     }
     case "asset": {
       const symbol = String(params?.symbol ?? "7203.T"); const r = rng(seedOf(symbol)); const jp = /\.T$/.test(symbol);

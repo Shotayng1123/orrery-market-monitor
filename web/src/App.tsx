@@ -8,7 +8,8 @@ import { api, apiConfigured, clearToken, getToken, tokenId, type Me } from "./li
 import { AccountModal, ChangePassword } from "./auth/Account";
 import { Logo } from "./components/Logo";
 import { DEV_MOCK } from "./lib/useApi";
-import { anyOpen, setHolidays } from "./lib/sessions";
+import { anyOpen, noHolidays, setHolidays } from "./lib/sessions";
+import { clockSet, mockHolidays } from "./lib/mock";
 import { applyPrefs, loadPrefs, savePrefs, type Prefs } from "./lib/prefs";
 import type { Health } from "./lib/types";
 import { feedFrom, lateText } from "./lib/feed";
@@ -57,6 +58,10 @@ const VERIFY = takeVerifyLink();
 const DEV_BYPASS = import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS === "1";
 
 const OPEN_INTERVAL = 60, CLOSED_INTERVAL = 60;   // one minute always (Shota): FX is open most of the week and the check is cheap
+
+// The local copy asks no server for its holiday calendar: it takes the mock's (the Monitor's own rows), before
+// anything is drawn, so "opens …" beside a CLOSED passes over the same holidays as on the live Monitor.
+if (DEV_MOCK) setHolidays(mockHolidays());
 
 export default function App() {
   // the entry the Monitor opens on is marked before anything is drawn, so a list's kept state has its entry (lib/nav.ts)
@@ -136,8 +141,8 @@ export default function App() {
     try {
       const h = await api<Health>("health");
       setHealth(h); setHealthErr(null); feedFrom(h);
-      if (h.holidays) setHolidays(h.holidays);
-    } catch (e) { setHealthErr(e instanceof Error ? e.message : String(e)); feedFrom(null); }
+      if (h.holidays) setHolidays(h.holidays); else noHolidays();   // an answer without a calendar: a next open is then the scheduled one
+    } catch (e) { setHealthErr(e instanceof Error ? e.message : String(e)); feedFrom(null); noHolidays(); }   // no calendar: a next open is then the scheduled one (lib/opens.ts)
     finally { refreshing.current = false; }
     setUpdatedAt(new Date()); setTick((t) => t + 1);
     setHit(true); setTimeout(() => setHit(false), 2000);
@@ -189,7 +194,7 @@ export default function App() {
   const { view, sub } = route;
   return (
     <>
-      {DEV_MOCK && <div id="mockbar">MOCK PREVIEW — synthetic data for layout checks only. Nothing here is real. The live Monitor is at https://shotayng1123.github.io/orrery-market-monitor/</div>}
+      {DEV_MOCK && <div id="mockbar">MOCK PREVIEW — synthetic data for layout checks only. Nothing here is real. The live Monitor is at https://shotayng1123.github.io/orrery-market-monitor/{clockSet() && <span id="mockclock"> · clock set (om_mock_now): {fmtStamp(new Date())}</span>}</div>}
       <CardLayer />
       {acct && me && <AccountModal me={me} onClose={() => setAcct(false)} onSignOut={signOut} onChanged={() => setTok(getToken())} />}
       {notify && <Notify onClose={() => setNotify(false)} />}
