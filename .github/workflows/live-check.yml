@@ -7,6 +7,8 @@ name: live-check
 # pagefeed.ts) against the live tables, for USD/JPY, ^TNX, JGB 10Y and 7203.T: worth a run after a server deploy.
 # One part is not read-only and runs only when asked for by name: "token" has the database ask GitHub to start a
 # run of this check (its counts part) and prints GitHub's answer, which is how a stored token is tried out.
+# "pf" asks the database for its own look at the paper portfolio's store (pf_selftest): it prints "pf_selftest ok"
+# and counts, never an account, a portfolio or a note.
 # Another runs only by name: "keys" tries the owner's source keys (jobs/live_keys.ts): for SEC_USER_AGENT,
 # EDINET_API_KEY and BLS_API_KEY, "set" or "not set" and the HTTP status of one or two requests with each; never a
 # value. Those three secrets go to that step alone.
@@ -14,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: "Parts to print, comma-separated (jobs, relay, sources, market, source, equities, alerts, reasons, edinet, stock, counts); empty for all. token = try the stored GitHub token; keys = try the owner's source keys (SEC, EDINET, BLS)"
+        description: "Parts to print, comma-separated (jobs, relay, sources, market, source, equities, alerts, reasons, edinet, stock, counts, pf); empty for all. token = try the stored GitHub token; keys = try the owner's source keys (SEC, EDINET, BLS)"
         required: false
         default: ""
 

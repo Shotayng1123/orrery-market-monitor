@@ -1,8 +1,23 @@
 import { useEffect, useState } from "react";
+import { PAPER } from "../lib/paper";
+import { NOT_USED_TEXT, PERSONAL_USE_READ, PERSONAL_USE_TEXT } from "../lib/labels";
+import { HELP_EVENT, HELP_PERSONAL_USE } from "./PersonalUse";
 
 /** The legend behind the "?" in the header: what every column, colour and badge on the Monitor means, in one
  *  place and readable on a phone (the same explanations otherwise sit in hover tooltips, which a phone lacks). */
-const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
+/** A row: what it is about, the explanation, and for a row another screen opens Help at, its id. */
+type Row = [string, string] | [string, string, string];
+// The paper portfolio's part (P-1), in Help only where the tab is drawn (lib/paper.ts): what its screens show today.
+// The paragraphs on tracking error and on risk-adjusted figures come with the screens that show those figures.
+const PORTFOLIO_ROWS: Row[] = !__PAPER_BUILD__ ? [] : [
+  ["Paper, and only you", "A paper portfolio places no real order, has no broker and holds no money. It belongs to the account that made it: no other account can open it, its settings or its notes, and the Monitor has no screen, a manager's included, that shows one account's book to another. Before the first one the Monitor asks you to agree to one statement, once."],
+  ["Target return · Target volatility", "A book aims at no index. Its target return is cash plus a margin a year (cash + 5% to start): cash is the overnight rate of the book's base currency, EFFR for a dollar book and TONA for a yen book. Its target volatility is a share of capital a year. Neither is a limit. The form prints what they mean together: the implied Sharpe ratio (the margin ÷ the target volatility), the one-day VaR the volatility implies against the VaR limit, and the ladder's first step in target volatilities."],
+  ["Cash + x% as one figure", "Under the target return: the same target as one percentage, at the latest stored rate, named with its date and source (= 9.21% a year at EFFR 3.88% for 18 Nov 2026). Cash compounds at each weekday's strike, a weekend counting three days, on actual days over 360 for a dollar rate and over 365 for a yen rate; the margin compounds on top: (1 + cash) × (1 + x) − 1. The figure moves with the rate; the target itself is cash + x%."],
+  ["Reference · PROXY", "The Reference is the market a book is compared with, never an aim, and the start fixes it. Its index's own levels are subscription data, which the Monitor does not read: the series is a stand-in built from a fund that tracks the index, and says PROXY; until it is stored the row says it waits for its series. A Benchmark is what a relative-return book is measured and limited against; those starts are not offered yet."],
+  ["Ladder", "The owner's rule, fixed at creation: capital is cut at a first drawdown, cut again at a second, and the book is out at a third; a cut is restored one step at a time. Its base is one of three: a yearly reset that is not made after a losing year (the default), a yearly reset, or the high since the start. Each row of the form says what its base does to capital and limits."],
+  ["Fixed · changes · history", "Fixed at creation: the start, the base currency, the starting NAV, the Reference, the ladder and the house margin multiple. A limit or an assumption changes with a reason of 10 to 500 characters and is in force from the next session, never backwards; every value ever set stays in HISTORY with its reason. The two targets may be re-set only from 1 Dec to a January reset, under a yearly base. An amber A marks an assumption: a value the book sets because no free source gives it."],
+];
+const SECTIONS: Array<{ title: string; rows: Row[] }> = [
   { title: "Markets table", rows: [
     ["1D to 36M", "Change from the close at the start of that window to the last print. Per cent for prices, basis points (bp) for yields."],
     ["1D in σ", "Today's change divided by the standard deviation (σ) of the instrument's own daily changes in the 63 sessions before it: bp for a yield, % for the rest. +2.7σ is a rise of 2.7 times that σ. Worked out † by the Monitor from its stored daily closes; the cell's tooltip names them. An official-curve yield counts once its day is booked: a JGB's, a Bund's, a Gilt's and Canada's are published a day late, a US Treasury's on the day itself. Click the header to sort each bar by it; click again for the table's order."],
@@ -110,18 +125,23 @@ const SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
     ["Opening a page", "A page opened from a list (a name on MARKETS, RATES & FX, WATCHLIST or EQUITIES, a headline's company, an alert, search) starts at its top, with its name. Back returns the list to where it stood, with the line that was open on a phone still open."],
     ["\u2020", "Worked out by the Monitor from figures a source gives, not given by the source itself: on an instrument's page the 52-week high and low with their dates, realised volatility and its percentile, the largest rise and fall. The line under the panel says from which figures and over which dates."],
     ["Zero", "A change that rounds to zero at the precision shown is written without a sign and in grey (0.0%, 0.0bp), never as −0.0%."],
-    ["Keys", "1 to 6 switch tabs; / jumps to search; Esc leaves full screen."],
+    ["Data sources · personal use", `${PERSONAL_USE_TEXT} ${PERSONAL_USE_READ} ${NOT_USED_TEXT}`, HELP_PERSONAL_USE],
+    ["Keys", `1 to ${PAPER ? 7 : 6} switch tabs; / jumps to search; Esc leaves full screen.`],
   ] },
+  ...(__PAPER_BUILD__ && PAPER ? [{ title: "Portfolio", rows: PORTFOLIO_ROWS }] : []),
 ];
 
 export function Help() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false), [at, setAt] = useState<string | null>(null);
   useEffect(() => {
     if (!open) return;
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, [open]);
+  // another screen asks for one row ("personal use" at the end of a source line): Help opens with that row in view
+  useEffect(() => { const f = (e: Event) => { setAt((e as CustomEvent<string>).detail ?? null); setOpen(true); }; window.addEventListener(HELP_EVENT, f); return () => window.removeEventListener(HELP_EVENT, f); }, []);
+  useEffect(() => { if (open && at) document.getElementById(`help-${at}`)?.scrollIntoView({ block: "center" }); if (!open) setAt(null); }, [open, at]);
   return (
     <>
       <span id="help-ctl" className="chip-sm" title="What the columns, colours and badges mean" onClick={() => setOpen(true)}>?</span>
@@ -134,7 +154,7 @@ export function Help() {
                 {SECTIONS.map((s) => (
                   <div key={s.title} className="helpsec">
                     <h4>{s.title}</h4>
-                    <dl>{s.rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+                    <dl>{s.rows.map(([k, v, id]) => <div key={k} id={id ? `help-${id}` : undefined} className={id && id === at ? "at" : undefined}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
                   </div>
                 ))}
               </div>

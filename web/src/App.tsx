@@ -1,5 +1,5 @@
 import { pageHash } from "./lib/indices";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Topbar, VIEWS, type ViewId } from "./components/Topbar";
 import { CrashSwitch, TabGuard } from "./components/TabGuard";
 import { Gate } from "./auth/Gate";
@@ -36,6 +36,10 @@ import { AssetView } from "./views/Asset";
 import { WatchlistView } from "./views/Watchlist";
 import { CardLayer } from "./components/CompanyCard";
 import { navChanged, navDrawn, navPopped, navStart } from "./lib/nav";
+
+// The paper portfolio's screens (P-1) are a file of their own, asked for when the tab is first opened, and only where
+// the build carries the paper book (lib/paper.ts): a build with the switch off does not make that file.
+const PortfolioView = __PAPER_BUILD__ ? lazy(() => import("./views/Portfolio")) : null;
 
 interface Route { view: ViewId; sub: string }
 function parseHash(): Route {
@@ -127,7 +131,7 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if (["INPUT", "SELECT", "TEXTAREA"].includes((e.target as HTMLElement | null)?.tagName ?? "")) return;   // typing in a field or a drop-down (its list jumps to the typed character) is not a shortcut
       if (e.key === "Escape") goFull(false);
-      if (e.key >= "1" && e.key <= "6" && e.key.length === 1) { const v = VIEWS[Number(e.key) - 1]; if (v) setHash(v.id); }
+      if (e.key.length === 1 && e.key >= "1" && e.key <= String(VIEWS.length)) { const v = VIEWS[Number(e.key) - 1]; if (v) setHash(v.id); }   // 1 to 6; 1 to 7 where the paper portfolio's tab is drawn
     };
     window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey);
   }, []);
@@ -212,7 +216,7 @@ export default function App() {
         </div></div>
       )}
       <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={me?.email ?? userId} onSignOut={() => (me ? setAcct(true) : signOut())} updatedAt={updatedAt} nextAt={nextAt} polling={polling} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} pv2={pv2} canPreview={phone} />
-      <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–6 TABS · ESC</span><span>&#9974;</span></div>
+      <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–{VIEWS.length} TABS · ESC</span><span>&#9974;</span></div>
       <div id="wrap">
         <div id="grid" data-view={view}>
           <TabGuard key={`${view}/${pv2 ? "p" : "d"}`} resetKey={sub ?? ""}>
@@ -224,6 +228,7 @@ export default function App() {
           {view === "equities" && (pv2 ? <EquitiesPhone sub={sub} onSub={(s) => setHash("equities", s)} tick={tick} /> : <EquitiesView sub={sub} onSub={(s) => setHash("equities", s)} tick={tick} />)}
           {view === "rates" && (pv2 ? <RatesPhone tick={tick} /> : <RatesFxView sub={sub} onSub={(s) => setHash("rates", s)} tick={tick} />)}
           {view === "asset" && (pv2 ? <AssetPhone symbol={sub} tick={tick} /> : <AssetView symbol={sub} tick={tick} />)}
+          {view === "portfolio" && PortfolioView && <Suspense fallback={<div className="c12 mut" id="pf-wait">loading…</div>}><PortfolioView sub={sub} tick={tick} phone={pv2} classic={phone && !pv2} /></Suspense>}
           </TabGuard>
         </div>
         <footer>Orrery Monitor shows market data from third-party feeds (Yahoo Finance; US Treasury; Japan MOF; exchange and central-bank publications) that may be delayed or incomplete; every panel states its source and as-of time. Information only; nothing here is investment advice. Default time zone: Singapore.</footer>

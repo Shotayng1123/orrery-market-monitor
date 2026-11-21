@@ -25,7 +25,9 @@ export function tokenId(token: string | null): string | null {
   try { const body = token.split(".")[0]; return (JSON.parse(atob(body.replace(/-/g, "+").replace(/_/g, "/"))) as { id?: string }).id ?? null; } catch { return null; }
 }
 
-export class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
+/** `body`: the server's whole answer to a refused request, where it sent more than its sentence (the paper
+ *  portfolio's form: which fields it refuses). */
+export class ApiError extends Error { constructor(public status: number, message: string, public body?: unknown) { super(message); } }
 
 type Params = Record<string, string | number | boolean | undefined>;
 function url(action: string, params?: Params): string {
@@ -52,7 +54,7 @@ export async function api<T>(action: string, params?: Params, init?: RequestInit
   if (r.status === 401) { clearToken(); window.dispatchEvent(new Event("om:unauth")); throw new ApiError(401, "Signed out"); }
   let body: unknown = null;
   try { body = text ? JSON.parse(text) : null; } catch { throw new ApiError(r.status, `Bad response (${r.status})`); }
-  if (!r.ok) throw new ApiError(r.status, (body as { error?: string } | null)?.error ?? `HTTP ${r.status}`);
+  if (!r.ok) throw new ApiError(r.status, (body as { error?: string } | null)?.error ?? `HTTP ${r.status}`, body);
   return body as T;
 }
 

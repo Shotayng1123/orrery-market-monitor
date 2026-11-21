@@ -40,6 +40,10 @@ web/        Vite + React + TypeScript. src/styles/tokens.css is the design syste
             src/components/Sheet.tsx: a phone's sheet from the bottom edge (a dialog: focus stays inside it, the
             page behind does not scroll, and ✕, Esc, a tap on the dimmed page or the browser's Back closes it).
             "Add Orrery to your Home Screen" opens in it, from its line on MARKETS or from the menu.
+            src/views/Portfolio.tsx, src/components/pf/, src/styles/pf.css: the paper portfolio's screens (P-1), a
+            file of their own that only a build carrying the paper book makes (src/lib/paper.ts: the page's switch).
+            src/lib/pf/ is a copy of the server's engine (supabase/functions/_shared/pf/), written by
+            `node tools/sync-pf.cjs` from web/ and never edited by hand; the logic checks fail when the two differ.
 supabase/   migrations/ and functions/ (tick, daily, api), cron.sql.
 jobs/       TypeScript scripts for GitHub Actions.
 ```
@@ -95,7 +99,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 2,337 checks in 37 suites on 21 Nov 2026): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 2,590 checks in 40 suites on 21 Nov 2026): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -165,9 +169,30 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   line of its own. These checks read no clock but that one and trust no font: the stamp's line that takes one line
   on the engineer's machine took two on GitHub's, and it carries a date on some days and none on others (the check
   they replace passed here by 2 px and stopped pull request #48 on GitHub on a Saturday).
-  `cd web && npm run e2e` starts the test servers it needs and runs them all, three suites at a time: about 17
-  minutes on the engineer's machine (1,029 s on 21 Nov 2026; the 34 suites and 2,052 checks before that day's three
-  new suites took 14.5 minutes there and 13 on GitHub). `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
+  The **paper portfolio** (P-1, on the development servers, where its switch is always on) has three suites.
+  `portfolio` (a computer): the seventh tab at six sizes with the header as tall as with six tabs, in the machine's
+  fonts and in a wide one; the one-screen header's two rules (the seventh tab adds no row) and key 7; with no book,
+  three cards and two muted lines, nothing drawn as a disabled button;
+  the list and the cap; the statement once (its words read from the engine's file, CONTINUE held until the box is
+  ticked, NOT NOW storing nothing) and the three starts created with the defaults their forms showed; the form's
+  targets lines, refusals, ladder and trade lists, its width at four sizes with CREATE in view, a draft, the errors;
+  a book's Overview with no figure P-1 does not hold, fixed rows without a control, a change with its reason, the
+  pending value and HISTORY, the targets' window on 21 Nov and 15 Dec, notes, renaming, delete after typing the name,
+  a second account seeing nothing; and the page's own calls answered by the suite (a server with its switch off, the
+  statement first, a refusal). `phone-portfolio` (an iPhone SE, an iPhone 13, a Pixel 7): the seventh bar item with
+  every label inside its item in the machine's fonts and in a wide one, the current label alone at 320 px; the
+  statement's sheet; the form's start, Review and sections with 16-px inputs and Review and Create above the bar at
+  every scroll position; a book's head, views, change sheet, notes and delete; every tap target 44 px on 23 screens.
+  `layout-guard-portfolio`: the layout guard on the list, the three forms and the three stand-in books' Overview and
+  Settings at its eight sizes. All three set the page's clock (`om_mock_now`) and never read the machine's.
+  `portfolio`, `phone-portfolio` and `local-copy` also check the "personal use" lines, which are live on the published
+  page, and `local-copy` opens the built site on both layouts to check the state the page's switch says: with it off,
+  six tabs, no "PORTFOLIO" or "Portfolio" anywhere, `#portfolio/new` showing MARKETS, no portfolio route asked, and
+  no file of the portfolio's screens or of its stand-in books among the published files.
+  `cd web && npm run e2e` starts the test servers it needs and runs them all, three suites at a time: about 19
+  minutes on the engineer's machine (1,136 s on 21 Nov 2026 with the paper portfolio's three suites; 1,029 s for the
+  37 suites and 2,337 checks before them; the 34 suites and 2,052 checks before that day's first three new suites
+  took 14.5 minutes there and 13 on GitHub). `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
   A suite that fails once is tried again; when the second try passes, the lines that failed the first time are
   printed all the same, so a check that fails only now and then can be found from the publish job's log.
   Needs Playwright's browser once: `npx playwright install chromium`.
@@ -186,8 +211,14 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   the session after it, the series with the step taken out, and the page's own lines for both), the server's reads
   for a stock's NEWS and an instrument's page run against a stand-in database that records each query, and the second path for prices (when the
   relay takes over and hands back, its timetable against the database's own), where a statements table wider
-  than the screen comes to rest, and the one formatting of figures, dates and words (`lib/fmt.ts`, `lib/time.ts`,
-  `lib/labels.ts`). `cd jobs && npx tsx ../sim/logic.test.ts`.
+  than the screen comes to rest, the one formatting of figures, dates and words (`lib/fmt.ts`, `lib/time.ts`,
+  `lib/labels.ts`), and the paper portfolio's engine (section [AF]: each start's defaults, ranges and refusals; cash
+  + x% as one figure at EFFR and at TONA; the target volatility against the VaR limit, clear, warned and refused;
+  the ladder's words; the next session and the targets' window; every route over a store kept in memory, with the
+  statement first, a second account, the cap, a change's history and delete; with the server's switch off, all twelve
+  routes refusing without reaching the store; the statement's words the same in the engine, the migration's seed and
+  the owner's record; the page's copy of the engine equal to the server's files; no workflow, job or function naming
+  a private table; both switches off; the "personal use" paragraph in this file word for word). `cd jobs && npx tsx ../sim/logic.test.ts`.
   The same command checks the file itself, in its last section. GitHub installs `jobs/` alone before it runs the
   logic checks (`logic-tests`, and `deploy-server` before a deploy), so nothing the file imports, directly or through
   another file, may reach a package of the page's (`web/node_modules`: React, uPlot). On a machine that has
@@ -203,7 +234,11 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   run with the migration file itself on PGlite, a Postgres inside Node; and the pattern an instrument's headlines are
   matched by in the database (`words.test.cjs`); and the market table's σ of daily changes and σ vs 1M avg against the
   server's own rule, rolls included, with the probe's record of futures and the alerts' and devices' new columns
-  (`sigma.test.cjs`). `cd sim/sql && npm ci && npm test`.
+  (`sigma.test.cjs`); and the paper portfolio's store (`pf.test.cjs`: the migration applied twice, as a superuser, as
+  a role that may make roles and as one that may not; no API role reading a table; one scenario of 53 calls run
+  through the engine against the database's functions and against the local copy's store, every answer compared;
+  the append-only and fixed-column rules tried from outside the functions; an account's rows going with it).
+  `cd sim/sql && npm ci && npm test`.
 
 The `deploy-web` workflow runs the browser and logic checks before it publishes: a failing check stops the publish.
 A pull request that touches `web/` runs them without publishing. `logic-tests` runs the logic and database checks
@@ -219,9 +254,19 @@ when the server's functions or migrations change.
 | Policy rates | ECB, Bank of England and HKMA data feeds (`daily?job=policy`); Fed target range from the New York Fed's EFFR data (`jobs/fed.ts`, GitHub Actions). FRED supplied the earlier Fed history but refuses connections from GitHub's runners and the edge runtime |
 | Economic calendar | FXStreet calendar API (consensus, previous, actual); ForexFactory weekly JSON as the fallback |
 | News | RSS from publishers only: WSJ Markets, FT Markets, Nikkei Asia, CNBC (Markets, World, Asia), MarketWatch, Japan Times |
-| Constituents | Wikipedia lists (S&P 500, Nikkei 225), checked monthly |
+| Constituents | S&P 500, KOSPI 200 and Hang Seng: Wikipedia's lists; Nasdaq-100: Nasdaq's list; SSE 180: China Securities Index's file; Nikkei 225, with its weights: Nikkei Inc.'s weights file (personal use); TOPIX, with its sectors: JPX's list of TSE-listed issues, 東証上場銘柄一覧 (personal use) |
+| Japan short selling | JPX: the short-selling ratio (空売り集計), the short-position reports (空売り残高報告) and the margin balances (信用取引現在高) (personal use) |
 
 TOPIX has no Yahoo ticker: the `1306.T` ETF stands in for the live level (badge PROXY) and the official JPX close is used for daily figures.
+
+**Personal use** (the owner's decision of 20 Nov 2026). Files from JPX, Nikkei, JSF and fund issuers are used on the owner's statement that this Monitor's use is personal and non-commercial (20 Nov 2026). Each is credited where it is used.
+Read today: JPX's list of TSE-listed issues (TOPIX's members and their sectors), its short-selling ratio, short-position reports and margin balances, and Tokyo's holidays from its calendar; Nikkei's file of the Nikkei 225's members and weights. No JSF or fund issuer's file is read yet.
+Not used, by the owner's decision of 21 Nov 2026: JPX's TOPIX weight file, its lending-fee file (品貸料), its margin balances by name, Osaka's settlement and volume pages and its results-date workbook (決算発表予定日); Nomura's holdings files; Cboe's VIX-family files.
+On screen, every source line that names one of those files ends "· personal use": EQUITIES' SHORT INTEREST and
+SCREENER (the member lists of TOPIX and the Nikkei 225) and a Tokyo stock's SHORT INTEREST, on both layouts. On a
+computer the two words open Help at "Data sources · personal use"; on a phone the source line opens a card with the
+publisher, the file and the same paragraph. The words are in `web/src/lib/labels.ts`; the logic checks compare this
+paragraph with them, and `phone-portfolio` and `portfolio` check the lines on both layouts.
 
 ### When a closed market opens (since 2026-11-21)
 
@@ -363,6 +408,53 @@ Japanese statements (ordinary profit, extraordinary items); a company elsewhere 
 income, pretax income, income tax, buybacks, dividends paid and stock-based compensation instead (`LAYOUT_JP` and
 `LAYOUT_FOREIGN` in `_shared/fin.ts`). One unit (m, bn or tn) is chosen per company from
 its revenue and written once, in the statements table's header.
+
+## The paper portfolio (P-1, built on 2026-11-21; not on the published page yet)
+
+A private paper book per account: no real orders, no broker, no money, and visible to the account that made it only.
+P-1 is its first step: the statement an account agrees to once (version 1, the owner's wording), NEW PAPER PORTFOLIO
+with three absolute-return starts (Equity long/short · Japan, Equity long/short · Global, Global macro) and two
+relative-return starts that are named and not offered yet, the two targets (cash + x% a year and a target volatility)
+with what they mean together, the ladder and its three bases, a book's Overview and Settings with a reason asked for
+every change and a history that is only ever added to, notes of up to 2,000 characters, and delete after typing the
+name. There are no orders, no NAV and no limits at work yet: the book's page says so in one line.
+
+- **Where the rules live.** `supabase/functions/_shared/pf/` is the engine: the five starts' defaults, ranges,
+  reasons and whose each is (`presets.ts`), the form's rules and refusals (`form.ts`), the targets' arithmetic and the
+  ladder's words (`targets.ts`), the next session and the targets' window (`calendar.ts`), what a screen reads from the
+  stored rows (`view.ts`), and the routes over a store (`route.ts`). Pure TypeScript: no database, no clock of its
+  own, no package. The server runs it over the database's functions (`_shared/pfstore.ts`); the page has a copy
+  (`web/src/lib/pf/`, written by `node tools/sync-pf.cjs`) so the form on screen and the server refuse by the same
+  rules in the same words; the local copy runs the same routes over a list kept in the browser (`lib/mockPf.ts`).
+- **Who sees what.** A portfolio's rows are reached only through database functions that answer for one account
+  (`supabase/README.md`, "The paper portfolio"). No workflow, job or log names a private table or prints a row: the
+  live check's part `pf` calls one function that returns counts and prints `pf_selftest ok`.
+- **Addresses.** `#portfolio` (the book last opened on this device, else the list, else the starts),
+  `#portfolio/all`, `#portfolio/new[/<start>]`, `#portfolio/<id>`, `#portfolio/<id>/settings[/<section>]`. `<id>` is
+  the portfolio's own id, never its name.
+- **The local copy.** Three stand-in books to start (`om_mock_pf` in the browser's storage: one with every default,
+  two changes and four notes; one on a yen base with a 60-character name; one macro book), `?mock=empty` (no book, an
+  account that has not agreed), `?mock=cap` (five open books), `om_mock_pf_account = "2"` (a second account, which
+  sees none of them), `om_mock_pf_refuse` = `1` · `offline` · `signedout` (a write that fails each way). With
+  `om_mock_now` = `2026-12-15T02:00:00Z` the targets' window is open. `om_paper = "0"` shows the local copy as the
+  published page is today, with six tabs.
+
+### The paper portfolio's two switches
+
+P-1 to P-4a go live together: a book whose limits and ladder are not yet enforced would start a record under rules
+that change midway. Until P-4a is accepted both switches are **off**:
+
+| Switch | File | Off (today) | On |
+|---|---|---|---|
+| the page's | `web/src/lib/paper.ts`, `PAPER_ON_LIVE_SITE` | the published page has six tabs and six bar items, keys 1 to 6, and `#portfolio` opens MARKETS as any unknown address does; the portfolio's screens are not in the published files (a build with the switch off does not make their file) | the seventh tab PORTFOLIO, the seventh bar item, key 7, the route |
+| the server's | `supabase/functions/_shared/pf/switch.ts`, `PAPER_ON_SERVER` | every portfolio route of the API answers 404 "Paper portfolios are not available yet." before it reads or writes anything; the tables are deployed and stay empty | the routes answer for the signed-in account |
+
+Development servers (the local copy, the checks' stand-in servers) always show the paper book. To turn it on for
+users, set both constants to `true` in one pull request, when P-4a is accepted; the site and the server are published
+minutes apart, and in between a page that asks a server still off shows the server's sentence and nothing else
+breaks. `web/e2e/local-copy.cjs` checks the built site for the state the page's constant says (no "PORTFOLIO" and no
+"Portfolio" anywhere on the page, `#portfolio/new` showing MARKETS), and the logic checks that a refused route reaches
+neither the store nor the server's facts.
 
 ## Morning Notes
 

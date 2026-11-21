@@ -458,6 +458,49 @@ search (two before to five after). The job looks up only the marks of the rule i
 symbol it first puts that stock's marks on the queue itself (`--seed`, an S&P 500 member), as its page would, so
 the reasons can be there before the page is opened: Actions › move-causes › Run workflow with `symbol`.
 
+## The paper portfolio (added 2026-11-21; migration `20261121000001_pf_store.sql`)
+
+P-1 of the paper portfolio: the statement an account agrees to, its portfolios, their settings with the history, and
+its notes. No orders, no prices and no NAV yet. **Nothing of it is usable on the live Monitor until P-4a is accepted**:
+the API's portfolio routes refuse while `PAPER_ON_SERVER` (`functions/_shared/pf/switch.ts`) is `false`, and the page
+shows no entry while `PAPER_ON_LIVE_SITE` (`web/src/lib/paper.ts`) is `false`. Both are turned in one pull request
+(`README.md`, "The paper portfolio's two switches"). The migration deploys now: six tables, empty.
+
+- **Tables**: `consent_statements` (version 1 seeded), `account_consents`, `pf_portfolios`, `pf_settings` (append-only:
+  a change is a new row, in force from the next session), `pf_notes` (never edited; a removed note keeps a line with
+  its time and loses its text), `pf_ladder_events` (January's reset lines; written from P-3).
+- **Who may see what.** A portfolio belongs to one account. Row level security is on for all six tables, and nothing
+  is granted to `anon`, `authenticated` or `service_role` (Supabase grants new tables to all three by default; the
+  migration takes that away). The only door is the functions `pf_*(p_account, …)`, which `service_role` may call and
+  nobody else, each naming the account in every statement. A second wall: a role without login, `monitor_account`,
+  owns those functions, and one policy per table lets it see only the rows of the account the function set for its
+  transaction. If the hosted database does not let the migration make that role or hand it the functions, a notice
+  says so, the functions stay with their maker and still filter by account, and `pf_selftest()` reports which way it
+  is. Every child row carries `(portfolio_id, account)` with a foreign key to its portfolio.
+- **What is never changed.** What is fixed at creation cannot be updated (a trigger refuses); settings and notes are
+  only added to; a portfolio's rows go only with the portfolio, by `pf_delete`, after its account has typed its name;
+  an account's rows go with the account.
+- **The API** (`functions/api/index.ts`) names none of these tables: its routes `pf_form`, `pf_list`, `pf_get`,
+  `pf_create`, `pf_rename`, `pf_setting_set`, `pf_targets_set`, `pf_note_add`, `pf_note_remove`, `pf_delete`,
+  `consent` and `consent_agree` run the engine (`_shared/pf/route.ts`) over the database's functions
+  (`_shared/pfstore.ts`). The ranges, steps and refusals are the engine's (`_shared/pf/form.ts`), the same file the
+  page's form runs. Nothing in these routes writes a log line: a refusal goes back to the page that asked.
+- **The statement** is the owner's wording (b) of 20 Nov 2026, kept as version 1. The owner's record reads:
+
+> "Private notes, levels and paper portfolios are kept for your account only. Do not enter non-public or confidential information, in notes or in positions: nothing material and non-public about a company or a market, and nothing confidential of your firm or its clients. ☐ I agree"
+
+  The "☐" is the checkbox itself. The logic checks compare this line, the migration's seed and the engine's file
+  (`_shared/pf/statement.ts`) character for character. A new wording is a new version, asked again of every account.
+- **Looking.** Actions › live-check with `only` = `pf` calls `pf_selftest()` and prints `pf_selftest ok` with counts
+  only (tables, policies, grants that should not exist, functions, whether the second wall is in force): no row, no
+  name, no account. `deploy-server` does not run it; run it once after the first deploy of this migration.
+- **Checks.** `sim/sql/pf.test.cjs` applies the migration on PGlite (twice; as a superuser, as a role that may make
+  roles, and as one that may not), runs the same 53 calls through the engine against the database's functions and
+  against the local copy's store and compares every answer, and tries each rule above from outside the functions.
+  `sim/logic.test.ts` section [AE] checks the engine.
+
+The welcome email still says "the six tabs": it is to say seven in the pull request that turns the switches.
+
 ## Changing the shared sign-in password
 
 The password exists only as the function secret `MONITOR_PASSWORD`; it is not in git or in the database, and

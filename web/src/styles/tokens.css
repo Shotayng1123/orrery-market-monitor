@@ -1955,3 +1955,38 @@ table#in-key td.l{min-width:9.5em}
 .aldrop.ph .al-fig{margin-left:auto;font-size:13.5px;font-variant-numeric:tabular-nums}
 .aldrop.ph .al-msg{overflow-wrap:anywhere}
 .aldrop.ph .alrules{margin:10px 14px 2px}
+
+/* ===== the paper portfolio's entry (P-1, 21 Nov 2026; the designer's build note D/p1-design.md §1) =====
+   Only while the entry is drawn: #topbar carries .t7 with its seventh tab, #pnav .n7 with its seventh item (the
+   published page has six of each until the paper book's switch is turned, lib/paper.ts). The screens' own rules are
+   in styles/pf.css, loaded with the screens. */
+/* one-screen layout: with a seventh tab the header's row was full and took a second one (23.6 to 47 CSS px at
+   1440x900 and 1280x720). While the tab is there the search box is 64 px wide (it is 124), 200 px with the focus or
+   with text in it, laid over what follows so the row does not move, and each tab has 5 px of side padding (it has 6) */
+body.term #topbar.t7 #nav a{padding:2px 5px}
+body.term #topbar.t7 #search{flex:0 0 64px;width:64px}
+body.term #topbar.t7 #search input{width:64px}
+body.term #topbar.t7 #search input:focus,body.term #topbar.t7 #search input:not(:placeholder-shown){width:200px;position:relative;z-index:3}
+body.term #topbar.t7 #search:focus-within .skey{display:none}
+/* the phone's bar with seven items: a label never leaves its item (in a font wider than any phone uses it is cut with
+   an ellipsis and does not run into its neighbour), and under 360 px of width the bar shows each icon and the label
+   of the current tab only (every link keeps its aria-label) */
+#pnav.n7 a span{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:359px){#pnav.n7 a:not(.on) span{display:none}}
+/* the tab's pages are pages, not dashboards: in the one-screen layout they scroll, as a piece of RESEARCH does */
+body.term #grid[data-view="portfolio"]{display:block;overflow:auto;overscroll-behavior:contain}
+
+/* ===== "personal use" (the owner's decision P4 of 20 Nov 2026; the designer's §1.6) =====
+   The two words at the end of a source line that names a JPX or Nikkei file. On a computer they are teal and open
+   Help at its paragraph; on a phone the whole source line takes the tap (44 px by its ::before) and opens a card. */
+.puse{margin:0;padding:0;border:0;border-radius:0;background:none;color:var(--cyan);font:inherit;letter-spacing:inherit;cursor:pointer}
+.puse:hover{text-decoration:underline}
+.puse:focus{outline:none}
+.puse:focus-visible{outline:1px solid var(--amber);outline-offset:2px}
+.helpsec dl>div.at{outline:1px solid var(--cyan);outline-offset:3px;border-radius:2px}
+.psrc{position:relative;display:inline-flex;align-items:center;justify-content:flex-end;min-width:44px;min-height:28px;margin:0;padding:0;border:0;border-radius:0;background:none;color:var(--mut);font:inherit;font-weight:400;letter-spacing:0;text-transform:none;white-space:nowrap;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.psrc::before{content:"";position:absolute;inset:-8px -4px}
+.psrc .pu{color:var(--cyan)}
+.psrc:focus{outline:none}
+.psrc:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.psrc-p{margin:4px 0 12px;font-size:15px;line-height:1.5}

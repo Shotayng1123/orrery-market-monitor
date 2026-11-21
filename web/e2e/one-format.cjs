@@ -131,7 +131,7 @@ const D = /^\d{1,2} [A-Z][a-z]{2} \d{4}$/, STAMP = /^\d{1,2} [A-Z][a-z]{2} \d\d:
     const nav = await c.p.evaluate(() => [...document.querySelectorAll("#nav a")].map((a) => a.textContent));
     const bar = await ph.p.evaluate(() => [...document.querySelectorAll("#pnav a span")].map((a) => a.textContent));
     const t1 = await ph.p.locator(".mp-head h1").textContent();
-    ck(`the tabs: ${nav.join(" · ")} on the computer; ${bar.join(" · ")} along the phone's foot`, nav.join() === "MARKETS,NEWS,RESEARCH,EQUITIES,RATES & FX,WATCHLIST" && bar.join() === "Markets,News,Research,Equities,Rates,Watchlist" && t1 === "Markets", { nav, bar, t1 });
+    ck(`the tabs: ${nav.join(" · ")} on the computer; ${bar.join(" · ")} along the phone's foot`, nav.join() === "MARKETS,NEWS,RESEARCH,EQUITIES,RATES & FX,WATCHLIST,PORTFOLIO" && bar.join() === "Markets,News,Research,Equities,Rates,Watchlist,Portfolio" && t1 === "Markets", { nav, bar, t1 });
     const delayC = await c.p.evaluate(() => ({ table: [...document.querySelectorAll("table.mkt .badge.delay")].map((x) => x.textContent), tile: [...document.querySelectorAll(".mtile .badge.delay")].map((x) => x.textContent) }));
     const delayP = await ph.p.evaluate(() => [...document.querySelectorAll(".mp-st .delay")].map((x) => x.textContent));
     ck(`a feed's delay: "${delayC.table[0]}" in the table and on the charts, "${delayP[0]}" on the phone`, delayC.table.length > 0 && delayC.tile.length > 0 && [...delayC.table, ...delayC.tile].every((x) => /^DELAYED ~\d+m$/.test(x)) && delayP.length > 0 && delayP.every((x) => /^Delayed ~\d+m$/.test(x)), { delayC, delayP });

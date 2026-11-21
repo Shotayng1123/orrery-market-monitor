@@ -16,7 +16,7 @@ const utc = (iso: string | null | undefined): string => (iso ? iso.slice(0, 16).
 const head = (t: string): void => console.log(`\n== ${t}`);
 // a table or a column that a database from before some change does not have is said, not thrown
 // LIVE_CHECK_ONLY (the workflow's "only" input): a comma-separated choice of parts, by the first word of each title
-// below (jobs, relay, sources, market, source, equities, alerts, reasons, edinet, stock, counts); empty for all of them
+// below (jobs, relay, sources, market, source, equities, alerts, reasons, edinet, stock, counts, pf); empty for all of them
 const ONLY = (process.env.LIVE_CHECK_ONLY ?? "").toLowerCase().split(",").map((x) => x.trim()).filter(Boolean);
 async function part(key: string, title: string, f: () => Promise<void>): Promise<void> { if (ONLY.length && !ONLY.includes(key)) return; head(title); try { await f(); } catch (e) { console.log(`  could not be read: ${e instanceof Error ? e.message : String(e)}`); } }
 const must = <T>(r: { data: T | null; error: { message: string } | null }): T => { if (r.error) throw new Error(r.error.message); return r.data as T; };
@@ -223,6 +223,21 @@ async function main(): Promise<void> {
     if (acc.error) console.log(`  welcome email: could not be read (${acc.error.message})`);
     else { const rows = (acc.data ?? []) as Array<{ status: string; welcomed_at: string | null; welcome_tries: number | null }>, open = rows.filter((r) => r.status === "active"), had = open.filter((r) => r.welcomed_at), gaveUp = open.filter((r) => !r.welcomed_at && (r.welcome_tries ?? 0) >= 3), last = had.map((r) => r.welcomed_at as string).sort().pop();
       console.log(`  welcome email: ${had.length} of ${open.length} open accounts have had it${last ? ` (the last one ${age(last)})` : ""}; ${open.length - had.length - gaveUp.length} get it at their next sign-in; ${gaveUp.length} given up after three failed sendings`); }
+  });
+
+  // The paper portfolio's store (P-1, 21 Nov 2026): the database's own look at its walls (pf_selftest, in the migration
+  // 20261121000001_pf_store.sql). It reads no portfolio: as a made-up account it must see nothing. What is printed is
+  // counts and one verdict; never an account, a portfolio's name, a note or a figure of any book. This repository's
+  // job logs are public.
+  await part("pf", "the paper portfolio's store: who may reach it (counts only)", async () => {
+    const r = await sb.rpc("pf_selftest");
+    if (r.error) { console.log(`  pf_selftest could not be run: ${r.error.message}`); return; }
+    const t = (r.data ?? {}) as Record<string, number | boolean | null>;
+    const n = (k: string): string => (typeof t[k] === "number" ? String(t[k]) : "–");
+    console.log(`  pf_selftest ${t.ok === true ? "ok" : "FAILED"}: ${n("rls")} of ${n("tables")} tables with row level security; ${n("openGrants")} privileges on them held by anon or authenticated, ${n("serviceRoleGrants")} by the server's own role; ${n("openFunctions")} of its functions callable by anon or authenticated; ${n("rowsSeen")} rows seen as a made-up account; ${n("statements")} version(s) of the statement`);
+    console.log(typeof t.functions === "number" && t.definerOwner === t.functions
+      ? `  the second wall is in force: all ${n("functions")} functions run as the role the policies bind (${n("policies")} policies), and through the policies alone a made-up account sees ${n("rowsThroughPolicies")} rows`
+      : `  the second wall is NOT in force: ${n("definerOwner")} of ${n("functions")} functions were handed to the role the policies bind (the database refused that part of the migration); each function still names the account in every statement`);
   });
 
   // The one part that is not read-only, and it runs only when asked for by name ("token"), never with the others:

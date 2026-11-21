@@ -19,10 +19,33 @@ function sheetShown(): void {
   if (entry) return;
   try { const s = history.state as Record<string, unknown> | null; history.pushState({ ...(s && typeof s === "object" ? s : {}), [MARK]: true }, ""); entry = true; } catch { /* no history: Back leaves the page, as before */ }
 }
+// Stepping out of the sheet's entry is not done at once: the browser goes back a moment after it is asked. An address
+// set in that moment (a page opened by what the sheet has just confirmed: the paper portfolio a statement's CONTINUE
+// creates) would be the entry that is stepped out of, and the reader would land back on the page under the sheet.
+// `sheetsSettled()` is the moment after: whoever opens a page right after a sheet closes waits for it.
+let settling: Promise<void> | null = null;
 function sheetGone(): void {
   openSheets = Math.max(0, openSheets - 1);
-  setTimeout(() => { if (openSheets === 0 && entry) { entry = false; if (marked()) { try { history.back(); } catch { /* nothing to step out of */ } } } }, 0);
+  let done: () => void = () => undefined;
+  const mine = new Promise<void>((res) => { done = res; });
+  settling = mine;
+  const settled = () => { if (settling === mine) settling = null; done(); };
+  setTimeout(() => {
+    if (openSheets === 0 && entry) {
+      entry = false;
+      if (marked()) {
+        // the browser says when it has stepped out (popstate); if it never does, the wait ends by itself
+        const popped = () => { window.removeEventListener("popstate", popped); clearTimeout(giveUp); settled(); };
+        const giveUp = setTimeout(popped, 500);
+        window.addEventListener("popstate", popped);
+        try { history.back(); return; } catch { popped(); return; }
+      }
+    }
+    settled();
+  }, 0);
 }
+/** Resolves once no sheet's history entry is being stepped out of: at once when none is. */
+export const sheetsSettled = (): Promise<void> => settling ?? Promise.resolve();
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 

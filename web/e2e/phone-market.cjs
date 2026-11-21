@@ -15,9 +15,9 @@ const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
   for (const dev of ["iPhone 13", "Pixel 7"]) { console.log(`\n[${dev}]`);
     const ctx = await b.newContext({ ...devices[dev] }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
     await p.goto(MOCK + "#market", { waitUntil: "networkidle" }); await p.waitForSelector(".mp-row"); await p.waitForTimeout(500);
-    const s0 = await state(p); ck("default on a phone (since 18 Nov): the phone layout at true size, the list, six bottom tabs", s0.pv2 && s0.zoom === "1" && s0.nav === 6 && s0.table === 0 && s0.list > 0, s0);
+    const s0 = await state(p); ck("default on a phone (since 18 Nov): the phone layout at true size, the list, seven bottom tabs (six on the published page until the paper portfolio's switch is turned: local-copy checks the built site)", s0.pv2 && s0.zoom === "1" && s0.nav === 7 && s0.table === 0 && s0.list > 0, s0);
     await p.goto(MOCK + "?phone=new#market", { waitUntil: "networkidle" }); await p.waitForSelector(".mp-row"); await p.waitForTimeout(600);
-    const s1 = await state(p); ck("?phone=new: preview on at true size, six bottom tabs, the switch gone from the address", s1.pv2 && s1.zoom === "1" && s1.nav === 6 && s1.table === 0 && s1.list > 0 && !s1.url.includes("phone="), s1);
+    const s1 = await state(p); ck("?phone=new: preview on at true size, seven bottom tabs, the switch gone from the address", s1.pv2 && s1.zoom === "1" && s1.nav === 7 && s1.table === 0 && s1.list > 0 && !s1.url.includes("phone="), s1);
     const rows = await p.evaluate(() => [...document.querySelectorAll(".mp-row")].map((r) => ({ name: r.querySelector(".n").textContent.trim(), last: r.querySelector(".mp-px").textContent.trim(), chg: r.querySelector(".mp-chg .fig").textContent.trim() })));
     const bad = rows.filter((r) => !classic[r.name] || classic[r.name].last !== r.last || classic[r.name].d1 !== r.chg);
     ck(`all ${rows.length} lines carry the desktop table's name, level (the same decimals, a yield's "%") and 1D change`, rows.length === Object.keys(classic).length && bad.length === 0, bad.slice(0, 3));
@@ -60,9 +60,9 @@ const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
     ck("CLASSIC LAYOUT: back exactly as before", !s3.pv2 && s3.zoom === "0.88" && s3.nav === 0 && s3.table === 1, s3);
     await p.reload({ waitUntil: "networkidle" }); await p.waitForTimeout(500); ck("and stays classic after a reload", !(await state(p)).pv2);
     await p.locator("#pv2-on").tap(); await p.waitForSelector(".mp-row"); await p.waitForTimeout(400); const s4 = await state(p);
-    ck("NEW LAYOUT button in the classic header: the phone layout again", s4.pv2 && s4.zoom === "1" && s4.nav === 6, s4);
+    ck("NEW LAYOUT button in the classic header: the phone layout again", s4.pv2 && s4.zoom === "1" && s4.nav === 7, s4);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
   { console.log("\n[iPhone 13 landscape]"); const ctx = await b.newContext({ ...devices["iPhone 13 landscape"] }); const p = await ctx.newPage();
     await p.goto(MOCK + "?phone=new#market", { waitUntil: "networkidle" }); await p.waitForSelector(".mp-row"); await p.waitForTimeout(500); const s = await state(p);
-    ck("the preview also applies with the phone on its side", s.pv2 && s.nav === 6 && s.list > 0, s); await ctx.close(); }
+    ck("the preview also applies with the phone on its side", s.pv2 && s.nav === 7 && s.list > 0, s); await ctx.close(); }
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0); })();

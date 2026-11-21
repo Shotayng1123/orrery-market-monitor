@@ -12,7 +12,8 @@ import type { TableRow } from "../lib/types";
 import { fmtNum, fmtPct, signCls, stockDecimals } from "../lib/fmt";
 import { mergeClasses } from "../lib/classes";
 import { fmtDate, fmtStamp } from "../lib/time";
-import { DRIVERS, MKT_CAP, PERIOD, SIGMA_WINDOW, TAB, VS_200D } from "../lib/labels";
+import { DRIVERS, JPX_SHORT_FILES, MEMBERS_SOURCE, MKT_CAP, PERIOD, SIGMA_WINDOW, TAB, VS_200D } from "../lib/labels";
+import { SourceLine } from "../components/PersonalUse";
 import { InstrumentRow } from "./MarketPhone";
 import { CCY, HeatMap, INDICES, JpShortPanel, PAST_MEMBERS, PERIODS, pos52, shortName, signed, vs, type BreadthRow, type IndexStats, type SectorRow, type StatRow } from "./Equities";
 import { RANGE_52W } from "./Market";
@@ -181,7 +182,7 @@ export function EquitiesPhone({ sub, onSub, tick }: { sub: string; onSub: (s: st
           </div>
         ))}</div> : noStats}
       </Section>
-      <Section title="Short interest" aux={jp ? "JPX" : s?.shorts ? `FINRA · ${fmtDate(s.shorts.d)}` : ""} card={false}>
+      <Section title="Short interest" aux={jp ? <SourceLine short="JPX" full={JPX_SHORT_FILES} /> : s?.shorts ? `FINRA · ${fmtDate(s.shorts.d)}` : ""} card={false}>
         <div className="mp-card pad mp-legacy">
           {jp ? <JpShortPanel idx={ix.stats} /> : s?.shorts ? (
             <>
@@ -201,7 +202,7 @@ export function EquitiesPhone({ sub, onSub, tick }: { sub: string; onSub: (s: st
         </> : noStats}
       </Section>
       <Section title="Heat map" aux="colour = 1D %" card={false}>{s ? <div className="mp-card hmap"><HeatMap s={s} rows={merged} height={470} /></div> : noStats}</Section>
-      <Section title="Screener" card={false}>{s ? <Screener s={s} /> : noStats}</Section>
+      <Section title="Screener" aux={s && MEMBERS_SOURCE[ix.stats] ? <SourceLine short={MEMBERS_SOURCE[ix.stats].short} full={MEMBERS_SOURCE[ix.stats].full} /> : undefined} card={false}>{s ? <Screener s={s} /> : noStats}</Section>
     </Screen>
   );
 }

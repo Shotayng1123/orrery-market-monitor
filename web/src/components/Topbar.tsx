@@ -10,12 +10,17 @@ import { openNotify } from "../lib/push";
 import { allStatuses, haveHolidays, type MarketId } from "../lib/sessions";
 import { marketSession } from "../lib/opens";
 import { fmtClock, fmtWhen, SGT, TZ_ABBR } from "../lib/time";
-import { TAB } from "../lib/labels";
+import { PORTFOLIO, TAB } from "../lib/labels";
+import { PAPER } from "../lib/paper";
 import { SIZES, type Prefs, type SizeKey } from "../lib/prefs";
 
-export type ViewId = "market" | "news" | "research" | "equities" | "rates" | "watch" | "asset";
-/** The tabs, in the glossary's words (lib/labels.ts): MARKETS · NEWS · RESEARCH · EQUITIES · RATES & FX · WATCHLIST. */
-export const VIEWS: Array<{ id: ViewId; label: string }> = (["market", "news", "research", "equities", "rates", "watch"] as const).map((id) => ({ id, label: TAB[id].toUpperCase() }));
+export type ViewId = "market" | "news" | "research" | "equities" | "rates" | "watch" | "asset" | "portfolio";
+/** The tabs, in the glossary's words (lib/labels.ts): MARKETS · NEWS · RESEARCH · EQUITIES · RATES & FX · WATCHLIST,
+ *  and PORTFOLIO as the seventh where the paper book is on (lib/paper.ts). Keys 1 to 6, or 1 to 7, follow this list. */
+export const VIEWS: Array<{ id: ViewId; label: string }> = [
+  ...(["market", "news", "research", "equities", "rates", "watch"] as const).map((id) => ({ id, label: TAB[id].toUpperCase() })),
+  ...(__PAPER_BUILD__ && PAPER ? [{ id: "portfolio" as const, label: PORTFOLIO.toUpperCase() }] : []),
+];
 const CHIP_MARKETS: MarketId[] = ["TSE", "HKEX", "SSE", "KRX", "SGX", "LSE", "NYSE"];
 
 export interface TopbarProps {
@@ -51,7 +56,7 @@ export function Topbar(p: TopbarProps) {
   useEffect(() => { setMenu(false); }, [p.view, p.pv2]);
   const ico = (d: string) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>;
   return (
-    <div id="topbar" className={p.pv2 && menu ? "open" : undefined}>
+    <div id="topbar" className={[p.pv2 && menu ? "open" : "", VIEWS.length > 6 ? "t7" : ""].filter(Boolean).join(" ") || undefined}>
       <span className="brand"><Logo />Orrery Monitor</span>
       {p.pv2 && (
         <span id="pv2-btns">
@@ -89,7 +94,7 @@ export function Topbar(p: TopbarProps) {
         {p.pv2 && <span id="pv2-off" className="chip-sm" title="Back to the earlier layout, on this browser only; NEW LAYOUT in its header returns" onClick={() => setPhoneV2(false)}>CLASSIC LAYOUT</span>}
         <Pick<SizeKey> id="sz-ctl" label="Text size" value={p.prefs.size} options={SIZES.map((s) => s.k)} onChange={(k) => p.onPrefs({ ...p.prefs, size: k })} title="Text size. AUTO scales the text and layout to this window; S, M, L and XL fix the size" />
         <span id="cmp-ctl" className={`chip-sm${p.prefs.compact ? " on" : ""}`} title="Terminal layout: one screen per tab, sized to the window" onClick={() => p.onPrefs({ ...p.prefs, compact: !p.prefs.compact })}>COMPACT</span>
-        <span id="fs-ctl" className="chip-sm" title="Full screen: no browser tabs or address bar, header hidden (Esc or the corner strip to leave; keys 1 to 6 switch tabs)" onClick={() => p.onFull(true)}>&#9974; FULL</span>
+        <span id="fs-ctl" className="chip-sm" title={`Full screen: no browser tabs or address bar, header hidden (Esc or the corner strip to leave; keys 1 to ${VIEWS.length} switch tabs)`} onClick={() => p.onFull(true)}>&#9974; FULL</span>
         {p.userId && <span className="chip" id="userchip" title={`Signed in as ${p.userId}. Click for your account: change password, sign out`} onClick={p.onSignOut}>{p.userId.split("@")[0].slice(0, 14).toUpperCase()}<span className="so"> · ACCOUNT</span></span>}
       </span>
     </div>

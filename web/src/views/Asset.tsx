@@ -15,6 +15,7 @@ import { pageLive } from "../lib/opens";
 import { fmtNum, fmtPct, signCls, stockDecimals } from "../lib/fmt";
 import { fmtDate, fmtStamp } from "../lib/time";
 import { avgTurnover, avgVolume, LARGEST_FALL, MKT_CAP, NEWS, NEXT_RESULTS, RANGE_52W, REALISED_VOL } from "../lib/labels";
+import { PersonalUse } from "../components/PersonalUse";
 import { chartMarks, finSections, fmtCount, fmtPc, fmtPp, fmtX, isSmallMove, moveParts, moveRule, noDocWhy, periodDoc, siteOf, whyText, type Fin, type MoveRow, type StockPage } from "../lib/stock";
 import { fmtResultsDate, resultsTip, resultsWords } from "../lib/results";
 import { AssetViewLegacy, stockMarketOf } from "./AssetLegacy";
@@ -208,7 +209,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
               <StockNews key={d.symbol} symbol={d.symbol} feed={feed} fit even={even} onEven={setEven} />
             </Panel>
           )}
-          {on("short") && <Panel no={no("short")} k="st-short" title="SHORT INTEREST" span={4} aux={s ? (s.kind === "jpx" ? "JPX short-position reports" : s.kind === "interest" ? "exchange-reported · Yahoo Finance" : "FINRA") : ""}>
+          {on("short") && <Panel no={no("short")} k="st-short" title="SHORT INTEREST" span={4} aux={s ? (s.kind === "jpx" ? <span id="st-short-src">JPX short-position reports · <PersonalUse /></span> : s.kind === "interest" ? "exchange-reported · Yahoo Finance" : "FINRA") : ""}>
             {!s ? <Empty title="No short data">None reported for this name.</Empty> : s.kind === "jpx" ? (
               <table className="secT" id="st-short"><tbody>
                 <tr><td className="l"><b>Reported positions (0.5% and above) · <span className="nb">{fmtDate(s.d)}</span></b></td><td className="num"><b>{(s.ratio * 100).toFixed(2)}%</b></td></tr>

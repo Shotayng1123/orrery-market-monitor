@@ -18,6 +18,9 @@ import { localDate, type Holidays } from "../_shared/sessions.ts";
 import { feedState } from "../_shared/feedhealth.ts";
 import { beatFresh, type Reading, type RelayNote } from "../_shared/relay.ts";
 import { LISTED_ALERTS } from "../_shared/sigma.ts";
+import { isPfAction, pfRoute, type PfFacts } from "../_shared/pf/route.ts";
+import { PAPER_ON_SERVER } from "../_shared/pf/switch.ts";
+import { sqlStore } from "../_shared/pfstore.ts";
 
 
 Deno.serve(async (req) => {
@@ -43,6 +46,13 @@ Deno.serve(async (req) => {
     if (action === "admin_users" || action === "admin_set" || action === "mail_test") {
       if (account.role !== "manager") return json(req, { error: "forbidden" }, 403);
       return action === "admin_users" ? await adminUsers(req) : action === "mail_test" ? await mailTest(req, account) : await adminSet(req, account);
+    }
+    // The paper portfolio (P-1): its routes, through the database's functions only. While the server's switch is off
+    // (_shared/pf/switch.ts) each refuses before anything is read or written, the request's own body included.
+    if (isPfAction(action)) {
+      const body = PAPER_ON_SERVER && req.method === "POST" ? ((await req.json().catch(() => ({}))) as Record<string, unknown>) : {};
+      const r = await pfRoute({ on: PAPER_ON_SERVER, store: sqlStore((fn, args) => db.rpc(fn, args)), now: () => new Date(), facts: paperFacts }, action, account.email, req.method, q, body);
+      return json(req, r.body, r.status);
     }
     switch (action) {
       case "health": return json(req, await health());
@@ -148,6 +158,20 @@ Deno.serve(async (req) => {
     return json(req, { error: e instanceof Error ? e.message : String(e) }, 500);
   }
 });
+
+// ---------- the paper portfolio: what the server holds besides the books ----------
+/** The holidays the Monitor holds (Tokyo's and New York's), for "in force from the next session"; the Monitor's own
+ *  USD/JPY close at 17:00 New York, for a yen book's dollar equivalent. The overnight rates (EFFR, TONA) are not
+ *  stored yet: they come with the daily NAV (P-3), and until then the form says the cash rate is not read. */
+async function paperFacts(): Promise<PfFacts> {
+  const since = new Date(Date.now() - 10 * 86400e3).toISOString().slice(0, 10);
+  const [{ data: cal }, { data: fx }] = await Promise.all([
+    db.from("sessions_cal").select("market,d").in("market", ["TSE", "NYSE"]).gte("d", since),
+    db.from("prices_daily").select("d,close").eq("symbol", "USDJPY=X").order("d", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  const days = (m: string) => ((cal ?? []) as Array<{ market: string; d: string }>).filter((r) => r.market === m).map((r) => r.d);
+  return { rates: { USD: null, JPY: null }, usdjpy: fx && Number(fx.close) > 0 ? { rate: Number(fx.close), d: fx.d as string, source: "Yahoo Finance, unofficial" } : null, holidays: { TSE: days("TSE"), NYSE: days("NYSE") } };
+}
 
 // ---------- sign-in ----------
 // ---------- publishing (research desk) ----------
