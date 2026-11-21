@@ -10,6 +10,9 @@
 //   om_mock_stale = "1", om_mock_live = "1"   a stopped price feed; EQUITIES while its market is open (below)
 //   om_mock_now = an ISO time         the page's clock starts there (lib/mockclock.ts) and the market rows follow the
 //                                     session table at that moment: a closed market, a midday break, a holiday
+//   om_mock_now = "now"               the machine's clock, with the market rows following the session table all the
+//                                     same: what the live Monitor would show at this hour (without the key the rows
+//                                     keep fixed states, which at most hours contradict the lines beside them)
 import { mockStock } from "./mockStock";
 import { mockInstrument, rowFromBars } from "./mockInstr";
 import standin from "./standin.json";
@@ -23,7 +26,7 @@ import type { PolicyStep } from "../components/PolicyChart";
 import type { Hit } from "./candidates";
 import type { StockFeed } from "./stock";
 
-const MASTER: Array<Pick<TableRow, "symbol" | "name" | "cls" | "group" | "market" | "currency" | "decimals" | "order"> & { base: number; vol: number; proxyFor?: string }> = [
+const MASTER: Array<Pick<TableRow, "symbol" | "name" | "cls" | "group" | "market" | "currency" | "decimals" | "order"> & { base: number; vol: number; proxyFor?: string; marketTab?: boolean; chart?: boolean }> = [
   { symbol: "^N225", name: "Nikkei 225", cls: "Equities", group: "equity", market: "TSE", currency: "JPY", decimals: 2, order: 1, base: 57000, vol: 0.013 },
   { symbol: "1306.T", name: "TOPIX via 1306.T", cls: "Equities", group: "equity", market: "TSE", currency: "JPY", decimals: 1, order: 2, base: 388, vol: 0.011, proxyFor: "TOPIX" },
   { symbol: "^GSPC", name: "S&P 500", cls: "Equities", group: "equity", market: "NYSE", currency: "USD", decimals: 2, order: 3, base: 7376, vol: 0.01 },
@@ -34,6 +37,9 @@ const MASTER: Array<Pick<TableRow, "symbol" | "name" | "cls" | "group" | "market
   { symbol: "000001.SS", name: "Shanghai Composite", cls: "Equities", group: "equity", market: "SSE", currency: "CNY", decimals: 2, order: 10, base: 3649, vol: 0.009 },
   { symbol: "^VIX", name: "VIX", cls: "Volatility", group: "equity", market: "NYSE", currency: "USD", decimals: 2, order: 17, base: 25.6, vol: 0.06 },
   { symbol: "NKD=F", name: "Nikkei 225 future (CME)", cls: "Futures", group: "equity", market: "CME", currency: "USD", decimals: 0, order: 18, base: 58265, vol: 0.013 },
+  // The S&P 500's future: in the table as on the live Monitor, where it is a driver on the S&P 500's EQUITIES page and
+  // its own page follows CME's hours. Kept off the stand-in MARKETS (no row there, no tile), which the checks count.
+  { symbol: "ES=F", name: "S&P 500 E-mini", cls: "Futures", group: "equity", market: "CME", currency: "USD", decimals: 2, order: 19, base: 7391.5, vol: 0.01, marketTab: false, chart: false },
   { symbol: "USDJPY=X", name: "USD/JPY", cls: "Currency", group: "fx", market: "FX", currency: "JPY", decimals: 3, order: 21, base: 158.4, vol: 0.005 },
   { symbol: "EURUSD=X", name: "EUR/USD", cls: "Currency", group: "fx", market: "FX", currency: "USD", decimals: 4, order: 22, base: 1.1143, vol: 0.004 },
   { symbol: "DX-Y.NYB", name: "US Dollar Index (DXY)", cls: "Currency", group: "fx", market: "NYSE", currency: "USD", decimals: 3, order: 29, base: 102.28, vol: 0.004 },
@@ -79,10 +85,16 @@ export function mockHolidays(now: number = Date.now()): Partial<Record<MarketId,
   const from = new Date(now - 2 * 86400e3).toISOString().slice(0, 10);
   return Object.fromEntries(Object.entries(HOLIDAYS).map(([k, v]) => [k, v.filter((d) => d >= from)]));
 }
-/** Whether the local copy's clock is set (`om_mock_now`, lib/mockclock.ts): the market rows then follow the session
- *  table at the page's clock. Without it they keep their fixed states (FX and the futures live, the rest not), so
- *  that the browser checks see the same rows at any hour. */
-export const clockSet = (): boolean => { try { return Number.isFinite(Date.parse(localStorage.getItem("om_mock_now") ?? "")); } catch { return false; } };
+/** `om_mock_now` as the browser's storage has it: an ISO time, "now", or nothing. */
+const clockPref = (): string => { try { return localStorage.getItem("om_mock_now") ?? ""; } catch { return ""; } };
+/** Whether the local copy's market rows follow the session table at the page's clock: `om_mock_now` holds a moment
+ *  (the page's clock starts there, lib/mockclock.ts) or "now" (the machine's clock). Without it they keep their fixed
+ *  states (FX and the futures live, the rest not), so that the browser checks see the same rows at any hour; a
+ *  person, or a role that judges the Monitor, sets it (the reviewer's O-6: on a Saturday the fixed rows show a pair
+ *  LIVE beside WATCHLIST's "Closed now: FX opens …"). */
+export const clockSet = (): boolean => { const v = clockPref(); return v === "now" || Number.isFinite(Date.parse(v)); };
+/** Whether that clock is the machine's own (`om_mock_now` = "now"). */
+export const clockIsNow = (): boolean => clockPref() === "now";
 const QUARTER = 15 * 60e3;
 const lastOpen = new Map<string, number>();
 /** A stand-in print by the session table at `now`: live with a print as old as the feed's delay while the market has
@@ -133,6 +145,7 @@ const MOCK_SIGMA_DAY: Record<string, number> = { "USDJPY=X": 2.7 };
  *  the stand-in contract never runs past it, whatever the date) and the day its record starts. */
 export const MOCK_CONTRACTS: Record<string, { contract: string; expiresIn: number; since: number }> = {
   "GC=F": { contract: GOLD_TO, expiresIn: GOLD_EXPIRES_IN, since: 60 }, "CL=F": { contract: "CLF27.NYM", expiresIn: 31, since: 25 }, "NKD=F": { contract: "NKDZ26.CME", expiresIn: 21, since: 40 },
+  "ES=F": { contract: "ESZ26.CME", expiresIn: 28, since: 40 },
 };
 const inDays = (n: number): string => new Date(Date.now() + n * 86400e3).toISOString().slice(0, 10);
 /** σ of the 63 daily changes into points `to - 62` … `to` (in per cent for a price, points for a yield), as the server. */

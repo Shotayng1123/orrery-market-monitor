@@ -12,6 +12,15 @@
 //   - nothing cut at the designer's sizes (plan review §3.7): C1 to C8, an iPhone SE and an iPhone 13;
 //   - the page with the server users have now: its `health` calendar and its `table` rows; a calendar that does not
 //     come ("scheduled"); a stock on an exchange the Monitor keeps no hours for (no CLOSED, no opening).
+// After the reviewer's check (21 Nov 2026):
+//   - O-1: the FX week by New York's clock, Sunday 17:00 to Friday 17:00 there: "opens 23 Nov 06:00 SGT" this weekend;
+//   - O-2: the dollar index, the UST 10Y yield and VIX, which the Monitor only reads in New York's hours, say LAST PRINT
+//     and "next read 22:30 SGT", never CLOSED, an opening or NYSE's early close;
+//   - O-4: a row that is not live in its market's hours says "first print due ~08:20 SGT" in a delayed feed's first
+//     minutes; after them "open since …" only where the Monitor holds the market's holidays, otherwise the timetable's
+//     session ("session 16:00–00:30 SGT, scheduled"), on a computer and on a phone, with nothing cut;
+//   - O-5: EQUITIES is opened on the S&P 500 (#equities/spx; "sp500" is no index's address and showed the Nikkei) and
+//     on the Hang Seng, whose drivers carry the long ", scheduled" lines in the small tiles.
 // Run from web/:  node e2e/run.cjs opens   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
 const MOCK = "http://localhost:5179/orrery-market-monitor/", STANDIN = "http://localhost:5181/orrery-market-monitor/";
@@ -48,7 +57,7 @@ const tiles = (p) => p.evaluate(() => [...document.querySelectorAll(".mtile.cp")
   const as = t.querySelector(":scope > .vl > .tags > .asof"); if (!vis(as)) return null;
   const o = [...t.querySelectorAll(".opens")].find(vis) ?? null, tr = t.getBoundingClientRect(), ar = as.getBoundingClientRect(), r = o?.getBoundingClientRect(), cv = t.querySelector(":scope > .ch > .chv")?.getBoundingClientRect();
   const apart = (a, b2) => a.left >= b2.right - 0.5 || a.right <= b2.left + 0.5 || a.top >= b2.bottom - 0.5 || a.bottom <= b2.top + 0.5;
-  return { name: t.querySelector(".lbtxt")?.textContent ?? "", label: as.querySelector(".st").textContent, stamp: as.textContent.replace(/\s+/g, " ").trim(), live: t.classList.contains("live"), opens: o?.textContent ?? null, tip: o?.getAttribute("title") ?? null,
+  return { name: t.querySelector(".lbtxt")?.textContent ?? "", label: as.querySelector(".st").textContent, stamp: as.textContent.replace(/\s+/g, " ").trim(), live: t.classList.contains("live"), opens: o?.textContent ?? null, kind: o ? o.className.replace(/^opens\s*/, "") : null, tip: o?.getAttribute("title") ?? null,
     whole: !o || (o.scrollWidth <= o.clientWidth + 1 && r.left >= tr.left - 0.5 && r.right <= tr.right + 0.5 && r.bottom <= tr.bottom + 0.5 && r.top >= tr.top - 0.5),
     clear: !o || ((!cv || apart(r, cv)) && apart(r, ar)), below: !o ? null : r.top >= ar.top - 1.5, fs: o ? parseFloat(getComputedStyle(o).fontSize) : null, oneLine: !o ? null : r.height <= parseFloat(getComputedStyle(o).lineHeight || "0") * 1.6 || r.height <= 18 };
 }).filter(Boolean));
@@ -56,13 +65,19 @@ const tiles = (p) => p.evaluate(() => [...document.querySelectorAll(".mtile.cp")
 const lines = (p) => p.evaluate(() => [...document.querySelectorAll(".mp-row.inst")].map((r) => {
   const st = r.querySelector(".mp-st"), o = st.querySelector(".opens"), sr = st.getBoundingClientRect(), px = r.querySelector(".mp-px").getBoundingClientRect(), pill = r.querySelector(".mp-chg").getBoundingClientRect(), nm = r.querySelector(".n").getBoundingClientRect();
   const kids = [...st.children].map((c) => c.getBoundingClientRect());
-  return { n: r.querySelector(".n").textContent, state: st.firstElementChild?.textContent ?? "", opens: o?.textContent ?? null, tip: o?.getAttribute("title") ?? null, h: Math.round(r.getBoundingClientRect().height), fs: parseFloat(getComputedStyle(st).fontSize),
+  return { n: r.querySelector(".n").textContent, state: st.firstElementChild?.textContent ?? "", opens: o?.textContent ?? null, kind: o ? o.className.replace(/^opens\s*/, "") : null, tip: o?.getAttribute("title") ?? null, h: Math.round(r.getBoundingClientRect().height), fs: parseFloat(getComputedStyle(st).fontSize),
     rows: new Set(kids.map((k) => Math.round(k.top))).size, whole: st.scrollWidth <= st.clientWidth + 1 && kids.every((k) => k.right <= sr.right + 0.5 && k.left >= sr.left - 0.5),
     clear: sr.top >= nm.bottom - 1 && sr.top >= px.bottom - 1 && kids.every((k) => k.right <= pill.left + 0.5), ox: document.documentElement.scrollWidth - innerWidth };
 }));
 const chips = (p) => p.evaluate(() => Object.fromEntries([...document.querySelectorAll("#mktstat .mk")].map((c) => [c.firstChild.textContent, { cls: c.className.replace("mk ", ""), lt: c.querySelector(".lt").textContent, tip: c.getAttribute("title") }])));
 const rowTips = (p) => p.evaluate(() => Object.fromEntries([...document.querySelectorAll("table.mkt tbody tr:not(.cls), table.mini tbody tr.click")].map((tr) => [tr.querySelector("a.lnk")?.textContent ?? "", tr.getAttribute("title")])));
 const by = (xs, name) => xs.find((x) => x.name === name || x.n === name);
+// what a line may be, by what stands before it: an opening beside CLOSED, a next read beside LAST PRINT (an instrument
+// the Monitor only reads in New York's hours: the dollar index, the UST 10Y yield, VIX), nothing beside anything else
+const OPENS = /^opens (\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d SGT(, scheduled)?$/, READ = /^next read (\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d SGT$/;
+const READ_ONLY = ["VIX", "UST 10Y yield", "US Dollar Index (DXY)", "UST 10Y", "DXY"];
+const tileOk = (x) => (x.label === "CLOSED" ? x.kind === "opens" && OPENS.test(x.opens ?? "") : x.kind === "read" ? x.label === "LAST PRINT" && READ.test(x.opens ?? "") && READ_ONLY.includes(x.name) : x.opens === null);
+const lineOk = (x) => (x.state === "Closed" ? x.kind === "opens" && OPENS.test(x.opens ?? "") : x.kind === "read" ? /^Last print (\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d$/.test(x.state) && READ.test(x.opens ?? "") && READ_ONLY.includes(x.n) : x.opens === null);
 
 (async () => { const b = await chromium.launch();
   console.log("\n[the owner's moment, Fri 20 Nov 2026 21:16 SGT: MARKETS on a computer, 1440x900]");
@@ -77,11 +92,15 @@ const by = (xs, name) => xs.find((x) => x.name === name || x.n === name);
     ck(`a market that is open has no such line: the Nikkei future "${fut?.stamp}", USD/JPY "${jpy?.stamp}"`, fut?.label === "LIVE" && fut.opens === null && fut.live && jpy?.label === "LIVE" && jpy.opens === null, { fut, jpy });
     const pub = t.filter((x) => x.label === "PUBLISHED");
     ck(`an official yield, published once a day, has none either (${pub.map((x) => `${x.name}: ${x.stamp}`).join("; ")})`, pub.length === 2 && pub.every((x) => x.opens === null), pub);
-    const closed = t.filter((x) => x.label === "CLOSED"), other = t.filter((x) => x.label !== "CLOSED");
-    ck(`every tile that says CLOSED says when its market opens (${closed.length} of ${t.length}); no other tile does`, closed.length >= 9 && closed.every((x) => /^opens (\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d SGT(, scheduled)?$/.test(x.opens ?? "")) && other.every((x) => x.opens === null), { closed: closed.filter((x) => !x.opens), other: other.filter((x) => x.opens) });
+    const closed = t.filter((x) => x.label === "CLOSED"), read = t.filter((x) => x.kind === "read"), lined = t.filter((x) => x.opens);
+    ck(`every tile that says CLOSED says when its market opens (${closed.length} of ${t.length}); no tile of an open market or of an official yield has a line`, closed.length >= 8 && t.every(tileOk), t.filter((x) => !tileOk(x)));
+    const vix = by(t, "VIX"), tnx = by(t, "UST 10Y yield"), dxy = by(t, "US Dollar Index (DXY)");
+    ck(`the three the Monitor only reads in New York's hours are not called closed by them (O-2): VIX "${vix?.stamp}" "${vix?.opens}", the UST 10Y yield "${tnx?.stamp}" "${tnx?.opens}", the dollar index "${dxy?.stamp}" "${dxy?.opens}"`, read.length === 3 && [vix, tnx, dxy].every((x) => x?.label === "LAST PRINT" && x.stamp === "LAST PRINT 05:00 SGT" && x.opens === "next read 22:30 SGT" && x.kind === "read" && !x.live), { vix, tnx, dxy });
+    ck(`their tooltip says what the time is: "${tnx?.tip}"`, tnx?.tip === "The Monitor reads this instrument during New York's regular session (09:30–16:00 ET; to 13:00 on NYSE's early closes). New York's exchange is not its market, and the Monitor does not hold its own market's hours: it is called neither open nor closed here. Next read 20 Nov 22:30 SGT.", tnx?.tip);
     // (how many lines a long one takes depends on the font the machine has: only the short one is held to one line)
-    ck("the opening is whole, under the stamp and clear of the change beside it; New York's short one on one line", closed.every((x) => x.whole && x.below && x.clear && x.fs >= 9) && sp.oneLine, closed.filter((x) => !(x.whole && x.below && x.clear)));
+    ck("each line is whole, under the stamp and clear of the change beside it; New York's short one on one line", lined.length === closed.length + 3 && lined.every((x) => x.whole && x.below && x.clear && x.fs >= 9) && sp.oneLine && tnx.oneLine, lined.filter((x) => !(x.whole && x.below && x.clear)));
     const tips = await rowTips(p);
+    ck(`the UST 10Y yield's row in the table: "${tips["UST 10Y"]}"`, tips["UST 10Y"] === "^TNX · Yahoo Finance · last print 20 Nov 2026 05:00 SGT · next read 22:30 SGT · open its page", tips["UST 10Y"]);
     ck(`a table row's tooltip says it too: "${tips["S&P 500"]}"; an open market's: "…${(tips["USD/JPY"] ?? "").split(" · ").slice(-2).join(" · ")}"`, /^\^GSPC · Yahoo Finance · last print 20 Nov 2026 05:00 SGT · market closed · opens 22:30 SGT · open its page$/.test(tips["S&P 500"]) && / · market open · open its page$/.test(tips["USD/JPY"]) && /^JGB10Y · Japan MOF · published for \d{1,2} [A-Z][a-z]{2} \d{4} · open its page$/.test(tips["JGB 10Y"]), { sp: tips["S&P 500"], jpy: tips["USD/JPY"], jgb: tips["JGB 10Y"] });
     const c = await chips(p);
     ck(`and the header's market chips: NYSE "${c.NYSE?.tip}", TSE "${c.TSE?.tip}", HKEX "${c.HKEX?.tip}"`, c.NYSE?.tip === "New York CLOSED at 08:16 ET · opens 22:30 SGT" && c.TSE?.tip === "Tokyo CLOSED at 22:16 JST · opens 24 Nov 08:00 SGT" && c.HKEX?.tip === "Hong Kong CLOSED at 21:16 HKT · opens 23 Nov 09:30 SGT, scheduled" && c.NYSE.lt === "–", c);
@@ -93,8 +112,9 @@ const by = (xs, name) => xs.find((x) => x.name === name || x.n === name);
     const l = await lines(p), sp = by(l, "S&P 500"), nk = by(l, "Nikkei 225"), hs = by(l, "Hang Seng"), jpy = by(l, "USD/JPY"), fut = by(l, "NK225 fut"), y2 = by(l, "UST 2Y");
     ck(`under the S&P 500's name: "${sp?.state}" and "${sp?.opens}"; the Nikkei 225's "${nk?.opens}"; Hang Seng's "${hs?.opens}"`, sp?.state === "Closed" && sp.opens === "opens 22:30 SGT" && nk?.opens === "opens 24 Nov 08:00 SGT" && hs?.opens === "opens 23 Nov 09:30 SGT, scheduled", { sp, nk, hs });
     ck(`open markets keep their state alone (USD/JPY "${jpy?.state}", the Nikkei future "${fut?.state}"); an official yield says "${y2?.state}", not Closed`, jpy?.state === "Live" && jpy.opens === null && /^Delayed ~10m$/.test(fut?.state ?? "") && fut.opens === null && /^Published \d{1,2} [A-Z][a-z]{2} \d{4}$/.test(y2?.state ?? "") && y2.opens === null, { jpy, fut, y2 });
-    const closed = l.filter((x) => x.state === "Closed");
-    ck(`every line that says Closed says when its market opens (${closed.length} of ${l.length}); no other line does`, closed.length >= 9 && closed.every((x) => /^opens /.test(x.opens ?? "")) && l.filter((x) => x.state !== "Closed").every((x) => x.opens === null), l.filter((x) => (x.state === "Closed") !== !!x.opens));
+    const closed = l.filter((x) => x.state === "Closed"), tn = by(l, "UST 10Y"), vx = by(l, "VIX"), dx = by(l, "DXY");
+    ck(`every line that says Closed says when its market opens (${closed.length} of ${l.length}); a live line and an official yield have none`, closed.length >= 8 && l.every(lineOk), l.filter((x) => !lineOk(x)));
+    ck(`the three read in New York's hours say what their figure is as of and when it is next read (O-2): the UST 10Y "${tn?.state}" "${tn?.opens}", VIX "${vx?.state}", DXY "${dx?.state}"`, [tn, vx, dx].every((x) => x?.state === "Last print 05:00" && x.opens === "next read 22:30 SGT"), { tn, vx, dx });   // (whether the two share a row depends on the machine's font: not counted)
     // (whether the longest state and opening share one row depends on the machine's font: New York's short one must)
     ck(`each line whole under the name and the level, clear of the change pill, at ${l[0]?.fs}px (lines ${[...new Set(l.map((x) => x.h))].join(" and ")}px high here); "Closed" and "opens 22:30 SGT" on one row; no sideways scroll`, l.every((x) => x.whole && x.clear && x.fs >= 11 && x.ox <= 0) && sp.rows === 1, l.filter((x) => !(x.whole && x.clear)));
     await p.locator(".mp-row.inst", { has: p.locator(".n", { hasText: /^S&P 500$/ }) }).tap(); await p.waitForSelector(".mp-item.open .mp-full");
@@ -105,12 +125,16 @@ const by = (xs, name) => xs.find((x) => x.name === name || x.n === name);
   console.log("\n[a weekend, Sat 21 Nov 10:00 SGT (the longest lines): nothing cut at the designer's sizes]");
   for (const code of ["C1", "C2", "C3", "C6", "C7", "C8"]) {
     const { ctx, p, errs } = await page(b, code, SAT);
-    for (const [hash, sel, what] of [["#market", ".mtile.cp .asof", "MARKETS"], ["#rates", ".panel[data-k='pairs'] .mtile.cp .asof", "RATES & FX"], ["#equities/sp500", ".bigwrap .asof", "EQUITIES"], ["#asset/NVDA", ".bigwrap .asof", "a stock's page"], ["#asset/USDJPY%3DX", ".bigwrap .asof", "an instrument's page"]]) {
+    for (const [hash, sel, what, title] of [["#market", ".mtile.cp .asof", "MARKETS"], ["#rates", ".panel[data-k='pairs'] .mtile.cp .asof", "RATES & FX"], ["#equities/spx", ".bigwrap .asof", "EQUITIES, the S&P 500", "S&P 500"], ["#equities/hsi", ".bigwrap .asof", "EQUITIES, the Hang Seng", "HANG SENG"], ["#asset/NVDA", ".bigwrap .asof", "a stock's page"], ["#asset/USDJPY%3DX", ".bigwrap .asof", "an instrument's page"], ["#asset/ES%3DF", ".bigwrap .asof", "a future's page"]]) {
       await go(p, MOCK, hash, sel);
       // tiles ask for their place as they come near the screen: walk the page once so every tile on it is drawn
       await p.evaluate(async () => { for (let y = 0; y < document.documentElement.scrollHeight; y += 600) { window.scrollTo(0, y); await new Promise((r) => setTimeout(r, 40)); } window.scrollTo(0, 0); }); await p.waitForTimeout(250);
-      const t = await tiles(p), closed = t.filter((x) => x.label === "CLOSED"), ox = await p.evaluate(() => document.documentElement.scrollWidth - innerWidth);
-      ck(`${code} ${what}: ${closed.length} tiles say CLOSED, each with its opening whole and clear of the stamp and the change (the longest: "${[...closed].sort((a, z2) => (z2.opens ?? "").length - (a.opens ?? "").length)[0]?.opens}"); no sideways scroll`, closed.length >= 1 && closed.every((x) => /^opens \d{1,2} Nov \d\d:\d\d SGT(, scheduled)?$/.test(x.opens ?? "") && x.whole && x.clear && x.below && x.fs >= 9) && t.filter((x) => x.label !== "CLOSED").every((x) => x.opens === null) && ox <= 0, { bad: closed.filter((x) => !(x.whole && x.clear && x.below && x.opens)), ox });
+      const t = await tiles(p), closed = t.filter((x) => x.label === "CLOSED"), lined = t.filter((x) => x.opens), ox = await p.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+      // the index the EQUITIES page shows is the one asked for (O-5: "#equities/sp500" fell back to the Nikkei 225)
+      const shown = title ? await p.locator(".panel[data-k='eq-index'] .phead .t").first().textContent().catch(() => null) : null;
+      ck(`${code} ${what}: ${closed.length} tiles say CLOSED, each with its opening whole and clear of the stamp and the change (the longest line: "${[...lined].sort((a, z2) => (z2.opens ?? "").length - (a.opens ?? "").length)[0]?.opens}"); no sideways scroll${title ? `; the page is "${shown}"` : ""}`, closed.length >= 1 && t.every(tileOk) && closed.every((x) => / Nov /.test(x.opens)) && lined.every((x) => x.whole && x.clear && x.below && x.fs >= 9) && ox <= 0 && (!title || (shown ?? "").toUpperCase().includes(title.toUpperCase())), { bad: t.filter((x) => !tileOk(x) || (x.opens && !(x.whole && x.clear && x.below))), ox, shown });
+      if (code === "C1" && hash === "#equities/spx") { const es = by(t, "S&P 500 E-mini"); ck(`the S&P 500's drivers are its four (O-6: the stand-in table has the E-mini, as the live one): ${t.slice(1).map((x) => `${x.name} "${x.opens}"`).join("; ")}`, t.length === 5 && es?.label === "CLOSED" && es.opens === "opens 23 Nov 07:00 SGT, scheduled" && ["VIX", "UST 10Y yield", "US Dollar Index (DXY)"].every((n) => by(t, n)?.opens === "next read 23 Nov 22:30 SGT"), t); }
+      if (code === "C1" && hash === "#equities/hsi") ck(`the Hang Seng's drivers carry the long lines in their small tiles: ${t.slice(1).map((x) => `${x.name} "${x.opens}"`).join("; ")}`, by(t, "Hang Seng")?.opens === "opens 23 Nov 09:30 SGT, scheduled" && by(t, "Shanghai Composite")?.opens === "opens 23 Nov 09:30 SGT, scheduled" && by(t, "S&P 500")?.opens === "opens 23 Nov 22:30 SGT" && by(t, "UST 10Y yield")?.opens === "next read 23 Nov 22:30 SGT", t);
     }
     ck(`${code}: no script error`, errs.length === 0, errs); await ctx.close();
   }
@@ -126,12 +150,12 @@ const by = (xs, name) => xs.find((x) => x.name === name || x.n === name);
   }
   for (const code of ["P1", "P2"]) {
     const { ctx, p, errs } = await page(b, code, SAT);
-    for (const [hash, what] of [["#market", "MARKETS"], ["#rates", "RATES & FX"], ["#equities/sp500", "EQUITIES"]]) {
+    for (const [hash, what, first] of [["#market", "MARKETS"], ["#rates", "RATES & FX"], ["#equities/spx", "EQUITIES, the S&P 500", "S&P 500"], ["#equities/hsi", "EQUITIES, the Hang Seng", "Hang Seng"]]) {
       await go(p, MOCK, hash, ".mp-row.inst");
       const l = await lines(p), closed = l.filter((x) => x.state === "Closed");
-      ck(`${code} ${what}: ${closed.length} lines say Closed, each with its opening whole and clear of the level and the pill (the longest: "${[...closed].sort((a, z2) => (z2.opens ?? "").length - (a.opens ?? "").length)[0]?.opens}"), type ${l[0]?.fs}px; no sideways scroll`, closed.length >= 1 && closed.every((x) => /^opens \d{1,2} Nov \d\d:\d\d SGT(, scheduled)?$/.test(x.opens ?? "")) && l.every((x) => x.whole && x.clear && x.fs >= 11 && x.ox <= 0) && l.filter((x) => x.state !== "Closed").every((x) => x.opens === null), l.filter((x) => !(x.whole && x.clear)));
+      ck(`${code} ${what}: ${closed.length} lines say Closed, each with its opening whole and clear of the level and the pill (the longest line: "${[...l].sort((a, z2) => (z2.opens ?? "").length - (a.opens ?? "").length)[0]?.opens}"), type ${l[0]?.fs}px; no sideways scroll${first ? `; the index is "${l[0]?.n}"` : ""}`, closed.length >= 1 && l.every(lineOk) && closed.every((x) => / Nov /.test(x.opens)) && l.every((x) => x.whole && x.clear && x.fs >= 11 && x.ox <= 0) && (!first || l[0]?.n === first), l.filter((x) => !(lineOk(x) && x.whole && x.clear)));
     }
-    for (const [hash, what] of [["#asset/NVDA", "a stock's page"], ["#asset/USDJPY%3DX", "an instrument's page"]]) {
+    for (const [hash, what] of [["#asset/NVDA", "a stock's page"], ["#asset/USDJPY%3DX", "an instrument's page"], ["#asset/ES%3DF", "a future's page"]]) {
       await go(p, MOCK, hash, ".mp-hero .asof");
       const t = await tiles(p), h = t[0], ox = await p.evaluate(() => document.documentElement.scrollWidth - innerWidth);
       ck(`${code} ${what}: "${h?.stamp}" and "${h?.opens}", whole, type ${h?.fs}px; no sideways scroll`, h?.label === "CLOSED" && /^opens 23 Nov \d\d:\d\d SGT(, scheduled)?$/.test(h.opens ?? "") && h.whole && h.clear && h.fs >= 11 && ox <= 0, { h, ox });
@@ -143,8 +167,21 @@ const by = (xs, name) => xs.find((x) => x.name === name || x.n === name);
   { const { ctx, p, errs } = await page(b, "C1", SAT);
     await go(p, MOCK, "#rates", ".panel[data-k='pairs'] .mtile.cp .asof");
     const tips = await rowTips(p), t = await tiles(p), jpy = by(t, "USD/JPY");
-    ck(`a pair's row: "${tips["USD/JPY"]}"`, tips["USD/JPY"] === "USD/JPY (USDJPY=X) · Yahoo Finance · last print 21 Nov 2026 06:00 SGT · market closed · opens 23 Nov 05:00 SGT, scheduled · open its page", tips["USD/JPY"]);
-    ck(`its tile: "${jpy?.stamp}" and "${jpy?.opens}" ("${jpy?.tip}")`, jpy?.stamp === "CLOSED 06:00 SGT" && jpy.opens === "opens 23 Nov 05:00 SGT, scheduled" && /^FX: trades Monday 05:00 to Saturday 06:00 SGT\. Scheduled to open 23 Nov 05:00 SGT\./.test(jpy.tip), jpy);
+    ck(`a pair's row: "${tips["USD/JPY"]}"`, tips["USD/JPY"] === "USD/JPY (USDJPY=X) · Yahoo Finance · last print 21 Nov 2026 06:00 SGT · market closed · opens 23 Nov 06:00 SGT, scheduled · open its page", tips["USD/JPY"]);
+    ck(`its tile: "${jpy?.stamp}" and "${jpy?.opens}": Sunday 17:00 in New York, which is Monday 06:00 SGT in New York's winter (O-1; "${jpy?.tip}")`, jpy?.stamp === "CLOSED 06:00 SGT" && jpy.opens === "opens 23 Nov 06:00 SGT, scheduled" && jpy.tip === "FX: trades Sunday 17:00 to Friday 17:00 ET. Scheduled to open 23 Nov 06:00 SGT. The Monitor does not hold this market's holidays: on one the market stays shut.", jpy);
+    const dxy = by(t, "US Dollar Index (DXY)"), dxTip = tips["US Dollar Index (DXY)"] ?? tips["DXY"];
+    ck(`the dollar index beside the pairs: "${dxy?.stamp}" and "${dxy?.opens}"; its row "…${(dxTip ?? "").split(" · ").slice(-2).join(" · ")}"`, dxy?.label === "LAST PRINT" && dxy.opens === "next read 23 Nov 22:30 SGT" && / · next read 23 Nov 22:30 SGT · open its page$/.test(dxTip ?? "") && !/market closed/.test(dxTip ?? ""), { dxy, dxTip });
+    ck("no script error", errs.length === 0, errs); await ctx.close(); }
+  // the hour the two rules differed in: Mon 23 Nov 2026, 05:30 SGT, Sunday 16:30 in New York (the table called FX open)
+  { const { ctx, p, errs } = await page(b, "C1", "2026-11-22T21:30:00Z");
+    await go(p, MOCK, "#rates", ".panel[data-k='pairs'] .mtile.cp .asof");
+    const jpy = by(await tiles(p), "USD/JPY"), tips = await rowTips(p);
+    ck(`Mon 23 Nov at 05:30 SGT a pair is still shut: "${jpy?.stamp}" and "${jpy?.opens}"; its row "…${(tips["USD/JPY"] ?? "").split(" · ").slice(-3).join(" · ")}"`, jpy?.label === "CLOSED" && jpy.stamp === "CLOSED 21 Nov 06:00 SGT" && jpy.opens === "opens 06:00 SGT, scheduled" && !jpy.live && / · market closed · opens 06:00 SGT, scheduled · open its page$/.test(tips["USD/JPY"] ?? ""), { jpy, tip: tips["USD/JPY"] });
+    ck("no script error", errs.length === 0, errs); await ctx.close(); }
+  { const { ctx, p, errs } = await page(b, "P1", "2026-11-22T22:30:00Z");
+    await go(p, MOCK, "#rates", ".mp-row.inst");
+    const jpy = by(await lines(p), "USD/JPY");
+    ck(`and at 06:30 SGT it is trading (on a phone: "${jpy?.state}")`, jpy?.state === "Live" && jpy.opens === null, jpy);
     ck("no script error", errs.length === 0, errs); await ctx.close(); }
 
   console.log("\n[a holiday: Tokyo on Mon 23 Nov 2026, 10:00 SGT]");
@@ -194,14 +231,15 @@ const by = (xs, name) => xs.find((x) => x.name === name || x.n === name);
   { const { ctx, p, errs } = await page(b, "C1", DELAY);
     await go(p, MOCK, "#market", ".mtile.cp .asof");
     const t = await tiles(p), nk = by(t, "Nikkei 225"), ks = by(t, "KOSPI"), tips = await rowTips(p);
-    ck(`the Nikkei 225 is not called closed: "${nk?.stamp}" and "${nk?.opens}" ("${nk?.tip}")`, nk?.label === "LAST PRINT" && nk.stamp === "LAST PRINT 20 Nov 14:30 SGT" && nk.opens === "open since 08:00 SGT" && nk.whole && nk.clear && /^Tokyo: regular session 09:00–11:30, 12:30–15:30 JST; in session since 24 Nov 08:00 SGT\. The last print the Monitor has is older than a live one; this feed is delayed about 20 minutes\. Holidays: JPX's calendar\.$/.test(nk.tip), nk);
-    ck(`Seoul's, whose holidays are not held: "${ks?.stamp}" and "${ks?.opens}"; the row's tooltip "…${(tips["Nikkei 225"] ?? "").split(" · ").slice(-3).join(" · ")}"`, ks?.stamp === "LAST PRINT 23 Nov 14:30 SGT" && ks.opens === "open since 08:00 SGT, scheduled" && / · no new print · open since 08:00 SGT · open its page$/.test(tips["Nikkei 225"] ?? ""), { ks, tip: tips["Nikkei 225"] });
-    ck("no tile says CLOSED without an opening", t.filter((x) => x.label === "CLOSED").every((x) => /^opens /.test(x.opens ?? "")), t.filter((x) => x.label === "CLOSED" && !x.opens));
+    ck(`the Nikkei 225 is not called closed, and is told when its first print is due (O-4): "${nk?.stamp}" and "${nk?.opens}" ("${nk?.tip}")`, nk?.label === "LAST PRINT" && nk.stamp === "LAST PRINT 20 Nov 14:30 SGT" && nk.opens === "first print due ~08:20 SGT" && nk.kind === "due" && nk.whole && nk.clear && nk.tip === "Tokyo: regular session 09:00–11:30, 12:30–15:30 JST; in session since 24 Nov 08:00 SGT. This feed is delayed about 20 minutes: the session's first print is due about 24 Nov 08:20 SGT. Holidays: JPX's calendar.", nk);
+    ck(`Seoul's, whose holidays are not held: "${ks?.stamp}" and "${ks?.opens}"; the row's tooltip "…${(tips["Nikkei 225"] ?? "").split(" · ").slice(-3).join(" · ")}"`, ks?.stamp === "LAST PRINT 23 Nov 14:30 SGT" && ks.opens === "first print due ~08:20 SGT, scheduled" && ks.whole && ks.clear && / · delayed ~20m · first print due ~08:20 SGT · open its page$/.test(tips["Nikkei 225"] ?? ""), { ks, tip: tips["Nikkei 225"] });
+    ck("no tile says CLOSED without an opening, and none says a market is open that the Monitor cannot know to be", t.filter((x) => x.label === "CLOSED").every((x) => /^opens /.test(x.opens ?? "")) && t.every((x) => !/open since/.test(x.opens ?? "") || ["Nikkei 225", "TOPIX via 1306.T"].includes(x.name)), t.filter((x) => x.label === "CLOSED" && !x.opens));
     ck("no script error", errs.length === 0, errs); await ctx.close(); }
   { const { ctx, p, errs } = await page(b, "P1", DELAY);
     await go(p, MOCK, "#market", ".mp-row.inst");
     const l = await lines(p), nk = by(l, "Nikkei 225");
-    ck(`on a phone (iPhone SE): "${nk?.state}" and "${nk?.opens}", whole`, nk?.state === "No new print" && nk.opens === "open since 08:00 SGT" && l.every((x) => x.whole && x.clear), l.filter((x) => !(x.whole && x.clear)));
+    const ks = by(l, "KOSPI");
+    ck(`on a phone (iPhone SE) the line does not read like a fault: "${nk?.state}" and "${nk?.opens}"; Seoul's "${ks?.state}" and "${ks?.opens}"; every line whole`, nk?.state === "Delayed ~20m" && nk.opens === "first print due ~08:20 SGT" && ks?.state === "Delayed ~20m" && ks.opens === "first print due ~08:20 SGT, scheduled" && l.every((x) => x.whole && x.clear), l.filter((x) => !(x.whole && x.clear)));
     ck("no script error", errs.length === 0, errs); await ctx.close(); }
 
   console.log("\n[a stock's page: LIVE in its exchange's hours, CLOSED with the opening outside them]");
@@ -236,7 +274,7 @@ const by = (xs, name) => xs.find((x) => x.name === name || x.n === name);
     const { ctx, p, errs } = await page(b, code, SAT);
     await go(p, MOCK, "#watch", ".mp-row.starred");
     const w = await p.evaluate(() => { const o = document.querySelector("#wl-opens"), c = o?.closest(".mp-sec")?.getBoundingClientRect(), r = o?.getBoundingClientRect(); return { line: o?.textContent ?? null, whole: !!o && o.scrollWidth <= o.clientWidth + 1 && r.left >= c.left - 0.5 && r.right <= c.right + 0.5, fs: o ? parseFloat(getComputedStyle(o).fontSize) : 0, ox: document.documentElement.scrollWidth - innerWidth, n: document.querySelectorAll(".mp-row.starred").length }; });
-    ck(`${code}, a weekend: "${w.line}", whole in its note under the ${w.n} names, type ${w.fs}px; no sideways scroll`, w.line === "Closed now: FX opens 23 Nov 05:00 SGT, scheduled · CME Globex opens 23 Nov 07:00 SGT, scheduled · New York opens 23 Nov 22:30 SGT · Tokyo opens 24 Nov 08:00 SGT." && w.whole && w.fs >= 11 && w.ox <= 0 && w.n === 10, w);
+    ck(`${code}, a weekend: "${w.line}", whole in its note under the ${w.n} names, type ${w.fs}px; no sideways scroll`, w.line === "Closed now: FX opens 23 Nov 06:00 SGT, scheduled · CME Globex opens 23 Nov 07:00 SGT, scheduled · New York opens 23 Nov 22:30 SGT · Tokyo opens 24 Nov 08:00 SGT." && w.whole && w.fs >= 11 && w.ox <= 0 && w.n === 10, w);
     ck(`${code}: no script error`, errs.length === 0, errs); await ctx.close();
   }
   { const { ctx, p, errs } = await page(b, "C1", NYOPEN, { om_mock_watch: JSON.stringify([{ symbol: "NVDA", name: null }, { symbol: "USDJPY=X", name: null }]) });
@@ -278,6 +316,49 @@ const by = (xs, name) => xs.find((x) => x.name === name || x.n === name);
       const t = await tiles(p), sp = by(t, "S&P 500"), nk = by(t, "Nikkei 225");
       ck(`when ${what}, New York's and Tokyo's are the scheduled times and say so: "${sp?.opens}", "${nk?.opens}" ("…${(sp?.tip ?? "").split(". ").slice(-1)[0]}")`, sp?.opens === "opens 22:30 SGT, scheduled" && nk?.opens === "opens 23 Nov 08:00 SGT, scheduled" && /The holiday calendar \(NYSE's\) could not be loaded: on a holiday the market stays shut\.$/.test(sp.tip), { sp, nk });
       ck("no script error", errs.length === 0, errs); await ctx.close();
+    }
+  }
+
+  console.log("\n[no live price in a market's hours, as the live server would feed it (O-4): Wed 25 Nov 2026, 00:10 SGT; the browser's clock fixed]");
+  { const NOW = "2026-11-24T16:10:00Z";   // Tue 24 Nov 16:10 in London, 11:10 in New York: London, Frankfurt, New York, São Paulo, Globex and FX in their hours
+    const closes = { d1: 100, w1: 100, m1: 100, m3: 100, m12: 100, m36: 100 }, dates = { d1: "2026-11-23", w1: "2026-11-17", m1: "2026-10-24", m3: "2026-08-24", m12: "2025-11-24", m36: "2023-11-24" }, pct = { d1: 1, w1: 1, m1: 1, m3: 1, m12: 1, m36: 1 };
+    // every row but Bitcoin's is not live, its last print three hours old: a feed that sent nothing new, or (for all the
+    // Monitor knows of London, Frankfurt, São Paulo, Globex and FX) a holiday there
+    const row = (o) => ({ cls: "Equities", group: "equity", currency: "USD", decimals: 2, order: 1, last: 12345.67, source: "yahoo", closes, closeDates: dates, pct, chg: pct, marketTab: true, chart: true, z1m: 0.1, pos52: 50, vs200: 1, live: false, lastAt: "2026-11-24T13:02:00Z", ...o });
+    const rows = [row({ symbol: "^FTSE", name: "FTSE 100", market: "LSE", currency: "GBP", order: 1 }), row({ symbol: "^GDAXI", name: "DAX", market: "XETRA", currency: "EUR", order: 2 }), row({ symbol: "^GSPC", name: "S&P 500", market: "NYSE", order: 3 }),
+      row({ symbol: "^BVSP", name: "Bovespa", market: "B3", currency: "BRL", decimals: 0, order: 4 }), row({ symbol: "^N225", name: "Nikkei 225", market: "TSE", currency: "JPY", lastAt: "2026-11-24T06:30:00Z", order: 5 }),
+      row({ symbol: "ES=F", name: "S&P 500 E-mini", cls: "Futures", market: "CME", order: 18 }), row({ symbol: "USDJPY=X", name: "USD/JPY", cls: "Currency", group: "fx", market: "FX", currency: "JPY", decimals: 3, last: 158.4, order: 21 }),
+      row({ symbol: "^TNX", name: "UST 10Y yield", cls: "Fixed income", group: "rates", market: "NYSE", decimals: 3, last: 4.859, order: 32 }), row({ symbol: "BTC-USD", name: "Bitcoin", cls: "Crypto", group: "fx", market: "CRYPTO", decimals: 0, order: 60, live: true, lastAt: "2026-11-24T16:09:00Z" })];
+    const HOLIDAYS = { TSE: ["2026-12-31", "2027-01-01"], NYSE: ["2026-11-26", "2026-12-25", "2027-01-01"] };
+    const open = async (code) => { const z = SIZES[code], ctx = await b.newContext({ ...(z.dev ? devices[z.dev] : { viewport: { width: z.vp[0], height: z.vp[1] } }), deviceScaleFactor: 1 }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message)); await p.clock.setFixedTime(new Date(NOW));
+      await p.route("**/fakeapi?*", (r) => { const a = new URL(r.request().url()).searchParams.get("action");
+        const body = a === "health" ? { ok: true, at: NOW, tick: { lastAt: NOW, ageMin: 1, ok: true, note: "stand-in" }, daily: { lastAt: NOW, ok: true, note: "stand-in" }, sources: [], holidays: HOLIDAYS, holidaysVerified: true } : a === "table" ? { rows, asOf: NOW } : a === "series" ? { symbol: "x", res: "1d", points: [], asOf: null } : { rows: [] };
+        r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(body) }); });
+      return { ctx, p, errs }; };
+    const WANT = { "FTSE 100": "session 16:00–00:30 SGT, scheduled", DAX: "session 16:00–00:30 SGT, scheduled", "S&P 500": "open since 24 Nov 22:30 SGT", Bovespa: "session 21:00–04:00 SGT, scheduled", "S&P 500 E-mini": "session 07:00–06:00 SGT, scheduled", "USD/JPY": "session to 28 Nov 06:00 SGT, scheduled" };
+    for (const code of ["C1", "C2"]) {
+      const { ctx, p, errs } = await open(code);
+      await go(p, STANDIN, "#market", ".mtile.cp .asof");
+      await p.waitForFunction(() => [...document.querySelectorAll(".mtile.cp .opens")].some((e) => e.textContent === "open since 24 Nov 22:30 SGT"), null, { timeout: 8000 }).catch(() => undefined);
+      await p.evaluate(async () => { for (let y = 0; y < document.documentElement.scrollHeight; y += 600) { window.scrollTo(0, y); await new Promise((r) => setTimeout(r, 40)); } window.scrollTo(0, 0); }); await p.waitForTimeout(250);
+      const t = await tiles(p), ft = by(t, "FTSE 100"), sp = by(t, "S&P 500"), nk = by(t, "Nikkei 225"), tn = by(t, "UST 10Y yield"), bt = by(t, "Bitcoin"), ox = await p.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+      const got = Object.fromEntries(Object.keys(WANT).map((n) => [n, by(t, n)?.opens ?? null]));
+      ck(`${code}: a market the Monitor holds no holidays for is not said to be open: the FTSE 100 "${ft?.stamp}" and "${ft?.opens}" (it read "open since 24 Nov 16:00 SGT, scheduled"); New York, whose calendar is held, "${sp?.opens}"`, ft?.stamp === "LAST PRINT 24 Nov 21:02 SGT" && ft.kind === "session" && Object.entries(WANT).every(([n, w]) => got[n] === w) && sp?.kind === "since" && t.every((x) => !/open since/.test(x.opens ?? "") || x.name === "S&P 500"), got);
+      if (code === "C1") ck(`its tooltip says what is known and what is not: "${ft?.tip}"`, ft?.tip === "London: regular session 08:00–16:30 UK. Its timetable's session: 24 Nov 16:00 SGT to 25 Nov 00:30 SGT. The last print the Monitor has is older than a live one; this feed is delayed about 15 minutes. The Monitor does not hold this market's holidays: on one there is no session.", ft?.tip);
+      ck(`${code}: the rest of the table as before: the Nikkei 225 "${nk?.stamp}" "${nk?.opens}"; the UST 10Y yield in New York's hours "${tn?.stamp}", no line; Bitcoin "${bt?.label}"`, nk?.label === "CLOSED" && nk.opens === "opens 08:00 SGT" && tn?.label === "LAST PRINT" && tn.opens === null && bt?.label === "LIVE" && bt.opens === null, { nk, tn, bt });
+      ck(`${code}: each of these lines whole, under its stamp and clear of the change beside it; no sideways scroll`, t.filter((x) => x.opens).length === 7 && t.filter((x) => x.opens).every((x) => x.whole && x.clear && x.below && x.fs >= 9) && ox <= 0, { bad: t.filter((x) => x.opens && !(x.whole && x.clear && x.below)), ox });
+      const tips = await rowTips(p);
+      if (code === "C1") ck(`a row's tooltip: "…${(tips["FTSE 100"] ?? "").split(" · ").slice(-3).join(" · ")}"`, / · no new print · session 16:00–00:30 SGT, scheduled · open its page$/.test(tips["FTSE 100"] ?? "") && / · no new print · open since 24 Nov 22:30 SGT · open its page$/.test(tips["S&P 500"] ?? ""), { ft: tips["FTSE 100"], sp: tips["S&P 500"] });
+      ck(`${code}: no script error`, errs.length === 0, errs); await ctx.close();
+    }
+    for (const code of ["P1", "P2"]) {
+      const { ctx, p, errs } = await open(code);
+      await go(p, STANDIN, "#market", ".mp-row.inst");
+      await p.waitForFunction(() => [...document.querySelectorAll(".mp-row.inst .opens")].some((e) => e.textContent === "open since 24 Nov 22:30 SGT"), null, { timeout: 8000 }).catch(() => undefined);
+      const l = await lines(p), ft = by(l, "FTSE 100"), sp = by(l, "S&P 500"), tn = by(l, "UST 10Y"), jp = by(l, "USD/JPY");
+      ck(`${code}: under the FTSE 100's name "${ft?.state}" and "${ft?.opens}"; the S&P 500's "${sp?.state}" and "${sp?.opens}"; USD/JPY's "${jp?.opens}"; the UST 10Y's "${tn?.state}", no line`, ft?.state === "No new print" && ft.opens === "session 16:00–00:30 SGT, scheduled" && sp?.state === "No new print" && sp.opens === "open since 24 Nov 22:30 SGT" && jp?.opens === "session to 28 Nov 06:00 SGT, scheduled" && tn?.state === "Last print 24 Nov 21:02" && tn.opens === null && l.every((x) => !/open since/.test(x.opens ?? "") || x.n === "S&P 500"), { ft, sp, jp, tn });
+      ck(`${code}: every line whole under the name and the level, clear of the change pill, type ${l[0]?.fs}px (lines ${[...new Set(l.map((x) => x.h))].join(" and ")}px high here); no sideways scroll`, l.length === rows.length && l.every((x) => x.whole && x.clear && x.fs >= 11 && x.ox <= 0), l.filter((x) => !(x.whole && x.clear)));
+      ck(`${code}: no script error`, errs.length === 0, errs); await ctx.close();
     }
   }
 

@@ -493,6 +493,10 @@ What the Monitor does about it:
   the one further behind is the state: on 18 Nov crypto kept arriving, and read together with the rest its fresh
   prints vouched for the feed, so the first version of this check (deployed that evening, two hours into the stop) never raised
   the bar. Currencies and futures are judged only inside their real week, Sunday 17:00 New York to Friday 17:00.
+  Since 21 Nov 2026 the session table (`_shared/sessions.ts`, `marketState`) keeps the same FX week; until then it
+  was Monday 05:00 to Saturday 06:00 SGT all year, an hour early at the open in New York's winter and an hour late at
+  the close in its summer. So the minute job reads currency pairs, and the table calls one live, only from Sunday
+  17:00 New York to Friday 17:00: an hour a week fewer than before, never more.
 - **Daily closes.** After the bell on 18 Nov the daily history, on the server, booked the stopped prices as that
   day's closes (7303.98 for the S&P 500). `history` now reads how far the answers in hand reach (the newest
   minute bar it is given: for crypto, for everything else together, and for each market on its own) and books a

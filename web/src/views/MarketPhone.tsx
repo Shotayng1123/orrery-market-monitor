@@ -9,10 +9,10 @@ import { useApi, DEV_MOCK } from "../lib/useApi";
 import { fmtPct, fmtSigma, fmtStampSafe, isYield, signCls } from "./shared";
 import { PERIODS, type PeriodKey, type TableRow } from "../lib/types";
 import { marketOf } from "../lib/sessions";
-import { rowSession, rowStateWords } from "../lib/opens";
+import { rowSession, rowStateWords, stateWord } from "../lib/opens";
 import { shortName } from "../lib/short";
 import { cellBp, cellPct, CurvePanel, levelOf, RANGE_52W, RANGE_52W_TIP, rollTip, SIGMA_1D_TIP, SIGMA_1M, SIGMA_1M_TIP } from "./Market";
-import { asOfLine, fmtDate, isOfficialRow, rowAsOf, rowAsOfTitle } from "../lib/time";
+import { asOfCell, fmtDate, isOfficialRow, rowAsOf, rowAsOfTitle } from "../lib/time";
 import { classLabel, delayed, MOVERS_SIGMA, PERIOD, SIGMA_1D, TAB, VS_200D } from "../lib/labels";
 import { commonWindow, moveLine, moversInSigma, sigmaTip, SIGMA_LINE, SIGMA_QUIET } from "../lib/movers";
 import { pageHash } from "../lib/indices";
@@ -40,18 +40,24 @@ const fmtMove = (r: TableRow, v: number | null) => (isYield(r) ? cellBp(v) : cel
 const moveCls = (r: TableRow, v: number | null) => (isYield(r) ? signCls(v == null ? null : v * 100, 1) : signCls(v, 2));
 const level = (r: TableRow) => levelOf(r, r.last);   // the instrument's decimals, "%" after a yield, as on every screen
 
+/** What a line's figure is as of, where the Monitor calls its market neither open nor closed: "Last print 05:00",
+ *  "Last print 20 Nov 05:00", "Last close 19 Nov". */
+const lastWords = (r: TableRow): string => { const a = rowAsOf(r); return !a ? "as of –" : a.kind === "print" ? `Last print ${asOfCell(a)}` : `Last close ${a.date}`; };
 /** A line's state under its name: Live or Delayed ~20m; Closed with when its market next opens, in SGT ("opens 22:30
- *  SGT"; the owner's request of 20 Nov 2026, lib/opens.ts); "No new print" with since when its session is open, where
- *  the row is not live in its market's regular hours; "Published" with its date for an official yield, which has no
- *  session; for a market the session table does not keep, what the figure is as of. The opening goes under the state,
- *  whole, where the two do not fit on one line. */
+ *  SGT"; the owner's request of 20 Nov 2026, lib/opens.ts). Where the row is not live while its market's timetable
+ *  has a session: "Delayed ~20m" with when the session's first print is due, in its first minutes on a delayed feed;
+ *  after them "No new print" with since when the market is open, or with the timetable's session where the Monitor
+ *  does not hold the market's holidays. "Published" with its date for an official yield, which has no session. For an
+ *  instrument read in New York's hours that are not its market's (the dollar index, the Cboe yields, VIX), and for a
+ *  market the session table does not keep: what the figure is as of ("Last print 05:00"), with when it is next read.
+ *  The line beside the state goes under it, whole, where the two do not fit on one line. */
 function Status({ r }: { r: TableRow }) {
   const m = marketOf(r.market), ses = rowSession(r), pub = isOfficialRow(r) ? rowAsOf(r) : null;
   return (
     <span className="mp-st">
       {r.live ? (m && m.delayMin > 0 ? <span className="delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>{delayed(m.delayMin)}</span> : <span className="live">Live</span>)
         : pub ? <span className="pub" title={rowAsOfTitle(r)}>Published {fmtDate(pub.ymd)}</span>
-        : <span className="state">{ses.now === "closed" ? "Closed" : ses.now === "open" ? "No new print" : asOfLine(rowAsOf(r))}</span>}
+        : <span className="state" title={rowAsOfTitle(r)}>{stateWord(ses) ?? lastWords(r)}</span>}
       {ses.note && <span className={`opens ${ses.note.kind}`} title={ses.note.tip}>{ses.note.text}</span>}
       {r.roll && <span className="roll" title={rollTip(r)}>Roll</span>}
       {r.proxyFor && <span title={`${r.name} stands in for ${r.proxyFor}`}>via {r.symbol}</span>}

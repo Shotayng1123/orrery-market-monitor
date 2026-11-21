@@ -9,7 +9,7 @@ import { AccountModal, ChangePassword } from "./auth/Account";
 import { Logo } from "./components/Logo";
 import { DEV_MOCK } from "./lib/useApi";
 import { anyOpen, noHolidays, setHolidays } from "./lib/sessions";
-import { clockSet, mockHolidays } from "./lib/mock";
+import { clockIsNow, clockSet, mockHolidays } from "./lib/mock";
 import { applyPrefs, loadPrefs, savePrefs, type Prefs } from "./lib/prefs";
 import type { Health } from "./lib/types";
 import { feedFrom, lateText } from "./lib/feed";
@@ -194,7 +194,7 @@ export default function App() {
   const { view, sub } = route;
   return (
     <>
-      {DEV_MOCK && <div id="mockbar">MOCK PREVIEW — synthetic data for layout checks only. Nothing here is real. The live Monitor is at https://shotayng1123.github.io/orrery-market-monitor/{clockSet() && <span id="mockclock"> · clock set (om_mock_now): {fmtStamp(new Date())}</span>}</div>}
+      {DEV_MOCK && <div id="mockbar">MOCK PREVIEW — synthetic data for layout checks only. Nothing here is real. The live Monitor is at https://shotayng1123.github.io/orrery-market-monitor/{clockSet() && <span id="mockclock"> · {clockIsNow() ? "rows by the session table at the machine's clock" : "clock set"} (om_mock_now): {fmtStamp(new Date())}</span>}</div>}
       <CardLayer />
       {acct && me && <AccountModal me={me} onClose={() => setAcct(false)} onSignOut={signOut} onChanged={() => setTok(getToken())} />}
       {notify && <Notify onClose={() => setNotify(false)} />}

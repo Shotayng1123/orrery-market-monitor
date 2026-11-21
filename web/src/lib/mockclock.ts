@@ -3,7 +3,8 @@
 // page's clock starts at that moment each time the page loads and runs on from it, and the stand-in market rows follow
 // the session table at that moment (lib/mock.ts): a market that is shut is CLOSED with its last print at its close, one
 // in its regular hours is live. So a closed market, a midday break, a holiday or an early close can be looked at
-// whatever the real time is (the bar at the top says the clock is set). Without it the clock is the machine's.
+// whatever the real time is (the bar at the top says the clock is set). Without it the clock is the machine's; with
+// "now" in place of a time the clock is the machine's too, and the rows follow the session table all the same.
 // Imported first by main.tsx, before anything reads the time.
 if (import.meta.env.DEV && import.meta.env.VITE_DEV_MOCK === "1") {
   let at = NaN;

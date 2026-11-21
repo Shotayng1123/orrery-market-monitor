@@ -14,7 +14,7 @@ import { asOfCell, asOfOf, asOfTitle, fmtDate, fmtWhen, type AsOfKind } from "..
 import { byResultsDay, fmtResultsDate, RESULTS_SOURCE, resultsMark, resultsStatus, resultsTip } from "../lib/results";
 import { classLabel, hitLine, MKT_CAP, NEXT_RESULTS, RESULTS_AHEAD, VS_200D, VS_50D } from "../lib/labels";
 import { cellBp, changeShade, RANGE_52W, RANGE_52W_TIP } from "./Market";
-import { marketSession, shutLine, shutMarkets, symbolMarket } from "../lib/opens";
+import { marketSession, readInNewYork, shutLine, shutMarkets, symbolMarket } from "../lib/opens";
 import type { TableRow } from "../lib/types";
 
 /** A row of the watch_list route. Since 19 Nov 2026 a market instrument's row also carries the change of its level
@@ -63,12 +63,13 @@ export const decode = (t: string) => t.replace(/&amp;/g, "&").replace(/&#x([0-9a
 export const WL_ALERTS = 10, WL_NEWS = 15;
 /** The market whose hours a watchlist row keeps: a Monitor instrument's as the market table has it; otherwise the
  *  one its symbol gives (a stock's exchange, the FX week for a pair). Null for an official yield, which has no
- *  session, and where the Monitor keeps no hours. */
+ *  session, for an instrument that is only read in New York's hours (the dollar index, the Cboe yields, VIX: New
+ *  York's exchange is not their market, lib/opens.ts readInNewYork), and where the Monitor keeps no hours. */
 export function useWatchMarkets(tick: number): (r: WatchRow) => string | null {
   // the table names each instrument's market; it changes with the instruments list, so half-hourly is plenty
   const table = useApi<{ rows: TableRow[] }>("table", undefined, Math.floor(tick / 30));
-  const by = new Map((table.data?.rows ?? []).map((t) => [t.symbol, t.market as string]));
-  return (r) => (r.asOfKind === "published" ? null : by.get(r.symbol) || symbolMarket(r.symbol));
+  const by = new Map((table.data?.rows ?? []).map((t) => [t.symbol, readInNewYork(t) ? "" : (t.market as string)]));
+  return (r) => (r.asOfKind === "published" ? null : by.has(r.symbol) ? by.get(r.symbol) || null : symbolMarket(r.symbol));
 }
 /** WATCHLIST's line for the markets of its names that are shut now, each with when it opens (lib/opens.ts): "Closed
  *  now: New York opens 23 Nov 22:30 SGT · Tokyo opens 24 Nov 08:00 SGT". Empty when none is shut. */

@@ -7,24 +7,38 @@
 //   - No guesses: a holiday in the calendar the Monitor holds (Tokyo's from JPX, New York's from NYSE) is passed over.
 //     For a market whose holidays it does not hold, the line ends ", scheduled": the time the timetable gives, on a
 //     local holiday the market stays shut.
-//   - A row that is not live while its market is in its regular hours (a delayed feed's first minutes, a feed that has
-//     stopped, a holiday the Monitor does not know) is not called CLOSED: it says LAST PRINT and "open since 08:00 SGT".
+//   - A row that is not live while its market's timetable has a session is not called CLOSED: its stamp says LAST
+//     PRINT, and the line says what the Monitor knows (the reviewer's O-4, 21 Nov 2026). In a session's first minutes
+//     on a delayed feed: "first print due ~08:20 SGT". After them, where the Monitor holds the market's holidays
+//     (so today is known not to be one): "open since 08:00 SGT". Where it does not, it cannot say the market is open
+//     (on a local holiday it is not): the timetable's session, "session 16:00–00:30 SGT, scheduled".
+//   - An instrument the Monitor reads in New York's regular hours though New York's exchange is not its market (the
+//     dollar index, the Cboe yield and volatility indices; the reviewer's O-2) is called neither open nor closed by
+//     New York's hours: its stamp says LAST PRINT and the line when the Monitor next reads it, "next read 22:30 SGT".
 //   - An official yield is published once a day and has no session: nothing is said of it. Crypto never closes.
 import { calendarState, EARLY_CLOSES, HOLIDAY_SOURCES, holidaysNow, marketOf, marketStatus, nextOpen, openSince, stockMarket, type HolidayMap, type Market, type MarketId, type NextOpen } from "./sessions";
-import { fmtDate, fmtStamp, fmtWhen, isOfficialRow, TZ_ABBR } from "./time";
+import { fmtClock, fmtDate, fmtDayTime, fmtStamp, fmtWhen, isOfficialRow, TZ_ABBR } from "./time";
+import { delayed } from "./labels";
 
-/** What the session table says of a market now: shut, in its regular hours, or not known to it (no such market in the
- *  table, one that never closes, or one whose calendar has not arrived yet). */
+/** What the session table says of a market now: shut, in its timetable's hours, or not known to it (no such market in
+ *  the table, one that never closes, one whose calendar has not arrived yet, or an instrument that is only read in
+ *  New York's hours). */
 export type SessionNow = "closed" | "open" | "unknown";
 export interface SessionNote {
-  /** "opens": the market is shut, and this is when it next opens. "since": it is in its regular hours, since then. */
-  kind: "opens" | "since";
-  /** "opens 22:30 SGT", "opens 23 Nov 22:30 SGT", "opens 23 Nov 09:30 SGT, scheduled", "open since 08:00 SGT". */
+  /** "opens": the market is shut, and this is when it next opens.
+   *  "since": it is in its regular hours by a calendar the Monitor holds, since then.
+   *  "session": its timetable has a session now, but the Monitor does not hold its holidays: the session's hours.
+   *  "due": a session's first minutes on a delayed feed: when the first print is due.
+   *  "read": an instrument read in New York's hours, which are not its own market's: when it is next read. */
+  kind: "opens" | "since" | "session" | "due" | "read";
+  /** "opens 22:30 SGT", "opens 23 Nov 09:30 SGT, scheduled", "open since 08:00 SGT", "session 16:00–00:30 SGT,
+   *  scheduled", "first print due ~08:20 SGT", "next read 22:30 SGT". */
   text: string;
   /** The whole of it for a tooltip: the market, its hours, why it is shut, whose calendar. */
   tip: string;
   /** True when the Monitor does not hold the market's holidays for that day: the time is the timetable's. */
   scheduled: boolean;
+  /** The moment the line names: the next open, the session's start, the first print's due time, the next read. */
   at: Date;
   market: Market;
 }
@@ -39,7 +53,7 @@ const hhmm = (minute: number): string => `${p2(Math.floor(minute / 60) % 24)}:${
 const zone = (m: Market): string => TZ_ABBR[m.tz] ?? `${m.name} time`;
 /** A market's regular hours in its own time: "09:00–11:30, 12:30–15:30 JST". */
 export function hoursText(m: Market): string {
-  if (m.id === "FX") return "Monday 05:00 to Saturday 06:00 SGT";
+  if (m.id === "FX") return "Sunday 17:00 to Friday 17:00 ET";
   if (m.id === "CME") return "Sunday 18:00 to Friday 17:00 ET, with a break from 17:00 to 18:00 each day";
   return `${m.sessions.map(([a, b]) => `${hhmm(a)}–${hhmm(b)}`).join(", ")} ${zone(m)}`;
 }
@@ -70,11 +84,51 @@ function opensNote(m: Market, n: NextOpen, now: Date, cal: Cal): SessionNote {
     tip: `${trades(m)}. ${why}${skipped}${n.firm ? "Next opens" : "Scheduled to open"} ${fmtStamp(n.at)}. ${calendarWords(m, n.firm, "the market stays shut", cal)}`,
   };
 }
-function sinceNote(m: Market, s: { at: Date; firm: boolean }, now: Date, cal: Cal): SessionNote {
+/** How long after a session's first print is due (its start plus the feed's delay) the line still says when it was
+ *  due: the server calls a print live while it is no older than the feed's delay plus fifteen minutes (table.ts). */
+export const DUE_GRACE_MIN = 15;
+/** A row that is not live while its market's timetable has a session (`s`: from openSince). Three cases, none of which
+ *  says more than the Monitor knows (the reviewer's O-4, 21 Nov 2026):
+ *  - the session's first minutes on a delayed feed: when its first print is due, "first print due ~08:20 SGT";
+ *  - after them, a market whose holidays the Monitor holds: today is not one, so "open since 08:00 SGT";
+ *  - after them, any other market: it may be a local holiday, on which the row was rightly called closed before
+ *    21 Nov 2026 and wrongly "open since" on that day: the timetable's session, "session 16:00–00:30 SGT, scheduled". */
+function sinceNote(m: Market, s: { at: Date; end: Date; firm: boolean }, now: Date, cal: Cal): SessionNote {
+  const late = `The last print the Monitor has is older than a live one${m.delayMin > 0 ? `; this feed is delayed about ${m.delayMin} minutes` : ""}.`;
+  const due = new Date(s.at.getTime() + m.delayMin * 60e3), sched = s.firm ? "" : ", scheduled";
+  if (m.delayMin > 0 && now.getTime() < due.getTime() + DUE_GRACE_MIN * 60e3) return {
+    kind: "due", at: due, market: m, scheduled: !s.firm,
+    text: `first print due ~${when(due, now)}${sched}`,
+    tip: `${trades(m)}; ${s.firm ? "in session since" : "its timetable's session began"} ${fmtStamp(s.at)}. This feed is delayed about ${m.delayMin} minutes: the session's first print is due about ${fmtStamp(due)}. ${calendarWords(m, s.firm, "there is no session", cal)}`,
+  };
+  if (s.firm) return {
+    kind: "since", at: s.at, market: m, scheduled: false,
+    text: `open since ${when(s.at, now)}`,
+    tip: `${trades(m)}; in session since ${fmtStamp(s.at)}. ${late} ${calendarWords(m, true, "there is no session", cal)}`,
+  };
+  // a session of a day or more (the FX week) gives its end alone; a shorter one its two times of day
+  const long = s.end.getTime() - s.at.getTime() >= 24 * 3600e3;
   return {
-    kind: "since", at: s.at, market: m, scheduled: !s.firm,
-    text: `open since ${when(s.at, now)}${s.firm ? "" : ", scheduled"}`,
-    tip: `${trades(m)}; in session since ${fmtStamp(s.at)}. The last print the Monitor has is older than a live one${m.delayMin > 0 ? `; this feed is delayed about ${m.delayMin} minutes` : ""}. ${calendarWords(m, s.firm, "there is no session", cal)}`,
+    kind: "session", at: s.at, market: m, scheduled: true,
+    text: long ? `session to ${fmtDayTime(s.end)} SGT, scheduled` : `session ${fmtClock(s.at)}–${fmtClock(s.end)} SGT, scheduled`,
+    tip: `${trades(m)}. Its timetable's session: ${fmtStamp(s.at)} to ${fmtStamp(s.end)}. ${late} ${calendarWords(m, false, "there is no session", cal)}`,
+  };
+}
+
+// ---- an instrument that is only read in New York's hours (the reviewer's O-2, 21 Nov 2026) ----
+/** Whether a row is read in New York's regular hours though New York's exchange is not its market. The instruments
+ *  table gives the dollar index (ICE) and the Cboe yield and volatility indices (^FVX, ^TNX, ^TYX; VIX, VXN) the market
+ *  NYSE: the server reads them, and calls them live, while New York is open. That is the Monitor's reading schedule,
+ *  not their venue's session, and the Monitor holds neither Cboe's nor ICE's hours. So: a row whose market is NYSE and
+ *  whose class is not Equities (New York's regular session is the market of US stocks and equity indices). */
+export const readInNewYork = (r: { market?: string | null; cls?: string | null }): boolean => r.market === "NYSE" && !!r.cls && r.cls !== "Equities";
+/** Such a row while New York is shut: when the Monitor next reads it. Nothing is said of its own market. */
+function readNote(n: SessionNote, now: Date): SessionNote {
+  const ny = n.market;
+  return {
+    kind: "read", at: n.at, market: ny, scheduled: n.scheduled,
+    text: `next read ${when(n.at, now)}${n.scheduled ? ", scheduled" : ""}`,
+    tip: `The Monitor reads this instrument during New York's regular session (${hoursText(ny)}${EARLY_CLOSES[ny.id] ? "; to 13:00 on NYSE's early closes" : ""}). New York's exchange is not its market, and the Monitor does not hold its own market's hours: it is called neither open nor closed here. Next read ${fmtStamp(n.at)}${n.scheduled ? ", by the timetable" : ""}.`,
   };
 }
 
@@ -92,19 +146,33 @@ export function marketSession(id: string | null | undefined, now: Date = new Dat
   const n = waiting ? null : nextOpen(m, now, cal.holidays, cal.state);
   return { now: "closed", note: n ? opensNote(m, n, now, cal) : null };
 }
-/** A row of the market table: nothing for a live row or an official yield; otherwise its market's session. */
-export function rowSession(r: { market?: string | null; live: boolean; source?: string | null }, now: Date = new Date(), cal: Cal = calNow()): RowSession {
+/** What a row needs for its session: its market, whether it is live, its provider, and (for an instrument that is
+ *  only read in New York's hours) its class. */
+export interface SessionRow { market?: string | null; live: boolean; source?: string | null; cls?: string | null }
+/** A row of the market table: nothing for a live row or an official yield; for an instrument that is only read in New
+ *  York's hours, when it is next read and nothing of its market ("unknown"); otherwise its market's session. */
+export function rowSession(r: SessionRow, now: Date = new Date(), cal: Cal = calNow()): RowSession {
   if (isOfficialRow(r)) return { now: "unknown", note: null };
   if (r.live) return { now: "open", note: null };
+  if (readInNewYork(r)) { const ny = marketSession("NYSE", now, cal); return { now: "unknown", note: ny.now === "closed" && ny.note ? readNote(ny.note, now) : null }; }
   return marketSession(r.market, now, cal);
 }
-/** The same for a row's tooltip: " · market open", " · market closed · opens 23 Nov 22:30 SGT",
- *  " · no new print · open since 08:00 SGT"; nothing for an official yield or a market the table does not keep. */
-export function rowStateWords(r: { market?: string | null; live: boolean; source?: string | null }, now: Date = new Date(), cal: Cal = calNow()): string {
+/** A row's state in a word or two, for a phone's line and a tooltip: "Closed"; in its timetable's hours "Delayed ~20m"
+ *  while the session's first print is due and "No new print" after; null where the Monitor says neither (the caller
+ *  then says what the figure is as of). */
+export function stateWord(s: RowSession): string | null {
+  if (s.now === "closed") return "Closed";
+  if (s.now !== "open") return null;
+  return s.note?.kind === "due" ? delayed(s.note.market.delayMin) : "No new print";   // the same words as a live row's delay mark (lib/labels.ts)
+}
+/** The same for a row's tooltip: " · market open", " · market closed · opens 23 Nov 22:30 SGT", " · delayed ~20m ·
+ *  first print due ~08:20 SGT", " · no new print · open since 08:00 SGT", " · next read 22:30 SGT"; nothing for an
+ *  official yield or a market the table does not keep. */
+export function rowStateWords(r: SessionRow, now: Date = new Date(), cal: Cal = calNow()): string {
   if (isOfficialRow(r)) return "";
   if (r.live) return " · market open";
-  const s = rowSession(r, now, cal);
-  return s.now === "closed" ? ` · market closed${s.note ? ` · ${s.note.text}` : ""}` : s.now === "open" ? ` · no new print${s.note ? ` · ${s.note.text}` : ""}` : "";
+  const s = rowSession(r, now, cal), w = stateWord(s), note = s.note ? ` · ${s.note.text}` : "";
+  return s.now === "closed" ? ` · market closed${note}` : w ? ` · ${w.toLowerCase()}${note}` : note;
 }
 
 // ---- rows whose `live` the server does not send: a stock's page, an instrument outside the market table ----

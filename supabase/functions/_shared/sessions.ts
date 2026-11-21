@@ -24,10 +24,14 @@ export const MARKETS: Market[] = [
   { id: "CME", name: "CME Globex", tz: "America/New_York", sessions: [[hm(0), hm(17)], [hm(18), hm(24)]], days: [0, 1, 2, 3, 4, 5], delayMin: 10 },
   { id: "B3", name: "São Paulo", tz: "America/Sao_Paulo", sessions: [[hm(10), hm(17)]], days: MF, delayMin: 15 },
   { id: "BMV", name: "Mexico City", tz: "America/Mexico_City", sessions: [[hm(8, 30), hm(15)]], days: MF, delayMin: 20 },
+  // Spot FX: one session a week by New York's clock, Sunday 17:00 to Friday 17:00 there (marketState below); this
+  // row's `tz`, `sessions` and `days` are not read for it.
   { id: "FX", name: "FX", tz: SGT, sessions: [[hm(0), hm(24)]], days: [1, 2, 3, 4, 5, 6], delayMin: 0 },
   { id: "CRYPTO", name: "Crypto", tz: "UTC", sessions: [[hm(0), hm(24)]], days: [0, 1, 2, 3, 4, 5, 6], delayMin: 0 },
 ];
 export const marketById = (id: string): Market | undefined => MARKETS.find((m) => m.id === id);
+/** The FX week's clock: New York's. The week opens on Sunday at 17:00 there and closes on Friday at 17:00. */
+export const FX_TZ = "America/New_York", FX_BELL = hm(17);
 
 // ---- what the Monitor knows of each market's calendar, and from whom (20 Nov 2026; the page's copy says more) ----
 // Holidays are rows of `sessions_cal` (loadHolidays in table.ts): Tokyo's and New York's for 2026 and 2027, checked
@@ -72,8 +76,12 @@ export type Holidays = Partial<Record<string, Set<string>>>;
 export function marketState(m: Market, now: Date, holidays: Holidays = {}): MarketState {
   const p = partsIn(m.tz, now), minute = p.h * 60 + p.m;
   if (m.id === "FX") {
-    const sg = partsIn(SGT, now), mm = sg.h * 60 + sg.m;
-    return (sg.wd >= 2 && sg.wd <= 5) || (sg.wd === 1 && mm >= hm(5)) || (sg.wd === 6 && mm < hm(6)) ? "OPEN" : "CLOSED";
+    // The FX week by New York's clock, from Sunday 17:00 to Friday 17:00 there: the rule the feed's health and a
+    // pair's day already keep (feedhealth.ts fxTrading; fx.ts fxDay). Until 21 Nov 2026 this was Monday 05:00 to
+    // Saturday 06:00 SGT all year: an hour early at the open in New York's winter, an hour late at the close in its
+    // summer, so the page said a pair opened at 05:00 SGT when by this rule it opens at 06:00 (the reviewer's O-1).
+    const ny = partsIn(FX_TZ, now), mm = ny.h * 60 + ny.m;
+    return ny.wd === 6 || (ny.wd === 5 && mm >= FX_BELL) || (ny.wd === 0 && mm < FX_BELL) ? "CLOSED" : "OPEN";
   }
   if (m.id === "CME") {
     const open = (p.wd >= 1 && p.wd <= 4 && (minute < hm(17) || minute >= hm(18))) || (p.wd === 5 && minute < hm(17)) || (p.wd === 0 && minute >= hm(18));

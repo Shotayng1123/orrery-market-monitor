@@ -1,10 +1,11 @@
 // Exchange sessions. Decides which markets are open right now (for the refresh cadence and the top-bar
 // chips) and when a market that is shut next opens (the line beside every CLOSED: the owner's request of
 // 20 Nov 2026). Hours are the exchanges' published regular sessions, each kept in its own time zone, so
-// daylight saving is followed by the zone itself; holidays come from the API's calendar (`sessions_cal`) and
-// are merged in with setHolidays(). Until that loads, weekends are the only closures, and the chip tooltip
-// says so. The server keeps the same table and the same rules (supabase/functions/_shared/sessions.ts);
-// sim/logic.test.ts checks that the two agree.
+// daylight saving is followed by the zone itself; the FX week and CME Globex are kept by New York's clock.
+// Holidays come from the API's calendar (`sessions_cal`) and are merged in with setHolidays(). Until that
+// loads, weekends are the only closures, and the chip tooltip says so. The server keeps the same table and
+// the same rules (supabase/functions/_shared/sessions.ts); sim/logic.test.ts checks that the two agree, and
+// that both give the FX week as the server's own rule for when currencies trade does (feedhealth.ts fxTrading).
 import { partsIn, SGT } from "./time";
 
 export type MarketId = "TSE" | "HKEX" | "SSE" | "KRX" | "TWSE" | "NSE" | "SGX" | "ASX" | "XETRA" | "SIX" | "LSE" | "NYSE" | "B3" | "BMV" | "CME" | "FX" | "CRYPTO";
@@ -42,7 +43,8 @@ export const MARKETS: Market[] = [
   { id: "CME", name: "CME Globex", tz: "America/New_York", sessions: [[hm(0), hm(17)], [hm(18), hm(24)]], days: [0, 1, 2, 3, 4, 5], delayMin: 10 },
   { id: "B3", name: "São Paulo", tz: "America/Sao_Paulo", sessions: [[hm(10), hm(17)]], days: MF, delayMin: 15 },
   { id: "BMV", name: "Mexico City", tz: "America/Mexico_City", sessions: [[hm(8, 30), hm(15)]], days: MF, delayMin: 20 },
-  // Spot FX: continuous from the Sydney open on Monday morning to the New York close on Friday evening, in SGT.
+  // Spot FX: one session a week, kept by New York's clock (FX_TZ, FX_BELL below): from Sunday 17:00 there to Friday
+  // 17:00. This row's `tz`, `sessions` and `days` are not read for it (marketStatus, nextOpen and openSince keep the week).
   { id: "FX", name: "FX", tz: SGT, sessions: [[hm(0), hm(24)]], days: [1, 2, 3, 4, 5, 6], delayMin: 0 },
   { id: "CRYPTO", name: "Crypto", tz: "UTC", sessions: [[hm(0), hm(24)]], days: [0, 1, 2, 3, 4, 5, 6], delayMin: 0 },
 ];
@@ -96,6 +98,17 @@ export const haveHolidays = () => calendar === "ok";
 export const calendarState = (): "wait" | "ok" | "none" => calendar;
 export const holidaysNow = (): HolidayMap => HOLIDAYS;
 
+// ---- the FX week (the reviewer's O-1, 21 Nov 2026) ----
+// Currencies trade from Sunday 17:00 New York to Friday 17:00 New York: the Monitor's own rule since 19 Nov 2026
+// (the server's fxTrading in feedhealth.ts, which the feed's health and the booking of a pair's day already follow;
+// supabase/README.md). In Singapore that is Monday 06:00 to Saturday 06:00 while New York is on winter time, and
+// Monday 05:00 to Saturday 05:00 on its summer time. Until 21 Nov 2026 this table kept the week in SGT, Monday 05:00
+// to Saturday 06:00 all year: an hour early at the open in New York's winter, an hour late at the close in its summer.
+// What the feed itself does at the two ends of the week is not in any log yet (jobs/probes/sessions_check.ts reads it).
+export const FX_TZ = "America/New_York", FX_BELL = hm(17);
+/** Whether the FX week is in progress at `now`: not from Friday 17:00 New York to Sunday 17:00. */
+const fxOpen = (now: Date): boolean => { const p = partsIn(FX_TZ, now), minute = p.h * 60 + p.m; return !(p.wd === 6 || (p.wd === 5 && minute >= FX_BELL) || (p.wd === 0 && minute < FX_BELL)); };
+
 export interface MarketStatus { market: Market; state: MarketState; local: string; localDate: string }
 
 export function marketStatus(m: Market, now: Date = new Date(), holidays: HolidayMap = HOLIDAYS): MarketStatus {
@@ -103,12 +116,7 @@ export function marketStatus(m: Market, now: Date = new Date(), holidays: Holida
   const local = `${String(p.h).padStart(2, "0")}:${String(p.m).padStart(2, "0")}`;
   const base = { market: m, local, localDate: p.ymd };
   const minute = p.h * 60 + p.m;
-  if (m.id === "FX") {
-    // open Monday 05:00 SGT to Saturday 06:00 SGT
-    const sg = partsIn(SGT, now), mm = sg.h * 60 + sg.m;
-    const open = (sg.wd >= 2 && sg.wd <= 5) || (sg.wd === 1 && mm >= hm(5)) || (sg.wd === 6 && mm < hm(6));
-    return { ...base, state: open ? "OPEN" : "CLOSED" };
-  }
+  if (m.id === "FX") return { ...base, state: fxOpen(now) ? "OPEN" : "CLOSED" };   // Sunday 17:00 to Friday 17:00, New York
   if (m.id === "CME") {
     const open = (p.wd >= 1 && p.wd <= 4 && (minute < hm(17) || minute >= hm(18))) || (p.wd === 5 && minute < hm(17)) || (p.wd === 0 && minute >= hm(18));
     return { ...base, state: open ? "OPEN" : "CLOSED" };
@@ -182,9 +190,9 @@ export function nextOpen(m: Market, now: Date = new Date(), holidays: HolidayMap
   const st = marketStatus(m, now, holidays).state;
   if (st === "OPEN") return null;
   if (m.id === "FX") {
-    // the week opens on Monday at 05:00 SGT
-    const sg = partsIn(SGT, now), mm = sg.h * 60 + sg.m;
-    for (let k = 0; k <= 7; k++) { const ymd = addDays(sg.ymd, k); if (weekdayOf(ymd) === 1 && (k > 0 || mm < hm(5))) return { at: new Date(zonedMs(SGT, ymd, hm(5))), day: ymd, firm: false, why: "hours", skipped: [] }; }
+    // the week opens on Sunday at 17:00 New York: Monday 06:00 SGT in New York's winter, 05:00 SGT in its summer
+    const ny = partsIn(FX_TZ, now), mm = ny.h * 60 + ny.m;
+    for (let k = 0; k <= 7; k++) { const ymd = addDays(ny.ymd, k); if (weekdayOf(ymd) === 0 && (k > 0 || mm < FX_BELL)) return { at: new Date(zonedMs(FX_TZ, ymd, FX_BELL)), day: ymd, firm: false, why: "hours", skipped: [] }; }
     return null;
   }
   const p = partsIn(m.tz, now), minute = p.h * 60 + p.m;
@@ -210,17 +218,19 @@ export function nextOpen(m: Market, now: Date = new Date(), holidays: HolidayMap
   return null;
 }
 
-/** For a market that is open now: when the session in progress began, and whether the Monitor knows that today is
- *  not a holiday there (`firm`, as in nextOpen). Null when it is not open, and for one that never closes. */
-export function openSince(m: Market, now: Date = new Date(), holidays: HolidayMap = HOLIDAYS, state: "wait" | "ok" | "none" = calendar): { at: Date; firm: boolean } | null {
+/** For a market whose timetable has a session in progress now: when that session began (`at`) and when it ends
+ *  (`end`: an early close where one is known), and whether the Monitor knows that today is not a holiday there (`firm`,
+ *  as in nextOpen). Null when it is not in a session, and for a market that never closes. */
+export function openSince(m: Market, now: Date = new Date(), holidays: HolidayMap = HOLIDAYS, state: "wait" | "ok" | "none" = calendar): { at: Date; end: Date; firm: boolean } | null {
   if (m.id === "CRYPTO" || marketStatus(m, now, holidays).state !== "OPEN") return null;
   if (m.id === "FX") {
-    const sg = partsIn(SGT, now), mm = sg.h * 60 + sg.m;
-    for (let k = 0; k <= 7; k++) { const ymd = addDays(sg.ymd, -k); if (weekdayOf(ymd) === 1 && (k > 0 || mm >= hm(5))) return { at: new Date(zonedMs(SGT, ymd, hm(5))), firm: false }; }
+    // the week in progress: from the last Sunday 17:00 New York to the Friday 17:00 after it
+    const ny = partsIn(FX_TZ, now), mm = ny.h * 60 + ny.m;
+    for (let k = 0; k <= 7; k++) { const ymd = addDays(ny.ymd, -k); if (weekdayOf(ymd) === 0 && (k > 0 || mm >= FX_BELL)) return { at: new Date(zonedMs(FX_TZ, ymd, FX_BELL)), end: new Date(zonedMs(FX_TZ, addDays(ymd, 5), FX_BELL)), firm: false }; }
     return null;
   }
   const p = partsIn(m.tz, now), minute = p.h * 60 + p.m;
-  if (m.id === "CME") return { at: new Date(zonedMs(m.tz, minute >= hm(18) ? p.ymd : addDays(p.ymd, -1), hm(18))), firm: false };
+  if (m.id === "CME") { const from = minute >= hm(18) ? p.ymd : addDays(p.ymd, -1); return { at: new Date(zonedMs(m.tz, from, hm(18))), end: new Date(zonedMs(m.tz, addDays(from, 1), hm(17))), firm: false }; }
   const s = m.sessions.find(([a, b]) => minute >= a && minute < b);
-  return s ? { at: new Date(zonedMs(m.tz, p.ymd, s[0])), firm: holidaysKnown(m, p.ymd, holidays, state) } : null;
+  return s ? { at: new Date(zonedMs(m.tz, p.ymd, s[0])), end: new Date(zonedMs(m.tz, p.ymd, Math.min(s[1], dayEnd(m, p.ymd)))), firm: holidaysKnown(m, p.ymd, holidays, state) } : null;
 }

@@ -61,9 +61,12 @@ The local copy's clock can be set: `om_mock_now` in the browser's storage, an IS
 Tue 24 Nov 2026, 10:45 SGT), starts the page's clock at that moment on each load (`web/src/lib/mockclock.ts`), and the
 stand-in market rows then follow the session table: a market that is shut is CLOSED with its last print at its
 close, one in its regular hours is live. So a closed market, a midday break, a holiday or an early close can be
-looked at whatever the hour (the red bar at the top says the clock is set). Without it the clock is the machine's
-and the rows keep fixed states (FX and the futures live, the rest not), so the browser checks see the same rows
-at any hour. The holidays it passes over are the Monitor's own calendar rows, not stand-ins.
+looked at whatever the hour (the red bar at the top says the clock is set). `om_mock_now` = `now` keeps the
+machine's clock and makes the rows follow the session table all the same: what the live Monitor would show at this
+hour. Without the key the clock is the machine's and the rows keep fixed states (FX and the futures live, the rest
+not), so the browser checks see the same rows at any hour; at most hours those rows contradict the lines beside
+them (a pair LIVE on a Saturday beside "Closed now: FX opens …"), so set the key before judging what a screen says
+of a market's hours. The holidays it passes over are the Monitor's own calendar rows, not stand-ins.
 
 ## Deploy
 
@@ -78,7 +81,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, about 1,870 checks in 34 suites): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, about 1,910 checks in 34 suites): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -121,8 +124,10 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   bars, phone search, the watchlist's two columns at the feed's real lengths, curve labels, the header's alert line for every kind of alert),
   in ways that hold at any time of day; and when a closed market opens (`opens`: beside every CLOSED, on both
   layouts and at ten window sizes, at set moments of a set clock: a Friday evening, a weekend, a holiday, a midday
-  break, an early close, a session's first minutes on a delayed feed; `layout-guard-closed`: the layout guard again
-  with the clock on a weekend, when every closed market's line carries its opening).
+  break, an early close, a session's first minutes on a delayed feed; the FX week by New York's clock; the dollar
+  index, the UST 10Y yield and VIX saying when they are next read, never CLOSED; a row with no live price in its
+  market's hours saying "open since" only where the Monitor holds that market's holidays; `layout-guard-closed`: the
+  layout guard again with the clock on a weekend, when every closed market's line carries its opening).
   `cd web && npm run e2e` starts the test servers it needs and runs them all (about twelve minutes, three suites at
   a time); `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
   A suite that fails once is tried again; when the second try passes, the lines that failed the first time are
@@ -174,11 +179,13 @@ in Singapore, "opens 23 Nov 22:30 SGT" on another day. Nothing is fetched for it
 
 | On the page | Where it comes from |
 |---|---|
-| The time | The start of the market's next regular session in the session table (`web/src/lib/sessions.ts`; the server keeps the same table in `supabase/functions/_shared/sessions.ts`, and `sim/logic.test.ts` checks that the two agree). Each market's hours are in its own time zone, so a change of clocks there moves the time by itself: New York opens at 22:30 SGT in its winter and 21:30 SGT in its summer |
+| The time | The start of the market's next regular session in the session table (`web/src/lib/sessions.ts`; the server keeps the same table in `supabase/functions/_shared/sessions.ts`, and `sim/logic.test.ts` checks that the two agree). Each exchange's hours are in its own time zone, so a change of clocks there moves the time by itself: New York opens at 22:30 SGT in its winter and 21:30 SGT in its summer |
+| Currencies and CME Globex | Kept by New York's clock. The FX week runs from Sunday 17:00 to Friday 17:00 there, the server's own rule for when currencies trade (`fxTrading` in `_shared/feedhealth.ts`): Monday 06:00 to Saturday 06:00 SGT in New York's winter, 05:00 to 05:00 SGT in its summer. Until 21 Nov 2026 both session tables kept it as Monday 05:00 to Saturday 06:00 SGT all year, so a pair read "opens 05:00 SGT" an hour early in winter; `sim/logic.test.ts` now holds both tables to `fxTrading` at every half hour of 2026 and 2027 (bar its 25 December and 1 January, which the tables do not hold). Globex: Sunday 18:00 to Friday 17:00 there, with a break from 17:00 to 18:00 each day. What the feed itself does at the two ends of the FX week is not in a log yet: the probe `jobs/probes/sessions_check.ts` reads it |
 | Holidays | The rows of `sessions_cal`, which the page receives with `health`: Tokyo's from JPX's calendar and New York's from NYSE's, each for 2026 and 2027, checked against the publishers' own pages on 7 Nov 2026 (migration `20261107000010`). A next open passes over them |
 | Early closes | New York's, at 13:00 there: 27 Nov and 24 Dec 2026, 26 Nov 2027, 3 Jul and 24 Nov 2028, as NYSE's page "Holidays & Trading Hours" gave them to the source-probe `pf_rules` on 20 Nov 2026 (its lines are quoted in the session table). After one the market is CLOSED on the page and on the server |
 | ", scheduled" | Every other market (Hong Kong, Shanghai, Seoul, Taipei, Mumbai, Singapore, Sydney, Frankfurt, Zurich, London, São Paulo, Mexico City, CME Globex, FX), New York and Tokyo after 31 Dec 2027, and any market when the calendar did not load: the Monitor does not hold those holidays, so the time is the timetable's and says so; on a local holiday the market stays shut |
-| LAST PRINT, "open since 08:00 SGT" | A row that is not live while its market is in its regular hours (a delayed feed's first minutes of a session, a feed that has stopped, a holiday the Monitor does not hold) is not called CLOSED |
+| LAST PRINT, with what the Monitor knows | A row that is not live while its market's timetable has a session is not called CLOSED. In a session's first minutes on a delayed feed (its start plus the feed's delay, and fifteen minutes more): "first print due ~08:20 SGT". After them, for Tokyo and New York, whose holidays are held: "open since 08:00 SGT". For every other market: "session 16:00–00:30 SGT, scheduled" (the FX week: "session to 28 Nov 06:00 SGT, scheduled"): on a local holiday the Monitor does not hold there is no session, and it does not say the market is open |
+| "next read 22:30 SGT" | The dollar index (`DX-Y.NYB`, ICE), the Cboe yield indices (`^FVX`, `^TNX`, `^TYX`) and `^VIX` and `^VXN` carry the market `NYSE` in the instruments table: that is when the server reads them, not their venue's session, and the Monitor holds neither Cboe's nor ICE's hours. The page's rule (`readInNewYork` in `web/src/lib/opens.ts`): a row whose market is `NYSE` and whose class is not Equities. Outside New York's session such a row says LAST PRINT and when it is next read, never CLOSED, an opening or NYSE's early close |
 | A stock's page | The stock route sends no live state: the page reads it from the session table and the quote's own time (the exchange from the symbol's suffix, as the server's alerts do), so the chart says LIVE in the exchange's hours and CLOSED with the opening outside them. A stock on an exchange the table does not keep (`MC.PA`) says neither |
 
 The words are made in `web/src/lib/opens.ts`. A midday break gives the afternoon's start; crypto, which never closes,
