@@ -103,8 +103,9 @@ const calRows = (p, phone) => p.evaluate((phone) => phone
     // the alert list in the header: one of each kind (a stock's move, an index, a buyback, guidance, M&A)
     await p.evaluate(() => { location.hash = "market"; }); await p.waitForTimeout(500);
     if (phone) await p.evaluate(() => scrollTo(0, 0));
-    await p.locator("#alerts .alrt").click(); await p.waitForSelector(".aldrop tbody tr");
-    const kinds = await p.evaluate(() => [...document.querySelectorAll(".aldrop tbody tr td:nth-child(3)")].map((x) => x.textContent));
+    // (a computer's list is a table with a kind column; a phone's is rows, each of its kind: the designer's D-63)
+    await p.locator("#alerts .alrt").click(); await p.waitForSelector(".aldrop [data-kind]");
+    const kinds = await p.evaluate(() => [...document.querySelectorAll(".aldrop [data-kind]")].map((x) => x.querySelector(".al-kind")?.textContent ?? ({ index: "index", buyback: "buyback", revision: "guidance", mna: "M&A", sigma: "σ move", stock: "TSE" })[x.dataset.kind]));
     ck(`the alert list holds one of each kind: ${[...new Set(kinds)].join(", ")}`, ["index", "buyback", "guidance", "M&A"].every((k) => kinds.includes(k)) && kinds.some((k) => k === "TSE" || k === "NYSE"), kinds);
     await p.keyboard.press("Escape"); await p.mouse.click(5, phone ? 600 : 880);
     ck("nothing says the API is not configured; no page errors", (await noConfig(p)) && errs.length === 0, errs);

@@ -10,7 +10,8 @@ import { useApi } from "../lib/useApi";
 import type { Curve, TableRow } from "../lib/types";
 import { fmtChg, fmtLevel, fmtPct, fmtStampSafe, signCls } from "./shared";
 import { datesIn, fmtDate, rowAsOfTitle } from "../lib/time";
-import { rowStateWords } from "../lib/opens";
+import { panelRowOf, rowStateWords } from "../lib/opens";
+import { ClosedNow } from "../components/ClosedNow";
 import { bankName, dottedLine, FX, FX_CHARTS, YIELD_CHARTS } from "../lib/labels";
 import { levelOf } from "./Market";
 import { PERIODS } from "../lib/types";
@@ -110,6 +111,8 @@ export function RatesFxView({ tick }: { sub: string; onSub: (s: string) => void;
     <>
       <div className="c12"><PeriodBar period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} /></div>
       <Panel no="01" title={FX.toUpperCase()} span={12} k="fx" aux={table.data ? <>as of {fmtStampSafe(table.data.asOf)} · Yahoo Finance</> : ""}>
+        {/* the FX week and the rows read in New York's hours: shut now, and when each opens or is next read (D-62) */}
+        {fx.length > 0 && <ClosedNow id="fx-opens" rows={fx.map(panelRowOf)} />}
         {fx.length ? <FxTable rows={fx} /> : <Empty title="Awaiting the data feed">{table.error ?? "Pairs load with the market table."}</Empty>}
       </Panel>
       <Panel no="02" title={FX_CHARTS.toUpperCase()} span={12} k="pairs" aux={`${fx.length} panels · ${period}`}>

@@ -10,14 +10,15 @@ import { fmtPct, fmtChg, fmtLevel, fmtSigma, fmtStampSafe, isYield, signCls } fr
 import { cellBp, cellPct } from "../lib/fmt";
 import { pageHash } from "../lib/indices";
 import { openAsset } from "../components/CompanyCard";
-import { fmtDate, rowAsOfTitle } from "../lib/time";
+import { fmtDate, fmtDayMon, rowAsOfTitle } from "../lib/time";
 import { classLabel, delayed, dottedLine, FX, MOVERS_SIGMA, RANGE_52W as RANGE_WORD, RATES, SIGMA_1D, SIGMA_1M as SIGMA_WORD, VS_200D } from "../lib/labels";
 import { commonWindow, moveLine, moversInSigma, sigmaTip, SIGMA_LINE, SIGMA_QUIET, sortBySigma } from "../lib/movers";
 import { codeOf, monthOf } from "../lib/futures";
 import { Flash } from "../components/Flash";
 import { PERIODS, type Curve, type TableRow } from "../lib/types";
 import { marketOf } from "../lib/sessions";
-import { rowStateWords } from "../lib/opens";
+import { panelRowOf, rowStateWords } from "../lib/opens";
+import { ClosedNow } from "../components/ClosedNow";
 import { filterCurve } from "../lib/curveTenors";
 import { shortName } from "../lib/short";
 import { Sig } from "../components/Sig";
@@ -198,7 +199,9 @@ function SigmaStrip({ rows, loading, asOf }: { rows: TableRow[]; loading: boolea
               );
             })}
           </div>
-          <div className="mut finnote sgnote" id="mk-sigma-note">{"\u2020"} worked out here from the daily closes the Monitor stores{win ? `, mostly ${fmtDate(win.from)} – ${fmtDate(win.to)}` : ""} (each cell's own window on its tooltip); a future's changes of contract are left out from when the Monitor records them, and any before stay in (a future's page says from when).</div>
+          {/* one line (the designer's D-69): what a future's changes of contract do to its σ is on each future's tooltip,
+              on its page and in Help */}
+          <div className="mut finnote sgnote" id="mk-sigma-note">{"\u2020"} worked out here from the Monitor's daily closes{win ? `, mostly ${win.from.slice(0, 4) === win.to.slice(0, 4) ? fmtDayMon(win.from) : fmtDate(win.from)} – ${fmtDate(win.to)}` : ""} · each cell's own window on its tooltip</div>
         </>
       ) : loading ? <div className="empty sgempty">loading…</div> : <Empty title={rows.length ? "No moves in σ yet" : "Awaiting the data feed"}>{rows.length ? "The server sends each instrument's σ of daily changes with the table once its update is deployed." : null}</Empty>}
     </Panel>
@@ -219,7 +222,9 @@ export function MarketView({ tick }: { tick: number }) {
     <>
       <SigmaStrip rows={rows} loading={!table.data && !table.error} asOf={table.data?.asOf ?? null} />
       <Panel no="02" k="mkt" title="MARKETS" aux={table.data ? <>as of {fmtStampSafe(table.data.asOf)} · Yahoo Finance, US Treasury, MOF{DEV_MOCK && <span className="badge est">MOCK</span>}</> : table.error ? <span className="warn">{table.error}</span> : "loading…"}>
-        {rows.length ? <MarketsTable rows={rows} /> : <Empty title="Awaiting the data feed">{table.error ?? "The market table fills once the Monitor backend is deployed and its first daily history run has completed."}</Empty>}
+        {/* which of the table's markets are shut, and when each opens, on screen without a hover (the designer's D-62) */}
+        {rows.length > 0 && <ClosedNow id="mk-opens" rows={rows.map(panelRowOf)} />}
+        {rows.length ? <div className="mktbox"><MarketsTable rows={rows} /></div> : <Empty title="Awaiting the data feed">{table.error ?? "The market table fills once the Monitor backend is deployed and its first daily history run has completed."}</Empty>}
       </Panel>
       <div className="c12">{selector}</div>
       <ChartGroup no="03" k="mk-eq" title="EQUITIES" show={2} rows={by("equity")} period={period} tick={tick} sigmaWindow={sigmaWindow} />

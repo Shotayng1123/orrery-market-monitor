@@ -89,8 +89,8 @@ const openRow = (p) => p.evaluate(() => document.querySelector(".mp-item.open .m
     // the alert list, from low on MARKETS: the header's alert line opens it, and a line with a page opens that page at its top
     await fresh(p, MOCK, "#market", ".mp-item");
     { await p.evaluate(() => scrollTo(0, 1200)); await settle(p, 300);
-      await p.locator("#alerts .alrt").click(); await p.waitForSelector("#alerts .aldrop .lnk");
-      await p.locator("#alerts .aldrop tr", { hasText: "USD/JPY" }).locator(".lnk").first().click(); await settle(p, 900);
+      await p.locator("#alerts .alrt").click(); await p.waitForSelector("#alerts .aldrop [data-kind]");
+      await p.locator("#alerts .aldrop [data-kind]", { hasText: "USD/JPY" }).first().click(); await settle(p, 900);   // a phone's list is rows, each a tap (the designer's D-63)
       const a = await at(p);
       ck(`the alert list (from MARKETS at y 1200) › USD/JPY's σ move: its page opens at y ${a.y}, "${a.h1}" on screen`, a.hash === "#asset/USDJPY%3DX" && a.y === 0 && a.h1 === "USD/JPY" && a.h1On && a.backOn, a); }
     // an address entered again (a new history entry, no change of address): Back still finds the list as it was left

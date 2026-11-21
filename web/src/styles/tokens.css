@@ -1804,3 +1804,47 @@ body.pv2 .ntf-kinds>.k{font-size:11.5px}
 body.pv2 .ntf-kind{min-height:44px}
 /* a future's contract and last roll on the phone's Key data: long values wrap at the right instead of widening the table */
 table.mp-t.kv td .wv{display:inline-block;white-space:normal;max-width:52vw;text-align:right;overflow-wrap:anywhere;font-weight:600;line-height:1.35}
+/* ---- "Closed now: …" above a table (the designer's D-62, 21 Nov 2026): which of the panel's markets are shut and when
+   each opens, on screen without a hover. A note line: the market names in the text colour, the rest a step quieter. It
+   may wrap and is never cut; on a computer an entry goes to the next line as a whole where it fits there. ---- */
+.finnote.closednow{margin:0 0 6px;color:var(--txt2)}
+.closednow b{font-weight:400;color:var(--txt)}
+.finnote.closednow .e{display:inline-block;max-width:100%;vertical-align:top}
+.mp-note.closednow{margin:0 8px 8px}
+/* the one-screen layout: the line takes its height from the table's rows */
+body.term .finnote.closednow{flex:0 0 auto;margin:0 0 1px;font-size:9px;line-height:1.3}
+body.term .pbody>.mktbox{flex:1 1 0;min-height:0}   /* the table fills what the line above it leaves: its rows give the height */
+/* The one-screen layout, a page's own chart (a stock's, an instrument's, EQUITIES' index): it keeps its stamp and, beside
+   CLOSED, when its market opens, as in the scrolling layout (the designer's D-62: on those pages nothing else said it).
+   One line: the price, the change, then the badges, the stamp and the opening at the right; they wrap under where the
+   panel is narrow, never cut. The small tiles stay bare (they do not fit a 130px tile). */
+body.term .mtile.cp.large{grid-template-columns:auto auto minmax(0,1fr)}
+body.term .mtile.cp.large>.vl{display:contents}
+body.term .mtile.cp.large>.vl>.px{grid-column:1;grid-row:2}
+body.term .mtile.cp.large>.ch{grid-column:2;grid-row:2}
+body.term .mtile.cp.large>.vl>.tags{display:inline-flex;grid-column:3;grid-row:2;justify-self:end;margin-left:0;min-width:0}
+body.term .mtile.cp.large .asof{display:inline;font-size:9px}
+body.term .mtile.cp.large .badge{display:inline}
+body.term .mtile.cp.large .opens{font-size:9px}
+/* ---- an instrument's KEY DATA (the designer's D-64, 21 Nov 2026): a future's "Last change of contract" was one unbroken
+   value that forced the value column wide, so at text L the panel scrolled sideways and every figure lost its end. The
+   label column is never narrower than 9.5em (a label takes at most two lines), and a value of several parts goes onto
+   a second line between its parts, each part whole. ---- */
+table#in-key td.l{min-width:9.5em}
+.kvT td.num.wv{white-space:normal}
+/* ---- the alert list behind the header's line (the designer's D-63, 21 Nov 2026; B-34). A computer: the message wraps,
+   the time, the kind and the figure keep their width, so nothing leaves the box and the box never scrolls sideways.
+   A phone: rows as on WATCHLIST (the time and, at the right, the figure; the message; a σ move's kind, window and
+   source), each at least 44 px, the box as wide as the alert card. ---- */
+.aldrop{overflow-x:hidden}
+.aldrop table.secT{width:100%}
+.aldrop table.secT td.al-msg{white-space:normal;overflow-wrap:anywhere}
+.aldrop table.secT td.al-t,.aldrop table.secT td.al-kind,.aldrop table.secT td.al-fig{width:1%}
+.aldrop.ph{left:0;right:0;width:auto;min-width:0;max-width:none;max-height:70vh;padding:10px 0 8px;border-radius:12px}
+.aldrop.ph .minih{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 14px 2px;font-size:11px;line-height:1.5}
+.aldrop.ph .alntf{float:none;margin:0;font-size:13px;min-height:44px;display:inline-flex;align-items:center}
+.aldrop.ph .nw-row{min-height:44px;box-sizing:border-box}
+.aldrop.ph .nw-row:last-of-type{border-bottom:1px solid var(--bord)}
+.aldrop.ph .al-fig{margin-left:auto;font-size:13.5px;font-variant-numeric:tabular-nums}
+.aldrop.ph .al-msg{overflow-wrap:anywhere}
+.aldrop.ph .alrules{margin:10px 14px 2px}

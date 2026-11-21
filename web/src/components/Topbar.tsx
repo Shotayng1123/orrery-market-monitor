@@ -62,7 +62,7 @@ export function Topbar(p: TopbarProps) {
       <nav id="nav">
         {VIEWS.map((v) => <a key={v.id} href={`#${v.id}`} className={v.id === p.view ? "on" : ""} onClick={(e) => { e.preventDefault(); p.onNav(v.id); }}>{v.label}</a>)}
       </nav>
-      <Alerts tick={p.tick} />
+      <Alerts tick={p.tick} phone={!!p.pv2} />
       <Search />
       <span className="bmq">
         <span id="mktstat" title={`Regular sessions, each in its exchange's local time${hol}`}>

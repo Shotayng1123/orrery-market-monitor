@@ -10,7 +10,7 @@ import type { EconEvent } from "../lib/types";
 import { fmtLevel, fmtSigma, signCls } from "../lib/fmt";
 import { fmtClock, fmtDate, fmtStamp, SGT } from "../lib/time";
 import { EVENTS, LARGEST_FALL, LARGEST_RISE, LEVEL_THEN, NEWS, NEXT_MEETING, PERIOD, RANGE_52W, REALISED_VOL, SIGMA_1M, SIGMA_WINDOW, VS_200D } from "../lib/labels";
-import { asOfWords, calSource, ccyWords, contractLine, contractSource, distCls, distText, impactOk, lastAndDay, lastRollLine, matchedWords, moveCls, moveText, noEvents, pctlText, periodsOf, rollMarks, rollsOutLine, SERIES_LINE, volLine, volTip, workedLine, type ImpactPick, type InstrumentPage } from "../lib/instrument";
+import { asOfWords, calSource, ccyWords, contractLine, contractSource, distCls, distText, impactOk, lastAndDay, lastRoll, matchedWords, moveCls, moveText, noEvents, pctlText, periodsOf, rollMarks, rollsOutLine, SERIES_LINE, volLine, volTip, workedLine, type ImpactPick, type InstrumentPage } from "../lib/instrument";
 import { keyLabel, useLiveRow } from "./Instrument";
 import { dayLabel, dayOf, IMPACTS } from "./News";
 
@@ -58,7 +58,7 @@ export function InstrumentPhone({ d, tick }: { d: InstrumentPage; tick: number }
   const feed = d.feed ?? null, vol = volLine(i.vol, u), r52 = i.range52, v3 = i.vol.m3;
   const asOf = i.asOfKind === "print" && row.lastAt ? fmtStamp(row.lastAt) : asOfWords(i);
   const p = periods.includes(period) ? period : "12M";
-  const fut = i.futures, marks = fut ? rollMarks(fut) : undefined;   // B-27: a future's rolls, marked on its daily chart
+  const fut = i.futures, marks = fut ? rollMarks(fut) : undefined, roll = lastRoll(fut);   // B-27: a future's rolls, marked on its daily chart
   return (
     <div className="mp">
       <header className="mp-head doc"><button type="button" className="mp-back" onClick={back}>&#8249; Back</button><Star symbol={d.symbol} name={d.name} /></header>
@@ -88,7 +88,7 @@ export function InstrumentPhone({ d, tick }: { d: InstrumentPage; tick: number }
             <KV k="Day's range" sub={i.official ? "published once a day: none" : undefined}>{i.session && i.session.low != null && i.session.high != null ? `${lvl(i.session.low)} – ${lvl(i.session.high)}` : "–"}</KV>
             <KV k="Previous close" sub={i.prev.date ? `${fmtDate(i.prev.date)}${row.roll?.step != null ? " · new contract's" : ""}` : undefined}>{lvl(i.prev.level)}</KV>
             {fut && <KV k="Contract" sub={contractSource(fut)}><span className="wv" id="in-contract">{contractLine(fut)}</span></KV>}
-            {fut && <KV k="Last change of contract"><span className="wv" id="in-roll">{lastRollLine(fut)}</span></KV>}
+            {fut && <KV k="Last change of contract" sub={roll.sub ?? undefined}><span className="wv" id="in-roll">{roll.main}</span></KV>}
             <KV k={keyLabel(i, RANGE_52W, "range52")} sub={`${fmtDate(r52.loDate)} · ${fmtDate(r52.hiDate)}`}>{lvl(r52.lo)} – {lvl(r52.hi)}</KV>
             <KV k={keyLabel(i, "From 52W high / low", "fromHiLo")}><span className={distCls(r52.fromHi, u)}>{distText(r52.fromHi, u)}</span> / <span className={distCls(r52.fromLo, u)}>{distText(r52.fromLo, u)}</span></KV>
             <KV k={keyLabel(i, SIGMA_1M, "z1m")}><span className={signCls(i.z1m, 1)}>{fmtSigma(i.z1m)}</span></KV>

@@ -60,7 +60,8 @@ const AMBER = "rgb(255, 111, 97)", D = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
     ck("each cell: a name, its σ in its sign's colour, the day's change and the level under it, whole; a link to the instrument's page", s.cells.every((c, i) => /^#(asset|equities)\//.test(c.href) && c.whole && /^[+-]?\d[\d,.]*(%|bp) · [\d,.]+%?$/.test(c.mv) && (want[i].z1d > 0.05 ? /\bup\b/.test(c.zCls) : want[i].z1d < -0.05 ? /\bdn\b/.test(c.zCls) : true)), s.cells);
     const usd = s.cells.find((c) => c.nm === "USD/JPY");
     ck(`USD/JPY's 2.7σ day leads, at the alert line: an amber border ("${usd?.z}", ${usd?.border}); under 1.5σ a cell is muted (${s.cells.filter((c) => c.quiet).length} of 10)`, s.cells[0].nm === "USD/JPY" && usd.z === "+2.7σ" && usd.hot && usd.border === AMBER && s.cells.filter((c) => !c.hot).every((c) => c.border !== AMBER) && s.cells.every((c) => c.quiet === (Math.abs(parseFloat(c.z)) < 1.5)), s.cells.map((c) => [c.nm, c.z, c.hot, c.quiet]));
-    ck(`the line under it: "${s.note}"`, new RegExp(`^† worked out here from the daily closes the Monitor stores, mostly ${D} – ${D} \\(each cell's own window on its tooltip\\); a future's changes of contract are left out from when the Monitor records them, and any before stay in \\(a future's page says from when\\)\\.$`).test(s.note ?? ""), s.note);
+    // one line since 21 Nov 2026 (the designer's D-69): what a future's changes of contract do is on each future's tooltip, its page and in Help
+    ck(`the line under it, one line: "${s.note}"`, new RegExp(`^† worked out here from the Monitor's daily closes, mostly \\d{1,2} [A-Z][a-z]{2}( \\d{4})? – ${D} · each cell's own window on its tooltip$`).test(s.note ?? "") && (await p.evaluate(() => { const n = document.querySelector("#mk-sigma-note"); return n.getBoundingClientRect().height <= parseFloat(getComputedStyle(n).lineHeight) * 1.6; })), s.note);
     ck(`1D IN σ right after 1D, the σ kept lower case under the upper-cased header (${t.heads.slice(1, 5).join(" · ")})`, t.heads[2] === "1D" && t.heads[3] === "1D IN σ" && t.sortCase === "none" && t.heads.length === 12, t.heads);
     // the table's rows in its own order: by `order`, grouped by class in the order the classes first come
     const ordered = [...rows].sort((a, b2) => a.order - b2.order), clsOrder = [...new Set(ordered.map((r) => r.cls))], inTable = clsOrder.flatMap((c) => ordered.filter((r) => r.cls === c));
@@ -70,6 +71,9 @@ const AMBER = "rgb(255, 111, 97)", D = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
     ck(`its tooltip says what it is worked out from ("${usdRow.ztip.slice(0, 90)}…")`, new RegExp(`^The day's change over the σ of the 63 daily changes before it \\([\\d.]+% a day\\), worked out † from the daily closes of ${D} – ${D} \\(Yahoo Finance\\)$`).test(usdRow.ztip), usdRow.ztip);
     const jgb = t.rows.find((x) => /^JGB/.test(x.name));
     ck(`an official-curve yield's day is measured on its booked close ("…${jgb?.ztip.split(" · ")[1]}")`, !!jgb && new RegExp(`\\(Japan MOF\\) · measured on ${D}'s close \\(published a day late\\)$`).test(jgb.ztip) && /^[+-]?\d+\.\dσ$/.test(jgb.z), jgb);
+    // D-67: the US Treasury publishes its curve on the day itself; only the others are a day late (Help, "Curves")
+    const ust = t.rows.find((x) => x.name === "UST 2Y");
+    ck(`a US Treasury yield's tooltip does not say "a day late" ("…${ust?.ztip.split(" · ")[1]}")`, !!ust && new RegExp(`\\(US Treasury\\) · measured on ${D}'s close, its newest published day$`).test(ust.ztip) && !/a day late/.test(ust.ztip), ust);
     // B-27: gold's stand-in roll day
     const gold = t.rows.find((x) => x.name === "Gold"), gr = rows.find((r) => r.symbol === "GC=F");
     const naive = (gr.last / (gr.closes.d1 / (1 + gr.roll.step / 100)) - 1) * 100, within = gr.pct.d1, naiveZ = naive / gr.sd1d;
@@ -119,13 +123,14 @@ const AMBER = "rgb(255, 111, 97)", D = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
     const m = await p.evaluate(() => { const r = (e) => { if (!e) return null; const x = e.getBoundingClientRect(); return { top: Math.round(x.top), bottom: Math.round(x.bottom), left: Math.round(x.left), right: Math.round(x.right), w: Math.round(x.width), h: Math.round(x.height) }; };
       const sec = document.querySelector(".mp > .mp-sec"), row = document.querySelector(".mp-sgrow"), cards = [...document.querySelectorAll(".mp-sgcard")];
       const navTop = document.querySelector("#pnav").getBoundingClientRect().top;
-      return { first: sec?.id ?? null, h2: sec?.querySelector("h2 > span").textContent, sgNote: sec?.querySelector("#mk-sigma-note")?.textContent ?? null, sigCase: sec ? getComputedStyle(sec.querySelector("h2 .sig")).textTransform : null, aux: sec?.querySelector("h2 .aux")?.textContent ?? null, screenSub: document.querySelector(".mp-head .mp-asof")?.textContent ?? "",
+      return { first: sec?.id ?? null, h2: sec?.querySelector("h2 > span").textContent, sgNote: document.querySelector("#mk-sigma-note")?.textContent ?? null, sgNoteIn: !!sec?.querySelector("#mk-sigma-note"), sgNoteUnder: (() => { const n = document.querySelector("#mk-sigma-note"), items = [...document.querySelectorAll(".mp-item")]; return !!n && items.length > 0 && n.getBoundingClientRect().top >= items[items.length - 1].getBoundingClientRect().bottom - 0.5; })(), sigCase: sec ? getComputedStyle(sec.querySelector("h2 .sig")).textTransform : null, aux: sec?.querySelector("h2 .aux")?.textContent ?? null, screenSub: document.querySelector(".mp-head .mp-asof")?.textContent ?? "",
         cards: cards.map((c) => ({ ...r(c), nm: c.querySelector(".nm").textContent, z: c.querySelector(".z").textContent, mv: c.querySelector(".mv").textContent, cut: [...c.querySelectorAll(".z,.mv")].some((x) => x.scrollWidth > x.clientWidth + 1), href: c.getAttribute("href"), snap: getComputedStyle(c).scrollSnapAlign })),
         row: { ...r(row), scrollW: row.scrollWidth, clientW: row.clientWidth, snap: getComputedStyle(row).scrollSnapType, bar: getComputedStyle(row).scrollbarWidth },
         strip: r(sec), note: r(document.querySelector(".mp-today")), hint: r(document.querySelector(".mp-a2hs")), rows: [...document.querySelectorAll(".mp-row")].filter((e) => e.getBoundingClientRect().bottom <= navTop).length, vw: innerWidth, ox: document.documentElement.scrollWidth - innerWidth }; });
     ck(`the first section is "${m.h2}" (σ lower case), with the screen's as-of in its head ("${m.aux}")`, m.first === "mk-sigma" && m.h2 === "Movers in σ" && m.sigCase === "none" && /^as of \d{1,2} [A-Z][a-z]{2} \d\d:\d\d SGT$/.test(m.aux ?? "") && !/as of/.test(m.screenSub), m);
     ck(`ten cards of ${m.cards[0]?.w} x ${m.cards[0]?.h} px in one row that moves sideways and stops on a card, no scrollbar; the third is cut at the screen's edge (${m.cards[2]?.left}–${m.cards[2]?.right} of ${m.vw})`, m.cards.length === 10 && m.cards.every((c) => c.w === 132 && c.h === 76 && c.snap === "start" && !c.cut && /^#(asset|equities)\//.test(c.href)) && new Set(m.cards.map((c) => c.top)).size === 1 && m.row.scrollW > m.row.clientW && /x mandatory/.test(m.row.snap) && m.row.bar === "none" && m.cards[2].left < m.vw && m.cards[2].right > m.vw, { cards: m.cards.slice(0, 3), row: m.row });
-    ck(`the line under the cards: "${m.sgNote}"`, new RegExp(`^The day's change ÷ σ of its daily changes, 63 sessions\. † Worked out by the Monitor from the daily closes, mostly ${D} – ${D}\.$`).test(m.sgNote ?? ""), m.sgNote);
+    // under the lists since 21 Nov 2026 (the designer's verdict on D-14: above them it kept every list row off the first screen)
+    ck(`what the cards measure is a note under the lists, not between the cards and them: "${m.sgNote}"`, new RegExp(`^Movers in σ: the day's change ÷ σ of its daily changes, 63 sessions\. † Worked out by the Monitor from the daily closes, mostly ${D} – ${D}\.$`).test(m.sgNote ?? "") && !m.sgNoteIn && m.sgNoteUnder, { note: m.sgNote, in: m.sgNoteIn, under: m.sgNoteUnder });
     ck(`each card: the name, "${m.cards[0].z}" and the day's change ("${m.cards[0].mv}")`, m.cards[0].nm === "USD/JPY" && m.cards[0].z === "+2.7σ" && m.cards.every((c) => /^[+-]?\d+\.\dσ$/.test(c.z) && /^[+-]?\d[\d,.]*(%|bp)$/.test(c.mv)), m.cards.slice(0, 3));
     ck(`no card or hint above the data: the strip comes first (${m.strip.top} px), the morning note (${m.note?.top}) and the install hint (${m.hint?.top}) under it; ${m.rows} list rows on the first screen (more come with I-22's one-line alert and install line)`, (!m.note || m.note.top >= m.strip.bottom) && (!m.hint || (m.hint.top >= m.strip.bottom && (!m.note || m.hint.top >= m.note.bottom))) && m.strip.top < 300, m);
     ck("nothing runs off the page sideways", m.ox <= 0, m.ox);
@@ -167,7 +172,7 @@ const AMBER = "rgb(255, 111, 97)", D = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
     await go(p, "#asset/GC%3DF", "#in-key");
     const d = await p.evaluate(async () => { const { mockAction } = await import("/orrery-market-monitor/src/lib/mock.ts"); const a = mockAction("stock", { symbol: "GC=F" }), s = mockAction("series", { symbol: "GC=F", range: "10Y" });
       const ctr = document.querySelector("#in-contract")?.closest("tr");
-      return { contract: document.querySelector("#in-contract")?.textContent ?? null, contractSrc: ctr ? `${ctr.title} ${ctr.querySelector("small")?.textContent ?? ""}` : null, contractShown: ctr ? ctr.innerText : null, roll: document.querySelector("#in-roll")?.textContent ?? null, rolls: document.querySelector("#in-rolls")?.textContent ?? null, volTxt: [...document.querySelectorAll("#in-key tr")].find((tr) => /Realised vol/.test(tr.cells[0].textContent))?.cells[1].innerText ?? null, fallTxt: [...document.querySelectorAll("#in-key tr")].find((tr) => /Largest fall/.test(tr.cells[0].textContent))?.cells[1].innerText ?? null,
+      return { contract: document.querySelector("#in-contract")?.textContent ?? null, contractSrc: ctr ? `${ctr.title} ${ctr.querySelector("small")?.textContent ?? ""}` : null, contractShown: ctr ? ctr.innerText : null, roll: document.querySelector("#in-roll")?.textContent ?? null, rollRow: (document.querySelector("#in-roll")?.closest("tr")?.innerText ?? "").replace(/\s+/g, " ").trim(), rolls: document.querySelector("#in-rolls")?.textContent ?? null, volTxt: [...document.querySelectorAll("#in-key tr")].find((tr) => /Realised vol/.test(tr.cells[0].textContent))?.cells[1].innerText ?? null, fallTxt: [...document.querySelectorAll("#in-key tr")].find((tr) => /Largest fall/.test(tr.cells[0].textContent))?.cells[1].innerText ?? null,
         fut: a.instrument.futures, vol: a.instrument.vol, fall: a.instrument.fall, pts: s.points.map((x) => ({ t: x.t, v: x.v })).slice(-1300) }; });
     // the same series with the step taken out by hand: every close before the roll day on the new contract's level
     const rollT = Date.parse(d.fut.lastRoll.d + "T00:00:00Z") / 1000, clean = d.pts.map((x) => ({ t: x.t, v: x.t < rollT ? x.v * 1.03 : x.v }));
@@ -175,7 +180,7 @@ const AMBER = "rgb(255, 111, 97)", D = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
     const ann = (xs, n) => sdv(lr(xs).slice(-n)) * Math.sqrt(252) * 100;
     const v3 = ann(clean, 63), v3step = ann(d.pts, 63);
     ck(`${name}: the contract's source is labelled unofficial on screen, under it, as the owner asked for Yahoo's named contracts (S2: "${(d.contractShown ?? "").replace(/\s+/g, " ").trim().slice(0, 110)}")`, /Yahoo Finance \(unofficial\)/.test(d.contractSrc ?? "") && /Yahoo Finance \(unofficial\) · read \d{1,2} [A-Z][a-z]{2} \d\d:\d\d SGT/.test(d.contractShown ?? ""), d.contractShown);
-    ck(`${name}: the contract the last price is from ("${d.contract}") and the last change of contract ("${d.roll}")`, new RegExp(`^Feb 2027 \\(GCG27\\) · expires ${D}$`).test(d.contract ?? "") && d.fut.expires > new Date().toISOString().slice(0, 10) && new RegExp(`^${D} · from Dec 2026, \\+3\\.00% change of contract$`).test(d.roll ?? ""), d);
+    ck(`${name}: the contract the last price is from ("${d.contract}") and the last change of contract ("${d.roll}")`, new RegExp(`^Feb 2027 \\(GCG27\\) · expires ${D}$`).test(d.contract ?? "") && d.fut.expires > new Date().toISOString().slice(0, 10) && new RegExp(`^${D} · Dec 2026 \u2192 Feb 2027$`).test(d.roll ?? "") && /step \+3\.00%, left out/.test(d.rollRow) && !/change of contract.*change of contract/.test(d.rollRow), d);   // on two lines since 21 Nov 2026 (the designer's D-64)
     ck(`${name}: the line says what the series is and that its rolls are left out ("${(d.rolls ?? "").slice(0, 120)}…")`, /^A front-month series \(Yahoo's =F\): on a roll day it moves to the next contract, and that step is not a move\. Rolls left out of realised vol and its percentile, σ vs 1M avg, the largest rise and fall and the 1D in σ: 1 since /.test(d.rolls ?? "") && /Changes of contract before .* are not known to the Monitor/.test(d.rolls ?? ""), d.rolls);
     ck(`${name}: its realised vol over 3M (${d.vol.m3.ann.toFixed(3)}% ann.) is that of the series with the step taken out (${v3.toFixed(3)}%), not the stepped series' (${v3step.toFixed(3)}%); KEY DATA writes it ("${d.volTxt?.split("\n")[0]}")`, Math.abs(d.vol.m3.ann - v3) < 1e-6 && Math.abs(v3step - v3) > 0.2 && (d.volTxt ?? "").includes(d.vol.m3.ann.toFixed(1)), { page: d.vol.m3.ann, v3, v3step });
     ck(`${name}: its largest fall (${d.fall?.chg.toFixed(2)}%, ${d.fall?.from} to ${d.fall?.to}) is measured on the same series`, !!d.fall && !!d.fallTxt && d.fallTxt.includes(`${Math.abs(d.fall.chg).toFixed(1)}%`), { fall: d.fall, txt: d.fallTxt });
@@ -223,6 +228,57 @@ const AMBER = "rgb(255, 111, 97)", D = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
       }
       ck(`${name}: no page errors`, errs.length === 0, errs); await ctx.close();
     }
+  }
+
+  // After the verdicts of round 3a (21 Nov 2026).
+  console.log("\n[D-63, B-34: the alert list behind the header's line shows every alert whole, on a phone and on a computer]");
+  { // the list as a reader sees it: the box inside the window, nothing sideways, every row's parts inside the box
+    const list = (p) => p.evaluate(() => { const d = document.querySelector(".aldrop"), br = d.getBoundingClientRect(), W = document.documentElement.clientWidth;
+      const rows = [...d.querySelectorAll("[data-kind]")].map((x) => { const cells = [...x.querySelectorAll(".al-t,.al-msg,.al-kind,.al-fig,.al-note,.alnote")].filter((c) => c.getBoundingClientRect().width > 0); const rg = document.createRange(); rg.selectNodeContents(x);
+        const boxes = [...cells.map((c) => c.getBoundingClientRect()), ...[...rg.getClientRects()].filter((q) => q.width > 0)];
+        return { kind: x.dataset.kind, h: x.getBoundingClientRect().height, inside: boxes.every((q) => q.left >= br.left - 0.5 && q.right <= br.right + 0.5), cut: cells.some((c) => c.scrollWidth > c.clientWidth + 1), t: x.querySelector(".al-t")?.textContent ?? "", msg: x.querySelector(".al-msg")?.textContent ?? "", fig: x.querySelector(".al-fig")?.textContent ?? "", figCls: x.querySelector(".al-fig")?.className ?? "", kd: x.querySelector(".al-kind")?.textContent ?? null, note: x.querySelector(".al-note,.alnote")?.textContent ?? null }; });
+      return { head: d.querySelector(".minih").innerText.replace(/\s+/g, " ").trim(), rules: d.querySelector(".alrules")?.textContent ?? null, inWin: br.left >= 0 && br.right <= W + 0.5, sx: d.scrollWidth - d.clientWidth, rows, ox: document.documentElement.scrollWidth - innerWidth }; });
+    const sa = (await (async () => { const { ctx, p } = await page(b, { viewport: { width: 1440, height: 900 } }, AUTO); await go(p, "#market", "#alerts .alrt"); const a = await p.evaluate(async () => { const { mockAction } = await import("/orrery-market-monitor/src/lib/mock.ts"); return mockAction("alerts", { n: 20 }).rows; }); await ctx.close(); return a; })());
+    const sig = sa.find((a) => a.kind === "sigma");
+    for (const [name, dev] of [["P1, iPhone SE", "iPhone SE (3rd gen)"], ["P2, iPhone 13", "iPhone 13"]]) {
+      const { ctx, p, errs } = await page(b, devices[dev]);
+      await go(p, "#market", "#alerts .alrt");
+      await p.locator("#alerts .alrt").tap(); await p.waitForSelector(".aldrop [data-kind]"); await p.waitForTimeout(250);
+      const l = await list(p), row = l.rows.find((r) => r.kind === "sigma");
+      ck(`${name}: the list is no wider inside than its box (${l.sx} px over) and stands inside the screen; none of its ${l.rows.length} rows has a part outside the box or cut`, l.sx <= 1 && l.inWin && l.ox <= 0 && l.rows.length === sa.length && l.rows.every((r) => r.inside && !r.cut), { sx: l.sx, bad: l.rows.filter((r) => !r.inside || r.cut) });
+      ck(`${name}: the stand-in σ move whole: "${row?.msg}", "${row?.fig}" in its sign's colour, and under it "${row?.note}"`, !!row && row.msg === sig.msg && row.fig === "+2.7σ" && /\bup\b/.test(row.figCls) && row.note === `σ move · ${sig.note}` && /Yahoo Finance/.test(row.note), row);
+      ck(`${name}: no row under 44 px (the shortest ${Math.round(Math.min(...l.rows.map((r) => r.h)))} px); the head is "${l.head}" and the rules are a note under the list`, l.rows.every((r) => r.h >= 44) && /^LAST \d+ ALERTS · TIMES IN SGT Notifications…$/.test(l.head) && /σ moves from 2\.5σ/.test(l.rules ?? "") && !/Σ/.test(l.head + l.rules) && l.rows.every((r) => !/SGT/.test(r.t)), { head: l.head, t: l.rows.map((r) => r.t) });
+      await p.locator('.aldrop [data-kind="sigma"]').first().tap(); await p.waitForTimeout(500);
+      ck(`${name}: a tap on it opens USD/JPY's page and closes the list`, (await p.evaluate(() => location.hash)) === "#asset/USDJPY%3DX" && (await p.locator(".aldrop").count()) === 0);
+      await p.goBack(); await p.waitForSelector("#alerts .alrt"); await p.locator("#alerts .alrt").tap(); await p.waitForSelector(".aldrop [data-kind]");
+      const news = await p.evaluate(() => { const r = document.querySelector('.aldrop a.nw-row[data-kind="buyback"]'); return r ? { href: r.getAttribute("href"), co: r.querySelector(".nw-tk button")?.textContent ?? null } : null; });
+      ck(`${name}: a news alert is a link to its article and keeps a button to its company's page ("${news?.co}")`, !!news && /^https?:/.test(news.href ?? "") && !!news.co, news);
+      ck(`${name}: no page errors`, errs.length === 0, errs); await ctx.close();
+    }
+    for (const [name, vp, prefs] of [["C1 1440x900", [1440, 900], AUTO], ["C2 1280x720", [1280, 720], AUTO], ["C3 1440x900 XL", [1440, 900], XL], ["C6 1920x1080", [1920, 1080], AUTO], ["1440x900 L", [1440, 900], { size: "L", compact: false, v: 2 }], ["C4 1440x900, one screen", [1440, 900], CMP]]) {
+      const { ctx, p, errs } = await page(b, { viewport: { width: vp[0], height: vp[1] } }, prefs);
+      await go(p, "#market", "#alerts .alrt");
+      await p.locator("#alerts .alrt").click(); await p.waitForSelector(".aldrop [data-kind]"); await p.waitForTimeout(250);
+      const l = await list(p), row = l.rows.find((r) => r.kind === "sigma");
+      ck(`${name}: every row's kind and figure lie inside the box, the box inside the window, nothing sideways (${l.rows.length} rows; the σ move: "${row?.kd}", "${row?.fig}")`, l.sx <= 1 && l.inWin && l.ox <= 0 && l.rows.length === sa.length && l.rows.every((r) => r.inside && !r.cut && r.kd !== null) && row?.kd === "σ move" && row.fig === "+2.7σ" && row.note === sig.note, { sx: l.sx, inWin: l.inWin, bad: l.rows.filter((r) => !r.inside || r.cut) });
+      if (name.startsWith("C1")) ck(`${name}: "times in SGT" once in the head, not on every row ("${l.rows[0]?.t}"): "${l.head.slice(0, 60)}…"`, /^LAST \d+ ALERTS · TIMES IN SGT · /.test(l.head) && /σ MOVES FROM 2\.5σ/.test(l.head) && l.rows.every((r) => !/SGT/.test(r.t)) && /^(\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d$/.test(l.rows[0].t), l.head);
+      ck(`${name}: no page errors`, errs.length === 0, errs); await ctx.close();
+    }
+  }
+
+  console.log("\n[D-64: a future with a recorded change of contract: KEY DATA whole at text L, no label over two lines]");
+  for (const [name, vp, size] of [["1440x900 L", [1440, 900], "L"], ["1536x864 L", [1536, 864], "L"], ["1366x768 L", [1366, 768], "L"], ["1680x1050 XL", [1680, 1050], "XL"], ["C1 1440x900", [1440, 900], "AUTO"], ["C2 1280x720", [1280, 720], "AUTO"]]) {
+    const { ctx, p, errs } = await page(b, { viewport: { width: vp[0], height: vp[1] } }, { size, compact: false, v: 2 });
+    await go(p, "#asset/GC%3DF", "table#in-key");
+    const k = await p.evaluate(() => { const key = document.querySelector(".panel[data-k='in-key'] .pbody").getBoundingClientRect();
+      const rows = [...document.querySelectorAll("table#in-key tr")].map((tr) => { const l = tr.querySelector("td.l"), v = tr.querySelector("td.num"), rg = document.createRange(); rg.selectNodeContents(l);
+        const lines = new Set([...rg.getClientRects()].filter((q) => q.width > 0).map((q) => Math.round(q.top))).size, vr = v.getBoundingClientRect(), inner = [...v.querySelectorAll("*")].map((e) => e.getBoundingClientRect()).filter((q) => q.width > 0);
+        return { k: l.textContent, lines, em: l.getBoundingClientRect().width / parseFloat(getComputedStyle(l).fontSize), stacked: getComputedStyle(tr).display === "flex", cut: vr.right > key.right + 0.5 || vr.left < key.left - 0.5 || inner.some((q) => q.right > key.right + 0.5 || q.left < key.left - 0.5) || v.scrollWidth > v.clientWidth + 1, v: v.innerText.replace(/\s+/g, " ").trim() }; });
+      return { sideways: [...document.querySelectorAll(".panel .pbody")].filter((x) => x.scrollWidth > x.clientWidth + 1).map((x) => x.closest(".panel").dataset.k), rows, ox: document.documentElement.scrollWidth - innerWidth }; });
+    const roll = k.rows.find((r) => r.k === "Last change of contract");
+    ck(`${name}: no panel body of gold's page scrolls sideways, every KEY DATA value is whole inside the panel, and no label takes more than two lines (${k.rows.filter((r) => r.lines === 2).length} take two); the label column at least 9.5em where it stands beside the values`, k.sideways.length === 0 && k.ox <= 0 && k.rows.length === 12 && k.rows.every((r) => !r.cut && r.lines <= 2 && (r.stacked || r.em >= 9.4)), { sideways: k.sideways, bad: k.rows.filter((r) => r.cut || r.lines > 2 || !(r.stacked || r.em >= 9.4)) });
+    if (name.startsWith("1440x900 L")) ck(`${name}: the last change of contract on two lines: "${roll?.v}"`, new RegExp(`^${D} · Dec 2026 \u2192 Feb 2027 step \\+3\\.00%, left out$`).test(roll?.v ?? ""), roll);
+    ck(`${name}: no page errors`, errs.length === 0, errs); await ctx.close();
   }
 
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0); })();

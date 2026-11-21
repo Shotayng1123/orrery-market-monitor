@@ -167,8 +167,9 @@ async function tnxBoth(p) {
       await p.goto(FAKE + hash, { waitUntil: "networkidle" }); await p.waitForSelector("#alerts .alrt"); await p.evaluate(() => document.fonts.ready); await p.waitForTimeout(300);
       const line = (await p.locator("#alerts .alrt").innerText()).replace(/\s+/g, " ").trim();
       await p.locator("#alerts .alrt").click(); await p.waitForSelector(".aldrop .minih");
-      const head = (await p.locator(".aldrop .minih").innerText()).replace(/\s+/g, " ").trim(), list = await p.locator(".aldrop").innerText();
-      ck(`${name}: the line, a σ move newest, reads "${line}"; the list's head "${head.slice(0, 100)}…"; no capital Σ in either`, !/Σ/.test(line) && /2\.7σ/.test(line) && (name.startsWith("iPhone") || /σ MOVE/.test(line)) && !/Σ/.test(list) && /σ MOVES FROM 2\.5σ/.test(head), { line, head });
+      // a phone's list has a short head and its rules as a note under the rows (the designer's D-63): the σ is read there
+      const head = (await p.locator(".aldrop .minih").innerText()).replace(/\s+/g, " ").trim(), list = await p.locator(".aldrop").innerText(), rules = name.startsWith("iPhone") ? await p.locator(".aldrop .alrules").innerText() : head;
+      ck(`${name}: the line, a σ move newest, reads "${line}"; the list's head "${head.slice(0, 100)}…"; no capital Σ in either`, !/Σ/.test(line) && /2\.7σ/.test(line) && (name.startsWith("iPhone") || /σ MOVE/.test(line)) && !/Σ/.test(list) && /σ moves from 2\.5σ/i.test(rules) && /TIMES IN SGT/.test(head), { line, head, rules });
       ck(`${name}: no page errors`, errs.length === 0, errs); await ctx.close();
     } }
 

@@ -110,9 +110,10 @@ const NOTE_FRESH_MS = 36 * 3600e3;
 
 /** Movers in σ on a phone (the designer's I-6 note): the first section, one row of cards that moves sideways and stops on
  *  a card, the third card cut at the edge so the row reads as "more to the right"; each card opens its page. The
- *  screen's as-of is in its head. */
+ *  screen's as-of is in its head. What the figure is and where it is worked out from is a note under the lists (the
+ *  designer's verdict on D-14, 21 Nov 2026: with the note above them no list row reached a phone's first screen). */
 function SigmaCards({ rows, asOf }: { rows: TableRow[]; asOf: string | null }) {
-  const top = moversInSigma(rows), win = commonWindow(top);
+  const top = moversInSigma(rows);
   if (!top.length) return null;
   return (
     <section className="mp-sec" id="mk-sigma">
@@ -129,7 +130,6 @@ function SigmaCards({ rows, asOf }: { rows: TableRow[]; asOf: string | null }) {
           );
         })}
       </div>
-      <p className="mp-note" id="mk-sigma-note">The day's change ÷ σ of its daily changes, 63 sessions. † Worked out by the Monitor from the daily closes{win ? `, mostly ${fmtDate(win.from)} – ${fmtDate(win.to)}` : ""}.</p>
     </section>
   );
 }
@@ -147,7 +147,7 @@ export function MarketPhone({ tick }: { tick: number }) {
   const rows = (table.data?.rows ?? []).filter((r) => r.marketTab !== false).sort((a, b) => a.order - b.order);   // the curated table set
   const groups = new Map<string, TableRow[]>();
   for (const r of rows) groups.set(r.cls, [...(groups.get(r.cls) ?? []), r]);
-  const strip = moversInSigma(rows).length > 0;   // the screen's as-of then moves into the strip's head
+  const movers = moversInSigma(rows), strip = movers.length > 0, win = commonWindow(movers);   // the screen's as-of then moves into the strip's head
   return (
     <Screen title={TAB.market}
       sub={<>{table.data ? (strip ? null : <>as of {fmtStampSafe(table.data.asOf)}</>) : table.error ? <span className="warn">{table.error}</span> : "loading…"}{DEV_MOCK && <span className="badge est">MOCK</span>}</>}
@@ -172,6 +172,8 @@ export function MarketPhone({ tick }: { tick: number }) {
           </div>
         </section>
       )) : <Empty title="Awaiting the data feed">{table.error ?? "The market list fills once the first prices arrive."}</Empty>}
+      {/* what Movers in σ measures, under the lists (it stood between the cards and the lists) */}
+      {strip && <p className="mp-note" id="mk-sigma-note">Movers in σ: the day's change ÷ σ of its daily changes, 63 sessions. † Worked out by the Monitor from the daily closes{win ? `, mostly ${fmtDate(win.from)} – ${fmtDate(win.to)}` : ""}.</p>}
       {rows.length > 0 && (
         <section className="mp-sec">
           <h2>Yield curves</h2>

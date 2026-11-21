@@ -98,7 +98,8 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   dates (`results-dates`: the day in each company's own market and no time of day, in KEY DATA, on WATCHLIST and in
   NEWS › Results calendar, both layouts), moves in σ (`sigma-moves`: MOVERS IN σ and the 1D IN σ
   column on both layouts and in the one-screen layout and at XL, sorting within each bar, the stand-in 2.7σ alert, gold's
-  stand-in roll day kept out of its 1D, its σ, its volatility and its largest fall, the roll marked on its chart, and a
+  stand-in roll day kept out of its 1D, its σ, its volatility and its largest fall, the roll marked on its chart, the
+  alert list whole on two phones and at five computer sizes, gold's KEY DATA whole at text L, and a
   server from before), the classic phone layout, the sign-in screen, creating an
   account by verification email, the manager's accounts list, the
   home-screen hint, the new-version bar, opening without a connection, notifications (with the kinds a device receives and its σ line), a tab that fails
@@ -117,7 +118,8 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   where they scroll sideways, are walked as a reader moves them (where they open, each press of "‹ earlier years",
   swipes of 40 px each way) on four phones and on a computer at text XL, and every place they come to rest must show
   each period whole, beside the line names and at the right edge. `layout-guard-instruments` runs the same checks on
-  four instruments' pages at the same sizes. It also cuts, clips and
+  five instruments' pages (gold, a future, among them) at the same sizes. The guard also opens the alert list behind
+  the header's line once at each size: nothing cut or sideways, and its box inside the window. It also cuts, clips and
   covers figures on purpose with throwaway styles, to show that it fails each time. XL text and the one-screen
   layout join it once they are fixed. `nothing-cut` checks the designer's findings behind it one by one (whole
   columns at both edges of a phone's statements, pressed back and swiped, short interest at its natural height, chart titles, long headlines under day
@@ -191,11 +193,21 @@ in Singapore, "opens 23 Nov 22:30 SGT" on another day. Nothing is fetched for it
 The words are made in `web/src/lib/opens.ts`. A midday break gives the afternoon's start; crypto, which never closes,
 and an official yield, published once a day, have no such line.
 
+Since 21 Nov 2026 a table says it without a hover too. The first line above the MARKETS table, RATES & FX's FX table
+and WATCHLIST's names (above the list on a phone), in the scrolling and the one-screen layout, reads "Closed now: New
+York opens 22:30 SGT · Hong Kong and Shanghai open 23 Nov 09:30 SGT, scheduled · Tokyo (holiday) opens 24 Nov 08:00
+SGT · next read 22:30 SGT: VIX, DXY, UST 10Y" (`closedLine` in `web/src/lib/opens.ts`, `components/ClosedNow.tsx`):
+the markets of that table's own rows that are shut, the soonest to open first, markets that open at the same moment in
+one entry, the reason in brackets where the Monitor knows one (a holiday in a calendar it holds, a midday or daily
+break, an early close today), then the rows it only reads in New York's hours. The line is absent while none of the
+table's markets is shut. In the one-screen layout a page's own chart (a stock's, an instrument's, EQUITIES' index)
+keeps its stamp with the opening after it; the small tiles there show neither.
+
 ### Moves in σ (MARKETS, since 2026-11-20)
 
 | On the page | Where it comes from |
 |---|---|
-| MOVERS IN σ (the ten largest of the day, any class) and the 1D IN σ column | Worked out by the Monitor from its stored daily closes (`_shared/sigma.ts`, and the database's `fn_table_stats` with the same rule): the day's change over the standard deviation of the instrument's own daily changes in the 63 sessions before it, a yield's in points of its level (bp), a price's in per cent. The newest change is never in its own yardstick. An official-curve yield's day counts once it is booked (it is published a day late). Each figure's closes are on its tooltip |
+| MOVERS IN σ (the ten largest of the day, any class) and the 1D IN σ column | Worked out by the Monitor from its stored daily closes (`_shared/sigma.ts`, and the database's `fn_table_stats` with the same rule): the day's change over the standard deviation of the instrument's own daily changes in the 63 sessions before it, a yield's in points of its level (bp), a price's in per cent. The newest change is never in its own yardstick. An official-curve yield's day counts once it is booked (Japan's, the euro area's, the UK's and Canada's curves are published a day late; the US Treasury's on the day itself, and its tooltip says "its newest published day"). Each figure's closes are on its tooltip |
 | σ moves in the alert list and as notifications | The same figure, for every currency, yield, commodity, volatility index, future and coin (the equity indices keep their ±3% alert): raised from 2σ, one per instrument and session, updated while the move grows; the lists everyone reads show them from 2.5σ, and each device chooses its kinds and its own line (2, 2.5 or 3σ) in Notifications. Each names its σ, its window and its source |
 
 ### A future's contract and its rolls (B-27, since 2026-11-20)

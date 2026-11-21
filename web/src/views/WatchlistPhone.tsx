@@ -14,7 +14,8 @@ import { asOfLine, asOfOf, asOfTitle, fmtDate, fmtWhen } from "../lib/time";
 import { classLabel, hitLine, PERIOD, RESULTS_AHEAD, TAB } from "../lib/labels";
 import { byResultsDay, MARKS_NOTE, RESULTS_NOTE, resultsDayLabel, resultsStatusShort } from "../lib/results";
 import { cellBp } from "./Market";
-import { closedNow, closedWords, decode, lastOf, sourcesOf, useWatchMarkets, WINDOWS, WL_ALERTS_EMPTY, type Feed, type WatchRow } from "./Watchlist";
+import { ClosedNow } from "../components/ClosedNow";
+import { closedWords, decode, lastOf, sourcesOf, useWatchMarkets, WINDOWS, WL_ALERTS_EMPTY, type Feed, type WatchRow } from "./Watchlist";
 
 /** WATCHLIST for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026): the user's own names as lines with one
  *  change (the period is picked at the top), then their results dates, alerts, headlines and research mentions.
@@ -35,7 +36,7 @@ export function WatchlistPhone({ tick }: { tick: number }) {
   const [k, setK] = useState<Key>("pct1d");
   const box = useAddBox(w.has);
   const rows = list.data?.rows ?? [], src = sourcesOf(rows);
-  const market = useWatchMarkets(tick), shut = closedNow(rows, market);   // the markets of my names that are shut, each with when it opens
+  const market = useWatchMarkets(tick);   // each name's market, for the line of those that are shut and a row's tooltip
   const alerts = feed.data?.alerts ?? [], news = feed.data?.news ?? [], research = feed.data?.research ?? [];
   // each name's next results under the day bar of its own market's day, no time of day (A-30)
   const ahead = byResultsDay(rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3), (r) => r.earningsAt, (r) => r.symbol);
@@ -59,6 +60,8 @@ export function WatchlistPhone({ tick }: { tick: number }) {
         </div>
       )}
       <Section title="My names" aux="times in SGT" card={false}>
+        {/* the markets of my names that are shut, each with when it opens: above the list (the designer's D-62) */}
+        {rows.length > 0 && <ClosedNow id="wl-opens" rows={rows.map(market)} phone />}
         <div className="mp-card">
           {rows.length ? rows.map((r) => {
             const a = asOfOf(r.asOf, r.asOfKind), c = change(r, k);
@@ -73,7 +76,6 @@ export function WatchlistPhone({ tick }: { tick: number }) {
           }) : <Empty title={w.ready && list.data ? "Your watchlist is empty" : "Loading your watchlist"}>{list.error ?? (w.ready && list.data ? "Press the star beside a name on its page, in the screener or in the results calendar, or type part of a name or of a symbol above and choose from the list." : "")}</Empty>}
         </div>
         {rows.length > 0 && <p className="mp-note" id="wl-src">{src ? `${/[,;]/.test(src) ? "Sources" : "Source"}: ${src}. ` : ""}A stock is at its last close, a market instrument at its last print; a yield's changes are in bp.</p>}
-        {shut && <p className="mp-note" id="wl-opens">{shut}.</p>}
       </Section>
       <Section title={RESULTS_AHEAD} aux="Yahoo Finance · dates only" card={false}>
         <div className="mp-card">

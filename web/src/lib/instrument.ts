@@ -151,12 +151,18 @@ export function contractLine(f: FuturesInfo | undefined, today: string = partsIn
 /** Whose word the contract is, and when it was read, under it on both layouts (the owner's P3: a named month is
  *  labelled Yahoo Finance (unofficial); the reviewer's S2): "Yahoo Finance (unofficial) · read 21 Nov 01:38 SGT". */
 export const contractSource = (f: Pick<FuturesInfo, "source" | "seenAt">): string => `${f.source.replace(/ quote:.*$/, "")}${f.seenAt ? ` · read ${fmtStamp(f.seenAt)}` : ""}`;
-/** "20 Nov 2026 · from Dec 2026, +3.00% change of contract"; "none since <date>" when the record holds none. */
-export function lastRollLine(f: FuturesInfo | undefined): string {
+/** The last change of contract on two lines, as "Contract" has them (the designer's D-64, 21 Nov 2026: one unbroken
+ *  value forced KEY DATA's value column wide, and at text L every figure in the panel lost its end): the day and the two
+ *  months, "20 Nov 2026 · Dec 2026 → Feb 2027", and under it the step, "step +3.00%, left out" (of the 1D, the σ, realised
+ *  volatility and the largest moves: the note under the panel says which). "none recorded since <date>" when the record
+ *  holds none; "step not measured" where the source gave no close of the new contract before the roll. */
+export function lastRoll(f: FuturesInfo | undefined): { main: string; sub: string | null } {
   const r = f?.lastRoll;
-  if (!r) return f?.knownFrom ? `none recorded since ${fmtDate(f.knownFrom)}` : "–";
-  return `${fmtDate(r.d)} · ${r.fromMonth ? `from ${r.fromMonth}` : "from a contract no longer listed"}${r.step != null ? `, ${fmtPct(r.step, 2)} change of contract` : ", change of contract not measured"}`;
+  if (!r) return { main: f?.knownFrom ? `none recorded since ${fmtDate(f.knownFrom)}` : "–", sub: null };
+  return { main: `${fmtDate(r.d)} · ${r.fromMonth ?? "a contract no longer listed"} \u2192 ${r.toMonth}`, sub: r.step != null ? `step ${fmtPct(r.step, 2)}, left out` : "step not measured" };
 }
+/** The two as one line, for a tooltip: "20 Nov 2026 · Dec 2026 → Feb 2027 · step +3.00%, left out". */
+export const lastRollLine = (f: FuturesInfo | undefined): string => { const r = lastRoll(f); return r.sub ? `${r.main} · ${r.sub}` : r.main; };
 /** What the series is (B's line): said under KEY DATA on both layouts. */
 export const SERIES_LINE = "A front-month series (Yahoo's =F): on a roll day it moves to the next contract, and that step is not a move.";
 /** Which figures leave the rolls out, and from when the Monitor knows them (B-27). */

@@ -31,6 +31,8 @@
 // at L, where the right column is about 400 CSS px) on every screen but EQUITIES, and a stock's two pages are guarded
 // at the other windows D-51 named: 1366x768 and 1536x864 at L, 1680x1050 at XL. EQUITIES joins at L with I-9: there
 // its breadth chart is laid over its table's figures and FLOW BY SECTOR and SCREENER scroll sideways (C/backlog.md).
+// The alert list behind the header's line is opened once at each size and measured the same way, with its box inside
+// the window (the designer's D-63, 21 Nov 2026).
 // XL text and the one-screen (COMPACT) layout join when increment I-9 fixes them (the designer's D-06 and D-21).
 // With GUARD_CLOCK set, the same guard runs with the local copy's clock at that moment (layout-guard-closed: a weekend,
 // when each closed market's line carries when it opens).
@@ -54,7 +56,9 @@ const SIZES = [
   { code: "P1", label: "iPhone SE", ctx: { ...devices["iPhone SE (3rd gen)"] }, phone: true },
   { code: "P2", label: "iPhone 13", ctx: { ...devices["iPhone 13"] }, phone: true },
   // D-51's other windows, on a stock's page only: its right column is 380 to 430 CSS px there
-  ...[[1366, 768, "L"], [1536, 864, "L"], [1680, 1050, "XL"]].map(([w, h, size]) => ({ code: `${w}${size}`, label: `${w}x${h}, text ${size}`, ctx: { viewport: { width: w, height: h } }, prefs: { size, compact: false, v: 2 }, screens: ["asset/7203.T", "asset/NVDA"] })),
+  // (and a future's page with a recorded change of contract: the designer's D-64, 21 Nov 2026: gold's KEY DATA scrolled
+  // sideways at 1440x900 and 1536x864 at L and cut every figure)
+  ...[[1366, 768, "L"], [1536, 864, "L"], [1680, 1050, "XL"]].map(([w, h, size]) => ({ code: `${w}${size}`, label: `${w}x${h}, text ${size}`, ctx: { viewport: { width: w, height: h } }, prefs: { size, compact: false, v: 2 }, screens: ["asset/7203.T", "asset/NVDA", "asset/GC%3DF"] })),
 ];
 // what scrolls sideways by design on a phone: the statements under their fixed line names, the wide phone tables, and
 // MARKETS' row of σ cards (the designer's I-6 note: one row that moves sideways with snap, the third card cut at the edge)
@@ -303,6 +307,18 @@ const span = (s) => (s.shown.length ? `${s.shown[0]}–${s.shown[s.shown.length 
         for (const t of m.taps.filter((q) => q.known >= 0)) knownSeen.set(t.known, (knownSeen.get(t.known) ?? 0) + 1);
         ck(`#${h}: every one of ${m.targets} tap targets is 44 x 44 px or more, measured on what takes the tap${m.taps.length - unknown.length ? ` (${m.taps.length - unknown.length} on the designer's list, below)` : ""}`, unknown.length === 0, unknown.slice(0, 12));
       }
+    }
+    // The alert list behind the header's line, opened once at each size (the designer's D-63, 21 Nov 2026: on a phone
+    // every line was cut at the box's edge, on a computer the kind and the figure lay outside the box, and at the
+    // larger text sizes the box reached past the window). The guard's own measure with the list open, and the box
+    // inside the window. In the guard's own run only: a run of other screens (GUARD_SCREENS) leaves it out.
+    if (!ONLY) {
+      await p.goto(MOCK + "#market", { waitUntil: "networkidle" }); await settle(p);
+      await p.locator("#alerts .alrt").click(); await p.waitForSelector(".aldrop [data-kind]"); await settle(p);
+      const m = await measure(p, !!s.phone), x = problems(m, !!s.phone, null);
+      const box = await p.evaluate(() => { const d = document.querySelector(".aldrop"), r = d.getBoundingClientRect(), W = document.documentElement.clientWidth; return { n: d.querySelectorAll("[data-kind]").length, sx: d.scrollWidth - d.clientWidth, left: Math.round(r.left), right: Math.round(r.right), W, out: [...d.querySelectorAll(".al-t,.al-msg,.al-kind,.al-fig,.al-note,.alnote")].filter((c) => { const q = c.getBoundingClientRect(); return q.width > 0 && (q.left < r.left - 0.5 || q.right > r.right + 0.5); }).length }; });
+      ck(`the alert list, open (${box.n} alerts): no figure cut, nothing sideways, the box inside the window (${box.left}–${box.right} of ${box.W}) and every row's time, message, kind and figure inside the box`, clean(x) && box.n > 0 && box.sx <= 1 && box.left >= 0 && box.right <= box.W + 0.5 && box.out === 0, { ...x, box });
+      if (s.phone) { const unknown = m.taps.filter((t) => t.known < 0); ck(`the alert list, open: every tap target is 44 x 44 px or more (${m.targets} measured)`, unknown.length === 0, unknown.slice(0, 12)); }
     }
     ck("no page errors", errs.length === 0, errs); await ctx.close();
   }

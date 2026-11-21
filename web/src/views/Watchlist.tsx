@@ -14,7 +14,8 @@ import { asOfCell, asOfOf, asOfTitle, fmtDate, fmtWhen, type AsOfKind } from "..
 import { byResultsDay, fmtResultsDate, RESULTS_SOURCE, resultsMark, resultsStatus, resultsTip } from "../lib/results";
 import { classLabel, hitLine, MKT_CAP, NEXT_RESULTS, RESULTS_AHEAD, VS_200D, VS_50D } from "../lib/labels";
 import { cellBp, changeShade, RANGE_52W, RANGE_52W_TIP } from "./Market";
-import { marketSession, readInNewYork, shutLine, shutMarkets, symbolMarket } from "../lib/opens";
+import { marketSession, panelRowOf, symbolMarket, type PanelRow } from "../lib/opens";
+import { ClosedNow } from "../components/ClosedNow";
 import type { TableRow } from "../lib/types";
 
 /** A row of the watch_list route. Since 19 Nov 2026 a market instrument's row also carries the change of its level
@@ -61,21 +62,19 @@ export const decode = (t: string) => t.replace(/&amp;/g, "&").replace(/&#x([0-9a
 /** How many alerts and headlines WATCHLIST shows before "SHOW n MORE" (D-48: at the feed's own lengths, 40 alerts
  *  and 60 headlines, the results dates fell two screens down). */
 export const WL_ALERTS = 10, WL_NEWS = 15;
-/** The market whose hours a watchlist row keeps: a Monitor instrument's as the market table has it; otherwise the
- *  one its symbol gives (a stock's exchange, the FX week for a pair). Null for an official yield, which has no
- *  session, for an instrument that is only read in New York's hours (the dollar index, the Cboe yields, VIX: New
- *  York's exchange is not their market, lib/opens.ts readInNewYork), and where the Monitor keeps no hours. */
-export function useWatchMarkets(tick: number): (r: WatchRow) => string | null {
+/** What a watchlist row gives the "Closed now" line (lib/opens.ts closedLine): a Monitor instrument as the market
+ *  table has it (its market; nothing for an official yield, which has no session; its short name where the Monitor
+ *  only reads it in New York's hours: the dollar index, the Cboe yields, VIX); any other name the market its symbol
+ *  gives (a stock's exchange, the FX week for a pair), or nothing where the Monitor keeps no hours. */
+export function useWatchMarkets(tick: number): (r: WatchRow) => PanelRow {
   // the table names each instrument's market; it changes with the instruments list, so half-hourly is plenty
   const table = useApi<{ rows: TableRow[] }>("table", undefined, Math.floor(tick / 30));
-  const by = new Map((table.data?.rows ?? []).map((t) => [t.symbol, readInNewYork(t) ? "" : (t.market as string)]));
-  return (r) => (r.asOfKind === "published" ? null : by.has(r.symbol) ? by.get(r.symbol) || null : symbolMarket(r.symbol));
+  // (whether a row read in New York's hours is being read now is New York's session's to say: this copy of the table can be half an hour old)
+  const by = new Map((table.data?.rows ?? []).map((t): [string, PanelRow] => { const p = panelRowOf(t); return [t.symbol, p.read ? { read: p.read } : p]; }));
+  return (r) => (r.asOfKind === "published" ? {} : by.get(r.symbol) ?? { market: symbolMarket(r.symbol) });
 }
-/** WATCHLIST's line for the markets of its names that are shut now, each with when it opens (lib/opens.ts): "Closed
- *  now: New York opens 23 Nov 22:30 SGT · Tokyo opens 24 Nov 08:00 SGT". Empty when none is shut. */
-export const closedNow = (rows: WatchRow[], market: (r: WatchRow) => string | null): string => { const shut = shutMarkets(rows.map(market).filter((m): m is string => !!m)); return shut.length ? `Closed now: ${shutLine(shut)}` : ""; };
 /** The same for one row's tooltip: " · market closed · opens 23 Nov 22:30 SGT", or nothing. */
-export const closedWords = (m: string | null): string => { const s = m ? marketSession(m) : null; return s && s.now === "closed" ? ` · market closed${s.note ? ` · ${s.note.text}` : ""}` : ""; };
+export const closedWords = (row: PanelRow): string => { const m = row.read ? null : row.market, s = m ? marketSession(m) : null; return s && s.now === "closed" ? ` · market closed${s.note ? ` · ${s.note.text}` : ""}` : ""; };
 /** What ALERTS ON MY NAMES holds, said where it has nothing yet (both layouts). */
 export const WL_ALERTS_EMPTY = "Moves beyond ±5% (large companies) or ±7%, index moves beyond ±3%, σ moves from 2.5σ, buybacks, guidance changes and large deals on your names appear here.";
 export function WatchlistView({ tick }: { tick: number }) {
@@ -108,7 +107,7 @@ export function WatchlistView({ tick }: { tick: number }) {
   const name = (s: string) => rows.find((r) => r.symbol === s)?.name ?? s;
   const how = "Press the star beside a name on its own page, in the screener or in the results calendar, or type part of a name or of a symbol above (toyota, nvid, 7203, ^N225) and choose from the list.";
   const sources = sourcesOf(rows);
-  const market = useWatchMarkets(tick), shut = closedNow(rows, market);
+  const market = useWatchMarkets(tick);
   return (
     <>
       <Panel no="01" title="MY NAMES" span={12} k="wl" aux={<>{rows.length} name{rows.length === 1 ? "" : "s"}{sources ? ` · ${sources}` : ""} · times in SGT</>}>
@@ -136,6 +135,9 @@ export function WatchlistView({ tick }: { tick: number }) {
           <span className="chip-sm" onClick={() => void box.submit()}>ADD</span>
           {box.msg && <span id="wl-msg" className={box.msg.kind === "err" ? "warn" : "mut"}>{box.msg.text}</span>}
         </div>
+        {/* the markets of my names that are shut, each with when it opens, in SGT (the owner's request of 20 Nov 2026):
+            above the table, as on MARKETS and RATES & FX (the designer's D-62) */}
+        {rows.length > 0 && <ClosedNow id="wl-opens" rows={rows.map(market)} />}
         {rows.length ? (
           <table className="secT wlT">
             <thead><tr><th /><th className="l">Name</th><th className="l">Sector / kind</th><th>Last</th><th className="l asof" title="What the row's figures are as of, in SGT: the date of a close or of an official yield's publication, the time of today's last print">As of</th><th>1D</th><th>1W</th><th>1M</th><th>3M</th><th>12M</th><th title="% for prices, bp for yields">{VS_50D}</th><th title="% for prices, bp for yields">{VS_200D}</th><th title={RANGE_52W_TIP}>{RANGE_52W}</th><th>{MKT_CAP}</th><th className="l" title={`The company's next results date as ${RESULTS_SOURCE} gives it: the day in the company's own market (Tokyo, New York …), without a time of day, as the source does not state the release time; est. = estimated, not confirmed by the company`}>{NEXT_RESULTS}</th></tr></thead>
@@ -159,8 +161,6 @@ export function WatchlistView({ tick }: { tick: number }) {
             })}</tbody>
           </table>
         ) : <Empty title={w.ready && list.data ? "Your watchlist is empty" : "Loading your watchlist"}>{list.error ?? (w.ready && list.data ? how : "")}</Empty>}
-        {/* the markets of my names that are shut, each with when it opens, in SGT (the owner's request of 20 Nov 2026) */}
-        {shut && <div className="mut finnote" id="wl-opens">{shut}</div>}
       </Panel>
       {/* MY NAMES takes the full width (it gained the AS OF column); below it the two-column page (the designer's
           §3.4 and §4.5): results ahead over alerts on the left, headlines over research on the right, each column

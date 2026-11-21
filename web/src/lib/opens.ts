@@ -19,6 +19,7 @@
 import { calendarState, EARLY_CLOSES, HOLIDAY_SOURCES, holidaysNow, marketOf, marketStatus, nextOpen, openSince, stockMarket, type HolidayMap, type Market, type MarketId, type NextOpen } from "./sessions";
 import { fmtClock, fmtDate, fmtDayTime, fmtStamp, fmtWhen, isOfficialRow, TZ_ABBR } from "./time";
 import { delayed } from "./labels";
+import { shortName } from "./short";
 
 /** What the session table says of a market now: shut, in its timetable's hours, or not known to it (no such market in
  *  the table, one that never closes, one whose calendar has not arrived yet, or an instrument that is only read in
@@ -41,6 +42,9 @@ export interface SessionNote {
   /** The moment the line names: the next open, the session's start, the first print's due time, the next read. */
   at: Date;
   market: Market;
+  /** For "opens": why the market is shut now, where the Monitor knows a reason beyond its hours: a holiday in the
+   *  calendar it holds, its midday (or daily) break, an early close today. */
+  why?: "holiday" | "break" | "early";
 }
 export interface RowSession { now: SessionNow; note: SessionNote | null }
 /** The holiday calendar a reading is made with: the days, and whether it has come ("wait": asked for or not yet,
@@ -79,7 +83,7 @@ function opensNote(m: Market, n: NextOpen, now: Date, cal: Cal): SessionNote {
     : n.why === "early" && early != null ? `Closed early today, at ${hhmm(early)} ${zone(m)} (${calendarOf(m)}). ` : "";
   const skipped = later.length ? `${later.map((d) => fmtDate(d)).join(", ")}: ${later.length === 1 ? "a holiday" : "holidays"} in ${calendarOf(m)}. ` : "";
   return {
-    kind: "opens", at: n.at, market: m, scheduled: !n.firm,
+    kind: "opens", at: n.at, market: m, scheduled: !n.firm, ...(n.why === "hours" || (n.why === "early" && early == null) ? {} : { why: n.why }),
     text: `opens ${when(n.at, now)}${n.firm ? "" : ", scheduled"}`,
     tip: `${trades(m)}. ${why}${skipped}${n.firm ? "Next opens" : "Scheduled to open"} ${fmtStamp(n.at)}. ${calendarWords(m, n.firm, "the market stays shut", cal)}`,
   };
@@ -194,7 +198,51 @@ export function symbolMarket(symbol: string): MarketId | null {
   return stockMarket(symbol);
 }
 
-// ---- a list of names (WATCHLIST): one line for the markets that are shut ----
+// ---- a panel's rows: one line for the markets that are shut (the designer's D-62, 21 Nov 2026; A-41, B-35) ----
+// "Closed now: New York opens 22:30 SGT · Seoul opens 23 Nov 08:00 SGT, scheduled · Hong Kong and Shanghai open 23 Nov
+// 09:30 SGT, scheduled · Tokyo (holiday) opens 24 Nov 08:00 SGT · next read 22:30 SGT: VIX, DXY, UST 10Y": above the
+// table on MARKETS, RATES & FX's FX and WATCHLIST's MY NAMES, in both computer layouts, and above a phone's WATCHLIST
+// list. The markets are those of the panel's own rows, the soonest to open first; markets that open at the same moment
+// share one entry; where the Monitor knows why a market is shut beyond its hours (a holiday in the calendar it holds,
+// its break, an early close today) the reason stands in brackets. The rows the Monitor only reads in New York's hours
+// (lib readInNewYork) end the line while New York is shut. Nothing when no market of the rows is shut.
+/** What a row gives the line: its market by the session table (null: none kept), or that it is only read in New York's
+ *  hours (`read`: its short name; `live`: it is being read now). */
+export interface PanelRow { market?: string | null; read?: string | null; live?: boolean }
+/** One entry of the line: the markets that open at the same moment, for the same reason. */
+export interface ShutEntry {
+  names: string[]; why: string | null; when: string; at: Date; scheduled: boolean; tip: string;
+  /** The markets ("Hong Kong and Shanghai"), what follows them (" (holiday) opens 24 Nov 08:00 SGT"), and the two together. */
+  label: string; rest: string; text: string;
+}
+export interface ClosedLine { entries: ShutEntry[]; read: { lead: string; names: string[]; text: string; tip: string } | null }
+/** The reason in the line's brackets: "holiday", "midday break" ("daily break" for Globex), "early close". */
+export const whyWord = (n: Pick<SessionNote, "why" | "market">): string | null => (n.why === "holiday" ? "holiday" : n.why === "break" ? (n.market.id === "CME" ? "daily break" : "midday break") : n.why === "early" ? "early close" : null);
+const listed = (xs: string[]): string => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
+/** The line of a panel's rows, or null when none of their markets is shut. */
+export function closedLine(rows: PanelRow[], now: Date = new Date(), cal: Cal = calNow()): ClosedLine | null {
+  const shut = shutMarkets(rows.filter((r) => !r.read).map((r) => r.market), now, cal);
+  if (!shut.length) return null;
+  const entries: ShutEntry[] = [];
+  for (const n of shut) {
+    const why = whyWord(n), when2 = n.text.replace(/^opens /, "");
+    const e = entries.find((x) => x.at.getTime() === n.at.getTime() && x.scheduled === n.scheduled && x.why === why);
+    if (e) { e.names.push(n.market.name); e.tip = `${e.tip}\n${n.tip}`; }
+    else entries.push({ names: [n.market.name], why, when: when2, label: "", rest: "", text: "", tip: n.tip, at: n.at, scheduled: n.scheduled });
+  }
+  for (const e of entries) { e.label = listed(e.names); e.rest = `${e.why ? ` (${e.why})` : ""} ${e.names.length > 1 ? "open" : "opens"} ${e.when}`; e.text = e.label + e.rest; }
+  // the rows read in New York's hours, while New York is shut and none of them is being read
+  const names = [...new Set(rows.filter((r) => r.read && !r.live).map((r) => r.read!))], ny = names.length ? marketSession("NYSE", now, cal) : null;
+  const rd = ny && ny.now === "closed" && ny.note ? readNote(ny.note, now) : null;
+  return { entries, read: rd ? { lead: `${rd.text}: `, names, text: `${rd.text}: ${names.join(", ")}`, tip: rd.tip } : null };
+}
+/** A market-table row for the line: nothing for an official yield (it has no session); a row the Monitor only reads in
+ *  New York's hours by its short name; any other by its market. */
+export const panelRowOf = (r: SessionRow & { symbol: string; name: string }): PanelRow => (isOfficialRow(r) ? {} : readInNewYork(r) ? { read: shortName(r.symbol, r.name), live: r.live } : { market: r.market });
+/** The line as text: "Closed now: New York opens 22:30 SGT · … · next read 22:30 SGT: VIX, DXY, UST 10Y". */
+export const closedLineText = (c: ClosedLine): string => `Closed now: ${[...c.entries.map((e) => e.text), ...(c.read ? [c.read.text] : [])].join(" · ")}`;
+
+// ---- a list of markets: each that is shut, with when it opens ----
 /** The markets among `ids` that are shut now, each with when it opens, the soonest first. */
 export function shutMarkets(ids: Array<string | null | undefined>, now: Date = new Date(), cal: Cal = calNow()): SessionNote[] {
   const out: SessionNote[] = [];
