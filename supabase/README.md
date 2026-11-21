@@ -136,6 +136,22 @@ is kept).
   yield once its day is booked, against `sd63x`) and sends `z1d`, `sd1d`, `zFrom`, `zTo`, `zN` (`zN`, the changes counted,
   also where they are too few for a σ: the page says how many). The rule is written once
   in `_shared/sigma.ts`; `sim/sql/sigma.test.cjs` checks the database's figures against it.
+- **The last session** (B-32, 2026-11-21; no migration, no new source). Each row of the table also carries `ls`, the
+  instrument's newest completed day: the change between its two newest booked closes (`fn_table_anchors`' `last_d` and
+  the close before it) over `sd63x`, the σ of the 63 daily changes that end at the earlier of the two, so the change is
+  never in its own yardstick (`lastSession` in `_shared/sigma.ts`). It holds the session's date, both closes, the
+  change in % or bp, the σ with its window and count, and on a future's roll day the change within the new contract
+  (`fut_rolls.prev_close`); where that close is not known the change is the series' own and there is no σ. A σ is
+  given only when the window the database returns ends at the earlier close. The page reads `ls` for MOVERS IN σ's
+  LAST SESSION, for the line under a currency's figure in its day's first three hours, and as the sign that the
+  server can say which day a figure is of; a page from before ignores it.
+- **The mark of a results date** (A-37, 2026-11-21). `earningsOf` in `_shared/yahoo.ts` passes Yahoo's
+  `isEarningsDateEstimate` as given: true, false, or none where Yahoo sends none. Until then it wrote false
+  ("confirmed") by a rule of its own whenever the date it kept was `earningsTimestamp` and `earningsTimestampStart`
+  was another value or absent. A stock's page and a watchlist name outside the indices are read at the request and
+  follow at once; an index member's stored mark (`constituent_stats.earnings_est`) is rewritten by that list's next
+  quote run (`daily?job=flow`, `mflow` or `stats`: on weekdays, in each market's hours), so a mark stored before the
+  deploy can stay until that market's next session.
 - **σ alerts** (`alerts.kind` 'sigma', with `sigma` and `note`): the tick scans the table every minute
   (`scanSigmaAlerts`) for every currency, yield, commodity, volatility index, future and coin at 2σ or beyond; one row
   per instrument and session (a currency pair's FX day; a future's CME trade date, so an evening's move from 18:00 New

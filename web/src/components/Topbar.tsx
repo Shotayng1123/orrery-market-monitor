@@ -85,7 +85,7 @@ export function Topbar(p: TopbarProps) {
         <Help />
         {p.canPreview && !p.pv2 && <span id="pv2-on" className="chip-sm" title="The layout made for phones. Only this browser changes; switch back from its menu" onClick={() => setPhoneV2(true)}>NEW LAYOUT</span>}
         {p.pv2 && <span id="ntf-ctl" className="chip-sm" title="Alerts as notifications on this phone" onClick={() => { setMenu(false); openNotify(); }}>NOTIFICATIONS</span>}
-        {p.pv2 && !inst.installed && <span id="a2hs" className="chip-sm" title="How to put the Monitor on this phone's home screen, where it opens full screen like an app" onClick={() => { askInstallHint(); setMenu(false); window.scrollTo(0, 0); }}>ADD TO HOME SCREEN</span>}
+        {p.pv2 && !inst.installed && <span id="a2hs" className="chip-sm" title="How to put the Monitor on this phone's home screen, where it opens full screen like an app" onClick={() => { setMenu(false); askInstallHint(); }}>ADD TO HOME SCREEN</span>}
         {p.pv2 && <span id="pv2-off" className="chip-sm" title="Back to the earlier layout, on this browser only; NEW LAYOUT in its header returns" onClick={() => setPhoneV2(false)}>CLASSIC LAYOUT</span>}
         <Pick<SizeKey> id="sz-ctl" label="Text size" value={p.prefs.size} options={SIZES.map((s) => s.k)} onChange={(k) => p.onPrefs({ ...p.prefs, size: k })} title="Text size. AUTO scales the text and layout to this window; S, M, L and XL fix the size" />
         <span id="cmp-ctl" className={`chip-sm${p.prefs.compact ? " on" : ""}`} title="Terminal layout: one screen per tab, sized to the window" onClick={() => p.onPrefs({ ...p.prefs, compact: !p.prefs.compact })}>COMPACT</span>

@@ -5,7 +5,9 @@
 //     16:00 in New York, already the next day in Singapore), each with its mark and the source: a Tokyo company's
 //     "est. (Yahoo Finance)" whatever Yahoo marks, until JPX's own calendar is read (A-30; the reviewer's S5), a US
 //     company's as Yahoo marks it;
-//   - WATCHLIST: MY NAMES' Next results, RESULTS AHEAD (computer) and Results ahead under its days' bars (phone);
+//   - WATCHLIST: MY NAMES' Next results, RESULTS AHEAD (computer) and Results ahead under its days' bars (phone); MY
+//     NAMES carries the same marks as RESULTS AHEAD (A's A-37, 21 Nov 2026): "conf." for a date Yahoo marks confirmed
+//     (the stand-in AAPL, added to the list here), a dash where it gives no mark (the stand-in AVGO), "est." otherwise;
 //   - NEWS › Results calendar: every company under the bar of its own market's day, its mark where the time was, a
 //     mark the source does not give as a dash, and no time of day anywhere; from a server before 20 Nov 2026, which sent a
 //     missing mark as false, no "conf." at all (the reviewer's F4).
@@ -18,9 +20,9 @@ const MOCK = "http://localhost:5179/orrery-market-monitor/", STANDIN = "http://l
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d)}`); };
 const AUTO = { size: "AUTO", compact: false, v: 2 };
 const DESK = { viewport: { width: 1440, height: 900 } }, PHONE = devices["iPhone 13"];
-async function page(b, opts) {
+async function page(b, opts, watch) {
   const ctx = await b.newContext({ ...opts, deviceScaleFactor: 1 });
-  await ctx.addInitScript((pr) => { try { localStorage.setItem("om_prefs", JSON.stringify(pr)); localStorage.setItem("om_a2hs_hide", "1"); } catch {} }, AUTO);
+  await ctx.addInitScript(([pr, wl]) => { try { localStorage.setItem("om_prefs", JSON.stringify(pr)); localStorage.setItem("om_a2hs_hide", "1"); if (wl) localStorage.setItem("om_mock_watch", JSON.stringify(wl.map((symbol) => ({ symbol, name: null })))); } catch {} }, [AUTO, watch || null]);
   const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message)); return { ctx, p, errs };
 }
 const go = async (p, base, hash, sel) => { await p.goto(base + hash, { waitUntil: "networkidle" }); if (sel) await p.waitForSelector(sel); await p.evaluate(() => document.fonts.ready); await p.addStyleTag({ content: "#mockbar{display:none!important}" }); await p.waitForTimeout(500); };
@@ -52,9 +54,12 @@ const mockAnswer = (p, action, params) => p.evaluate(async ([a, q]) => { const {
       await ctx.close(); }
 
     console.log(`\n[WATCHLIST, ${dev}]`);
-    { const { ctx, p, errs } = await page(b, opts);
+    { // the stand-in list and AAPL, whose stand-in date Yahoo marks confirmed (A-37's done-when: "I add AAPL")
+      const { ctx, p, errs } = await page(b, opts, [...S.watch.start, "AAPL"]);
       await go(p, MOCK, "#watch", phone ? ".mp-sec .ev-row" : '.panel[data-k="wl-earn"] tr');
       const rows = (await mockAnswer(p, "watch_list")).rows.filter((r) => r.earningsAt);
+      const short = (est) => (est === true ? "est." : est === false ? "conf." : "–");
+      ck(`the stand-in list holds the three marks Yahoo can give a US company's date: AAPL confirmed (${rows.find((r) => r.symbol === "AAPL")?.earningsEst}), NVDA an estimate (${rows.find((r) => r.symbol === "NVDA")?.earningsEst}), AVGO none (${rows.find((r) => r.symbol === "AVGO")?.earningsEst})`, rows.find((r) => r.symbol === "AAPL")?.earningsEst === false && rows.find((r) => r.symbol === "NVDA")?.earningsEst === true && rows.some((r) => r.symbol === "AVGO" && r.earningsEst === null), rows.map((r) => [r.symbol, r.earningsEst]));
       const want = rows.map((r) => ({ sym: r.symbol, name: r.name, est: markOf(r.symbol, r.earningsEst), ...dayIn(r.earningsAt, TZ(r.symbol)) })).sort((a, c) => a.ymd.localeCompare(c.ymd, "en", { numeric: true }));
       if (!phone) {
         const v = await p.evaluate(() => {
@@ -63,8 +68,12 @@ const mockAnswer = (p, action, params) => p.evaluate(async ([a, q]) => { const {
           const pn = document.querySelector('.panel[data-k="wl-earn"]');
           return { my, headTip: document.querySelectorAll("table.wlT thead th")[ni]?.getAttribute("title") ?? "", aux: pn.querySelector(".phead .aux").textContent, ahead: [...pn.querySelectorAll("tbody tr")].map((tr) => [...tr.cells].map((c) => c.textContent)), body: pn.querySelector("table")?.textContent ?? "" };
         });
-        const myOk = want.every((w) => v.my.find((m) => m.sym === w.sym)?.cell === `${w.date}${w.est ? " est." : ""}`);
-        ck(`MY NAMES' Next results: each name on its own market's day (${want.map((w) => `${w.sym} ${w.date}${w.est ? " est." : ""}`).join(", ")}), no time of day; the header says whose day and why`, myOk && v.my.every((m) => !CLOCK.test(m.cell)) && /the day in the company's own market/.test(v.headTip) && /does not state the release time/.test(v.headTip), { my: v.my, want });
+        const myOk = want.every((w) => v.my.find((m) => m.sym === w.sym)?.cell === `${w.date} ${short(w.est)}`);
+        ck(`MY NAMES' Next results: each name on its own market's day with its mark (${want.map((w) => `${w.sym} ${w.date} ${short(w.est)}`).join(", ")}), no time of day; the header says whose day and why, and what the marks are`, myOk && v.my.every((m) => !CLOCK.test(m.cell)) && /the day in the company's own market/.test(v.headTip) && /does not state the release time/.test(v.headTip) && /conf\. or est\. as Yahoo marks the date/.test(v.headTip) && /a dash where the source gives no mark/.test(v.headTip), { my: v.my, want });
+        // A-37: a confirmed date and one the source does not mark no longer read alike, and MY NAMES agrees with RESULTS AHEAD
+        const cellOf = (sym) => v.my.find((m) => m.sym === sym)?.cell ?? null, aheadOf = (sym) => v.ahead.find((r) => r[1] === rows.find((x) => x.symbol === sym)?.name)?.[2] ?? null;
+        ck(`AAPL, which Yahoo marks confirmed: MY NAMES reads "${cellOf("AAPL")}" as RESULTS AHEAD reads "${aheadOf("AAPL")}"; AVGO, which Yahoo does not mark: "${cellOf("AVGO")}" and "${aheadOf("AVGO")}"; NVDA, an estimate: "${cellOf("NVDA")}" and "${aheadOf("NVDA")}"`, /^\d{1,2} [A-Z][a-z]{2} \d{4} conf\.$/.test(cellOf("AAPL") ?? "") && aheadOf("AAPL") === "confirmed" && /^\d{1,2} [A-Z][a-z]{2} \d{4} –$/.test(cellOf("AVGO") ?? "") && aheadOf("AVGO") === "–" && /^\d{1,2} [A-Z][a-z]{2} \d{4} est\.$/.test(cellOf("NVDA") ?? "") && aheadOf("NVDA") === "est.", { my: v.my, ahead: v.ahead });
+        ck(`a name without a results date keeps one dash, no mark (${v.my.filter((m) => m.cell === "–").length} of ${v.my.length})`, v.my.filter((m) => m.cell === "–").length === v.my.length - want.length && v.my.length === S.watch.start.length + 1, v.my);
         ck(`RESULTS AHEAD: "${v.aux}"; ${v.ahead.length} names in the order of their days, each its date and its mark, no time of day`, v.aux === "my names · Yahoo Finance · dates only" && v.ahead.length === want.length && v.ahead.every((r, i) => r[0] === want[i].date && r[1] === want[i].name && r[2] === (want[i].est === true ? "est." : want[i].est === false ? "confirmed" : "–")) && want.some((w) => TZ(w.sym) === "Asia/Tokyo") && !CLOCK.test(v.body), { ahead: v.ahead, want });
       } else {
         const v = await p.evaluate(() => { const s = [...document.querySelectorAll(".mp-sec")].find((x) => x.querySelector("h2 span").textContent === "Results ahead");
@@ -72,6 +81,8 @@ const mockAnswer = (p, action, params) => p.evaluate(async ([a, q]) => { const {
           return { aux: s.querySelector("h2 .aux").textContent, rows: out, note: s.querySelector("#wl-results-note")?.textContent ?? "", text: s.textContent }; });
         ck(`Results ahead ("${v.aux}"): each name under the bar of its own market's day (${v.rows.map((r) => `${r.bar}: ${r.t} ${r.n}`).join("; ")}), conf. or est. where the time was`, v.aux === "Yahoo Finance · dates only" && v.rows.length === want.length && v.rows.every((r, i) => r.bar === want[i].bar && r.n === want[i].name && r.t === (want[i].est === true ? "est." : want[i].est === false ? "conf." : "–")) && !CLOCK.test(v.text), { v, want });
         ck(`its note: "${v.note}"`, /^Yahoo Finance · each company's day in its own market · no time of day: the source states no release time/.test(v.note), v.note);
+        const markOn = (sym) => v.rows.find((r) => r.n === rows.find((x) => x.symbol === sym)?.name)?.t ?? null;
+        ck(`A-37 on the phone: AAPL "${markOn("AAPL")}", AVGO "${markOn("AVGO")}", NVDA "${markOn("NVDA")}"`, markOn("AAPL") === "conf." && markOn("AVGO") === "–" && markOn("NVDA") === "est.", v.rows);
       }
       ck("no page errors", errs.length === 0, errs);
       await ctx.close(); }

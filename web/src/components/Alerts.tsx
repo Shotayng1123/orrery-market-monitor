@@ -65,9 +65,13 @@ export function Alerts({ tick, phone = false }: { tick: number; phone?: boolean 
   // it is ("intraday", "at close", "1D": lib/alertline.ts), from the server's own words. A news alert shows its kind
   // and its company; one that names no company with a page here shows the first words of its headline in the name's
   // place and the publisher it came from, so a publisher never reads as a party to the news (R2A-05). The sentence is
-  // in the tooltip and the list. The phone's header shows the whole message under the label (tokens.css, body.pv2),
-  // so it keeps it as the second item.
+  // in the tooltip and the list (`.msg` is kept in the page for both layouts and shown by neither).
   const word = latest ? alertFigWord(latest) : null, orphan = !!latest && isNews(latest) && !hasPage(latest);
+  // A phone's line is one line of 40 px (the designer's D-14 and note (b) of 21 Nov 2026): the same parts, without the
+  // word after the figure and without a publisher (the stylesheet's: tokens.css, body.pv2), and with no line at all
+  // when there is no alert (a new server, or none raised yet): "no excessive moves" took the height of a list row.
+  // While the answer is on its way the line says so, and "unavailable" when it does not come.
+  if (phone && a.data && !rows.length) return null;
   return (
     <div id="alerts" ref={box}>
       <span className={`alrt${latest ? (lit ? " new" : fresh ? " fresh" : "") : " none"}`} onClick={toggle} title={latest ? `${latest.msg}${isNews(latest) && latest.market ? ` (${latest.market})` : ""}${isSigma(latest) && latest.note ? ` · ${latest.note}` : ""} · ${fmtStamp(latest.at)}\n\n${RULES}` : RULES}>
@@ -83,7 +87,7 @@ export function Alerts({ tick, phone = false }: { tick: number; phone?: boolean 
             {orphan && latest.market && <span className="src">via {latest.market}</span>}
           </span>
           <span className="t">{fmtWhen(latest.at)}</span>
-        </> : <span className="mut">{a.error ? "unavailable" : "no excessive moves"}</span>}
+        </> : <span className="mut">{phone ? (a.error ? "· unavailable" : "· loading…") : a.error ? "unavailable" : "no excessive moves"}</span>}
       </span>
       {/* The list (the designer's D-63, 21 Nov 2026; B-34). It was a table whose cells did not wrap in a box that scrolled
           sideways: on a phone every message was cut at the box's edge and a σ move's source was off the screen; on a

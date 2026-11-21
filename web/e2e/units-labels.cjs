@@ -85,13 +85,19 @@ async function tnxBoth(p) {
     const { ctx, p, errs } = await page(b, { ...devices[dev] });
     await p.goto(MOCK + "#market", { waitUntil: "networkidle" }); await p.waitForSelector(".mp-row"); await p.evaluate(() => document.querySelector("#mockbar")?.style.setProperty("display", "none"));
     let ps = await pills(p.locator(".mp-chg"));
-    ck(`MARKETS: all ${ps.length} pills say "1D" under the figure, at ${Math.min(...ps.map((x) => x.px))}px or more, nothing cut`, ps.length >= 15 && ps.every((x) => x.w === "1D" && !x.cut && x.px >= 11), ps.filter((x) => x.w !== "1D" || x.cut).slice(0, 3));
+    // Since 21 Nov 2026 (B-32) a line whose figure is not of today in Singapore names its day there in place of "1D"
+    // ("20 Nov": a yield published a day late, a market shut since an earlier day); a live line is today's and says
+    // "1D". Which lines carry a day turns on the machine's day here, so the rule is checked, not a count.
+    const live = await p.evaluate(() => [...document.querySelectorAll(".mp-row.inst")].filter((r) => r.querySelector(".mp-st .live, .mp-st .delay")).map((r) => ({ n: r.querySelector(".n").textContent, w: r.querySelector(".mp-chg .w").textContent })));
+    const DAY = /^\d{1,2} [A-Z][a-z]{2}$/, days = ps.filter((x) => x.w !== "1D");
+    ck(`MARKETS: all ${ps.length} pills say their window or their day under the figure ("1D" on ${ps.length - days.length}, the day of a figure that is not today's on ${days.length}${days[0] ? `: "${days[0].w}"` : ""}), every live line "1D" (${live.length}), at ${Math.min(...ps.map((x) => x.px))}px or more, nothing cut`, ps.length >= 15 && ps.every((x) => (x.w === "1D" || DAY.test(x.w ?? "")) && !x.cut && x.px >= 11) && live.length >= 5 && live.every((x) => x.w === "1D"), { odd: ps.filter((x) => !(x.w === "1D" || DAY.test(x.w ?? "")) || x.cut).slice(0, 3), live: live.filter((x) => x.w !== "1D") });
     await p.locator(".mp-head .pick select").selectOption("1W"); await p.waitForTimeout(300); ps = await pills(p.locator(".mp-chg"));
     const ust = await p.locator(".mp-row", { hasText: "UST 10Y" }).first().locator(".mp-chg .fig").textContent();
     ck(`Period -> 1W: every pill now says "1W"; UST 10Y's in bp (${ust})`, ps.every((x) => x.w === "1W") && /bp$/.test(ust), ps.filter((x) => x.w !== "1W").slice(0, 3));
     await p.locator(".mp-row", { hasText: "UST 10Y" }).first().tap(); await p.waitForSelector(".mp-item.open .mp-grid");
     const tiles = await p.evaluate(() => [...document.querySelectorAll(".mp-item.open .mp-grid")].pop().innerText.split("\n").filter(Boolean));
-    ck(`the opened line's statistics, 1D in σ first (I-6): ${tiles.join(" · ")}`, tiles[0] === "1D in σ" && /^[+-]?\d+\.\dσ$|^–$/.test(tiles[1]) && tiles[2] === "σ vs 1M avg" && /^[+-]?\d+\.\dσ$|^–$/.test(tiles[3]) && tiles[4] === "52W range" && /^\d{1,3}%$/.test(tiles[5]) && tiles[6] === "vs 200D" && /bp$/.test(tiles[7]), tiles);
+    // under the 1D in σ, the last session's with its date (B-32: a phone has no tooltip, so every line's is read here)
+    ck(`the opened line's statistics, 1D in σ first (I-6) with the last session's under it (B-32): ${tiles.join(" · ")}`, tiles[0] === "1D in σ" && /^[+-]?\d+\.\dσ$|^–$/.test(tiles[1]) && /^last session ([+-]?\d+\.\dσ|–) · \d{1,2} [A-Z][a-z]{2}$/.test(tiles[2]) && tiles[3] === "σ vs 1M avg" && /^[+-]?\d+\.\dσ$|^–$/.test(tiles[4]) && tiles[5] === "52W range" && /^\d{1,3}%$/.test(tiles[6]) && tiles[7] === "vs 200D" && /bp$/.test(tiles[8]), tiles);
     await p.evaluate(() => { location.hash = "rates"; }); await p.waitForSelector(".mp-sec .mp-row"); await p.waitForTimeout(300);
     await p.locator(".mp-head .pick select").selectOption("3M"); await p.waitForTimeout(300); ps = await pills(p.locator(".mp-chg"));
     ck(`RATES & FX: Period -> 3M, all ${ps.length} pills say "3M"`, ps.length >= 6 && ps.every((x) => x.w === "3M" && !x.cut), ps.filter((x) => x.w !== "3M").slice(0, 3));

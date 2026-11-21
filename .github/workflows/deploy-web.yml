@@ -21,10 +21,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # The browser checks (web/e2e, about 1,910 of them in 34 suites) and the logic checks (sim/logic.test.ts). Since
-  # 18 Nov 2026 the site is published only when they pass: until then a publish checked only that the site builds.
-  # The limit was 20 minutes when the checks took three; on 21 Nov 2026 the browser run alone took 12.3 minutes on
-  # the engineer's machine, before the installs, so the limit is 30: a run cut off by the clock would stop a publish.
+  # The browser checks (web/e2e: 2,337 of them in 37 suites on 21 Nov 2026) and the logic checks (sim/logic.test.ts,
+  # 702 of them). Since 18 Nov 2026 the site is published only when they pass: until then a publish checked only that
+  # the site builds. The limit was 20 minutes when the checks took three. On 21 Nov 2026 the browser run of 2,052
+  # checks in 34 suites took 14.5 minutes on the engineer's machine and 13 here, before the installs; with the three
+  # suites added that day it took 17.2 minutes on the engineer's machine (1,029 s), which by the same ratio is about
+  # 15.4 here. The limit stays 30: a run cut off by the clock would stop a publish. One suite is stopped at six
+  # minutes (web/e2e/run.cjs); the longest, opens, takes about 3.4 on the engineer's machine.
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30

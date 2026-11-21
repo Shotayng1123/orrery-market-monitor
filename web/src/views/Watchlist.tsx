@@ -11,11 +11,12 @@ import { useWatch } from "../lib/watch";
 import { fallbackDecimals, fmtLevel, fmtPct, fmtSigma, signCls } from "../lib/fmt";
 import { sigmaNoteLine } from "../lib/alertline";
 import { asOfCell, asOfOf, asOfTitle, fmtDate, fmtWhen, type AsOfKind } from "../lib/time";
-import { byResultsDay, fmtResultsDate, RESULTS_SOURCE, resultsMark, resultsStatus, resultsTip } from "../lib/results";
+import { byResultsDay, fmtResultsDate, MARKS_NOTE, RESULTS_SOURCE, resultsStatus, resultsStatusShort, resultsTip } from "../lib/results";
 import { classLabel, hitLine, MKT_CAP, NEXT_RESULTS, RESULTS_AHEAD, VS_200D, VS_50D } from "../lib/labels";
 import { cellBp, changeShade, RANGE_52W, RANGE_52W_TIP } from "./Market";
 import { marketSession, panelRowOf, symbolMarket, type PanelRow } from "../lib/opens";
 import { ClosedNow } from "../components/ClosedNow";
+import { NAV_WAIT } from "../lib/nav";
 import type { TableRow } from "../lib/types";
 
 /** A row of the watch_list route. Since 19 Nov 2026 a market instrument's row also carries the change of its level
@@ -66,12 +67,16 @@ export const WL_ALERTS = 10, WL_NEWS = 15;
  *  table has it (its market; nothing for an official yield, which has no session; its short name where the Monitor
  *  only reads it in New York's hours: the dollar index, the Cboe yields, VIX); any other name the market its symbol
  *  gives (a stock's exchange, the FX week for a pair), or nothing where the Monitor keeps no hours. */
-export function useWatchMarkets(tick: number): (r: WatchRow) => PanelRow {
+export function useWatchMarkets(tick: number): ((r: WatchRow) => PanelRow) & { ready: boolean } {
   // the table names each instrument's market; it changes with the instruments list, so half-hourly is plenty
   const table = useApi<{ rows: TableRow[] }>("table", undefined, Math.floor(tick / 30));
   // (whether a row read in New York's hours is being read now is New York's session's to say: this copy of the table can be half an hour old)
   const by = new Map((table.data?.rows ?? []).map((t): [string, PanelRow] => { const p = panelRowOf(t); return [t.symbol, p.read ? { read: p.read } : p]; }));
-  return (r) => (r.asOfKind === "published" ? {} : by.get(r.symbol) ?? { market: symbolMarket(r.symbol) });
+  const of = (r: WatchRow): PanelRow => (r.asOfKind === "published" ? {} : by.get(r.symbol) ?? { market: symbolMarket(r.symbol) });
+  // `ready`: the table has answered, or failed. Until then the "Closed now" line above the names is not at its full
+  // length (it names the markets of the Monitor's own instruments only once the table has come), so Back holds the
+  // page until then as well (lib/nav.ts; B-33: the line grew by 42 px above the row that was tapped)
+  return Object.assign(of, { ready: !!table.data || !!table.error });
 }
 /** The same for one row's tooltip: " · market closed · opens 23 Nov 22:30 SGT", or nothing. */
 export const closedWords = (row: PanelRow): string => { const m = row.read ? null : row.market, s = m ? marketSession(m) : null; return s && s.now === "closed" ? ` · market closed${s.note ? ` · ${s.note.text}` : ""}` : ""; };
@@ -110,6 +115,8 @@ export function WatchlistView({ tick }: { tick: number }) {
   const market = useWatchMarkets(tick);
   return (
     <>
+      {/* until the names and their markets have come, Back holds the page where it stood (lib/nav.ts; B-33) */}
+      {(!w.ready || (!list.data && !list.error) || !market.ready) && <span {...{ [NAV_WAIT]: "" }} hidden />}
       <Panel no="01" title="MY NAMES" span={12} k="wl" aux={<>{rows.length} name{rows.length === 1 ? "" : "s"}{sources ? ` · ${sources}` : ""} · times in SGT</>}>
         <div className="searchrow">
           <span className="addbox">
@@ -140,7 +147,7 @@ export function WatchlistView({ tick }: { tick: number }) {
         {rows.length > 0 && <ClosedNow id="wl-opens" rows={rows.map(market)} />}
         {rows.length ? (
           <table className="secT wlT">
-            <thead><tr><th /><th className="l">Name</th><th className="l">Sector / kind</th><th>Last</th><th className="l asof" title="What the row's figures are as of, in SGT: the date of a close or of an official yield's publication, the time of today's last print">As of</th><th>1D</th><th>1W</th><th>1M</th><th>3M</th><th>12M</th><th title="% for prices, bp for yields">{VS_50D}</th><th title="% for prices, bp for yields">{VS_200D}</th><th title={RANGE_52W_TIP}>{RANGE_52W}</th><th>{MKT_CAP}</th><th className="l" title={`The company's next results date as ${RESULTS_SOURCE} gives it: the day in the company's own market (Tokyo, New York …), without a time of day, as the source does not state the release time; est. = estimated, not confirmed by the company`}>{NEXT_RESULTS}</th></tr></thead>
+            <thead><tr><th /><th className="l">Name</th><th className="l">Sector / kind</th><th>Last</th><th className="l asof" title="What the row's figures are as of, in SGT: the date of a close or of an official yield's publication, the time of today's last print">As of</th><th>1D</th><th>1W</th><th>1M</th><th>3M</th><th>12M</th><th title="% for prices, bp for yields">{VS_50D}</th><th title="% for prices, bp for yields">{VS_200D}</th><th title={RANGE_52W_TIP}>{RANGE_52W}</th><th>{MKT_CAP}</th><th className="l" title={`The company's next results date as ${RESULTS_SOURCE} gives it: the day in the company's own market (Tokyo, New York …), without a time of day, as the source does not state the release time. After the date its mark: ${MARKS_NOTE}; a dash where the source gives no mark`}>{NEXT_RESULTS}</th></tr></thead>
             <tbody>{rows.map((r) => {
               const a = asOfOf(r.asOf, r.asOfKind);
               return (
@@ -155,7 +162,9 @@ export function WatchlistView({ tick }: { tick: number }) {
                     : <>{cell(r.pct1d, 4)}{cell(r.pct1w, 8)}{cell(r.pct1m, 12)}{cell(r.pct3m, 20)}{cell(r.pct12m, 50)}{cell(r.vs50, 10)}{cell(r.vs200, 20)}</>}
                   <td className="num mut">{r.pos52 == null ? "–" : `${Math.round(r.pos52)}%`}</td>
                   <td className="num mut">{r.mcap == null ? "–" : money(r.mcap, r.ccy)}</td>
-                  <td className="l mut" title={r.earningsAt ? resultsTip(r.symbol, r.earningsEst) : undefined}>{r.earningsAt ? `${fmtResultsDate(r.earningsAt, r.symbol)}${resultsMark(r.earningsEst, r.symbol) ? " est." : ""}` : "–"}</td>
+                  {/* the date and its mark, the same marks as RESULTS AHEAD below: "est.", "conf." as the source marks it, a dash
+                      where it gives none (A's A-37: a confirmed date and an unmarked one read alike, both without a mark) */}
+                  <td className="l mut" title={r.earningsAt ? resultsTip(r.symbol, r.earningsEst) : undefined}>{r.earningsAt ? <>{fmtResultsDate(r.earningsAt, r.symbol)} <span className="rmark">{resultsStatusShort(r.earningsEst, r.symbol)}</span></> : "–"}</td>
                 </tr>
               );
             })}</tbody>

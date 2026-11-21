@@ -17,6 +17,10 @@ export const SIGMA_1M = "σ vs 1M avg";
 /** Today's change over the σ of daily changes (63 sessions): a column, the strip on MARKETS and an alert's kind, for
  *  I-6 to use from the start ("1D σ" would read as the one-day standard deviation). */
 export const SIGMA_1D = "1D in σ", MOVERS_SIGMA = "Movers in σ", SIGMA_MOVE = "σ move";
+/** The two readings of MOVERS IN σ (B-32; the designer's note of 21 Nov 2026): the change since the last booked close,
+ *  and each instrument's newest completed day. Chips on a computer (upper-cased), a toggle on a phone; a cell writes
+ *  "last session" in lower case. */
+export const TODAY = "Today", LAST_SESSION = "Last session";
 /** Where the last level sits in its 52-week range, cells in "%". */
 export const RANGE_52W = "52W range";
 /** The distance from the moving averages (% for prices, bp for yields). */

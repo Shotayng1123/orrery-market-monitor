@@ -17,7 +17,7 @@
 //     New York's hours: its stamp says LAST PRINT and the line when the Monitor next reads it, "next read 22:30 SGT".
 //   - An official yield is published once a day and has no session: nothing is said of it. Crypto never closes.
 import { calendarState, EARLY_CLOSES, HOLIDAY_SOURCES, holidaysNow, marketOf, marketStatus, nextOpen, openSince, stockMarket, type HolidayMap, type Market, type MarketId, type NextOpen } from "./sessions";
-import { fmtClock, fmtDate, fmtDayTime, fmtStamp, fmtWhen, isOfficialRow, TZ_ABBR } from "./time";
+import { fmtClock, fmtDate, fmtDayMon, fmtDayTime, fmtStamp, fmtWhen, isOfficialRow, TZ_ABBR } from "./time";
 import { delayed } from "./labels";
 import { shortName } from "./short";
 
@@ -45,6 +45,9 @@ export interface SessionNote {
   /** For "opens": why the market is shut now, where the Monitor knows a reason beyond its hours: a holiday in the
    *  calendar it holds, its midday (or daily) break, an early close today. */
   why?: "holiday" | "break" | "early";
+  /** For "opens": the days after today that the next open passes over because the calendar the Monitor holds gives
+   *  them as holidays (local dates): on a Saturday Tokyo "opens 24 Nov", and this says why not on the 23rd. */
+  skipped?: string[];
 }
 export interface RowSession { now: SessionNow; note: SessionNote | null }
 /** The holiday calendar a reading is made with: the days, and whether it has come ("wait": asked for or not yet,
@@ -83,7 +86,7 @@ function opensNote(m: Market, n: NextOpen, now: Date, cal: Cal): SessionNote {
     : n.why === "early" && early != null ? `Closed early today, at ${hhmm(early)} ${zone(m)} (${calendarOf(m)}). ` : "";
   const skipped = later.length ? `${later.map((d) => fmtDate(d)).join(", ")}: ${later.length === 1 ? "a holiday" : "holidays"} in ${calendarOf(m)}. ` : "";
   return {
-    kind: "opens", at: n.at, market: m, scheduled: !n.firm, ...(n.why === "hours" || (n.why === "early" && early == null) ? {} : { why: n.why }),
+    kind: "opens", at: n.at, market: m, scheduled: !n.firm, ...(n.why === "hours" || (n.why === "early" && early == null) ? {} : { why: n.why }), ...(later.length ? { skipped: later } : {}),
     text: `opens ${when(n.at, now)}${n.firm ? "" : ", scheduled"}`,
     tip: `${trades(m)}. ${why}${skipped}${n.firm ? "Next opens" : "Scheduled to open"} ${fmtStamp(n.at)}. ${calendarWords(m, n.firm, "the market stays shut", cal)}`,
   };
@@ -161,22 +164,56 @@ export function rowSession(r: SessionRow, now: Date = new Date(), cal: Cal = cal
   if (readInNewYork(r)) { const ny = marketSession("NYSE", now, cal); return { now: "unknown", note: ny.now === "closed" && ny.note ? readNote(ny.note, now) : null }; }
   return marketSession(r.market, now, cal);
 }
-/** A row's state in a word or two, for a phone's line and a tooltip: "Closed"; in its timetable's hours "Delayed ~20m"
- *  while the session's first print is due and "No new print" after; null where the Monitor says neither (the caller
- *  then says what the figure is as of). */
+/** Why a market is shut, as a phone line's state word (the designer's D-65, 21 Nov 2026: the reasons were in tooltips,
+ *  and a phone has none): "Holiday", "Midday break" ("Daily break" for Globex), "Closed early"; "Closed" where it is
+ *  shut by its hours. One word or two, so the line stays one line beside "opens 24 Nov 08:00 SGT". */
+export const closedWord = (n: Pick<SessionNote, "why" | "market"> | null | undefined): string =>
+  (n?.why === "holiday" ? "Holiday" : n?.why === "break" ? (n.market.id === "CME" ? "Daily break" : "Midday break") : n?.why === "early" ? "Closed early" : "Closed");
+/** A row's state in a word or two, for a phone's line and a tooltip: "Closed", or why it is shut where the Monitor
+ *  knows ("Holiday", "Midday break", "Closed early"); in its timetable's hours "Delayed ~20m" while the session's
+ *  first print is due and "No new print" after; null where the Monitor says neither (the caller then says what the
+ *  figure is as of). */
 export function stateWord(s: RowSession): string | null {
-  if (s.now === "closed") return "Closed";
+  if (s.now === "closed") return closedWord(s.note);
   if (s.now !== "open") return null;
   return s.note?.kind === "due" ? delayed(s.note.market.delayMin) : "No new print";   // the same words as a live row's delay mark (lib/labels.ts)
 }
-/** The same for a row's tooltip: " · market open", " · market closed · opens 23 Nov 22:30 SGT", " · delayed ~20m ·
- *  first print due ~08:20 SGT", " · no new print · open since 08:00 SGT", " · next read 22:30 SGT"; nothing for an
- *  official yield or a market the table does not keep. */
+/** Whether a row holds an old price while its market's timetable has a session: not live, the session's first
+ *  minutes on a delayed feed over. The phone's line then reads what the figure is as of, "Last print 08:40", and that
+ *  and a tile's LAST PRINT are amber (the designer's D-66). A row the Monitor only reads in New York's hours is never
+ *  in this state: its print is not late. */
+export const staleInSession = (s: RowSession): boolean => s.now === "open" && !!s.note && s.note.kind !== "due";
+/** The holidays a next open passes over, short: "23 Nov: holiday", "31 Dec, 1 Jan: holidays"; null for none. */
+export const skippedWords = (n: Pick<SessionNote, "skipped"> | null | undefined): string | null => (n?.skipped?.length ? `${n.skipped.map((d) => fmtDayMon(d)).join(", ")}: ${n.skipped.length === 1 ? "holiday" : "holidays"}` : null);
+/** The same in full, for an opened phone row and a tooltip: "23 Nov 2026: a holiday in JPX's calendar". */
+const skippedFull = (n: SessionNote): string | null => (n.skipped?.length ? `${n.skipped.map((d) => fmtDate(d)).join(", ")}: ${n.skipped.length === 1 ? "a holiday" : "holidays"} in ${calendarOf(n.market)}` : null);
+/** Why a market is shut, in full: "a holiday in JPX's calendar", "its midday break", "an early close today, at 13:00 ET". */
+function whyFull(n: SessionNote, now: Date, cal: Cal): string | null {
+  if (n.why === "holiday") return `a holiday in ${calendarOf(n.market)}`;
+  if (n.why === "break") return n.market.id === "CME" ? "its daily break" : "its midday break";
+  if (n.why !== "early") return null;
+  const early = EARLY_CLOSES[n.market.id]?.[marketStatus(n.market, now, cal.holidays).localDate];
+  return early != null ? `an early close today, at ${hhmm(early)} ${zone(n.market)}` : "an early close today";
+}
+/** The line beside CLOSED on a page's own chart (a stock's, an instrument's, EQUITIES' index; D-65): the reason first,
+ *  then the opening, then a holiday it passes over: "holiday · opens 24 Nov 08:00 SGT", "midday break · opens 11:30
+ *  SGT", "early close · opens 30 Nov 22:30 SGT", "opens 24 Nov 08:00 SGT · 23 Nov: holiday". Any other note as it is. */
+export function pageLine(n: SessionNote): string {
+  if (n.kind !== "opens") return n.text;
+  const why = whyWord(n), skip = skippedWords(n);
+  return `${why ? `${why} · ` : ""}${n.text}${skip ? ` · ${skip}` : ""}`;
+}
+/** The same for a row's tooltip and an opened phone row: " · market open", " · market closed · opens 23 Nov 22:30 SGT",
+ *  " · market closed: a holiday in JPX's calendar · opens 24 Nov 08:00 SGT", " · market closed · opens 24 Nov 08:00 SGT
+ *  · 23 Nov 2026: a holiday in JPX's calendar", " · delayed ~20m · first print due ~08:20 SGT", " · no new print · open
+ *  since 08:00 SGT", " · next read 22:30 SGT"; nothing for an official yield or a market the table does not keep. */
 export function rowStateWords(r: SessionRow, now: Date = new Date(), cal: Cal = calNow()): string {
   if (isOfficialRow(r)) return "";
   if (r.live) return " · market open";
   const s = rowSession(r, now, cal), w = stateWord(s), note = s.note ? ` · ${s.note.text}` : "";
-  return s.now === "closed" ? ` · market closed${note}` : w ? ` · ${w.toLowerCase()}${note}` : note;
+  if (s.now !== "closed") return w ? ` · ${w.toLowerCase()}${note}` : note;
+  const why = s.note ? whyFull(s.note, now, cal) : null, skip = s.note ? skippedFull(s.note) : null;
+  return ` · market closed${why ? `: ${why}` : ""}${note}${skip ? ` · ${skip}` : ""}`;
 }
 
 // ---- rows whose `live` the server does not send: a stock's page, an instrument outside the market table ----
@@ -215,18 +252,24 @@ export interface ShutEntry {
   /** The markets ("Hong Kong and Shanghai"), what follows them (" (holiday) opens 24 Nov 08:00 SGT"), and the two together. */
   label: string; rest: string; text: string;
 }
-export interface ClosedLine { entries: ShutEntry[]; read: { lead: string; names: string[]; text: string; tip: string } | null }
+/** `lead`: what stands before the entries, "Closed now: "; nothing where no market is shut and the line is the next
+ *  read alone. */
+export interface ClosedLine { lead: string; entries: ShutEntry[]; read: { lead: string; names: string[]; text: string; tip: string } | null }
 /** The reason in the line's brackets: "holiday", "midday break" ("daily break" for Globex), "early close". */
 export const whyWord = (n: Pick<SessionNote, "why" | "market">): string | null => (n.why === "holiday" ? "holiday" : n.why === "break" ? (n.market.id === "CME" ? "daily break" : "midday break") : n.why === "early" ? "early close" : null);
 const listed = (xs: string[]): string => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
-/** The line of a panel's rows, or null when none of their markets is shut. */
+/** The line of a panel's rows: the markets that are shut, each with when it opens, then the rows that are only read in
+ *  New York's hours with when they are next read. Where no market of the rows is shut but such a row is not being
+ *  priced (RATES & FX's FX panel on a weekday: the FX week runs, New York is shut and the dollar index holds last
+ *  night's print), the line is that last part alone, "Next read 22:30 SGT: DXY" (the designer's note of 21 Nov 2026: the
+ *  panel said nothing then). Null when every row is being priced. */
 export function closedLine(rows: PanelRow[], now: Date = new Date(), cal: Cal = calNow()): ClosedLine | null {
   const shut = shutMarkets(rows.filter((r) => !r.read).map((r) => r.market), now, cal);
-  if (!shut.length) return null;
   const entries: ShutEntry[] = [];
   for (const n of shut) {
-    const why = whyWord(n), when2 = n.text.replace(/^opens /, "");
-    const e = entries.find((x) => x.at.getTime() === n.at.getTime() && x.scheduled === n.scheduled && x.why === why);
+    // a holiday the opening passes over stands after it, in brackets (D-65): "Tokyo opens 24 Nov 08:00 SGT (23 Nov: holiday)"
+    const why = whyWord(n), skip = skippedWords(n), when2 = `${n.text.replace(/^opens /, "")}${skip ? ` (${skip})` : ""}`;
+    const e = entries.find((x) => x.at.getTime() === n.at.getTime() && x.scheduled === n.scheduled && x.why === why && x.when === when2);
     if (e) { e.names.push(n.market.name); e.tip = `${e.tip}\n${n.tip}`; }
     else entries.push({ names: [n.market.name], why, when: when2, label: "", rest: "", text: "", tip: n.tip, at: n.at, scheduled: n.scheduled });
   }
@@ -234,13 +277,15 @@ export function closedLine(rows: PanelRow[], now: Date = new Date(), cal: Cal = 
   // the rows read in New York's hours, while New York is shut and none of them is being read
   const names = [...new Set(rows.filter((r) => r.read && !r.live).map((r) => r.read!))], ny = names.length ? marketSession("NYSE", now, cal) : null;
   const rd = ny && ny.now === "closed" && ny.note ? readNote(ny.note, now) : null;
-  return { entries, read: rd ? { lead: `${rd.text}: `, names, text: `${rd.text}: ${names.join(", ")}`, tip: rd.tip } : null };
+  if (!entries.length && !rd) return null;
+  const lone = !entries.length, words = rd ? (lone ? rd.text.replace(/^next read/, "Next read") : rd.text) : "";
+  return { lead: lone ? "" : "Closed now: ", entries, read: rd ? { lead: `${words}: `, names, text: `${words}: ${names.join(", ")}`, tip: rd.tip } : null };
 }
 /** A market-table row for the line: nothing for an official yield (it has no session); a row the Monitor only reads in
  *  New York's hours by its short name; any other by its market. */
 export const panelRowOf = (r: SessionRow & { symbol: string; name: string }): PanelRow => (isOfficialRow(r) ? {} : readInNewYork(r) ? { read: shortName(r.symbol, r.name), live: r.live } : { market: r.market });
 /** The line as text: "Closed now: New York opens 22:30 SGT · … · next read 22:30 SGT: VIX, DXY, UST 10Y". */
-export const closedLineText = (c: ClosedLine): string => `Closed now: ${[...c.entries.map((e) => e.text), ...(c.read ? [c.read.text] : [])].join(" · ")}`;
+export const closedLineText = (c: ClosedLine): string => `${c.lead}${[...c.entries.map((e) => e.text), ...(c.read ? [c.read.text] : [])].join(" · ")}`;
 
 // ---- a list of markets: each that is shut, with when it opens ----
 /** The markets among `ids` that are shut now, each with when it opens, the soonest first. */

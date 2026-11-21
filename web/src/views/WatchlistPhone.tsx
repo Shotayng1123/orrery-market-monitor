@@ -16,6 +16,7 @@ import { byResultsDay, MARKS_NOTE, RESULTS_NOTE, resultsDayLabel, resultsStatusS
 import { cellBp } from "./Market";
 import { ClosedNow } from "../components/ClosedNow";
 import { closedWords, decode, lastOf, sourcesOf, useWatchMarkets, WINDOWS, WL_ALERTS_EMPTY, type Feed, type WatchRow } from "./Watchlist";
+import { NAV_WAIT } from "../lib/nav";
 
 /** WATCHLIST for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026): the user's own names as lines with one
  *  change (the period is picked at the top), then their results dates, alerts, headlines and research mentions.
@@ -59,6 +60,10 @@ export function WatchlistPhone({ tick }: { tick: number }) {
           ))}
         </div>
       )}
+      {/* until the names have come, Back holds the list where it stood (lib/nav.ts; B-33): the sections below are drawn
+          first, and the names then arrive above them. The same until the market table has come: the line of the
+          markets that are shut, above the names, is at its full length only then */}
+      {(!w.ready || (!list.data && !list.error) || !market.ready) && <span {...{ [NAV_WAIT]: "" }} hidden />}
       <Section title="My names" aux="times in SGT" card={false}>
         {/* the markets of my names that are shut, each with when it opens: above the list (the designer's D-62) */}
         {rows.length > 0 && <ClosedNow id="wl-opens" rows={rows.map(market)} phone />}

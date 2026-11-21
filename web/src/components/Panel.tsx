@@ -17,7 +17,7 @@ function tableCsv(table: HTMLTableElement): string {
 /** Numbered panel: `01 TITLE …aux` head, scrolling body. Span is the 12-column grid width in the scrolling
  *  layout; `k` names the panel kind and `ts` its column span for the one-screen layout's placement rules.
  *  A panel that holds a table offers it as a CSV download (the small CSV button in its header). */
-export function Panel({ no, title, aux, span = 12, children, id, k, ts }: { no: string; title: string; aux?: ReactNode; span?: 3 | 4 | 5 | 6 | 7 | 8 | 9 | 12; children: ReactNode; id?: string; k?: string; ts?: number }) {
+export function Panel({ no, title, aux, span = 12, children, id, k, ts, after }: { no: string; title: string; aux?: ReactNode; span?: 3 | 4 | 5 | 6 | 7 | 8 | 9 | 12; children: ReactNode; id?: string; k?: string; ts?: number; after?: ReactNode /* a choice that stands right after the title, on its line (MOVERS IN σ's TODAY · LAST SESSION) */ }) {
   const body = useRef<HTMLDivElement>(null);
   const exportCsv = () => {
     const tables = [...(body.current?.querySelectorAll("table") ?? [])] as HTMLTableElement[];
@@ -32,7 +32,7 @@ export function Panel({ no, title, aux, span = 12, children, id, k, ts }: { no: 
   };
   return (
     <div className={`panel c${span}`} id={id} data-no={no} data-k={k} data-ts={ts}>
-      <div className="phead"><span className="no">{no}</span><span className="t">{title}</span>{aux !== undefined && <span className="aux">{aux}</span>}<span className="csvbtn" title="Download this panel's table as a CSV file (opens in Excel)" onClick={exportCsv}>CSV</span></div>
+      <div className="phead"><span className="no">{no}</span><span className="t">{title}</span>{after}{aux !== undefined && <span className="aux">{aux}</span>}<span className="csvbtn" title="Download this panel's table as a CSV file (opens in Excel)" onClick={exportCsv}>CSV</span></div>
       <div className="pbody" ref={body}>{children}</div>
     </div>
   );

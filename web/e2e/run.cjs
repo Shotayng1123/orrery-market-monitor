@@ -58,6 +58,9 @@ const SUITES = [
   { name: "results-dates", needs: ["mock", "standin"] },
   { name: "opens", needs: ["mock", "standin"] },
   { name: "layout-guard-closed", needs: ["mock"] },
+  { name: "morning", needs: ["mock", "standin"] },
+  { name: "phone-first", needs: ["mock", "standin"] },
+  { name: "shut-reasons", needs: ["mock", "standin"] },
 ];
 
 const args = process.argv.slice(2), serial = args.includes("--serial"), names = args.filter((a) => !a.startsWith("--"));

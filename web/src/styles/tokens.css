@@ -1064,12 +1064,9 @@ body.pv2 #nav{display:none}
 #pv2-btns button:focus{outline:none}
 #pv2-btns button:focus-visible{outline:2px solid var(--amber);outline-offset:-2px}
 #pv2-btns svg{width:22px;height:22px}
-body.pv2 #alerts{order:6;flex:1 1 100%;width:auto;margin:0 10px 10px 0}
-body.pv2 #alerts .alrt{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;max-width:none;white-space:normal;font-size:13.5px;line-height:1.35;padding:9px 11px;border-radius:9px}
-body.pv2 #alerts .alrt>span:nth-child(2){order:3;flex:1 1 100%;min-width:0}   /* label and time on the first line, the whole message under them */
-body.pv2 #alerts .alrt.none>span:nth-child(2){order:0;flex:0 1 auto}   /* nothing to report: one line */
-body.pv2 #alerts .alrt .k{font-size:11px}
-body.pv2 #alerts .alrt .t{font-size:11.5px;margin-left:auto}
+/* the alert line (the designer's D-14 and note (b) of 21 Nov 2026): one line of 40 px, where the whole message stood
+   under the label on two or three; the rules are with the computer's parts of the line, further down */
+body.pv2 #alerts{order:6;flex:1 1 100%;width:auto;margin:0 10px 5px 0}
 body.pv2 #search,body.pv2 #topbar .bmq{display:none}
 body.pv2 #topbar.open #search{display:block;order:3;flex:1 1 100%;margin:2px 10px 10px 0}
 body.pv2 #topbar.open #search input{width:100%;font-size:16px;padding:11px 12px;border-radius:9px}
@@ -1393,11 +1390,6 @@ body.pv2 .mvtip{font-size:13px;padding:9px 11px;border-radius:9px}
 body.pv2 .mvtip .t,body.pv2 .mvtip .l{font-size:12px}
 .mp-moves{list-style:none;margin:0;padding:0 6px 0 0;max-height:min(46vh,372px);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:var(--bord2) transparent}
 .mp-moves:focus-visible{outline:1px solid var(--amber);outline-offset:2px}
-/* the morning's note, offered above the market list: its day, its title, and where a tap goes */
-.mp-today{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px;align-items:center;margin:14px 0 0;padding:13px 14px 14px 16px;border:1px solid var(--bord2);border-left:3px solid var(--amber);border-radius:12px;background:var(--panel2);color:var(--txt);text-decoration:none}
-.mp-today .k{grid-column:1;font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--amber)}
-.mp-today .t{grid-column:1;margin-top:5px;font-size:15.5px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.mp-today .go{grid-column:2;grid-row:1/3;font-size:26px;line-height:1;color:var(--mut)}
 /* a one-line offer inside a card (notifications, on the watchlist) */
 .mp-nudge{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;border-bottom:1px solid var(--bord);font-size:14px;line-height:1.4;color:var(--txt2)}
 .mp-nudge button{flex:0 0 auto;min-height:40px;padding:0 14px;border:1px solid var(--amber);border-radius:9px;background:none;color:var(--amber);font-family:var(--mono);font-size:12.5px;font-weight:700;letter-spacing:.06em;cursor:pointer}
@@ -1439,19 +1431,6 @@ body.pv2 .cf-who{font-size:14.5px}
 body.pv2 .modal .cf-btns{flex-direction:column-reverse;gap:8px}
 body.pv2 .modal .cf-btns button.go.ghost{margin-top:0}
 body.pv2 .modal.acct h3 .x{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;margin:-12px -10px -12px 0;font-size:20px}
-
-/* phone layout: the "add to your home screen" hint (Shota, 18 Nov 2026; lib/install.ts) */
-.mp-a2hs{display:grid;grid-template-columns:28px minmax(0,1fr) 44px;gap:0 10px;align-items:start;margin:2px 0 16px;padding:13px 2px 13px 13px;border:1px solid var(--amber);border-radius:14px;background:var(--sel);font-family:var(--sans)}
-.mp-a2hs .ic{width:28px;height:28px;margin-top:1px;color:var(--amber)}
-.mp-a2hs .tx{min-width:0;display:flex;flex-direction:column;gap:5px}
-.mp-a2hs .tx>b{font-size:15.5px;font-weight:600;line-height:1.25}
-.mp-a2hs .tx>span{font-size:13.5px;line-height:1.5;color:var(--txt2)}
-.mp-a2hs .how b{color:var(--txt);font-weight:600}
-.mp-a2hs .sh{display:inline-block;width:17px;height:17px;margin:0 1px;vertical-align:-3px;color:var(--amber)}
-.mp-a2hs .go{align-self:flex-start;min-height:44px;margin-top:6px;padding:0 22px;border:0;border-radius:11px;background:var(--amber);color:#000;font-family:var(--sans);font-size:15px;font-weight:700;cursor:pointer}
-.mp-a2hs .x{width:44px;height:44px;margin:-10px 0 0;padding:0;border:0;border-radius:10px;background:transparent;color:var(--txt2);font-size:24px;line-height:1;cursor:pointer}
-.mp-a2hs .x:active{background:var(--panel2)}
-.mp-a2hs .go:focus,.mp-a2hs .x:focus{outline:none}
 
 /* the bars at the foot of every screen (Shota, 18 Nov 2026; components/FootBars.tsx): the connection and "a new
    version is ready", above the phone's tab bar */
@@ -1520,7 +1499,9 @@ body.term .mtile.cp>.vl>.tags{display:none}
 .mp-hero .mtile.cp>.vl{flex-direction:column-reverse;align-items:flex-start}
 .mp-hero .mtile.cp>.vl>.tags{margin:0 0 6px;justify-content:flex-start;gap:4px 6px}
 .mp-hero .mtile.cp>.vl>.tags .badge{margin:0}
-.mp-hero .mtile.cp>.vl>.tags .opens{font-size:12px;text-align:left}
+/* the opening has no margin of its own here (it had 4 px): on the stamp's line the row's gap of 6 px separates the two,
+   and on a line of its own it starts under the badges' left edge (it stood 4 px to their right: the designer, 21 Nov 2026) */
+.mp-hero .mtile.cp>.vl>.tags .opens{font-size:12px;text-align:left;margin-left:0}
 /* SHORT INTEREST (D-07): three columns at natural height (two for FINRA), one when the panel is narrow or on a phone */
 .msg3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:12px 18px;align-items:start}
 .msg3>div{min-width:0}
@@ -1598,8 +1579,19 @@ table.wlT td.nm .mut{white-space:nowrap}
 #alerts .alrt .one .q,#alerts .alrt .one .src{flex:none;color:var(--mut)}   /* what the figure is; a news alert's publisher */
 #alerts .alrt.new .one .q,#alerts .alrt.new .one .src{color:rgba(255,255,255,.75)}
 #alerts .alrt>.k,#alerts .alrt>.t{flex:none}
-body.pv2 #alerts .alrt .msg{display:inline}
-body.pv2 #alerts .alrt .one{display:none}
+/* A phone's line (the designer's note (b) of 21 Nov 2026, block 2): the same parts on one line of 40 px that takes a
+   44-px tap: the label, the kind of a σ move or a news alert, the name (the only part ever cut, with an ellipsis), the
+   figure in its sign's colour, the time at the right and a chevron. Not on it: the word after the figure ("intraday",
+   "at close", "1D") and a news alert's publisher; both are in the list one tap away and in the line's tooltip. */
+body.pv2 #alerts .alrt{position:relative;display:flex;flex-wrap:nowrap;align-items:center;gap:8px;height:40px;box-sizing:border-box;max-width:none;overflow:visible;white-space:nowrap;font-size:13.5px;line-height:1.2;padding:0 11px;border-radius:9px}
+body.pv2 #alerts .alrt::before{content:"";position:absolute;inset:-3px -1px}   /* 2 px beyond the line's own border above and below: a 44-px tap */
+body.pv2 #alerts .alrt .k{font-size:11px}
+body.pv2 #alerts .alrt .one{flex:1 1 auto;gap:8px}
+body.pv2 #alerts .alrt .one .kd{font-size:11px}
+body.pv2 #alerts .alrt .one .q,body.pv2 #alerts .alrt .one .src{display:none}
+body.pv2 #alerts .alrt .t{font-size:11.5px;margin-left:auto}
+body.pv2 #alerts .alrt:not(.none)::after{content:"\203A";flex:none;color:var(--mut);font-size:18px;line-height:1;font-family:var(--sans)}
+body.pv2 #alerts .alrt.new::after{color:#fff}
 /* search (D-10, D-37): "/" as a key cap at the box's right on a computer; on a phone, rows of 52 px or more under the
    field, the whole name on the first line and "7203.T · Equity · NK225" under it */
 #search .skey{position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:0 4px;border:1px solid var(--bord2);border-radius:3px;color:var(--mut);font:inherit;font-size:10px;line-height:1.35;pointer-events:none}
@@ -1782,21 +1774,127 @@ body.term .sgcell{flex-direction:row;align-items:baseline;gap:5px;padding:1px 5p
 body.term .sgcell .nm{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
 body.term .sgcell .z{font-size:11px}
 body.term .sgcell .mv,body.term .sgnote{display:none}
+/* B-32 (21 Nov 2026; the designer's note (a) of round 3b). The strip's two readings, TODAY and LAST SESSION, as two
+   joined chips right after the title (one shared border, the current one filled), with a line-height that leaves the
+   head its height. A cell's second line is the σ at the left and, at the right, the day of a move that is not today's;
+   "last session -2.2σ" is a cell's third line while a currency's or a future's day is under three hours old. */
+.sgpick{display:inline-flex;align-items:center;flex:none;margin:0 0 0 2px}
+.sgpick .chip-sm{margin-left:0;border-radius:0;line-height:1.3;padding:0 8px;background:transparent;font-family:inherit}
+.sgpick .chip-sm:first-child{border-radius:2px 0 0 2px}
+.sgpick .chip-sm:last-child{border-radius:0 2px 2px 0}
+.sgpick .chip-sm+.chip-sm{border-left:0}
+.sgpick .chip-sm.on{background:var(--amber);border-color:var(--amber);color:#000;font-weight:700}
+.sgpick .chip-sm:focus{outline:none}
+.sgpick .chip-sm:focus-visible{outline:1px solid var(--txt);outline-offset:1px}
+body.term .sgpick .chip-sm{margin-left:0;line-height:1.3;padding:0 5px}
+.sgcell .zl{display:flex;align-items:baseline;justify-content:space-between;gap:6px;min-width:0}
+.sgcell .day{flex:none;font-family:var(--mono);font-size:10px;font-weight:400;color:var(--mut);white-space:nowrap}
+.sgcell .mv .ls .f{white-space:nowrap}   /* in a narrow cell (text L) the line breaks after "session"; the figure is never broken */
+.sgcell .mv .d2{display:none}
+/* the table: a row whose last figure is not today's carries its day after the name and its badges; not a badge, no box */
+table.mkt td.l .asday{margin-left:6px;font-family:var(--mono);font-size:9.5px;color:var(--mut);white-space:nowrap}
+body.term table.mkt td.l .asday{font-size:9px;margin-left:4px}
+/* The one-screen layout, where the server sends the last session: a cell takes two lines where it had one, as a date
+   does not fit beside the longest name and its σ. Line 1: the name and the σ. Line 2, 9 px, one line: the day when it
+   is not today's, then the change ("20 Nov · -1.74%"); "last session -2.2σ" while the day is young. */
+body.term .sgstrip[data-ls] .sgcell{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:5px;row-gap:0;align-items:baseline;padding:1px 5px 2px}
+body.term .sgstrip[data-ls] .sgcell .nm{grid-column:1;grid-row:1;line-height:13px}
+body.term .sgstrip[data-ls] .sgcell .zl{grid-column:2;grid-row:1;line-height:13px}   /* both lines of a set height: the panel is as tall in any font */
+body.term .sgstrip[data-ls] .sgcell .zl .day{display:none}
+body.term .sgstrip[data-ls] .sgcell .mv{display:block;grid-column:1/-1;grid-row:2;font-size:9px;line-height:11px;white-space:nowrap;overflow:hidden}
+body.term .sgstrip[data-ls] .sgcell .mv .lv{display:none}
+body.term .sgstrip[data-ls] .sgcell .mv .d2{display:inline}
 /* the 1D IN σ header sorts (▼ while sorted), and a future's ROLL mark beside its name (B-27) */
 table.mkt th.sortable{cursor:pointer;user-select:none}
 table.mkt th.sortable:hover,table.mkt th.sortable.on{color:var(--amber)}
 .badge.roll{color:var(--txt2);border-color:var(--bord2);cursor:help}
 .mp-st .roll{color:var(--txt2)}
-/* the phone: Movers in σ first, one row of cards that moves sideways and stops on a card, no scrollbar; 132 x 76 px */
-.mp-sgrow{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:0 0 2px}
+/* the phone: Movers in σ first, one row of cards that moves sideways and stops on a card, no scrollbar; 144 x 76 px
+   since 21 Nov 2026 (132 before): the day of a move stands at the right of its σ, and at 430 px of screen three cards of
+   132 fitted exactly, so nothing said that seven more follow (the designer's D-71) */
+.mp-sgrow{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:0}
 .mp-sgrow::-webkit-scrollbar{display:none}
-.mp-sgcard{flex:0 0 132px;box-sizing:border-box;height:76px;scroll-snap-align:start;display:flex;flex-direction:column;justify-content:space-between;padding:8px 10px;border:1px solid var(--bord2);border-radius:10px;background:var(--panel);color:var(--txt);text-decoration:none;overflow:hidden}
+.mp-sgcard{flex:0 0 144px;box-sizing:border-box;height:76px;scroll-snap-align:start;display:flex;flex-direction:column;justify-content:space-between;padding:8px 10px;border:1px solid var(--bord2);border-radius:10px;background:var(--panel);color:var(--txt);text-decoration:none;overflow:hidden}
 .mp-sgcard .nm{font-size:14px;line-height:1.15;color:var(--cyan);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mp-sgcard .z{font-family:var(--mono);font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .mp-sgcard .mv{font-family:var(--mono);font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mp-sgcard.hot{border-color:var(--amber)}
 .mp-sgcard.quiet .z{color:var(--mut)}
-#mk-sigma.mp-sec h2{margin-top:10px}
+/* B-32 and the first screen (the designer's notes (a) and (b) of 21 Nov 2026). The head is 44 px: the title over the
+   screen's as-of at the left, and at the right the choice Today | Last session, a frame of two parts each taking a 44-px
+   tap. A card's second line is the σ with the move's day at its right; its third line the change, or "last session" with
+   that session's σ at the right while the day is young (only the words may be cut, never the figure). */
+#mk-sigma.mp-sec h2{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;align-content:center;align-items:center;column-gap:10px;row-gap:2px;height:44px;min-height:0;margin:0 8px}
+#mk-sigma.mp-sec h2>span:first-child{grid-column:1;grid-row:1;line-height:15px;white-space:nowrap}
+#mk-sigma.mp-sec h2>.aux{grid-column:1;grid-row:2;justify-self:start;font-family:var(--mono);font-size:11px;line-height:13px;white-space:nowrap}
+#mk-sigma.mp-sec h2>.mp-seg{grid-column:2;grid-row:1/3}
+.mp-seg{display:inline-flex;flex:none;border:1px solid var(--bord2);border-radius:8px}
+.mp-seg button{position:relative;height:32px;box-sizing:border-box;margin:0;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--txt2);font-family:var(--sans);font-size:13px;font-weight:500;letter-spacing:0;text-transform:none;white-space:nowrap;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.mp-seg button::before{content:"";position:absolute;inset:-6px 0}
+.mp-seg button.on{background:var(--amber);color:#000;font-weight:600}
+.mp-seg button:focus{outline:none}
+.mp-seg button:focus-visible{outline:2px solid var(--txt);outline-offset:-2px}
+.mp-sgcard .zl{display:flex;align-items:baseline;justify-content:space-between;gap:6px;min-width:0}
+.mp-sgcard .day{flex:none;font-family:var(--mono);font-size:11px;font-weight:400;color:var(--mut);white-space:nowrap}
+.mp-sgcard .mv.ls{display:flex;align-items:baseline;justify-content:space-between;gap:6px;font-size:11px;overflow:visible}
+.mp-sgcard .mv.ls .w{min-width:0;overflow:hidden;text-overflow:ellipsis;font-family:var(--sans)}
+.mp-sgcard .mv.ls .f{flex:none}
+/* a list line's pill names the row's day in place of "1D" where its move is not today's; an opened row's last session */
+.mp-chg>.w .day{letter-spacing:.02em}
+.mp-grid .ls{color:var(--mut);font-size:11px;line-height:1.25;white-space:normal}
+/* ---- the phone's first MARKETS screen (the designer's D-14 and note (b) of 21 Nov 2026): every block above the list a
+   fixed height on one line, so no font can move the list: the site header 52, the alert line 40 + 6, the title row 44,
+   the strip's head 44, the cards 76 + 6, the morning note 44, the install line 44 + 1, the first class head 28 + 1. The
+   first list row then starts at y 386 with everything showing, and four whole rows stand above the tab bar on an iPhone
+   SE (it started at y 790 there, below the tab bar). ---- */
+/* the title row: 44 px, "Markets" at 26 px with the local copy's MOCK badge after it; the screen's as-of is in the
+   strip's head (while the table loads, fails or sends no σ the line is under the title as before, and the row is taller) */
+.mp-head.one{height:44px;box-sizing:border-box;align-items:center;padding:0 8px 0 16px}
+.mp-head.one h1{font-size:26px;line-height:1}
+.mp-head.one .mp-ttl{display:flex;align-items:baseline;gap:8px;min-width:0}
+.mp-head.one .mp-asof{margin:0}
+/* the morning note and the install line: rows of 44 px in one block, a 1-px rule between two */
+.mp-lines{margin:6px 0 0;border-left:3px solid var(--amber);border-radius:10px;background:var(--panel2);overflow:hidden}
+.mp-line{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;height:44px;box-sizing:border-box;padding:0 0 0 13px;color:var(--txt);text-decoration:none;font-family:var(--sans)}
+.mp-line+.mp-line{height:45px;border-top:1px solid var(--bord)}
+.mp-line .tx{min-width:0;display:flex;flex-direction:column;gap:1px}
+.mp-line .k{font-family:var(--mono);font-size:11px;line-height:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-line .t{font-size:14.5px;line-height:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-line .t.one{font-weight:600}
+.mp-line .go{width:30px;text-align:center;font-size:22px;line-height:1;color:var(--mut)}
+.mp-line .open{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;min-width:0;height:44px;margin:0;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.mp-line .x{width:44px;height:44px;margin:0;padding:0;border:0;background:transparent;color:var(--txt2);font-size:22px;line-height:1;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.mp-line .open:focus,.mp-line .x:focus{outline:none}
+.mp-line .open:focus-visible,.mp-line .x:focus-visible,a.mp-line:focus-visible{outline:2px solid var(--amber);outline-offset:-2px}
+a.mp-line:active,.mp-line .open:active,.mp-line .x:active{background:var(--panel)}
+/* the first class head after the strip: 28 px with no margin above or below (every other head keeps its 22 and 8); the
+   gap above it is the lines' own, or 6 px under the cards where no line shows */
+.mp-sec.first h2{height:28px;min-height:0;margin:0 8px}
+#mk-sigma+.mp-sec.first{margin-top:6px}
+/* ---- the bottom sheet (components/Sheet.tsx; the designer's note (b) and D/p1-design.md §9): a panel fixed to the bottom
+   edge, as wide as the screen and at most 80% of its height, over a dimmed page; its head the title and ✕, its body
+   scrolling inside ---- */
+.sheet-bg{position:fixed;inset:0;z-index:80;display:flex;align-items:flex-end;background:rgba(0,0,0,.6);touch-action:none}
+.sheet{width:100%;max-height:80vh;max-height:80dvh;display:flex;flex-direction:column;box-sizing:border-box;background:var(--panel2);border-top:1px solid var(--bord2);border-radius:16px 16px 0 0;font-family:var(--sans);color:var(--txt);touch-action:auto}
+.sheet:focus{outline:none}
+.sheet-head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;padding:6px 6px 0 16px}
+.sheet-head .t{min-width:0;font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber)}
+.sheet-head .x{flex:none;width:44px;height:44px;margin:0;padding:0;border:0;border-radius:10px;background:transparent;color:var(--txt2);font-size:24px;line-height:1;cursor:pointer}
+.sheet-head .x:active{background:var(--panel)}
+.sheet-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:4px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+.sheet-link{display:flex;align-items:center;min-height:44px;margin:6px 0 0;padding:0;border:0;background:transparent;color:var(--cyan);font-family:var(--sans);font-size:14.5px;cursor:pointer}
+/* the install sheet's words and steps (they were the card's) */
+.a2hs-tx{display:flex;flex-direction:column;gap:8px}
+.a2hs-tx p{margin:0;font-size:14.5px;line-height:1.5;color:var(--txt2)}
+.a2hs-tx .how b{color:var(--txt);font-weight:600}
+.a2hs-tx .sh{display:inline-block;width:17px;height:17px;margin:0 1px;vertical-align:-3px;color:var(--amber)}
+.a2hs-tx .go{align-self:flex-start;min-height:52px;margin-top:4px;padding:0 26px;border:0;border-radius:12px;background:var(--amber);color:#000;font-family:var(--sans);font-size:15.5px;font-weight:700;cursor:pointer}
+.a2hs-tx .go:focus{outline:none}
+/* ---- an old price while its market trades (the designer's D-66, 21 Nov 2026): a phone line reads what the figure is as
+   of, "Last print 08:40", in amber, where it read "No new print"; a tile's and a page's LAST PRINT word turns amber in
+   the same state ---- */
+.mp-st .state.stale{color:var(--warn)}
+.mtile.cp .asof .st.stale{color:var(--warn);border-color:#7a5a1a}
 /* a roll's card on the chart: a hollow diamond for its dot (B-27) */
 .mvtip .t .dot.roll{width:7px;height:7px;border-radius:0;transform:rotate(45deg);background:transparent;border:1.5px solid var(--txt2);margin-right:7px}
 /* a σ move in the alert list: its window and source under its line (I-6) */

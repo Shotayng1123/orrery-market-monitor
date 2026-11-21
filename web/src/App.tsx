@@ -23,7 +23,7 @@ import { RatesPhone } from "./views/RatesPhone";
 import { WatchlistPhone } from "./views/WatchlistPhone";
 import { AssetPhone } from "./views/AssetPhone";
 import { PhoneNav } from "./components/PhoneNav";
-import { InstallHint } from "./components/InstallHint";
+import { InstallSheet } from "./components/InstallHint";
 import { FootBars } from "./components/FootBars";
 import { Notify } from "./components/Notify";
 import { NOTIFY_EVENT, pushOff } from "./lib/push";
@@ -198,6 +198,8 @@ export default function App() {
       <CardLayer />
       {acct && me && <AccountModal me={me} onClose={() => setAcct(false)} onSignOut={signOut} onChanged={() => setTok(getToken())} />}
       {notify && <Notify onClose={() => setNotify(false)} />}
+      {/* "Add Orrery to your Home Screen": its steps open in a sheet, from the line on MARKETS or from the menu on any tab */}
+      {pv2 && <InstallSheet />}
       {verify && !DEV_BYPASS && userId !== verify.email && (
         <div className="modal-bg confirm"><div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="vf-title" aria-describedby="vf-text">
           <h3 id="vf-title">Verification link</h3>
@@ -212,8 +214,6 @@ export default function App() {
       <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={me?.email ?? userId} onSignOut={() => (me ? setAcct(true) : signOut())} updatedAt={updatedAt} nextAt={nextAt} polling={polling} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} pv2={pv2} canPreview={phone} />
       <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–6 TABS · ESC</span><span>&#9974;</span></div>
       <div id="wrap">
-        {/* on MARKETS the hint sits under the data's first block, in the screen itself (MarketPhone; the designer's I-6 check) */}
-        {pv2 && view !== "market" && <InstallHint home={false} />}
         <div id="grid" data-view={view}>
           <TabGuard key={`${view}/${pv2 ? "p" : "d"}`} resetKey={sub ?? ""}>
           {import.meta.env.DEV && <CrashSwitch view={view} />}

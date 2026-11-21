@@ -255,8 +255,12 @@ const finState = (p) => p.evaluate(() => {
       ck("no page errors", errs.length === 0, errs); await ctx.close();
     } }
   { const { ctx, p, errs } = await page(b, { ...devices["iPhone 13"] });
-    await go(p, "#market", "#alerts .alrt .msg"); const m = await p.evaluate(() => ({ msg: document.querySelector("#alerts .alrt .msg").checkVisibility() ? document.querySelector("#alerts .alrt .msg").textContent : null, one: document.querySelector("#alerts .alrt .one").checkVisibility() }));
-    ck(`iPhone 13: the header still shows the whole message under the label ("${m.msg}")`, /down 11\.2% intraday$/.test(m.msg ?? "") && !m.one, m);
+    // A phone's alert is one line of 40 px since its first MARKETS screen was rebuilt (the designer's note (b), 21 Nov
+    // 2026; it showed the whole message on two lines under the label): the label, the name and the figure, with no
+    // "intraday" (the list it opens says what the figure is). Only the name may be cut.
+    await go(p, "#market", "#alerts .alrt .one"); const m = await p.evaluate(() => { const al = document.querySelector("#alerts .alrt"), ar = al.getBoundingClientRect(), part = (s) => { const e = al.querySelector(s); if (!e || !e.checkVisibility()) return null; const r = e.getBoundingClientRect(); return { t: e.textContent, whole: e.scrollWidth <= e.clientWidth + 1 && r.right <= ar.right + 0.5 && r.width > 0 }; };
+      return { h: Math.round(ar.height), k: part(".k"), nm: part(".one .nm"), fig: part(".one .fig"), q: part(".one .q"), t: part(".t"), msg: al.querySelector(".msg").checkVisibility(), tip: al.title.split("\n")[0], ox: document.documentElement.scrollWidth - innerWidth }; });
+    ck(`iPhone 13: the header's alert is one line of ${m.h} px: "${[m.k, m.nm, m.fig].filter(Boolean).map((x) => x.t).join(" · ")}", the label and the figure whole, no "intraday" on the line; the whole message is the line's title ("${m.tip}")`, m.h === 40 && m.k?.whole && !!m.nm && m.fig?.whole && /^[+−-]?\d+\.\d%$/.test(m.fig.t) && !m.q && !m.msg && /down 11\.2% intraday/.test(m.tip) && m.ox <= 0, m);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
 
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0); })();

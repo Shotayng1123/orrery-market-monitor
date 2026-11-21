@@ -3,7 +3,7 @@
 import { fxDay, isFxPair } from "./fx.ts";
 import { db, type InstrumentRow } from "./db.ts";
 import { localDate, marketById, marketState, partsIn, type Holidays } from "./sessions.ts";
-import { usableSd, z1mOf, zDay } from "./sigma.ts";
+import { lastSession, usableSd, z1mOf, zDay, type LastSession } from "./sigma.ts";
 import { isFuture, rollDay, tradeDate } from "./futures.ts";
 
 type PeriodKey = "d1" | "w1" | "m1" | "m3" | "m12" | "m36";
@@ -36,6 +36,9 @@ export interface TableRow {
   // 1D is then the change within the new contract; `step` the change of contract in % (null where not measured)
   contract: string | null;
   roll: { d: string; from: string | null; to: string; step: number | null } | null;
+  // B-32 (21 Nov 2026): the instrument's newest completed session, between its last two booked closes, over the σ of the
+  // 63 daily changes before it (sigma.ts lastSession); null where the Monitor holds fewer than two closes
+  ls: LastSession | null;
 }
 
 /** Yields are compared in points; a bond future in the rates group is a price and is compared in per cent. */
@@ -125,11 +128,18 @@ export async function computeTable(now: Date = new Date()): Promise<{ rows: Tabl
     // last booked close itself (a closed market, an official yield) against the 63 before it (sigma.ts)
     const own = useQuote, sd = usableSd(own ? st?.sd63 : st?.sd63x, own ? st?.n63 : st?.n63x);
     const z1d = roll && roll.step == null ? null : zDay(isYield(i) ? chg.d1 : pct.d1, sd);
+    // B-32: the newest completed session, whatever the row shows now: the last booked close against the one before it
+    // (the anchors give that one unless the quote is the newer view, when it was fetched above: `stuck`), over the σ of
+    // the 63 changes before it; a roll between the two closes counted within the new contract
+    const c0 = a?.last_d && a.last_close != null ? { d: a.last_d, close: a.last_close } : null;
+    const c1 = !a?.last_d ? null : a.d1_d === a.last_d ? prevBy.get(i.symbol) ?? null : a.d1_d && a.d1 != null ? { d: a.d1_d as string, close: a.d1 as number } : null;
+    const lr = isFuture(i.symbol) && c0 && c1 ? (rollsOf.get(i.symbol) ?? []).filter((r) => r.d <= c0.d && r.d > c1.d).sort((x, y) => y.d.localeCompare(x.d))[0] : undefined;
+    const ls = lastSession(c0, c1, isYield(i) ? "yield" : "price", { sd: st?.sd63x, n: st?.n63x, from: st?.from63x, to: st?.to63x }, lr ? { from: lr.from_contract, to: lr.to_contract, prevClose: lr.prev_close } : null);
     const pos52 = st && st.hi252 != null && st.lo252 != null && st.hi252 > st.lo252 && last != null ? ((last - st.lo252) / (st.hi252 - st.lo252)) * 100 : null;
     const vs200 = st && st.mean200 && last != null ? (isYield(i) ? last - st.mean200 : (last / st.mean200 - 1) * 100) : null;
     rows.push({ marketTab: i.market_tab !== false, chart: i.chart !== false, z1m, pos52, vs200,
       z1d, sd1d: sd, zFrom: sd == null ? null : (own ? st?.from63 : st?.from63x) ?? null, zTo: sd == null ? null : (own ? st?.to63 : st?.to63x) ?? null, zN: (own ? st?.n63 : st?.n63x) ?? null,
-      contract: isFuture(i.symbol) ? contractOf.get(i.symbol) ?? null : null, roll, symbol: i.symbol, name: i.name, cls: i.cls, group: i.grp, market: i.market, currency: i.currency, decimals: i.decimals, proxyFor: i.proxy_for ?? undefined, order: i.ord, last, lastAt, live, source: i.provider, closes, closeDates, pct, chg });
+      contract: isFuture(i.symbol) ? contractOf.get(i.symbol) ?? null : null, roll, ls, symbol: i.symbol, name: i.name, cls: i.cls, group: i.grp, market: i.market, currency: i.currency, decimals: i.decimals, proxyFor: i.proxy_for ?? undefined, order: i.ord, last, lastAt, live, source: i.provider, closes, closeDates, pct, chg });
   }
   return { rows, asOf: now.toISOString() };
 }

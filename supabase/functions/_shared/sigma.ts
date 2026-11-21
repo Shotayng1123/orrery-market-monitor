@@ -65,6 +65,47 @@ export const zDay = (chg: number | null | undefined, sd: number | null | undefin
 export const z1mOf = (last: number | null | undefined, mean21: number | null | undefined, sd21: number | null | undefined, f: number | null = 1): number | null =>
   fin(last) && fin(mean21) && fin(sd21) && sd21 > 0 && fin(f) && f > 0 ? (last - mean21 * f) / (sd21 * f) : null;
 
+// ---- the newest completed session (B's B-32, 21 Nov 2026) ----
+// At 07:00 SGT a currency's new day is an hour old (the FX day ended at 17:00 New York and is booked at 22:35 UTC), so
+// the day's change in σ says little, and the session that has just ended was in no cell: MOVERS IN σ gets a second
+// reading, LAST SESSION. It is each instrument's newest completed day: the change between its last two booked closes
+// (c0 − c1) over the σ of the 63 daily changes before it, which is the window that ends at c1 (fn_table_stats' sd63x:
+// the newest change is never in its own yardstick). On a future's roll day the change is counted within the new
+// contract, from that contract's own close before (futures.ts rollDay); where that close is not known the change is the
+// series' own, across the change of contract, and has no σ, as the day's own figure has none (table.ts).
+/** A booked close: its session's date and its level. */
+export interface Booked { d: string; close: number }
+/** The newest completed session of a table row. `chg` is in the row's units (per cent for a price, points for a yield),
+ *  `base` the close it is measured from (the close before, or on a roll day the new contract's own close before);
+ *  `sd`, `n`, `wFrom` and `wTo` the σ it is set against, the changes counted in it and its window's first and last close. */
+export interface LastSession {
+  d: string; from: string; close: number; base: number | null; chg: number | null; z: number | null;
+  sd: number | null; n: number | null; wFrom: string | null; wTo: string | null;
+  roll: { from: string | null; to: string; step: number | null } | null;
+}
+/** The newest completed session from the last two booked closes (`c0` the newest, `c1` the one before) and the σ of the
+ *  63 changes that end at `c1` (`w`: fn_table_stats' sd63x, n63x, from63x, to63x). A σ whose window does not end at
+ *  `c1` is not this session's and gives no figure. `roll`: a change of contract after `c1` and not after `c0`. */
+export function lastSession(c0: Booked | null | undefined, c1: Booked | null | undefined, units: Units,
+  w: { sd?: number | null; n?: number | null; from?: string | null; to?: string | null } | null | undefined,
+  roll: { from: string | null; to: string; prevClose: number | null } | null = null): LastSession | null {
+  if (!c0 || !c1 || !fin(c0.close) || !fin(c1.close) || !(c1.d < c0.d)) return null;
+  const known = !!roll && fin(roll.prevClose) && roll.prevClose > 0, base = roll && known ? roll.prevClose! : c1.close;
+  const chg = units === "yield" ? c0.close - base : base === 0 ? null : (c0.close / base - 1) * 100;
+  const sd = w && w.to === c1.d ? usableSd(w.sd, w.n) : null;
+  return { d: c0.d, from: c1.d, close: c0.close, base, chg, z: roll && !known ? null : zDay(chg, sd),
+    sd, n: w && w.to === c1.d ? w.n ?? null : null, wFrom: sd == null ? null : w?.from ?? null, wTo: sd == null ? null : w?.to ?? null,
+    roll: roll ? { from: roll.from, to: roll.to, step: known && c1.close > 0 ? (roll.prevClose! / c1.close - 1) * 100 : null } : null };
+}
+/** The same from a series of booked closes, oldest first (the logic checks; the database gives table.ts the two closes
+ *  and the σ): the last two closes, the σ of the 63 changes before the newest, a roll on the newest close's day. */
+export function lastSessionOf(closes: Booked[], units: Units, rolls: Array<RollLite & { from?: string | null; to?: string }> = []): LastSession | null {
+  const n = closes.length;
+  if (n < 2) return null;
+  const s = sigmaStats(closes, units, rolls), c0 = closes[n - 1], c1 = closes[n - 2], r = rolls.find((x) => x.d > c1.d && x.d <= c0.d);
+  return lastSession(c0, c1, units, { sd: s.sdx, n: s.nx, from: s.fromx, to: s.tox }, r ? { from: r.from ?? null, to: r.to ?? "", prevClose: r.prevClose } : null);
+}
+
 // ---- σ alerts ----
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** "19 Nov 2026", as the page writes a date (web/src/lib/time.ts fmtDate). */

@@ -17,8 +17,9 @@ import { mockStock } from "./mockStock";
 import { mockInstrument, rowFromBars } from "./mockInstr";
 import standin from "./standin.json";
 import { isYield } from "./fmt";
-import { marketOf, marketStatus, stockMarket, type MarketId } from "./sessions";
-import type { TableRow, Health, Curve, Series, Alert, EconEvent, NewsItem, Note, Report, PeriodKey } from "./types";
+import { dayEnd, FX_BELL, FX_TZ, marketOf, marketStatus, stockMarket, zonedMs, type Market, type MarketId } from "./sessions";
+import { partsIn } from "./time";
+import type { TableRow, Health, Curve, Series, Alert, EconEvent, NewsItem, Note, Report, PeriodKey, LastSession } from "./types";
 import type { Feed, WatchRow } from "../views/Watchlist";
 import type { EarningsRow } from "../components/Earnings";
 import type { PolicyRow } from "../views/RatesFx";
@@ -112,6 +113,42 @@ export function printAt(market: string | null | undefined, now: number): { live:
   return { live: false, lastAt: new Date(end).toISOString() };
 }
 
+// ---- the booked closes at a set clock (B-32, 21 Nov 2026) ----
+// With the clock set, each stand-in row's daily closes carry the dates the live Monitor's would at that moment. The
+// newest booked close is the last session of the row's market that has ended (an exchange's at its last bell; a currency
+// pair's and a CME future's at 17:00 New York, booked 35 minutes later, as the history job books them at 22:35 UTC in
+// New York's winter); the one before it is the session before, weekends and the calendar's holidays passed over. A print
+// after that close is the day's own, measured from it (USD/JPY on Tue 24 Nov at 07:10 SGT: from the close of 23 Nov,
+// with the session of 20 to 23 Nov as its last session); a print that is that close is the session itself (the Nikkei
+// 225 that morning: Friday 20 Nov, Monday being a holiday in Tokyo). Two things differ from the live Monitor. The local
+// copy still shows every Yahoo row as a print with its time, where the live Monitor shows a booked close by its date
+// once the day is booked: New York's rows at 07:10 SGT carry no day here and "23 Nov" there. And a future is live
+// here from 18:00 New York, the start of Globex's evening; the server's table dates a future's quote by New York's
+// calendar day (`supabase/functions/_shared/table.ts`), so there its row stays at the booked close until midnight in
+// New York (read in the code on 21 Nov 2026, not changed with B-32).
+const BOOK_LAG_MIN = 35;
+/** When the session dated `ymd` in a market's calendar has ended and is booked (ms). */
+export function sessionEndMs(m: Market, ymd: string): number {
+  return m.id === "FX" || m.id === "CME" ? zonedMs(FX_TZ, ymd, FX_BELL) + BOOK_LAG_MIN * 60e3 : zonedMs(m.tz, ymd, dayEnd(m, ymd));
+}
+const bookedCache = new Map<string, string[]>();
+/** The sessions of a market that have ended by `now`, newest first: `n` dates in the market's own calendar (New York's
+ *  for currencies and CME futures, Monday to Friday). Null for a market the session table does not keep, and for one
+ *  that never closes. */
+export function bookedDays(market: string | null | undefined, now: number, n: number): string[] | null {
+  const m = marketOf(market);
+  if (!m || m.id === "CRYPTO") return null;
+  const round = m.id === "FX" || m.id === "CME", hol = new Set(HOLIDAYS[m.id] ?? []);
+  const trades = (ymd: string): boolean => { const wd = new Date(`${ymd}T00:00:00Z`).getUTCDay(); return (round ? wd >= 1 && wd <= 5 : m.days.includes(wd)) && !hol.has(ymd); };
+  const back = (ymd: string): string => new Date(Date.parse(`${ymd}T00:00:00Z`) - 86400e3).toISOString().slice(0, 10);
+  let d = partsIn(round ? FX_TZ : m.tz, new Date(now)).ymd;
+  for (let k = 0; k < 21 && !(trades(d) && sessionEndMs(m, d) <= now); k++) d = back(d);
+  const key = `${m.id}|${d}`;
+  let list = bookedCache.get(key);
+  if (!list || list.length < n) { list = []; for (let x = d; list.length < n; x = back(x)) if (trades(x)) list.push(x); bookedCache.set(key, list); }
+  return list;
+}
+
 function rng(seed: number): () => number {
   let s = seed >>> 0 || 1;
   return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return (s % 100000) / 100000; };
@@ -141,6 +178,9 @@ function walkBack(times: number[], endValue: number, stepVol: number, seed: numb
 const GOLD_TO = "GCG27.CMX", GOLD_EXPIRES_IN = 96;
 export const MOCK_ROLL = { symbol: "GC=F", from: "GCZ26.CMX", to: GOLD_TO, step: 0.03, expiresIn: GOLD_EXPIRES_IN } as const;
 const MOCK_SIGMA_DAY: Record<string, number> = { "USDJPY=X": 2.7 };
+/** B-32 in the local copy: the session before USD/JPY's 2.7σ day was a -2.2σ one (the designer's sketch of the cell,
+ *  "last session -2.2σ"; the stand-in σ alert of a day ago, which stays under the list's 2.5σ line, names it). */
+const MOCK_LAST_SIGMA: Record<string, number> = { "USDJPY=X": -2.2 };
 /** The contract each stand-in future names, as the server's record (fut_contracts) does, its expiry in days from now (so
  *  the stand-in contract never runs past it, whatever the date) and the day its record starts. */
 export const MOCK_CONTRACTS: Record<string, { contract: string; expiresIn: number; since: number }> = {
@@ -162,8 +202,13 @@ function dailySeries(symbol: string, n: number): Array<{ t: number; v: number }>
   const days: number[] = [];
   for (let d = today - DAY; days.length < n; d -= DAY) { const wd = new Date(d * 1000).getUTCDay(); if (wd !== 0 && wd !== 6) days.unshift(d); }
   const out = walkBack(days, m.base, m.vol, seedOf(symbol)), L = out.length - 1;
-  const z = MOCK_SIGMA_DAY[symbol];
-  if (z && L > 66) for (let i = 0; i < 4; i++) { const v = out.map((p) => p.v); out[L - 1] = { ...out[L - 1], v: m.base / (1 + (z * sd63(v, L - 1, false)) / 100) }; }
+  // the newest two changes set to their stand-in sizes in σ: each is measured against the 63 changes before it, and the
+  // newer one's window holds the older one, so the two closes are set in turn until they rest
+  const z = MOCK_SIGMA_DAY[symbol], zl = MOCK_LAST_SIGMA[symbol];
+  if (z && L > 66) for (let i = 0; i < 8; i++) {
+    out[L - 1] = { ...out[L - 1], v: m.base / (1 + (z * sd63(out.map((p) => p.v), L - 1, false)) / 100) };
+    if (zl) out[L - 2] = { ...out[L - 2], v: out[L - 1].v / (1 + (zl * sd63(out.map((p) => p.v), L - 2, false)) / 100) };
+  }
   if (symbol === MOCK_ROLL.symbol) for (let k = 0; k < L; k++) out[k] = { ...out[k], v: out[k].v / (1 + MOCK_ROLL.step) };
   return out;
 }
@@ -190,33 +235,48 @@ function hourlySeries(symbol: string, days: number, perHour = 1): Array<{ t: num
 }
 
 export function mockTable(): { rows: TableRow[]; asOf: string } {
-  const atClock = clockSet();
+  const atClock = clockSet(), now = Date.now();
   const rows: TableRow[] = MASTER.map((m) => {
-    const s = dailySeries(m.symbol, 800);
+    const s = dailySeries(m.symbol, 800), L = s.length - 1;
     const last = m.base;
-    const at = (daysBack: number) => s[Math.max(0, s.length - 1 - daysBack)];
-    const a = { d1: at(1), w1: at(5), m1: at(21), m3: at(63), m12: at(252), m36: at(756) };
+    const source = providerOf(m.symbol);
+    // with the clock set (om_mock_now), a print by the session table at that moment; without, the fixed states
+    const pr = source === "yahoo" && atClock ? printAt(m.market, now) : null;
+    // B-32: the dates of the booked closes. With the clock set they are the market's own sessions (above), and the print
+    // is the day's own (`own`) when it came after the newest of them; otherwise it is that close, a closed market's last
+    // session. Without the clock every Yahoo row is a print of now and the closes keep the walk's own weekdays.
+    const mk = marketOf(m.market), days = pr && mk ? bookedDays(m.market, now, s.length) : null;
+    const own = source === "yahoo" && (!pr || !days || !mk || Date.parse(pr.lastAt) > sessionEndMs(mk, days[0]));
+    const iso = (i: number): string => new Date(s[Math.max(0, i)].t * 1000).toISOString().slice(0, 10);
+    const dateAt = (i: number): string => (days ? days[(own ? L - 1 : L) - Math.max(0, i)] ?? iso(i) : iso(i));
+    const back = { d1: 1, w1: 5, m1: 21, m3: 63, m12: 252, m36: 756 } as const;
     const closes: TableRow["closes"] = {}, closeDates: TableRow["closeDates"] = {}, pct: TableRow["pct"] = {};
     // B-27: gold's stand-in roll day: its 1D is the change within the new contract, from that contract's own close before
     const roll = m.symbol === MOCK_ROLL.symbol ? mockRoll(s) : null;
-    for (const [k, p] of Object.entries(a) as Array<[keyof typeof a, { t: number; v: number }]>) { const base = k === "d1" && roll ? roll.prevClose : p.v; closes[k] = base; closeDates[k] = new Date(p.t * 1000).toISOString().slice(0, 10); pct[k] = (last / base - 1) * 100; }
+    for (const [k, n] of Object.entries(back) as Array<[keyof typeof back, number]>) { const i = Math.max(0, L - n), base = k === "d1" && roll ? roll.prevClose : s[i].v; closes[k] = base; closeDates[k] = dateAt(i); pct[k] = (last / base - 1) * 100; }
     // σ 1M, 52-week position and distance to the 200-day average from the same synthetic closes, so those columns are not
     // blank in the preview (σ vs 1M avg on a future set on the new contract's level, as the server's)
     const tail = (n: number) => s.slice(-n).map((p, i, xs) => (roll && i < xs.length - 1 ? p.v * (1 + MOCK_ROLL.step) : p.v)), mean = (xs: number[]) => xs.reduce((x, y) => x + y, 0) / xs.length;
     const m21 = tail(21), mu = mean(m21), sd = Math.sqrt(mean(m21.map((v) => (v - mu) ** 2))), y = s.slice(-252).map((p) => p.v), lo = Math.min(...y, last), hi = Math.max(...y, last), m200 = mean(s.slice(-200).map((p) => p.v));
-    const rate = m.group === "rates" && !m.symbol.endsWith("=F"), source = providerOf(m.symbol);
+    const rate = m.group === "rates" && !m.symbol.endsWith("=F");
     // I-6: the day in σ, by the server's rule (supabase/functions/_shared/sigma.ts): the day's change over the σ of the 63
     // daily changes before it (the newest point is the print, the one before it the last close)
-    const L = s.length - 1, sdz = sd63(s.map((p) => p.v), L - 1, rate), day = rate ? last - (closes.d1 ?? last) : pct.d1 ?? 0;
+    const v = s.map((p) => p.v), sdz = sd63(v, L - 1, rate), day = rate ? last - (closes.d1 ?? last) : pct.d1 ?? 0;
+    const z1d = sdz > 0 ? day / sdz : null, zFrom = dateAt(L - 64), zTo = dateAt(L - 1);
+    // B-32: the newest completed session, by the server's rule (sigma.ts lastSession): the change between the last two
+    // booked closes over the σ of the 63 changes before it. Behind a print of the day's own, those are the two closes
+    // before the print; where the row is itself the last booked close, the session is the row's own day
+    const sdl = sd63(v, L - 2, rate), chgl = rate ? v[L - 1] - v[L - 2] : (v[L - 1] / v[L - 2] - 1) * 100;
+    const ls: LastSession = own
+      ? { d: dateAt(L - 1), from: dateAt(L - 2), close: v[L - 1], base: v[L - 2], chg: chgl, z: sdl > 0 ? chgl / sdl : null, sd: sdl, n: 63, wFrom: dateAt(L - 65), wTo: dateAt(L - 2), roll: null }
+      : { d: dateAt(L), from: dateAt(L - 1), close: last, base: closes.d1 ?? null, chg: day, z: z1d, sd: sdz, n: 63, wFrom: zFrom, wTo: zTo, roll: roll ? { from: roll.from, to: roll.to, step: roll.step } : null };
     const fut = MOCK_CONTRACTS[m.symbol];
     // as the server's table (table.ts): a print's own time; an official yield, which has no quote, stamped with the
     // date it was published for at midnight UTC ("<date>T00:00:00Z": a date, no time of day; the reviewer's R2B-01)
-    // with the clock set (om_mock_now), a print by the session table at that moment; without, the fixed states
-    const pr = source === "yahoo" && atClock ? printAt(m.market, Date.now()) : null;
-    const lastAt = pr ? pr.lastAt : source === "yahoo" ? new Date().toISOString() : `${new Date(s[s.length - 1].t * 1000).toISOString().slice(0, 10)}T00:00:00Z`;
+    const lastAt = pr ? pr.lastAt : source === "yahoo" ? new Date().toISOString() : `${iso(L)}T00:00:00Z`;
     return { ...m, proxyFor: m.proxyFor, last, lastAt, source, live: pr ? pr.live : source === "yahoo" && (m.market === "FX" || m.market === "CME"), closes, closeDates, pct,
       z1m: sd > 0 ? (last - mu) / sd : null, pos52: hi > lo ? ((last - lo) / (hi - lo)) * 100 : null, vs200: rate ? last - m200 : (last / m200 - 1) * 100,
-      z1d: sdz > 0 ? day / sdz : null, sd1d: sdz, zFrom: new Date(s[L - 64].t * 1000).toISOString().slice(0, 10), zTo: new Date(s[L - 1].t * 1000).toISOString().slice(0, 10), zN: 63,
+      z1d, sd1d: sdz, zFrom, zTo, zN: 63, ls,
       contract: fut?.contract ?? null, roll: roll ? { d: roll.d, from: roll.from, to: roll.to, step: roll.step } : null };
   });
   return { rows, asOf: new Date().toISOString() };

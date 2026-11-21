@@ -11,8 +11,9 @@ import { cellBp, cellPct } from "../lib/fmt";
 import { pageHash } from "../lib/indices";
 import { openAsset } from "../components/CompanyCard";
 import { fmtDate, fmtDayMon, rowAsOfTitle } from "../lib/time";
-import { classLabel, delayed, dottedLine, FX, MOVERS_SIGMA, RANGE_52W as RANGE_WORD, RATES, SIGMA_1D, SIGMA_1M as SIGMA_WORD, VS_200D } from "../lib/labels";
-import { commonWindow, moveLine, moversInSigma, sigmaTip, SIGMA_LINE, SIGMA_QUIET, sortBySigma } from "../lib/movers";
+import { classLabel, delayed, dottedLine, FX, LAST_SESSION, MOVERS_SIGMA, RANGE_52W as RANGE_WORD, RATES, SIGMA_1D, SIGMA_1M as SIGMA_WORD, TODAY, VS_200D } from "../lib/labels";
+import { cellDay, columnTip, commonWindow, dayWords, hasLastSession, lastTip, moveParts, moversInSigma, rowDayTip, showsLast, sigmaOf, SIGMA_LINE, SIGMA_QUIET, sortBySigma, staleDay, STRIP_N, todayTip, type SigmaMode } from "../lib/movers";
+import { useEntryState } from "../lib/nav";
 import { codeOf, monthOf } from "../lib/futures";
 import { Flash } from "../components/Flash";
 import { PERIODS, type Curve, type TableRow } from "../lib/types";
@@ -64,7 +65,7 @@ function MarketsTable({ rows }: { rows: TableRow[] }) {
   const ordered = [...rows].sort((a, b) => a.order - b.order);
   return <OneTable rows={bySigma ? sortBySigma(ordered) : ordered} bySigma={bySigma} onSigma={() => setBySigma(!bySigma)} />;
 }
-export const SIGMA_1D_TIP = "Today's change over the σ of the instrument's own daily changes in the 63 sessions before it (bp for yields, % for the rest). Click to sort by its size within each bar; click again for the table's order";
+export const SIGMA_1D_TIP = "Today's change over the σ of the instrument's own daily changes in the 63 sessions before it (bp for yields, % for the rest). Each row's tooltip also gives its last completed session. Click to sort by its size within each bar; click again for the table's order";
 function OneTable({ rows, bySigma, onSigma }: { rows: TableRow[]; bySigma: boolean; onSigma: () => void }) {
   const groups = new Map<string, TableRow[]>();
   for (const r of rows) groups.set(r.cls, [...(groups.get(r.cls) ?? []), r]);
@@ -117,11 +118,14 @@ function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
       <tr className="cls"><td colSpan={6 + PERIODS.length}><span>{classLabel(cls)}</span></td></tr>
       {rs.map((r) => {
         const isRate = isYield(r);
+        // B-32: a row whose last figure is not from today in Singapore carries its day after the name and its badges
+        // ("Nikkei 225 20 Nov": its LAST, 1D and 1D in σ are that day's); a live row carries none. Not a badge: no box
+        const day = staleDay(r);
         // every row opens its instrument's page (the designer's D-15, B-23): the name a teal link, the row a pointer.
         // Its tooltip says whether its market is open, and when a closed one next opens, in SGT (lib/opens.ts)
         return (
           <tr key={r.symbol} className={`click${r.live ? " live" : ""}`} title={`${r.symbol} · ${rowAsOfTitle(r)}${rowStateWords(r)} · open its page`} onClick={(e) => { if (!(e.target as HTMLElement).closest("a")) openAsset(r.symbol); }}>
-            <td className="l" title={`${r.name} (${r.symbol})`}><a className="lnk" href={`#${pageHash(r.symbol)}`}>{shortName(r.symbol, r.name)}</a><Badges r={r} /></td>
+            <td className="l" title={`${r.name} (${r.symbol})`}><a className="lnk" href={`#${pageHash(r.symbol)}`}>{shortName(r.symbol, r.name)}</a><Badges r={r} />{day && <span className="asday" title={rowDayTip(day)}>{dayWords(day)}</span>}</td>
             <td className="num"><Flash value={r.last}><b>{levelOf(r, r.last)}</b></Flash></td>
             {PERIODS.map((p) => {
               const c = r.closes[p.key];
@@ -130,7 +134,7 @@ function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
               // 1D IN σ right after 1D: "+2.7σ", shaded full at ±4σ (the designer's I-6 note). A roll day's mark is beside
               // the name; in the one-screen layout an R after this figure instead (the stylesheet's, so the cell's text
               // stays the figure), as the narrow name cell would put the DELAYED badge behind an ellipsis (the reviewer's S3)
-              return p.key === "d1" ? <Fragment key={p.key}>{cell}<td className={`num z ${signCls(r.z1d, 1)}${r.roll ? " rolled" : ""}`} style={{ background: changeShade(r.z1d ?? null, 4) }} title={sigmaTip(r)}>{fmtSigma(r.z1d)}</td></Fragment> : cell;
+              return p.key === "d1" ? <Fragment key={p.key}>{cell}<td className={`num z ${signCls(r.z1d, 1)}${r.roll ? " rolled" : ""}`} style={{ background: changeShade(r.z1d ?? null, 4) }} title={columnTip(r)}>{fmtSigma(r.z1d)}</td></Fragment> : cell;
             })}
             <td className={`num grp ${signCls(r.z1m, 1)}`} style={{ background: changeShade(r.z1m ?? null, 3) }}>{fmtSigma(r.z1m)}</td>
             <td className="num" style={{ background: r.pos52 == null ? undefined : levelShade(r.pos52, 0, 100) }}>{r.pos52 == null ? "–" : `${Math.round(r.pos52)}%`}</td>
@@ -175,26 +179,58 @@ export function CurvePanel({ period, tick }: { period: ChartPeriod; tick: number
   return <div className="cgrid two">{one("US TREASURY CURVE", us.data, us.error)}{one("JGB CURVE", jp.data, jp.error)}</div>;
 }
 
-/** MOVERS IN σ (I-6; B-06 (a), the designer's I-6 note): the ten largest of the day's moves in σ, any class, one row
- *  of ten cells (two rows of five under 1,100 CSS px), each a link to its page: the name, "+2.7σ" in its sign's colour,
- *  the change and the level under it. At the alert line (2.5σ) a cell gets an amber border; under 1.5σ it is lettered
- *  muted. The closes each figure is worked out from are on the cell's tooltip; the line under the strip names the window
- *  most of them share. */
-function SigmaStrip({ rows, loading, asOf }: { rows: TableRow[]; loading: boolean; asOf: string | null }) {
-  const top = moversInSigma(rows), win = commonWindow(top);
+/** The strip's two readings as two joined chips right after its title (B-32; the designer's note of 21 Nov 2026):
+ *  TODAY, the change since the last booked close, and LAST SESSION, each instrument's newest completed day. The current
+ *  one is filled; Left and Right move between them. Drawn only where the server sends the last session. */
+function SigmaPick({ mode, onMode }: { mode: SigmaMode; onMode: (m: SigmaMode) => void }) {
+  const TIP: Record<SigmaMode, string> = {
+    today: "The change since each instrument's last booked close, over the σ of the 63 daily changes before it",
+    last: "Each instrument's newest completed day: the change between its last two booked closes, over the σ of the 63 daily changes before it. A currency's and a future's day ends at 17:00 New York",
+  };
+  const go = (to: SigmaMode, from: HTMLElement) => { onMode(to); from.parentElement?.querySelector<HTMLElement>(`[data-mode="${to}"]`)?.focus(); };
+  return (
+    <span className="sgpick" id="mk-sgpick" role="group" aria-label="Which move each cell shows">
+      {(["today", "last"] as const).map((k) => (
+        <button type="button" key={k} data-mode={k} className={`chip-sm${mode === k ? " on" : ""}`} aria-pressed={mode === k} title={TIP[k]} onClick={() => onMode(k)}
+          onKeyDown={(e) => { if (e.key === "ArrowLeft") { e.preventDefault(); go("today", e.currentTarget); } else if (e.key === "ArrowRight") { e.preventDefault(); go("last", e.currentTarget); } }}>
+          {(k === "today" ? TODAY : LAST_SESSION).toUpperCase()}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+/** MOVERS IN σ (I-6; B-06 (a), the designer's I-6 note): the ten largest moves in σ, any class, one row of ten cells
+ *  (two rows of five under 1,100 CSS px), each a link to its page: the name, "+2.7σ" in its sign's colour, the change
+ *  and the level under it. At the alert line (2.5σ) a cell gets an amber border; under 1.5σ it is lettered muted. The
+ *  closes each figure is worked out from are on the cell's tooltip; the line under the strip names the window most of
+ *  them share.
+ *  B-32 (21 Nov 2026): two readings, TODAY and LAST SESSION, chosen right after the title; the day of a move that is not
+ *  today's at the right of its σ, and under Last session every session's date with its change and its close; under
+ *  Today, "last session -2.2σ" in place of the change and the level while a currency's or a CME future's day is under
+ *  three hours old (lib/movers.ts). In the one-screen layout a cell takes two lines: the name and the σ, then the day
+ *  and the change. */
+function SigmaStrip({ rows, loading, asOf, mode, onMode }: { rows: TableRow[]; loading: boolean; asOf: string | null; mode: SigmaMode; onMode: (m: SigmaMode) => void }) {
+  const pick = hasLastSession(rows), m: SigmaMode = pick ? mode : "today", now = new Date();
+  const top = moversInSigma(rows, STRIP_N, m), win = commonWindow(top, m);
+  // what the cells show changes with the choice; a yield's cell now names its day, so the head no longer says when an
+  // official yield's day counts. A server from before the last session keeps the head it had
+  const what = m === "last" ? "each instrument's last completed day ÷ σ of the 63 daily changes before it" : pick ? "the day's change ÷ σ of its daily changes, 63 sessions" : "today's change ÷ σ of daily changes, 63 sessions · official-curve yields once their day is booked";
   // the head names when its figures are as of, as the phone's does (the designer's §3.3; the reviewer's S1)
   return (
-    <Panel no="01" k="sigma" title={upperSigma(MOVERS_SIGMA)} aux={<>today's change ÷ σ of daily changes, 63 sessions · official-curve yields once their day is booked{asOf ? <> · <span id="mk-sigma-asof">as of {fmtStampSafe(asOf)}</span></> : null}{DEV_MOCK && <span className="badge est">MOCK</span>}</>}>
+    <Panel no="01" k="sigma" title={upperSigma(MOVERS_SIGMA)} after={pick ? <SigmaPick mode={m} onMode={onMode} /> : undefined} aux={<>{what}{asOf ? <> · <span id="mk-sigma-asof">as of {fmtStampSafe(asOf)}</span></> : null}{DEV_MOCK && <span className="badge est">MOCK</span>}</>}>
       {top.length ? (
         <>
-          <div className="sgstrip" id="mk-sigma">
+          <div className="sgstrip" id="mk-sigma" data-mode={m} data-ls={pick ? "" : undefined}>
             {top.map((r) => {
-              const z = r.z1d!;
+              const z = sigmaOf(r, m)!, day = cellDay(r, m, now), young = m === "today" && showsLast(r, now), p = moveParts(r, m);
               return (
-                <a key={r.symbol} className={`sgcell${Math.abs(z) >= SIGMA_LINE ? " hot" : ""}${Math.abs(z) < SIGMA_QUIET ? " quiet" : ""}`} href={`#${pageHash(r.symbol)}`} title={`${r.name} (${r.symbol}) · ${sigmaTip(r)}`}>
+                <a key={r.symbol} className={`sgcell${Math.abs(z) >= SIGMA_LINE ? " hot" : ""}${Math.abs(z) < SIGMA_QUIET ? " quiet" : ""}`} href={`#${pageHash(r.symbol)}`} title={`${r.name} (${r.symbol}) · ${m === "last" ? lastTip(r) : todayTip(r, now)}`}>
                   <span className="nm">{shortName(r.symbol, r.name)}</span>
-                  <span className={`z ${signCls(z, 1)}`}>{fmtSigma(z)}</span>
-                  <span className="mv">{moveLine(r)}</span>
+                  <span className="zl"><span className={`z ${signCls(z, 1)}`}>{fmtSigma(z)}</span>{day && <span className="day" title={fmtDate(day)}>{dayWords(day)}</span>}</span>
+                  {young
+                    ? <span className="mv"><span className="ls" title={`${r.name} (${r.symbol}) · ${lastTip(r)}`}>{LAST_SESSION.toLowerCase()} <span className="f">{fmtSigma(r.ls?.z)}</span></span></span>
+                    : <span className="mv">{day && <span className="d2">{dayWords(day)} · </span>}<span className="cg">{p.chg}</span><span className="lv"> · {p.lvl}</span></span>}
                 </a>
               );
             })}
@@ -212,6 +248,8 @@ export function MarketView({ tick }: { tick: number }) {
   const table = useApi<{ rows: TableRow[]; asOf: string }>("table", undefined, tick);
   const [period, setPeriod] = useState<ChartPeriod>("12M");
   const [sigmaWindow, setSigmaWindow] = useState<SigmaWindow>("m12");
+  // the strip's reading stays with this visit (Back returns to it); a fresh visit of MARKETS starts on TODAY
+  const [sgMode, setSgMode] = useEntryState<SigmaMode>("sigma", "today");
   const all = table.data?.rows ?? [];
   const rows = all.filter((r) => r.marketTab !== false);   // the curated table; every instrument keeps a chart below
   // one screen, or a phone: charts for the table set only (on a phone every instrument's chart made a page twenty thousand pixels long)
@@ -220,7 +258,7 @@ export function MarketView({ tick }: { tick: number }) {
   const selector = <PeriodBar period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} />;
   return (
     <>
-      <SigmaStrip rows={rows} loading={!table.data && !table.error} asOf={table.data?.asOf ?? null} />
+      <SigmaStrip rows={rows} loading={!table.data && !table.error} asOf={table.data?.asOf ?? null} mode={sgMode} onMode={setSgMode} />
       <Panel no="02" k="mkt" title="MARKETS" aux={table.data ? <>as of {fmtStampSafe(table.data.asOf)} · Yahoo Finance, US Treasury, MOF{DEV_MOCK && <span className="badge est">MOCK</span>}</> : table.error ? <span className="warn">{table.error}</span> : "loading…"}>
         {/* which of the table's markets are shut, and when each opens, on screen without a hover (the designer's D-62) */}
         {rows.length > 0 && <ClosedNow id="mk-opens" rows={rows.map(panelRowOf)} />}

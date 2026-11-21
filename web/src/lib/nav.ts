@@ -11,6 +11,15 @@
 //     the position as well, but only as far as the page is tall at that moment, and a list drawn from an answer that
 //     has not come yet is short (the live site; the local copy answers at once). So the position is held until the
 //     page is tall enough, for a few seconds at most, and given up at the reader's first touch, wheel or key.
+//   - Being tall enough is not all (B's B-33, 21 Nov 2026). A phone's WATCHLIST is first drawn without its names: its
+//     sections alone are tall enough for the position to be reached at once, the hold ended there, and the names then
+//     arrived above what was on screen, which the browser keeps in place by moving the page: the row that was tapped
+//     stood 589 px above the screen. So the position is held for as long as the page says a list is still on its way
+//     (an element marked `data-nav-wait`, which a view draws until its rows have come) and until the page has kept its
+//     height for a moment after that; a move of the page that the reader did not make is put right meanwhile. A view
+//     marks itself likewise while an answer of its own that draws above its list is on its way: WATCHLIST's line of
+//     the markets that are shut is at its full length once the market table has come (it grew by 42 px above the row),
+//     and a phone's MARKETS draws its morning note above the list (44 px). NEWS and EQUITIES do not mark theirs yet.
 //   - A list's own state that sets its height (MARKETS' and RATES & FX's open row on a phone) is kept with its entry
 //     (useEntryState), so Back finds the row open where it was.
 // Nothing is stored: the keys' positions live in this page's memory. After a reload the browser's own restoring is
@@ -20,7 +29,10 @@
 import { useCallback, useState } from "react";
 import { opensAtTop, type NavRoute } from "./pagetop";
 
-const KEY = "omNav", HOLD_MS = 5000;
+const KEY = "omNav", HOLD_MS = 5000, QUIET_MS = 300;
+/** A view draws an element with this attribute until the answers that set the height above its list have come
+ *  (WATCHLIST's names and the market table; a phone's MARKETS' morning note). */
+export const NAV_WAIT = "data-nav-wait";
 const INPUT = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
 let current: string | null = null;           // the key of the entry on screen
 let shown: NavRoute | null = null;            // its address, read
@@ -78,24 +90,35 @@ export function navDrawn(): void {
   else hold(p.y);
 }
 
-/** Keeps the page at `y` while it grows to reach it; stops once there, at the reader's first input, or after a few
- *  seconds. */
+/** Keeps the page at `y` while it grows to reach it and while a list above is still on its way; stops once the page
+ *  has stood there at an unchanged height for a moment with no list awaited, at the reader's first input, or after a
+ *  few seconds. */
 function hold(y: number): void {
-  let done = false;
+  let done = false, quiet: ReturnType<typeof setTimeout> | undefined;
   const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => place()) : null;
   const end = () => {
     if (done) return;
-    done = true; ro?.disconnect(); clearTimeout(timer);
+    done = true; ro?.disconnect(); clearTimeout(timer); clearTimeout(quiet);
     for (const e of INPUT) window.removeEventListener(e, end, true);
+    window.removeEventListener("scroll", place, true);
     if (stopHold === end) stopHold = null;
   };
+  const settled = () => {
+    if (done) return;
+    if (Math.abs(window.scrollY - y) > 1 || document.querySelector(`[${NAV_WAIT}]`)) { place(); return; }   // moved meanwhile, or a list still awaited
+    end();
+  };
+  // called when the page is first drawn, whenever it changes height, and whenever it moves without the reader's doing
+  // (the reader's own first touch, wheel or key has ended the hold before it moves anything)
   const place = () => {
     if (done) return;
     if (Math.abs(window.scrollY - y) > 1) window.scrollTo(0, y);
-    if (Math.abs(window.scrollY - y) <= 1) end();
+    clearTimeout(quiet);
+    quiet = setTimeout(settled, QUIET_MS);
   };
   const timer = setTimeout(end, HOLD_MS);
   for (const e of INPUT) window.addEventListener(e, end, { capture: true, passive: true });
+  window.addEventListener("scroll", place, { capture: true, passive: true });
   ro?.observe(document.body);
   stopHold = end;
   place();
