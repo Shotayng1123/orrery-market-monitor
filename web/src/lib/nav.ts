@@ -15,18 +15,10 @@
 //     (useEntryState), so Back finds the row open where it was.
 // Nothing is stored: the keys' positions live in this page's memory. After a reload the browser's own restoring is
 // all there is, as before.
+// Which pages open at their top is the rule in lib/pagetop.ts, a file that imports nothing: the logic checks read it
+// on GitHub, where React is not installed and this file, which imports it for useEntryState, cannot be loaded.
 import { useCallback, useState } from "react";
-
-export interface NavRoute { view: string; sub: string }
-
-/** Whether a new page opens at its top: a name's page (another name than the one on screen), or an index's page on
- *  EQUITIES opened from another tab. The tabs themselves keep what they do (on a phone the bottom bar goes to the top
- *  itself), and a piece of RESEARCH places itself. */
-export function opensAtTop(from: NavRoute | null, to: NavRoute): boolean {
-  if (to.view === "asset") return !!to.sub && !(from?.view === "asset" && from.sub === to.sub);
-  if (to.view === "equities") return !!to.sub && !!from && from.view !== "equities";
-  return false;
-}
+import { opensAtTop, type NavRoute } from "./pagetop";
 
 const KEY = "omNav", HOLD_MS = 5000;
 const INPUT = ["wheel", "touchstart", "pointerdown", "keydown"] as const;

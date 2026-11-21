@@ -31,7 +31,9 @@ web/        Vite + React + TypeScript. src/styles/tokens.css is the design syste
             plays the Monitor's answers are held (lib/hold.ts), so nothing else is drawn and it stays smooth.
             src/lib/nav.ts: a page opened from a list (a name's, or an index's on EQUITIES) starts at its top; Back
             returns the list to where it stood, holding the place while a late answer draws the list, and finds a
-            phone list's open line still open (each history entry carries a key in history.state).
+            phone list's open line still open (each history entry carries a key in history.state). Which pages
+            open at their top is the rule in src/lib/pagetop.ts, a file with no imports, so that the logic checks
+            can read it where React is not installed.
 supabase/   migrations/ and functions/ (tick, daily, api), cron.sql.
 jobs/       TypeScript scripts for GitHub Actions.
 ```
@@ -149,6 +151,16 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   relay takes over and hands back, its timetable against the database's own), where a statements table wider
   than the screen comes to rest, and the one formatting of figures, dates and words (`lib/fmt.ts`, `lib/time.ts`,
   `lib/labels.ts`). `cd jobs && npx tsx ../sim/logic.test.ts`.
+  The same command checks the file itself, in its last section. GitHub installs `jobs/` alone before it runs the
+  logic checks (`logic-tests`, and `deploy-server` before a deploy), so nothing the file imports, directly or through
+  another file, may reach a package of the page's (`web/node_modules`: React, uPlot). On a machine that has
+  `web/node_modules` such an import loads all the same: on 21 Nov 2026 the file read a rule from `lib/nav.ts`, which
+  imports React, passed here and stopped pull request #48's check on GitHub with "Cannot find module 'react'". The
+  section follows the imports as they are written, from file to file, and walks the files the run really loaded; it
+  fails on any machine, naming the file, the line and the way there. A rule of the page that the logic checks read
+  therefore lives in a module that imports no package (`lib/pagetop.ts` beside `lib/nav.ts`), and a type from a
+  module that does is imported with `import type`. To run the file exactly as GitHub does:
+  `git archive HEAD | tar -x -C <an empty folder>`, then `npm ci` and the command above in that folder's `jobs/`.
 - **Database checks** (`sim/sql`): the rules that live in database functions (the limits on verification emails;
   the queue for the reasons of big moves; the request for the second path),
   run with the migration file itself on PGlite, a Postgres inside Node; and the pattern an instrument's headlines are

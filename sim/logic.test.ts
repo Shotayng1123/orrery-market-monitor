@@ -1,5 +1,7 @@
 // Logic checks that need no browser and no database: exchange sessions (web and server copies must agree),
 // rolling sigma bands, exchange-local dating of Yahoo bars.  Run:  cd jobs && npx tsx ../sim/logic.test.ts
+// GitHub installs jobs/ alone before it runs this file: nothing imported here may reach a package of the page's
+// (React, uPlot), directly or through another file. The last section, [AB], fails on any machine when one does.
 import * as web from "../web/src/lib/sessions.ts";
 import * as srv from "../supabase/functions/_shared/sessions.ts";
 import { rollingBands, pct } from "../web/src/lib/stats.ts";
@@ -48,11 +50,14 @@ import { contractLine, contractSource, lastRoll, lastRollLine, rollMarks, rollsO
 import { mockSegments } from "../web/src/lib/mockInstr.ts";
 import type { TableRow } from "../web/src/lib/types.ts";
 import { byResultsDay, calendarFlag, fmtResultsDate, jpxDated, listingCity, listingTz, MARKS_NOTE, RESULTS_NOTE, resultsDay, resultsDayLabel, resultsMark, resultsStatus, resultsStatusShort, resultsTip, resultsWords } from "../web/src/lib/results.ts";
-import { opensAtTop } from "../web/src/lib/nav.ts";
+import { opensAtTop } from "../web/src/lib/pagetop.ts";
 import { closedLine, closedLineText, DUE_GRACE_MIN, hoursText, marketSession, pageLive, PAGE_FRESH_MIN, panelRowOf, readInNewYork, rowSession, rowStateWords, shutLine, shutMarkets, stateWord, symbolMarket, type Cal } from "../web/src/lib/opens.ts";
 import { mockHolidays, printAt } from "../web/src/lib/mock.ts";
-import { readFileSync as readText, readdirSync as listDir } from "node:fs";
+import { readFileSync as readText, readdirSync as listDir, statSync as fileStat } from "node:fs";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
+import { builtinModules, createRequire } from "node:module";
+import { dirname, resolve as resolvePath } from "node:path";
+import { fileURLToPath } from "node:url";
 
 let pass = 0, fail = 0;
 const ck = (name: string, cond: boolean, detail?: unknown) => { if (cond) { pass++; console.log("  ✓ " + name); } else { fail++; console.log("  ✗ " + name + (detail !== undefined ? "  ->  " + JSON.stringify(detail) : "")); } };
@@ -1728,6 +1733,97 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const pr = (id: string, iso: string) => printAt(id, Date.parse(iso));
     ck(`at the owner's moment the stand-in S&P 500 is not live, its last print at Thursday's close (${pr("NYSE", "2026-11-20T13:16:00Z")?.lastAt}); the Nikkei's at Friday's (${pr("TSE", "2026-11-20T13:16:00Z")?.lastAt}); a future is live on a print ten minutes old`, same(pr("NYSE", "2026-11-20T13:16:00Z"), { live: false, lastAt: "2026-11-19T21:00:00.000Z" }) && same(pr("TSE", "2026-11-20T13:16:00Z"), { live: false, lastAt: "2026-11-20T06:30:00.000Z" }) && same(pr("CME", "2026-11-20T13:16:00Z"), { live: true, lastAt: "2026-11-20T13:06:00.000Z" }) && pr("TSX", "2026-11-20T13:16:00Z") === null);
     ck(`five minutes after Tokyo's open on Tue 24 Nov its stand-in print is still Friday's close, the Monday being a holiday (${pr("TSE", "2026-11-24T00:05:00Z")?.lastAt}); twenty-five minutes after, it is live`, same(pr("TSE", "2026-11-24T00:05:00Z"), { live: false, lastAt: "2026-11-20T06:30:00.000Z" }) && same(pr("TSE", "2026-11-24T00:25:00Z"), { live: true, lastAt: "2026-11-24T00:05:00.000Z" }) && same(pr("TSE", "2026-11-24T02:45:00Z"), { live: false, lastAt: "2026-11-24T02:30:00.000Z" }) && same(pr("NYSE", "2026-11-27T18:30:00Z"), { live: false, lastAt: "2026-11-27T18:00:00.000Z" }));
+  }
+
+  // Last, so that a file a require loads part-way through the run is in Node's list too.
+  console.log("\n[AB] this file reaches nothing that GitHub's logic job lacks: only jobs/ is installed there (the failed check of pull request #48, 21 Nov 2026)");
+  {
+    // GitHub runs this file after `npm ci` in jobs/ and nowhere else (.github/workflows/logic-tests.yml, and the logic
+    // checks of deploy-server.yml, which stop a deploy of the server). A file of the page that imports one of the
+    // page's packages (web/node_modules: React, uPlot) cannot be loaded there, while on a machine that has
+    // web/node_modules it loads without a word. web/src/lib/nav.ts imports "react"; this file read one rule from it,
+    // passed on the engineer's machine and on the reviewer's, and stopped on GitHub with "Cannot find module 'react'".
+    // So this file looks twice at what it reaches, and fails on any machine before GitHub is asked:
+    //   1. The imports as they are written, followed from this file through every file they lead to: `import … from`,
+    //      `export … from`, and import("…") or require("…") of a plain string, read with TypeScript's own parser (a
+    //      package of jobs/). `import type` loads nothing and is not followed. A name that is not a file is a package.
+    //      Node looks for a package in node_modules beside the importing file and in the folders above it, so on
+    //      GitHub only a file of jobs/ finds one, and only one that jobs/package-lock.json installs. Node's own
+    //      modules (node:fs) are on every machine. An address with a scheme (npm:, jsr:, https:) is the server's way
+    //      under Deno and loads in no machine's Node: a run that reached one would stop here as well, so it is not
+    //      this check's business.
+    //   2. What this run really loaded. Node keeps, for every file loaded through require, the files it loaded in
+    //      turn, and tsx runs this file and its imports through require. Walked from this file down: every file of
+    //      the repository's own must be one the first look followed, so that the first look is known to miss nothing
+    //      that loads; and none may have loaded a file from web/node_modules or from anywhere else on this machine
+    //      (it has a folder of packages installed for every project). A file loaded by import() is not in Node's
+    //      list; the first look follows it.
+    // A rule of the page that this file checks belongs in a module that imports no package (lib/pagetop.ts holds
+    // lib/nav.ts's rule), and a type from a module that does is imported with `import type`.
+    const slash = (f: string) => f.replace(/\\/g, "/");
+    const root = slash(fileURLToPath(new URL("../", import.meta.url))), me = slash(fileURLToPath(import.meta.url));
+    const rel = (f: string) => (slash(f).startsWith(root) ? slash(f).slice(root.length) : slash(f));
+    const locked = new Set(Object.keys((JSON.parse(readText(new URL("../jobs/package-lock.json", import.meta.url), "utf8")) as { packages?: Record<string, unknown> }).packages ?? {}));
+    const where = (f: string): "own" | "jobs" | "elsewhere" => {
+      const r = rel(f);
+      if (r === slash(f)) return "elsewhere";                                           // not in the repository at all
+      if (!/(^|\/)node_modules\//.test(r)) return "own";
+      const pkg = /^jobs\/((?:node_modules\/(?:@[^/]+\/)?[^/]+\/)+)/.exec(r)?.[1].slice(0, -1);   // jobs/node_modules/zod/lib/x.js -> node_modules/zod, as the lock names it
+      return pkg !== undefined && locked.has(pkg) ? "jobs" : "elsewhere";
+    };
+
+    // 1. the imports as they are written
+    type TsNode = import("typescript").Node;
+    const ts = createRequire(new URL("../jobs/package.json", import.meta.url))("typescript") as typeof import("typescript");
+    const importsOf = (file: string): Array<{ spec: string; line: number }> => {
+      const sf = ts.createSourceFile(file, readText(file, "utf8"), ts.ScriptTarget.Latest), out: Array<{ spec: string; line: number }> = [];
+      const add = (lit: TsNode | undefined) => { if (lit && ts.isStringLiteralLike(lit)) out.push({ spec: lit.text, line: sf.getLineAndCharacterOfPosition(lit.end).line + 1 }); };
+      const visit = (n: TsNode): void => {
+        if (ts.isImportDeclaration(n)) { if (!n.importClause?.isTypeOnly) add(n.moduleSpecifier); }
+        else if (ts.isExportDeclaration(n)) { if (!n.isTypeOnly) add(n.moduleSpecifier); }
+        else if (ts.isCallExpression(n) && (n.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(n.expression) && n.expression.text === "require"))) add(n.arguments[0]);
+        ts.forEachChild(n, visit);
+      };
+      visit(sf);
+      return out;
+    };
+    const isFile = (f: string) => fileStat(f, { throwIfNoEntry: false })?.isFile() === true;
+    const fileOf = (from: string, spec: string) => { const p = slash(resolvePath(dirname(from), spec)); return [p, `${p}.ts`, `${p}.tsx`, `${p}/index.ts`, `${p}/index.tsx`].find(isFile) ?? null; };
+    const written = new Map<string, string | null>(), named: string[] = [];              // each file followed, and the file that led to it first
+    const way = (f: string): string => { const from = written.get(f); return from ? `${way(from)} > ${rel(f)}` : rel(f); };
+    const follow = (file: string, from: string | null) => {
+      if (written.has(file)) return;
+      written.set(file, from);
+      if (!/\.[cm]?[jt]sx?$/.test(file)) return;                                         // a .json imports nothing
+      for (const { spec, line } of importsOf(file)) {
+        const at = `${rel(file)}:${line} imports "${spec}" (the way there: ${way(file)})`;
+        if (/^\.{0,2}\//.test(spec)) {                                                   // a file: followed
+          const to = fileOf(file, spec);
+          if (to !== null && where(to) === "own") follow(to, file); else named.push(`${at}, ${to === null ? "which leads to no file" : "which is not a file of the repository's own"}`);
+        } else if (spec.startsWith("node:") || builtinModules.includes(spec) || /^[a-z][a-z\d+.-]*:/i.test(spec)) continue;   // Node's own, or Deno's
+        else if (!(rel(file).startsWith("jobs/") && locked.has(`node_modules/${spec.split("/").slice(0, spec.startsWith("@") ? 2 : 1).join("/")}`))) named.push(at);
+      }
+    };
+    follow(me, null);
+    ck(`the imports written in this file and in each file they lead to (${written.size} files) name no package that GitHub's logic job lacks: none of the page's, and one that jobs/package-lock.json installs only from a file of jobs/`, written.has(`${root}web/src/lib/sessions.ts`) && written.has(`${root}supabase/functions/_shared/sessions.ts`) && named.length === 0, named);
+
+    // 2. what this run really loaded
+    const self = typeof module === "object" && module !== null && Array.isArray(module.children) ? module : null;
+    const loaded: string[] = [], lacking: string[] = [], seen = new Set<NodeJS.Module>();
+    let fromJobs = 0;
+    const walk = (m: NodeJS.Module) => {
+      if (seen.has(m)) return;
+      seen.add(m); loaded.push(slash(m.filename));
+      for (const c of m.children) {
+        const w = where(c.filename);
+        if (w === "own") walk(c); else if (w === "jobs") fromJobs++; else lacking.push(`${rel(m.filename)} loads ${rel(c.filename)}`);
+      }
+    };
+    if (self) walk(self);
+    const missed = loaded.filter((f) => !written.has(f)).map(rel);
+    const noList = "this file was not loaded through require, so Node kept no list of what it loaded: the second look has to be written anew for the way the file is run now";
+    ck(`what this run really loaded can be listed (${loaded.length} files of the repository's own, this one first), and following the imports as written missed none of them`, loaded[0] === me && loaded.includes(`${root}web/src/lib/sessions.ts`) && missed.length === 0, self ? missed : noList);
+    ck(`none of those files loaded one from web/node_modules or from anywhere else on this machine (${fromJobs} from jobs/node_modules, of packages that jobs/package-lock.json installs)`, self !== null && lacking.length === 0, self ? lacking : noList);
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");
