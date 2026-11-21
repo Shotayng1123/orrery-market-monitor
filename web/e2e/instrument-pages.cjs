@@ -21,10 +21,14 @@
 //     with its date at midnight UTC, shows that date and never a made-up time of day, on its chart tile, in its tooltip
 //     and in MARKETS' row and phone line (R2B-01); every other tile gives its time with its zone (R2B-06); KEY DATA marks
 //     what the Monitor works out itself with † after the label, with a line under the panel (R2B-05). Both layouts.
+//   - A phone's chart keeps its room whatever the lines after its stamp (21 Nov 2026): a pair at the weekend, a yield
+//     read in New York's hours, in this machine's fonts and in a wide one, at set moments of the local copy's clock
+//     (e2e/hero.cjs), so that part does not depend on the day or the hour either.
 // Run from web/:  node e2e/run.cjs instrument-pages   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
 const { S } = require("./standin.cjs");
 const { routes } = require("./harness.cjs");
+const { heroRoom, roomOk, roomWords, SAT, FRI, WIDE, EACH_TAG_A_LINE, FLOOR } = require("./hero.cjs");
 const MOCK = "http://localhost:5179/orrery-market-monitor/", STANDIN = "http://localhost:5181/orrery-market-monitor/";
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d).slice(0, 1500)}`); };
 const CYAN = "rgb(31, 209, 193)";
@@ -237,6 +241,19 @@ const pc = (t) => /^[+-]?\d[\d,]*\.\d+%$/.test(t) || t === "–";
     await p.evaluate(() => { location.hash = "asset/%5EN225"; }); await p.waitForTimeout(800);
     ck("^N225 on the phone: the Nikkei 225 on EQUITIES", (await p.evaluate(() => location.hash)) === "#equities/nk225");
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+
+  // The instrument's page has the stock page's chart tile, and its lines after the stamp are the longest there are:
+  // "opens 23 Nov 06:00 SGT, scheduled" for a pair at the weekend, "next read 22:30 SGT" for a yield the Monitor reads
+  // in New York's hours (one line in this machine's fonts, two in a wide one). At set moments of the local copy's
+  // clock, never the machine's (e2e/hero.cjs).
+  console.log("\n[a phone: the chart keeps its room whatever the lines above it (21 Nov 2026)]");
+  { const usd = (now, css) => heroRoom(b, MOCK + "#asset/USDJPY%3DX", { now, css }), tnx = (css) => heroRoom(b, MOCK + "#asset/%5ETNX", { now: FRI, css });
+    const sat = await usd(SAT), live = await usd(FRI), tall = await usd(SAT, EACH_TAG_A_LINE), read = await tnx(), wide = await tnx(WIDE);
+    ck(`USD/JPY at the weekend, the FX week's opening after the stamp: ${roomWords(sat)} on a ${sat.vh}px screen`, roomOk(sat) && /CLOSED 06:00 SGT opens 23 Nov 06:00 SGT, scheduled$/.test(sat.text), sat);
+    ck(`USD/JPY while the FX week runs, no opening to say: ${roomWords(live)}`, roomOk(live) && /LIVE 21:16 SGT$/.test(live.text) && !/opens/.test(live.text), live);
+    ck(`and with every badge, the stamp and the opening on a line of its own, the tallest head there can be: ${roomWords(tall)}; the tile has grown by what its head gained, the chart at its ${FLOOR}px`, roomOk(tall) && tall.lines >= 3 && tall.head > live.head && tall.chart <= FLOOR + 1 &&Math.abs(tall.tile - (live.tile - live.chart - live.head + tall.head + FLOOR)) <= 1.5, { tall, live });
+    ck(`the UST 10Y yield on a Friday evening, when it is next read after its stamp: ${roomWords(read)}`, roomOk(read) && /LAST PRINT 05:00 SGT next read 22:30 SGT$/.test(read.text), read);
+    ck(`the same in a wide font (monospace, forced on every element): ${roomWords(wide)}`, roomOk(wide) && wide.text === read.text, wide); }
 
   console.log("\n[the one-screen layout (1440x900, compact): the designer's two screens, switched by GO TO; text XL (1440x900: one column in reading order)]");
   { const { ctx, p, errs } = await page(b, { viewport: { width: 1440, height: 900 } }, { size: "AUTO", compact: true, v: 2 });

@@ -3,9 +3,13 @@
 // (ten years, guidance, twelve quarters) and one with the sparse set; and the earlier page for a server that does
 // not answer the `stock` action yet. The figures are the mock feed's (made up, but consistent with each other, so
 // the sums and ratios on the page can be checked against the cells they come from).
+// The room the phone's chart has is measured at set moments of the local copy's clock, in this machine's fonts and
+// in a wide one (e2e/hero.cjs): what its stamp's line says, and so how many lines it takes, turns on the day, the
+// hour and the font, and the check that read the machine's clock failed on GitHub on a Saturday (21 Nov 2026).
 // Run from web/:  node e2e/run.cjs stock-page   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
 const { routes } = require("./harness.cjs");
+const { heroRoom, roomOk, roomWords, SAT, FRI, OPEN, WIDE, EACH_TAG_A_LINE, FLOOR } = require("./hero.cjs");
 const MOCK = "http://localhost:5179/orrery-market-monitor/", STANDIN = "http://localhost:5181/orrery-market-monitor/";
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d)}`); };
 const num = (t) => { const s = String(t).replace(/[,%x+]/g, "").replace(/−/g, "-").trim(); return s === "–" || s === "" ? null : Number(s); };
@@ -189,8 +193,18 @@ const IS = "revenue,cogs,gross,sga,op,nonOpInc,nonOpExp,ordinary,extraInc,extraL
     const top = await p.evaluate(() => ({ secs: [...document.querySelectorAll(".mp-sec > h2 > span:first-child")].map((e) => e.textContent), hint: document.querySelector(".mp-hero .rdout").textContent, stats: [...document.querySelectorAll("#st-key .mp-grid .k")].map((e) => e.textContent), kv: [...document.querySelectorAll("#st-key table.kv tr")].map((tr) => tr.cells[0].childNodes[0].textContent) }));
     ck("the same page as cards: Key data, Performance, News, Big moves, Short interest, Financials; the chart with volume", top.secs.join("|") === "Key data|Performance|News|Big moves|Short interest|Financials" && /volume/.test(top.hint), top);
     ck("key data: six figures at a glance, then the list (shares, diluted shares, average volume and turnover, short interest, …) in the glossary's words, as on the computer", top.stats.join() === "Day,Mkt cap,P/E, guidance,52W low,52W high,From 52W high" && ["Shares outstanding", "Diluted shares", "Avg daily volume (60d)", "Avg daily turnover (60d)", "Volume today", "Short interest (reported)", "Next results"].every((k) => top.kv.includes(k)), top);
-    { const hh = await p.evaluate(() => ({ tile: Math.round(document.querySelector(".mp-hero .mtile.cp").getBoundingClientRect().height), chart: Math.round(document.querySelector(".mp-hero .chartbox").getBoundingClientRect().height), vh: innerHeight }));
-      ck(`the chart has room on a phone: ${hh.chart}px of a ${hh.tile}px tile on a ${hh.vh}px screen (the tile was 350px)`, hh.tile >= 410 && hh.tile <= 540 && hh.chart >= 290, hh); }
+    // The chart keeps its room whatever the lines above it (e2e/hero.cjs; the failed check of pull request #48, 21 Nov
+    // 2026). Pages of their own at set moments of the local copy's clock, never the machine's: a weekend, when the
+    // stamp carries its date and the opening follows it; a Friday evening, the stamp without a date, in this machine's
+    // fonts and in a wide one (where that line no longer fits on one, as on GitHub's machines); Tokyo open; and the
+    // weekend again with every badge, the stamp and the opening on a line of its own.
+    { const at = (now, css) => heroRoom(b, MOCK + "#asset/7203.T", { now, css });
+      const sat = await at(SAT), fri = await at(FRI), wide = await at(FRI, WIDE), open = await at(OPEN), tall = await at(SAT, EACH_TAG_A_LINE);
+      ck(`the chart has room on a phone on a weekend, the stamp with its date and the opening after it: ${roomWords(sat)} on a ${sat.vh}px screen (the tile was 350px, then 410px whatever its head took, which left the chart 273px here)`, roomOk(sat) && /CLOSED 20 Nov 14:30 SGT opens 24 Nov 08:00 SGT$/.test(sat.text), sat);
+      ck(`on a Friday evening, the stamp without a date: ${roomWords(fri)}`, roomOk(fri) && /CLOSED 14:30 SGT opens 24 Nov 08:00 SGT$/.test(fri.text), fri);
+      ck(`the same Friday evening in a wide font (monospace, forced on every element): ${roomWords(wide)}`, roomOk(wide) && wide.text === fri.text, wide);
+      ck(`with Tokyo open and no opening to say: ${roomWords(open)}`, roomOk(open) && /LIVE 09:40 SGT$/.test(open.text) && !/opens/.test(open.text), open);
+      ck(`and with every badge, the stamp and the opening on a line of its own, the tallest head there can be: ${roomWords(tall)}; the tile has grown by what its head gained, the chart at its ${FLOOR}px`, roomOk(tall) && tall.lines >= 3 && tall.head > open.head && tall.chart <= FLOOR + 1 &&Math.abs(tall.tile - (open.tile - open.chart - open.head + tall.head + FLOOR)) <= 1.5, { tall, open }); }
     // big moves on a phone: tap a circle for the reason, tap elsewhere to put it away; the list with links below
     const pd = await discs(p, ".mp-hero");
     const pcard = () => p.evaluate(() => { const e = document.querySelector(".mp-hero .mvtip"); if (!e || getComputedStyle(e).display === "none") return null; const r = e.getBoundingClientRect(); return { text: e.innerText, left: r.left, right: r.right, vw: innerWidth, px: parseFloat(getComputedStyle(e.querySelector(".w")).fontSize) }; });

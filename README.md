@@ -131,7 +131,14 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   break, an early close, a session's first minutes on a delayed feed; the FX week by New York's clock; the dollar
   index, the UST 10Y yield and VIX saying when they are next read, never CLOSED; a row with no live price in its
   market's hours saying "open since" only where the Monitor holds that market's holidays; `layout-guard-closed`: the
-  layout guard again with the clock on a weekend, when every closed market's line carries its opening).
+  layout guard again with the clock on a weekend, when every closed market's line carries its opening); and the room
+  the chart keeps at the top of a phone's page of one name (`stock-page` and `instrument-pages`, through
+  `e2e/hero.cjs`): at least 290 px whatever the lines after its stamp, the tile growing with its head between 410 and
+  540 px and no further than the head needs, at set moments of the same clock (a weekend, a Friday evening, an open
+  market), in the machine's fonts and in a wide one, and with every badge, the stamp and the opening forced onto a
+  line of its own. These checks read no clock but that one and trust no font: the stamp's line that takes one line
+  on the engineer's machine took two on GitHub's, and it carries a date on some days and none on others (the check
+  they replace passed here by 2 px and stopped pull request #48 on GitHub on a Saturday).
   `cd web && npm run e2e` starts the test servers it needs and runs them all (about twelve minutes, three suites at
   a time); `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
   A suite that fails once is tried again; when the second try passes, the lines that failed the first time are
