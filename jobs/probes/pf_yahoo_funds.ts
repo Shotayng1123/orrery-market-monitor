@@ -27,7 +27,7 @@
 // Runtime: node.
 //   Actions > source-probe > Run workflow: probe = pf_yahoo_funds, runtime = node
 import { head, masked, pause, requestsMade, yahooSession } from "./lib.ts";
-import { GAP, chart, daily, dayIn, f, iso, median, num, pct, quotes, sd, str, totalReturns, yget, type Day, type J } from "./yahoo_lib.ts";
+import { GAP, chart, daily, dayIn, f, iso, median, num, pct, quotes, sd, str, totalReturns, unplacedWords, yget, type Day, type J } from "./yahoo_lib.ts";
 
 const MAX = 30;
 const t0 = Date.now(), nowS = Math.floor(t0 / 1000);
@@ -84,7 +84,7 @@ for (const sym of toRead) {
   const rows = daily(b), last60 = rows.slice(-60), vols = last60.map((r) => r.v ?? 0), px = rows[rows.length - 1]?.c ?? null;
   const av = vols.length ? vols.reduce((a, x) => a + x, 0) / vols.length : null;
   const tr = totalReturns(rows), r = tr.length ? tr.reduce((a, x) => a * (1 + x.r), 1) - 1 : null;
-  console.log(`  ${sym}: "${b.meta.longName ?? b.meta.shortName ?? "–"}" · ${b.meta.fullExchangeName ?? b.meta.exchangeName ?? "–"} · ${b.meta.currency ?? "–"} · ${b.tz} · ${rows.length} daily bars ${rows[0]?.d ?? "–"} to ${rows[rows.length - 1]?.d ?? "–"}, ${rows.filter((x) => !x.v).length} with no volume · newest close ${px ?? "–"} · average volume over the last ${last60.length} sessions ${f(av, 0)} a day (${av != null && px != null ? `${f(av * px / 1e6, 2)}m ${b.meta.currency ?? ""} a day` : "–"}), ${vols.filter((v) => v === 0).length} of them with none · ${b.div.length} distributions in the year${b.div.length ? `: ${b.div.map((x) => `${dayIn(b.tz, x.t)} ${x.amount}`).join(", ")}` : " (an accumulating class pays none)"} · ${b.split.length} splits · total return over the range ${pct(r)} (E)`);
+  console.log(`  ${sym}: "${b.meta.longName ?? b.meta.shortName ?? "–"}" · ${b.meta.fullExchangeName ?? b.meta.exchangeName ?? "–"} · ${b.meta.currency ?? "–"} · ${b.tz} · ${rows.length} daily bars ${rows[0]?.d ?? "–"} to ${rows[rows.length - 1]?.d ?? "–"}, ${rows.filter((x) => !x.v).length} with no volume · newest close ${px ?? "–"} · average volume over the last ${last60.length} sessions ${f(av, 0)} a day (${av != null && px != null ? `${f(av * px / 1e6, 2)}m ${b.meta.currency ?? ""} a day` : "–"}), ${vols.filter((v) => v === 0).length} of them with none · ${b.div.length} distributions in the year${b.div.length ? `: ${b.div.map((x) => `${dayIn(b.tz, x.t)} ${x.amount}`).join(", ")}` : " (an accumulating class pays none)"} · ${b.split.length} splits · total return over the range ${pct(r)} (E)${unplacedWords(b)}`);
 }
 
 // ---- 2. V-14: the Global Aggregate's daily line ----
@@ -154,7 +154,7 @@ head("4. C-39: 2559.T, its largest one-day changes in two years, the closes and 
   if (!b) console.log("  no chart");
   else {
     const rows = daily(b);
-    console.log(`  ${rows.length} daily bars ${rows[0]?.d ?? "–"} to ${rows[rows.length - 1]?.d ?? "–"}; ${b.split.length} split events${b.split.length ? `: ${b.split.map((x) => `${dayIn(b.tz, x.t)} ${x.num}:${x.den}`).join(", ")}` : ""}; ${b.div.length} distributions`);
+    console.log(`  ${rows.length} daily bars ${rows[0]?.d ?? "–"} to ${rows[rows.length - 1]?.d ?? "–"}; ${b.split.length} split events${b.split.length ? `: ${b.split.map((x) => `${dayIn(b.tz, x.t)} ${x.num}:${x.den}`).join(", ")}` : ""}; ${b.div.length} distributions${b.div.length ? `: ${b.div.map((x) => `${dayIn(b.tz, x.t)} ${x.amount}`).join(", ")}` : ""}`);
     const moves = rows.slice(1).map((r, i) => ({ i: i + 1, d: r.d, ratio: r.c / rows[i].c })).sort((x, y) => Math.abs(Math.log(y.ratio)) - Math.abs(Math.log(x.ratio))).slice(0, 5);
     for (const m of moves) console.log(`  ${m.d}: close ${rows[m.i - 1].c} (${rows[m.i - 1].d}, volume ${rows[m.i - 1].v ?? "–"}) then ${rows[m.i].c} (volume ${rows[m.i].v ?? "–"}): ${pct(m.ratio - 1)}, a ratio of ${m.ratio.toFixed(4)}${rows[m.i - 1].v && rows[m.i].v ? `; volume ${((rows[m.i].v as number) / (rows[m.i - 1].v as number)).toFixed(2)} times the day before's` : ""}`);
     const top = moves[0];
@@ -164,7 +164,7 @@ head("4. C-39: 2559.T, its largest one-day changes in two years, the closes and 
       const isSplitDay = b.split.some((x) => dayIn(b.tz, x.t) === top.d);
       console.log(`  the largest change has the size of ${near.off < 0.05 ? `a ${near.k >= 1 ? `${near.k}-for-1 split` : `1-for-${Math.round(1 / near.k)} consolidation`} (within ${(near.off * 100).toFixed(1)}%)` : "no round split"}; a split event on that date among Yahoo's events: ${isSplitDay ? "yes" : "NO"}`);
       const tr = totalReturns(rows).slice(-252), all = tr.reduce((a, x) => a * (1 + x.r), 1) - 1, without = tr.filter((x) => x.d !== top.d).reduce((a, x) => a * (1 + x.r), 1) - 1;
-      console.log(`  total return over the last ${tr.length} sessions (E): ${pct(all)}; with that one day left out: ${pct(without)}${tr.some((x) => x.d === top.d) ? "" : " (the day is not within them)"}`);
+      console.log(`  total return over the last ${tr.length} sessions (E): ${pct(all)}; with that one day left out: ${pct(without)}${tr.some((x) => x.d === top.d) ? "" : " (the day is not within them)"}${unplacedWords(b)}`);
     }
     const med = median(rows.slice(-60).map((r) => r.v ?? 0));
     console.log(`  median daily volume over the last 60 sessions: ${med ?? "–"}`);

@@ -1,8 +1,9 @@
 // The paper portfolio's probe of rule texts, the second run (P-0b: C/portfolio-plan.md §3.1b item 5): only what the
 // run of 20 Nov 2026 missed or misread (C/probes/pf_rules.log). Read then and not asked again: NYSE's, the Fed's,
 // SIFMA's and the BoJ's calendars, Rule 201, Rule 612's criteria, the IRS's 30%, GIPS 2.A.12, Morningstar's capture.
-// Every read of JPX's rule pages (tick tables, price limits, the closing auction, short selling) is in pf_jpx, held
-// for the owner. Read-only, no key, nothing written. In the order of the increments that wait:
+// Every read of JPX's rule pages (tick tables, price limits, the closing auction, short selling) is in pf_jpx, which
+// the owner released on 21 Nov 2026 ("(c) all"). Read-only, no key, nothing written. In the order of the increments
+// that wait:
 //   P-2 (fees and ticks)
 //   1. The SEC's order making the fiscal-year 2026 adjustments to transaction fee rates (Section 31), document
 //      2026-04233 of 4 Mar 2026 itself: the rate and the date it applies from. On 20 Nov the probe opened its
@@ -243,6 +244,9 @@ head("7. CME: its robots.txt, the one request made of it (its pages answered 403
 {
   const rb = await robots("https://www.cmegroup.com", ["/markets/equities/sp/e-mini-sandp500.contractSpecs.html", "/markets/equities/sp/e-mini-sandp500.margins.html", "/trading/price-limits.html", "/company/clearing-fees.html"]);
   console.log(`  FINDING: ${rb.outcome === "read" ? "CME serves a robots.txt to GitHub's machines; the verdicts on its pages are above, and its pages themselves answered 403 on 20 Nov" : rb.status === 403 || rb.status === 401 ? "CME refuses even its robots.txt (a wall for automated readers, not a rule that can be read)" : `no rule read (${rb.outcome}${rb.status ? `, HTTP ${rb.status}` : ""})`}. No page of CME's is asked in this run: the contract table stays B's (A) values, each naming the refused page, until a person enters a row from CME's page with its address and date (V-15)`);
+  // a robots.txt refused (401, 403, 418) is a refusal, and counts as one in the last line (it went uncounted: the line
+  // read "sites that refused: none" after CME's 403; the checks of round 3b, PR-15)
+  note("https://www.cmegroup.com/robots.txt", !(rb.outcome === "none" && (rb.status === 401 || rb.status === 403 || rb.status === 418)));
   await pause(GAP);
 }
 
@@ -288,7 +292,7 @@ head("9. Regulation (EU) No 231/2013, Articles 7 and 8: EUR-Lex's PDF format, th
     note(pdfUrl, b.ok);
     await pause(GAP);
     const isPdf = !!b.data && b.data.length > 4 && b.data[0] === 0x25 && b.data[1] === 0x50 && b.data[2] === 0x44 && b.data[3] === 0x46;
-    if (b.status === 202 || (b.data && !isPdf)) console.log(`  EUR-Lex answered ${b.status} with ${b.type || "no type"}, not a PDF: its wait page for automated readers, as on 20 Nov`);
+    if (b.status === 202 || (b.data && !isPdf)) { console.log(`  EUR-Lex answered ${b.status} with ${b.type || "no type"}, not a PDF: its wait page for automated readers, as on 20 Nov`); note(pdfUrl, false); }
     const pages = isPdf ? await pdfPages(b.data as Uint8Array) : null;
     if (pages) { console.log(`  ${pages.length} pages`); got = show(pages.join(" ")); if (!got) console.log("  the headings of Articles 7 and 8 were not found in the PDF's text"); }
   }
@@ -311,5 +315,5 @@ head("9. Regulation (EU) No 231/2013, Articles 7 and 8: EUR-Lex's PDF format, th
   if (!got) console.log("  NOT READ: the macro book's adjusted gross stays B's method as B knows AIFMD's, labelled so (§2.19)");
 }
 
-console.log(`\nsites that refused: ${[...refused].map(([h, n]) => `${h} (${n})`).join(", ") || "none"}`);
+console.log(`\nsites that refused a request, or answered it with a wait page: ${[...refused].map(([h, n]) => `${h} (${n})`).join(", ") || "none"}`);
 console.log(`requests made: ${requestsMade()} (at most ${MAX}); ${Math.round((Date.now() - t0) / 1000)} s`);

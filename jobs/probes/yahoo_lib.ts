@@ -57,7 +57,11 @@ export function barsOf(j: J | null): Bars | null {
   return { meta: res.meta, tz: String(res.meta.exchangeTimezoneName ?? "UTC"), ts, o: arr(q.open), h: arr(q.high), l: arr(q.low), c: arr(q.close), v: arr(q.volume), div, split };
 }
 export interface Day { d: string; t: number; o: number | null; h: number | null; l: number | null; c: number; v: number | null; div: number }
-/** Daily bars by the exchange's date (the last bar of a date kept), each with its date's distribution (ex-date). */
+/** Daily bars by the exchange's date (the last bar of a date kept), each with the distributions Yahoo dates on that
+ *  date. For most funds that date is the ex-date. For some it is not a session at all: the Tokyo bond funds' quarterly
+ *  distributions are dated the 11th or the 7th, on weekends as often as not, which cannot be ex-dates. Such a
+ *  distribution is attached to no bar here (`unplaced` lists them): nothing in Yahoo's answer says on which session
+ *  the fund went ex, so placing it on one would be a guess. */
 export function daily(b: Bars): Day[] {
   const dv = new Map<string, number>();
   for (const x of b.div) dv.set(dayIn(b.tz, x.t), (dv.get(dayIn(b.tz, x.t)) ?? 0) + x.amount);
@@ -72,7 +76,17 @@ export function minutesByDay(b: Bars): Map<string, Minute[]> {
   b.ts.forEach((t, i) => { const c = b.c[i]; if (c == null) return; const d = dayIn(b.tz, t); (days.get(d) ?? days.set(d, []).get(d)!).push({ t, hm: hmIn(b.tz, t), o: b.o[i], h: b.h[i], l: b.l[i], c, v: b.v[i] ?? 0 }); });
   return days;
 }
-/** Daily total returns from raw closes and distributions on their ex-dates (X-2). */
+/** The distributions of `b` that fall on a date without a bar, within the span the bars cover: in no day's return. */
+export function unplaced(b: Bars): Array<{ d: string; amount: number }> {
+  const days = new Set<string>();
+  b.ts.forEach((t, i) => { if (b.c[i] != null) days.add(dayIn(b.tz, t)); });
+  const all = [...days].sort(), first = all[0], last = all[all.length - 1];
+  return b.div.map((x) => ({ d: dayIn(b.tz, x.t), amount: x.amount })).filter((x) => first !== undefined && x.d >= first && x.d <= (last as string) && !days.has(x.d));
+}
+/** What a line that prints a total return says of them: nothing where there are none. */
+export const unplacedWords = (b: Bars): string => { const u = unplaced(b); return u.length ? `; NOT IN IT: ${u.length} distribution${u.length === 1 ? "" : "s"} Yahoo dates on a day without a session (${u.map((x) => `${x.d} ${x.amount}`).join(", ")}; ${f(u.reduce((a, x) => a + x.amount, 0), 4)} in all): for ${u.length === 1 ? "it" : "them"} the figure is a price return` : ""; };
+/** Daily total returns from raw closes and the distributions Yahoo dates on a session (X-2). A distribution dated on a
+ *  day without a session is in none of them: `unplaced` says which (the checks of round 3b, 21 Nov 2026: PR-10). */
 export const totalReturns = (rows: Day[]): Array<{ d: string; r: number }> => rows.slice(1).map((x, i) => ({ d: x.d, r: (x.c + x.div) / rows[i].c - 1 }));
 
 export async function chart(symbol: string, query: string): Promise<Bars | null> {

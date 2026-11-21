@@ -17,7 +17,8 @@
 //      (C-33; V-3), each session's own ratio, and their spread over all the sessions read;
 //   4. Yahoo's results-date fields as it sends them (earningsTimestamp, earningsTimestampStart, earningsTimestampEnd,
 //      isEarningsDateEstimate and any other field named "earnings…") for 7203.T, 6758.T, NVDA and AAPL, each moment
-//      in UTC, JST and New York's time (A-37: no log holds them; the in-session run prints them too).
+//      in UTC, JST and New York's time (A-37: first printed by this probe's run of 21 Nov 2026; the in-session run
+//      prints them too). How many index members and watch-list names come in each shape is counted by nothing yet.
 // A session is complete when its date is before today's in the exchange's time zone, or its market's state is closed.
 // One-minute bars are asked seven days at a time (Yahoo serves about a month of them, a week or so a request, as I
 // know it: a refusal is printed and nothing older is asked).
@@ -100,19 +101,24 @@ for (const { sym, windows } of NAMES) {
   const tz = db.tz, today = dayIn(tz, nowS), st = qs.get(sym)?.marketState, closed = st != null && /CLOSED|POST|PREPRE/i.test(String(st));
   const days = daily(db), dayOf = new Map(days.map((r) => [r.d, r]));
   const all = new Map<string, Minute[]>();
+  // the first session of each seven-day request: counted apart below (the checks of round 3b, 21 Nov 2026: PR-13). In
+  // the run of 21 Nov the Tokyo bars stamped before 09:05 came on those sessions and on almost no other, so the counts
+  // described how the bars were asked as much as Tokyo's sessions
+  const firstOf = new Set<string>();
   for (let w = 0; w < Math.min(windows, reach); w++) {
     const p2 = nowS - w * 7 * 86400, p1 = p2 - 7 * 86400;
     const mb = await chart(sym, `period1=${p1}&period2=${p2}&interval=1m`);
     if (!mb) { console.log(`  one-minute bars ${iso(p1).slice(0, 10)} to ${iso(p2).slice(0, 10)}: none served; nothing older is asked`); if (w >= 1) reach = Math.min(reach, w); break; }
-    const by = minutesByDay(mb);
-    console.log(`  one-minute bars ${iso(p1).slice(0, 10)} to ${iso(p2).slice(0, 10)}: ${mb.ts.length} bars over ${by.size} dates`);
+    const by = minutesByDay(mb), firstDate = [...by.keys()].sort()[0];
+    if (firstDate) firstOf.add(firstDate);
+    console.log(`  one-minute bars ${iso(p1).slice(0, 10)} to ${iso(p2).slice(0, 10)}: ${mb.ts.length} bars over ${by.size} dates${firstDate ? `, the first ${firstDate}` : ""}`);
     for (const [d, bars] of by) all.set(d, [...(all.get(d) ?? []), ...bars].sort((a, b) => a.t - b.t).filter((b, i, xs) => i === 0 || xs[i - 1].t !== b.t));
   }
   const sessions: Session[] = [...all].sort().filter(([d]) => d < today || closed).map(([d, bars]) => ({ d, bars, sum: bars.reduce((a, b) => a + b.v, 0), day: dayOf.get(d) }));
   if (!sessions.length) { console.log("  no complete session in the minute bars"); continue; }
   console.log(`  ${sessions.length} complete sessions, ${sessions[0].d} to ${sessions[sessions.length - 1].d} (${tz})${[...all.keys()].some((d) => !(d < today || closed)) ? "; today's, still open, left out" : ""}`);
   const outside: number[] = [], ratio: number[] = [], notMet: string[] = [];
-  let openIsDaily = 0, fiveTimes = 0, at0905 = 0, early = 0, pmFive = 0;
+  let openIsDaily = 0, fiveTimes = 0, at0905 = 0, early = 0, pmFive = 0, nFirst = 0, earlyFirst = 0, servedZero = 0, servedZeroFirst = 0;
   for (const x of sessions) {
     // the first bar that carries volume: a bar of no volume may stand before it (16 Nov's 09:00 bar in the log of 20 Nov)
     const i0 = Math.max(0, x.bars.findIndex((b) => b.v > 0)), first = x.bars[i0], dv = x.day?.v ?? null, share = dv ? (dv - x.sum) / dv : null;
@@ -124,6 +130,10 @@ for (const { sym, windows } of NAMES) {
     if (tz === TK) {
       if (first.hm === "09:05") at0905++;
       const before = x.bars.filter((b) => b.hm < "09:05"); if (before.length) early++;
+      // the first bar as served, whether or not it carries volume, and whether this is a request's first session
+      const isFirst = firstOf.has(x.d);
+      if (isFirst) { nFirst++; if (before.length) earlyFirst++; }
+      if (x.bars[0].v === 0) { servedZero++; if (isFirst) servedZeroFirst++; }
       const iPm = x.bars.findIndex((b) => b.hm >= "12:30"), aPm = against(x.bars, iPm); if (aPm != null && aPm >= 5) pmFive++;
       console.log(`    ${x.d}: ${x.bars.length} bars; the first with volume ${first.hm} open ${g(first.o)} high ${g(first.h)} low ${g(first.l)} close ${g(first.c)} volume ${first.v} (${x.sum ? (first.v / x.sum * 100).toFixed(1) : "–"}% of the minutes'; ${a0 != null ? `${a0.toFixed(1)} times the median of the next ten bars` : "–"}); the daily bar's open ${g(x.day?.o)}: ${x.day?.o == null || first.o == null ? "–" : same ? "the first bar's open" : "NOT the first bar's open"}; bars 09:00–09:04: ${before.length ? before.map((b) => `${b.hm} volume ${b.v} open ${g(b.o)}`).join(", ") : "none"}; 11:29 ${vol(at(x, "11:29"))}, 11:30 ${vol(at(x, "11:30"))}, 12:30 ${vol(at(x, "12:30"))}${iPm >= 0 && x.bars[iPm].hm !== "12:30" ? ` (the afternoon's first bar is ${x.bars[iPm].hm}, volume ${x.bars[iPm].v})` : ""}${aPm != null ? ` (${aPm.toFixed(1)} times the next ten)` : ""}, 15:24 ${vol(at(x, "15:24"))}, 15:30 ${vol(at(x, "15:30"))}; last bar with volume ${[...x.bars].reverse().find((b) => b.v > 0)?.hm ?? "–"}; minutes sum ${x.sum}, daily bar ${dv ?? "–"}, daily − minutes ${dv != null ? dv - x.sum : "–"} (${share != null ? (share * 100).toFixed(1) : "–"}% of the daily bar)`);
     } else {
@@ -135,6 +145,8 @@ for (const { sym, windows } of NAMES) {
   console.log(`  k (C-33, E): the daily bars' volume over the minute volumes' sum across the last ${last5.length} complete sessions (${last5[0]?.d ?? "–"} to ${last5[last5.length - 1]?.d ?? "–"}): ${f(k, 3)}; each session's own ratio over all ${ratio.length} read: min ${f(ratio.length ? Math.min(...ratio) : null, 3)}, median ${f(median(ratio), 3)}, max ${f(ratio.length ? Math.max(...ratio) : null, 3)}`);
   if (tz === TK) {
     console.log(`  the first bar with volume: stamped 09:05 on ${at0905} of ${n} sessions; a bar before 09:05 on ${early}; its open is the daily open on ${openIsDaily} of ${n}; its volume is five times the median of the next ten bars or more on ${fiveTimes} of ${n}. A's test of an opening print (the open is the daily open on every session, and the volume at least five times): ${notMet.length ? `not met on ${notMet.length} of ${n} (${notMet.slice(0, 8).join(", ")}${notMet.length > 8 ? " …" : ""})` : "MET on every session read"}`);
+    const wds = [...new Set([...firstOf].filter((d) => sessions.some((x) => x.d === d)).map((d) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date(`${d}T00:00:00Z`).getUTCDay()]))];
+    console.log(`  read with care: ${nFirst} of the ${n} sessions are the first session of a seven-day request (${wds.join(", ") || "–"}); a bar before 09:05 on ${earlyFirst} of those ${nFirst} and on ${early - earlyFirst} of the other ${n - nFirst}; the first bar as served carries no volume on ${servedZero} sessions (${servedZeroFirst} of them a request's first). The requests are whole weeks, so each one's first session falls on the same weekday: this run cannot tell "the first session of a request" from "that weekday"`);
     console.log(`  the afternoon's first bar: five times the median of the next ten bars or more on ${pmFive} of ${n} sessions`);
     console.log(`  daily bar − minute sum, as a share of the daily bar (V-4: what lies outside the minute bars; the closing auction is in it): min ${f(outside.length ? Math.min(...outside) * 100 : null, 1)}%, median ${f(median(outside) == null ? null : (median(outside) as number) * 100, 1)}%, max ${f(outside.length ? Math.max(...outside) * 100 : null, 1)}%, standard deviation ${f(sd(outside) == null ? null : (sd(outside) as number) * 100, 1)} points over ${outside.length} sessions; negative on ${outside.filter((x) => x < 0).length} (the minutes sum to more than the daily bar there)`);
   } else console.log(`  the first bar's open is the daily open on ${openIsDaily} of ${n} sessions`);

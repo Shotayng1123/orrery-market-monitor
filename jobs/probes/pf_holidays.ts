@@ -21,14 +21,14 @@
 // file's holidays of those months that fall on a weekday and are not among the Monitor's rows.
 // AN EXCHANGE'S OWN CLOSING DAYS ARE NOT IN A NATIONAL-HOLIDAY FILE: Tokyo's market is also shut from 31 December to
 // 3 January, of which only 1 January is a national holiday. So a row for 31 Dec not found in the file is no fault of
-// the row; JPX's own calendar page is the source for those days, and that read is held for the owner (pf_jpx).
+// the row; JPX's own calendar page is the source for those days: pf_jpx reads it (released by the owner on 21 Nov 2026).
 // Likewise a bank holiday is not always a settlement holiday of a payment system: P-8a says which list it takes.
 // Requests: at most 27, 1.5 s apart, to nine sites (a robots.txt each, then one to four pages or one file); a
 // robots.txt that answers 429 is asked once more after the wait it names (60 s at most), so 36 at the very most.
 // Runtime: node (the file is Shift_JIS; node:fs reads the two migrations from the checkout).
 //   Actions > source-probe > Run workflow: probe = pf_holidays, runtime = node
 import { readFileSync } from "node:fs";
-import { bytes, head, linksOf, look, masked, page, pause, requestsMade, robots, siteOf, textLines, titleOf, type Page } from "./lib.ts";
+import { bytes, gapFor, head, linksOf, look, masked, page, type Page, pause, requestsMade, robots, siteOf, textLines, titleOf } from "./lib.ts";
 
 const MAX = 27, GAP = 1500;
 const t0 = Date.now();
@@ -55,26 +55,26 @@ function holidayLines(p: Page): number {
 async function source(what: string, origin: string, tries: string[], home: string | null, readAll = false): Promise<void> {
   head(what);
   const rb = await robots(origin, [...tries, ...(home ? [home] : [])]);
-  await pause(GAP);
+  await pause(gapFor(rb, GAP));
   let found = 0;
   for (const path of tries) {
     if (found && !readAll) break;
     if (!rb.allows(path)) { console.log(`  not asked: robots.txt holds ${path}`); continue; }
     const p = await page(origin + path, { timeoutMs: 45000 });
-    await pause(GAP);
+    await pause(gapFor(rb, GAP));
     if (p.ok) found += holidayLines(p);
   }
   if (found || !home) return;
   if (!rb.allows(home)) { console.log(`  not asked: robots.txt holds ${home}`); return; }
   const h = await page(origin + home, { timeoutMs: 45000 });
-  await pause(GAP);
+  await pause(gapFor(rb, GAP));
   if (!h.ok) return;
   const ls = linksOf(h.html, h.final).filter((l) => /holiday|closing day|business day|operating day|opening hours|feiertag|bankfeiertag/i.test(`${l.text} ${l.href}`) && l.text.length < 90);
   console.log(`  ${titleOf(h.html) || "the home page"}: links that name holidays: ${ls.slice(0, 8).map((l) => `${l.text.slice(0, 50) || "(no text)"} -> ${masked(l.href)}`).join(" · ") || "none (the page may be built by scripts, or the list is deeper in the site)"}`);
   const next = ls.find((l) => siteOf(l.href) === siteOf(origin) && new URL(l.href).origin === origin && rb.allows(l.href));
   if (!next) return;
   const p = await page(next.href, { timeoutMs: 45000 });
-  await pause(GAP);
+  await pause(gapFor(rb, GAP));
   if (p.ok) holidayLines(p);
 }
 

@@ -21,7 +21,7 @@
 //   2. for the open market's four names: the median quoted spread beside its tier (V-1: A's fallback by size; the
 //      tier of the 60-session average volume at the last complete close, in dollars): more than twice or less than
 //      half goes back to A; the larger of that tier and one tick, the smallest ask − bid seen standing for the tick
-//      (the tick table is JPX's, held in pf_jpx); and Abdi and Ranaldo's estimate beside it (X-19; not used for a
+//      (the tick tables are JPX's: pf_jpx read them on 21 Nov 2026, and they are not wired in here yet); and Abdi and Ranaldo's estimate beside it (X-19; not used for a
 //      fill since V-1);
 //   3. today's one-minute bars of the open market's names: the newest bar's age beside the declared delay (V-5);
 //   4. Tokyo only: today's first bars of 7203.T and 1306.T in full, read at the start of the run and again at its
@@ -31,7 +31,7 @@
 //      money on each side, and the implied volatility at the money (OD-P5 (c); P-11);
 //   6. Yahoo's results-date fields as it sends them (earningsTimestamp, earningsTimestampStart, earningsTimestampEnd,
 //      isEarningsDateEstimate and any other field named "earnings…") for 7203.T, 6758.T, NVDA and AAPL, each moment
-//      in UTC, JST and New York's time (A-37: no log holds them).
+//      in UTC, JST and New York's time (A-37: pf_yahoo_hist printed them on 21 Nov 2026; here they are read in a session).
 // What needs no session is read by pf_yahoo_hist (complete sessions) and pf_yahoo_funds (funds), not here.
 //
 // Requests: at most 31, all to Yahoo, 1.2 s apart: the session (2), the =F quote that names each front month (1), the
@@ -85,6 +85,16 @@ const take = async (): Promise<number> => {
   return got.size;
 };
 const state = (sym: string) => String(readings.get(sym)?.[0]?.q.marketState ?? "–");
+// Tokyo's midday break, 11:30 to 12:30 JST: a quote read then is not a trading quote, whatever state Yahoo names for it.
+// It was judged once, at the first reading's clock, and every later reading was counted "in-session": a run begun at
+// 11:28 JST put its last readings in the break without a word (the checks of round 3b, 21 Nov 2026: PR-14). Each
+// reading is now judged at its own time: one taken in the break is printed as such and left out of every count,
+// median and verdict.
+const inBreak = (sym: string, atMs: number): boolean => { if (!/\.T$/.test(sym)) return false; const h = hmIn(TK, atMs / 1000); return h >= "11:30" && h < "12:30"; };
+/** A reading taken in its market's regular session: Yahoo's state REGULAR, and for a Tokyo name not in the break. */
+const inSession = (sym: string, r: { q: J; at: number }): boolean => String(r.q.marketState) === "REGULAR" && !inBreak(sym, r.at);
+/** Minutes since New York's 09:30 and to its 16:00, at the machine's clock (an early close is not known here). */
+const nyMinutes = (): { since: number; left: number } => { const [h, m] = hmIn(NY, sec()).split(":").map(Number); const now = h * 60 + m; return { since: now - (9 * 60 + 30), left: 16 * 60 - now }; };
 let usOpen = false, tkOpen = false;
 if (s) {
   head(`1. The v7 quote of ${ALL.length} symbols, reading 1: which market is in its regular session`);
@@ -93,7 +103,8 @@ if (s) {
   const jst = hmIn(TK, sec());
   console.log(`  ${n} of ${ALL.length} answered${ALL.filter((x) => !readings.has(x)).length ? `; not: ${ALL.filter((x) => !readings.has(x)).join(" ")}` : ""}`);
   console.log(`  marketState: NVDA ${state("NVDA")}, SPY ${state("SPY")}, 7203.T ${state("7203.T")}, 1306.T ${state("1306.T")}, ES=F ${state("ES=F")}, AGGU.L ${state("AGGU.L")}`);
-  console.log(`  IN SESSION: ${usOpen ? "New York" : tkOpen ? `Tokyo${jst >= "11:30" && jst < "12:30" ? " by Yahoo's state, but it is the midday break there (11:30 to 12:30 JST): a quote read now is not a trading quote" : ""}` : "NEITHER New York nor Tokyo. This run's bids and asks would be out of session, which the log of 20 Nov 2026 already holds: only the results-date fields are printed. Run it in New York's 14:30–21:00 UTC or Tokyo's 00:00–02:30 or 03:30–06:30 UTC"}`);
+  const nyM = nyMinutes();
+  console.log(`  IN SESSION: ${usOpen ? `New York, ${nyM.since} minutes after its open and ${nyM.left} before its close${nyM.since < 15 || nyM.left < 15 ? " (THE FIRST OR LAST QUARTER OF AN HOUR, which the header asks a run to avoid: the readings below are of the open's or the close's quotes)" : ""}` : tkOpen ? `Tokyo${jst >= "11:30" && jst < "12:30" ? " by Yahoo's state, but it is the midday break there (11:30 to 12:30 JST): a quote read now is not a trading quote" : ""}` : "NEITHER New York nor Tokyo. This run's bids and asks would be out of session, which the log of 20 Nov 2026 already holds: only the results-date fields are printed. Run it in New York's 14:30–21:00 UTC or Tokyo's 00:00–02:30 or 03:30–06:30 UTC"}`);
 }
 const four = usOpen ? US4 : tkOpen ? TK4 : [];
 const tz = usOpen ? NY : TK;
@@ -163,7 +174,7 @@ if (s && four.length) {
   for (const sym of ALL.filter((x) => x !== "USDJPY=X")) {
     const rs = readings.get(sym) ?? [];
     if (!rs.length) { console.log(`  ${sym}: no quote`); continue; }
-    if (!rs.some((r) => String(r.q.marketState) === "REGULAR")) { console.log(`  ${sym}: state ${rs[0].q.marketState ?? "–"} on every reading: its market is not in session, so its quote is not summarized (last ${rs[0].q.regularMarketPrice ?? "–"} at ${iso(num(rs[0].q.regularMarketTime))}; declared delay ${rs[0].q.exchangeDataDelayedBy ?? "–"} min)`); continue; }
+    if (!rs.some((r) => inSession(sym, r))) { console.log(`  ${sym}: state ${rs[0].q.marketState ?? "–"} on every reading: its market is not in session, so its quote is not summarized (last ${rs[0].q.regularMarketPrice ?? "–"} at ${iso(num(rs[0].q.regularMarketTime))}; declared delay ${rs[0].q.exchangeDataDelayedBy ?? "–"} min)`); continue; }
     const q0 = rs[0].q, tier = /=F$|\.(CME|CBT|NYM|CMX)$/.test(sym) ? null : tierOf(sym);
     const sp: number[] = [], width: number[] = [], off: number[] = [], age: number[] = [], sizes: string[] = [];
     let t1 = 0, t2 = 0, t3 = 0, t4 = 0, all4 = 0;
@@ -172,7 +183,7 @@ if (s && four.length) {
       const b = num(r.q.bid), a = num(r.q.ask), last = num(r.q.regularMarketPrice), tm = num(r.q.regularMarketTime), bp = spreadBp(r.q);
       distinct.add(`${b}/${a}`);
       if (tm != null) age.push(r.at / 1000 - tm);
-      const ok1 = String(r.q.marketState) === "REGULAR", ok2 = bp != null;
+      const ok1 = inSession(sym, r), ok2 = bp != null;
       const ok3 = ok2 && last != null && (b as number) - ((a as number) - (b as number)) <= last && last <= (a as number) + ((a as number) - (b as number));
       const ok4 = ok2 && tier != null && (bp as number) <= 20 * tier.bp;
       if (ok1) t1++; if (ok2) t2++; if (ok3) t3++; if (ok4) t4++; if (ok1 && ok2 && ok3 && (tier == null || ok4)) all4++;
@@ -190,14 +201,16 @@ if (s && four.length) {
     console.log(`\n-- ${sym}`);
     for (const r of rs) {
       const bp = spreadBp(r.q), tm = num(r.q.regularMarketTime), last = num(r.q.regularMarketPrice);
-      console.log(`  ${hms(r.at)} UTC  bid ${g(num(r.q.bid))} × ${r.q.bidSize ?? "–"}, ask ${g(num(r.q.ask))} × ${r.q.askSize ?? "–"}${bp != null ? ` (${bp.toFixed(2)} bp)` : " (not usable)"} · last ${r.q.regularMarketPrice ?? "–"} at ${tm != null ? hmIn(tz, tm) : "–"} local, ${tm != null ? ((r.at / 1000 - tm) / 60).toFixed(1) : "–"} min old${bp != null && last ? ` · the mid ${((((num(r.q.ask) as number) + (num(r.q.bid) as number)) / 2 / last - 1) * 1e4).toFixed(1)} bp from the last` : ""} · state ${r.q.marketState ?? "–"}`);
+      console.log(`  ${hms(r.at)} UTC${inBreak(sym, r.at) ? " MIDDAY BREAK, not counted" : String(r.q.marketState) === "REGULAR" ? "" : ` state ${r.q.marketState ?? "–"}, not counted`}  bid ${g(num(r.q.bid))} × ${r.q.bidSize ?? "–"}, ask ${g(num(r.q.ask))} × ${r.q.askSize ?? "–"}${bp != null ? ` (${bp.toFixed(2)} bp)` : " (not usable)"} · last ${r.q.regularMarketPrice ?? "–"} at ${tm != null ? hmIn(tz, tm) : "–"} local, ${tm != null ? ((r.at / 1000 - tm) / 60).toFixed(1) : "–"} min old${bp != null && last ? ` · the mid ${((((num(r.q.ask) as number) + (num(r.q.bid) as number)) / 2 / last - 1) * 1e4).toFixed(1)} bp from the last` : ""} · state ${r.q.marketState ?? "–"}`);
     }
-    const sp = rs.map((r) => (String(r.q.marketState) === "REGULAR" ? spreadBp(r.q) : null)).filter((x): x is number => x != null), med = median(sp), tier = tierOf(sym);
-    const widths = rs.filter((r) => String(r.q.marketState) === "REGULAR" && spreadBp(r.q) != null).map((r) => (num(r.q.ask) as number) - (num(r.q.bid) as number)), least = widths.length ? Math.min(...widths) : null, px = num(rs[0]?.q.regularMarketPrice);
+    const sp = rs.map((r) => (inSession(sym, r) ? spreadBp(r.q) : null)).filter((x): x is number => x != null), med = median(sp), tier = tierOf(sym), inBrk = rs.filter((r) => inBreak(sym, r.at)).length;
+    if (inBrk) console.log(`  ${inBrk} of the ${rs.length} readings were taken in Tokyo's midday break (11:30 to 12:30 JST): not counted below`);
+    const widths = rs.filter((r) => inSession(sym, r) && spreadBp(r.q) != null).map((r) => (num(r.q.ask) as number) - (num(r.q.bid) as number)), least = widths.length ? Math.min(...widths) : null, px = num(rs[0]?.q.regularMarketPrice);
     console.log(`  the smallest ask − bid seen: ${g(least)}${least != null && px ? ` (${(least / px * 1e4).toFixed(2)} bp of the last price): one tick is no more than that` : ""}`);
     const est = days.has(sym) ? abdiRanaldo(days.get(sym) as Day[]) : { bp: null, sessions: 0, to: null };
     console.log(`  median quoted spread over ${sp.length} in-session readings: ${f(med)} bp; A's tier ${tier ? `${tier.bp} bp (USD ${(tier.usd / 1e6).toFixed(1)}m a day, from ${tier.from})` : "–"}${med != null && tier ? `: the tier is ${(tier.bp / med).toFixed(2)} times the median: ${tier.bp > 2 * med ? "MORE THAN TWICE IT: back to A (V-1)" : tier.bp < med / 2 ? "LESS THAN HALF OF IT: back to A (V-1)" : "within half to twice"}` : ""}`);
-    // V-1's fallback is the larger of one tick and the tier; the tick table is JPX's (pf_jpx, held), so the smallest ask − bid seen stands for one tick here
+    // V-1's fallback is the larger of one tick and the tier; the tick tables are JPX's (pf_jpx read them on 21 Nov 2026;
+    // not wired in here yet), so the smallest ask − bid seen stands for one tick here
     const tickBp = least != null && px ? (least / px) * 1e4 : null, fallback = tier && tickBp != null ? Math.max(tier.bp, tickBp) : null;
     if (fallback != null && med) console.log(`  A's fallback spread (V-1: the larger of one tick and the tier), the smallest ask − bid seen standing for one tick: ${fallback.toFixed(2)} bp, ${(fallback / med).toFixed(2)} times the median quoted spread`);
     console.log(`  Abdi–Ranaldo over the ${est.sessions} sessions to ${est.to ?? "–"} (E): ${f(est.bp)} bp${est.bp != null && med ? `, ${(est.bp / med).toFixed(1)} times the median quoted spread${est.bp > 2 * med ? ": ABOVE TWICE IT" : ""}` : ""} (not used for a fill since V-1)`);

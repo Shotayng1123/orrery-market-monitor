@@ -26,35 +26,86 @@ export const counted = (): void => { made++; };
 
 // ---- what no probe asks (21 Nov 2026) ----
 // The owner's answer to the question on publishers' terms (21 Nov 2026, SGT): do without JPX's new files, Nomura's
-// holdings files and Cboe's VIX-family files. And, asked the same day and not answered yet: whether that also covers
-// the rest of JPX's site (its rule pages, its holiday calendar, its ETF list). Until the owner answers, no probe sends
-// a request to jpx.co.jp. look(), page() and bytes() refuse these addresses themselves, so a probe written before
-// the answer (index_files, stock_dates_crowding, japan_weekly_flows …) cannot ask them by being run again. The
-// Monitor's own jobs, which read the JPX and Nikkei files it has always read, do not use this file.
-const HOLDS: Array<{ name: string; re: RegExp; why: string }> = [
-  { name: "jpx", re: /^https?:\/\/(?:[^\/?#]*@)?(?:[^\/?#@]*\.)?jpx\.co\.jp(?:[:\/?#]|$)/i, why: "jpx.co.jp: no probe asks it until the owner answers the question of 21 Nov 2026 (JPX's rule pages, holiday calendar and ETF list); pf_jpx holds every such read" },
-  { name: "cboe-vix-files", re: /^https?:\/\/(?:[^\/?#]*@)?(?:[^\/?#@]*\.)?cboe\.com(?::\d+)?\/[^?#]*(?:daily_prices\/|_History\.csv|vixarchive)/i, why: "Cboe's VIX-family history files: the owner's answer of 21 Nov 2026 is to do without them (Yahoo's ^VIX family serves)" },
-  { name: "nomura-holdings", re: /^https?:\/\/(?:[^\/?#]*@)?(?:[^\/?#@]*\.)?(?:nomura-am\.co\.jp(?::\d+)?\/fund\/monthly_holdings|nextfunds\.jp(?::\d+)?\/monthly_holdings)/i, why: "Nomura's holdings files: the owner's answer of 21 Nov 2026 is to do without them" },
+// holdings files and Cboe's VIX-family files. Asked the same day: whether that also covers the rest of JPX's site. The
+// owner's answer, about 18:00 SGT: "(c) all": JPX's rule pages (tick sizes, daily price limits, the closing auction,
+// the short-selling price restriction), its market-holiday calendar, and the two statistics named (weekly trading by
+// type of investors, the monthly TOPIX PER and PBR) may be read. The files of the first answer stay ruled out, and
+// JPX's list of ETFs was not asked about. So jpx.co.jp is still refused to every probe here: look(), page(), bytes()
+// and robots() refuse these addresses themselves, and a probe written before the answers (index_files,
+// stock_dates_crowding, japan_weekly_flows …) cannot ask them by being run again. One probe, pf_jpx, lifts the hold
+// on jpx.co.jp for its own run, and reads only the parts its own switches say the owner has released. The Monitor's
+// own jobs, which read the JPX and Nikkei files it has always read, do not use this file.
+//
+// The hold reads the address as the request will go, not as it is written (the checks of round 3b, 21 Nov 2026:
+// PR-6). It tested the text of the address once, and fetch then went wherever a redirect led: an address on another
+// host that answers 301 to jpx.co.jp was fetched and handed to the probe, and a host written with a dot at its end,
+// with escaped letters or in full-width letters passed the test. So the address is parsed first (its host in lower
+// case, without a trailing dot, its path with its escapes decoded), and every request follows its redirects by hand,
+// one hop at a time, each hop put to the same test (`guarded` below).
+const onSite = (host: string, site: string): boolean => host === site || host.endsWith(`.${site}`);
+/** An address as a request reads it: the host in lower case with no dot at its end, and the path with its escapes
+ *  decoded, doubled slashes single, the query after it. Null for text that is no address. */
+export function addressOf(url: string): { host: string; path: string } | null {
+  let u: URL;
+  try { u = new URL(url.trim()); } catch { return null; }
+  let path = u.pathname;
+  try { path = decodeURIComponent(path); } catch { /* an escape that decodes to nothing: the path as written */ }
+  let query = u.search;
+  try { query = decodeURIComponent(query); } catch { /* as written */ }
+  return { host: u.hostname.toLowerCase().replace(/\.+$/, ""), path: path.replace(/\/{2,}/g, "/") + query };
+}
+const HOLDS: Array<{ name: string; test: (host: string, path: string) => boolean; raw: RegExp; why: string }> = [
+  { name: "jpx", test: (h) => onSite(h, "jpx.co.jp"), raw: /jpx\.co\.jp/i, why: "jpx.co.jp: refused to every probe but pf_jpx, which reads only what the owner released on 21 Nov 2026 (\"(c) all\": JPX's rule pages, its holiday calendar and two statistics); the files of the owner's first answer (TOPIX weights, 品貸料, margin balances by name, OSE settlement and volume pages, the 決算発表予定日 workbook) and JPX's ETF list stay unread" },
+  { name: "cboe-vix-files", test: (h, p) => onSite(h, "cboe.com") && /daily_prices\/|_History\.csv|vixarchive/i.test(p), raw: /cboe\.com.*(daily_prices|_History\.csv|vixarchive)/i, why: "Cboe's VIX-family history files: the owner's answer of 21 Nov 2026 is to do without them (Yahoo's ^VIX family serves)" },
+  { name: "nomura-holdings", test: (h, p) => (onSite(h, "nomura-am.co.jp") && /^\/fund\/monthly_holdings/i.test(p)) || (onSite(h, "nextfunds.jp") && /^\/monthly_holdings/i.test(p)), raw: /(nomura-am\.co\.jp|nextfunds\.jp).*monthly_holdings/i, why: "Nomura's holdings files: the owner's answer of 21 Nov 2026 is to do without them" },
 ];
 const lifted = new Set<string>();
-/** Why `url` is not asked, or null. */
-export const heldWhy = (url: string): string | null => HOLDS.find((h) => !lifted.has(h.name) && h.re.test(url))?.why ?? null;
+/** Why `url` is not asked, or null. Text that cannot be parsed as an address is held when it names a held site at all. */
+export const heldWhy = (url: string): string | null => {
+  const a = addressOf(url);
+  return HOLDS.find((h) => !lifted.has(h.name) && (a ? h.test(a.host, a.path) : h.raw.test(url)))?.why ?? null;
+};
 /** Lifts the hold on jpx.co.jp for this run. Only pf_jpx calls it, and only for the parts its own switches say the
  *  owner has released. */
 export const liftJpxHold = (): void => { lifted.add("jpx"); };
+/** For the checks alone: puts the hold on jpx.co.jp back (a check that runs pf_jpx's helpers must not leave it lifted). */
+export const restoreHolds = (): void => { lifted.clear(); };
 const notAsked = (url: string, why: string): void => console.log(`NOT ASKED (held)  ${masked(url)}\n  ${why}`);
+
+/** fetch, with every redirect followed by hand and put to the hold first: at most `MAX_HOPS` hops. Returns the answer
+ *  and the address it came from, or, where a hop leads to an address no probe asks, why (nothing is fetched there).
+ *  `only`: a probe that reads one site alone names it here, and a redirect that leaves it is not followed either. */
+const MAX_HOPS = 5;
+async function guarded(url: string, init: RequestInit & { only?: (url: string) => boolean }): Promise<{ r: Response; final: string; held?: undefined } | { held: string; at: string }> {
+  const { only, ...first } = init;
+  let at = url, req: RequestInit = first;
+  for (let hop = 0; ; hop++) {
+    const r = await fetch(at, { ...req, redirect: "manual" });
+    const loc = r.status >= 300 && r.status < 400 ? r.headers.get("location") : null;
+    if (!loc || hop >= MAX_HOPS) return { r, final: at };
+    let next: string;
+    try { next = new URL(loc, at).toString(); } catch { return { r, final: at }; }
+    try { await r.body?.cancel(); } catch { /* nothing to drop */ }
+    const why = heldWhy(next) ?? (only && !only(next) ? "the redirect leaves the site this probe reads" : null);
+    if (why) return { held: why, at: next };
+    // as a browser does: a 303, and a 301 or 302 answered to a POST, are followed with a GET and no body
+    if (r.status === 303 || ((r.status === 301 || r.status === 302) && String(req.method ?? "GET").toUpperCase() === "POST")) { const { body: _body, ...rest } = req; void _body; req = { ...rest, method: "GET" }; }
+    at = next;
+  }
+}
 
 /** Fetches `url` and prints one line: status, content type, size, time; then the first `show` characters of the
  *  answer. A failure to connect is printed too, with its message: that is often the finding. */
-export async function look(url: string, init: RequestInit & { show?: number; timeoutMs?: number } = {}): Promise<Look> {
+export async function look(url: string, init: RequestInit & { show?: number; timeoutMs?: number; only?: (url: string) => boolean } = {}): Promise<Look> {
   const t0 = Date.now(), show = init.show ?? 600, shown = masked(url);
   const hold = heldWhy(url);
   if (hold) { notAsked(url, hold); return { url, ok: false, status: null, type: null, bytes: 0, ms: 0, text: "", error: "held" }; }
   made++;
   try {
-    const r = await fetch(url, { ...init, headers: { "user-agent": UA, accept: "*/*", ...(init.headers as Record<string, string> | undefined) }, signal: AbortSignal.timeout(init.timeoutMs ?? 30000) });
-    const text = await r.text(), ms = Date.now() - t0, type = r.headers.get("content-type");
-    console.log(`${r.status} ${r.ok ? "OK" : "NOT OK"}  ${type ?? "no type"}  ${text.length} chars  ${ms} ms  ${shown}`);
+    const g = await guarded(url, { ...init, headers: { "user-agent": UA, accept: "*/*", ...(init.headers as Record<string, string> | undefined) }, signal: AbortSignal.timeout(init.timeoutMs ?? 30000) });
+    if (g.held !== undefined) { notAsked(g.at, `${g.held}\n  (a redirect from ${shown} leads there: not followed)`); return { url, ok: false, status: null, type: null, bytes: 0, ms: Date.now() - t0, text: "", error: "held" }; }
+    const r = g.r, text = await r.text(), ms = Date.now() - t0, type = r.headers.get("content-type");
+    console.log(`${r.status} ${r.ok ? "OK" : "NOT OK"}  ${type ?? "no type"}  ${text.length} chars  ${ms} ms  ${shown}${g.final !== url ? `  (ended at ${masked(g.final)})` : ""}`);
     const extra = ["retry-after", "x-ratelimit-remaining", "x-ratelimit-limit", "last-modified", "location"].map((h) => [h, r.headers.get(h)]).filter(([, v]) => v);
     if (extra.length) console.log(`  headers: ${masked(extra.map(([h, v]) => `${h}=${v}`).join("; "))}`);
     if (show > 0) console.log(`  first ${Math.min(show, text.length)} chars: ${masked(JSON.stringify(text.slice(0, show)))}`);
@@ -81,19 +132,20 @@ export interface Page { url: string; final: string; ok: boolean; status: number 
 /** Fetches a page and decodes it with the charset its header or its <meta> names (Japanese sites may send
  *  Shift_JIS). Prints one line like look()'s, with the address it ended at and its last-modified date, and nothing of
  *  the answer itself: the caller prints only the lines it picks. */
-export async function page(url: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<Page> {
+export async function page(url: string, init: RequestInit & { timeoutMs?: number; only?: (url: string) => boolean } = {}): Promise<Page> {
   const t0 = Date.now();
   const hold = heldWhy(url);
   if (hold) { notAsked(url, hold); return { url, final: url, ok: false, status: null, type: "", bytes: 0, html: "", lastModified: null }; }
   made++;
   try {
-    const r = await fetch(url, { redirect: "follow", ...init, headers: { "user-agent": UA, accept: "text/html,application/xhtml+xml,*/*", ...(init.headers as Record<string, string> | undefined) }, signal: AbortSignal.timeout(init.timeoutMs ?? 30000) });
-    const buf = new Uint8Array(await r.arrayBuffer()), type = r.headers.get("content-type") ?? "";
+    const g = await guarded(url, { ...init, headers: { "user-agent": UA, accept: "text/html,application/xhtml+xml,*/*", ...(init.headers as Record<string, string> | undefined) }, signal: AbortSignal.timeout(init.timeoutMs ?? 30000) });
+    if (g.held !== undefined) { notAsked(g.at, `${g.held}\n  (a redirect from ${masked(url)} leads there: not followed)`); return { url, final: url, ok: false, status: null, type: "", bytes: 0, html: "", lastModified: null }; }
+    const r = g.r, buf = new Uint8Array(await r.arrayBuffer()), type = r.headers.get("content-type") ?? "";
     const sniff = new TextDecoder("latin1").decode(buf.slice(0, 4096));
     const cs = (type.match(/charset=["']?([\w-]+)/i)?.[1] ?? sniff.match(/<meta[^>]+charset=["']?([\w-]+)/i)?.[1] ?? "utf-8").toLowerCase();
     let html: string;
     try { html = new TextDecoder(cs).decode(buf); } catch { html = new TextDecoder("utf-8").decode(buf); }
-    const final = r.url || url, lm = r.headers.get("last-modified"), ra = r.headers.get("retry-after");
+    const final = g.final, lm = r.headers.get("last-modified"), ra = r.headers.get("retry-after");
     console.log(`${r.status} ${r.ok ? "OK" : "NOT OK"}  ${type || "no type"}  ${buf.length} bytes  ${Date.now() - t0} ms  ${masked(url)}${final !== url ? `  (ended at ${masked(final)})` : ""}${lm ? `  last-modified ${lm}` : ""}${ra ? `  retry-after ${masked(ra)}` : ""}`);
     return { url, final, ok: r.ok, status: r.status, type, bytes: buf.length, html, lastModified: lm, retryAfter: ra };
   } catch (e) {
@@ -196,8 +248,11 @@ export async function robots(origin: string, paths: string[] = []): Promise<Robo
   }
   const type = r.type || "no type", lead = r.html.slice(0, 600).trim();
   const elsewhere = (() => { try { return !/\/robots\.txt$/i.test(new URL(r.final).pathname); } catch { return false; } })();
-  const html = /html/i.test(r.type) || /^<(!doctype|html|head|\?xml|body)/i.test(lead) || /<html[\s>]/i.test(lead);
   const directives = r.html.split(/\r?\n/).filter((l) => /^\s*(user-agent|disallow|allow|sitemap|crawl-delay|host)\s*:/i.test(l)).length;
+  // An HTML page in the file's place is told by what came back, not by the type the server names alone: a file of
+  // directives served as text/html is still the site's rules, and "Disallow: /" in it holds (the checks of round 3b,
+  // 21 Nov 2026: PR-7; by its type alone such a file was "an HTML page" and every path was open).
+  const html = /^<(!doctype|html|head|\?xml|body)/i.test(lead) || /<html[\s>]/i.test(lead) || (/html/i.test(r.type) && !directives);
   if (!r.ok) { console.log(`  no robots.txt read: HTTP ${r.status} (${type})${r.status === 401 || r.status === 403 ? ", a refusal: the site may refuse automated readers altogether" : ""}. No rule exists to read; that is not a file that allows`); for (const p of paths) console.log(`  ${p}: no rule read`); return none("none", r.status); }
   if (html || (elsewhere && !directives) || (r.html.trim() !== "" && !directives)) {
     console.log(`  no robots.txt read: HTTP ${r.status}, but ${html ? `an HTML page came back in its place (${type})` : "the answer holds no robots directive"}${elsewhere ? `, at ${masked(r.final)}` : ""}. No rule exists to read; that is not a file that allows`);
@@ -222,6 +277,14 @@ export async function robots(origin: string, paths: string[] = []): Promise<Robo
   for (const p of paths) { const hit = verdict(pathOf(p)); console.log(`  ${pathOf(p)}: ${hit && !hit.allow ? `DISALLOWED by "Disallow: ${hit.path}"` : `allowed${hit ? ` (by "Allow: ${hit.path}")` : ""}`}`); }
   return { origin: base, outcome: "read", status: r.status, rules, crawlDelay: delay, allows: (p) => { const hit = verdict(pathOf(p)); return !(hit && !hit.allow); } };
 }
+
+/** The pause before the next request to a site whose robots.txt was read, in ms: the probe's own pace `ms`, or the
+ *  Crawl-delay the file names for every reader where that is longer (30 s at most). The delay was printed and not
+ *  kept: two central banks' files said 5 s and the next page was asked after 1.5 (PR-7). */
+export const gapFor = (rb: Pick<Robots, "crawlDelay"> | null | undefined, ms: number): number => {
+  const d = Number(rb?.crawlDelay);
+  return Number.isFinite(d) && d > 0 ? Math.max(ms, Math.min(d, 30) * 1000) : ms;
+};
 
 /** The site an address belongs to: its host's last two labels, or its last three where the last two are a public
  *  suffix of the kind "co.jp", "gov.au" or "org.uk" (a rule of thumb, enough to tell a site's own links from others'). */
@@ -259,23 +322,54 @@ const TOPICS: Array<[string, RegExp]> = [
   ["re-use, reproduction and redistribution", /reproduc|redistribut|republish|\bcopy\b|\bcopies\b|copied|retrieval system|database|\bframe\b|二次利用|再配信|転載|複製|引用|転送/i],
   ["commercial use and credit", /commercial|credit|attribut|出所|出典|商用|営利/i],
 ];
-/** A line that bars automated reading, or any re-use whatever the purpose: what the owner's answer of 21 Nov 2026
- *  turned on (JPX's, Nomura's and Cboe's terms read so). A site whose terms carry one keeps its data files unread by
- *  a probe, and the finding goes to the owner. */
-const BARS = new RegExp([
-  "(prohibit|not permitted|may not|must not|shall not|forbid|do not|agree not to)[^.。]{0,120}(automat|robot|scrap|crawl|spider|data ?mining|harvest)",
-  "(automat|robot|scrap|crawl|spider|data ?mining|harvest)[^.。]{0,120}(prohibit|not permitted|may not|must not|shall not|forbid)",
-  "(自動|機械的|クローラ|スクレイピング|ロボット)[^。]{0,60}(禁止|できません|お断り|ご遠慮|禁じ)",
-  "(いかなる目的|目的の如何|如何なる用途|用途に関わらず|用途にかかわらず)[^。]{0,80}(できません|禁止|禁じ)",
-  "二次利用[^。]{0,40}(できません|禁止|禁じ)",
-  "(reproduc|copied|copy|distribut|stored)[^.]{0,160}(in any form|by any means)[^.]{0,160}without (the )?(prior|express|written)",
-  "(may not|must not|shall not|prohibit)[^.]{0,100}(reproduc|copy|distribut|store)[^.]{0,100}(any purpose|any form|any means)",
-].join("|"), "i");
+// ---- which line of a site's terms holds its data files (the gate) ----
+// What the owner's answer of 21 Nov 2026 turned on: JPX's, Nomura's and Cboe's terms bar re-use whatever the purpose,
+// and a site whose terms read so keeps its data files unread by a probe; the line goes to the owner. The first gate
+// knew those three wordings and little else: it wanted the words "any purpose", "any form" or "any means" beside the
+// ban, so iShares UK's "you may not sell, copy, publish, distribute … reproduce" was "none matched" and the probe went
+// on to that site's product data (21 Nov 2026; the checks of round 3b: PR-1), while a liability clause that named
+// automated systems was called a bar. The rule now, sentence by sentence:
+//   - a sentence that forbids copying, reproducing, storing, publishing or redistributing is a bar UNLESS it names
+//     the purpose the ban is limited to (commercial use) or the use it leaves free (personal, private, non-commercial,
+//     internal) and does not also say "whatever the purpose", "in any form" or "by any means". A ban "without prior
+//     permission" names no purpose: it is a bar;
+//   - a sentence that forbids automated reading (robots, scraping, crawling, data mining …) is a bar whatever it says
+//     of purpose;
+//   - a sentence that only declines liability ("shall not be liable for … automated systems") forbids nothing.
+// A bar holds the site's files and is printed for a person to read. The gate errs towards holding: a sentence it
+// cannot read as limited is a bar.
+const BAN_EN = /\b(?:may not|must not|shall not|cannot|can not|agree(?:s|d)? not to|undertake(?:s)? not to|not (?:be )?(?:permitted|allowed|authori[sz]ed)|(?:is|are) not to be|prohibit(?:ed|s|ion)?|forbidden|forbids?|refrain(?:s|ing)? from|you (?:will|shall|do) not|do not (?:copy|reproduce|redistribute|distribute|republish|store|scrape|crawl|use))\b|\bno\b[^.]{0,240}\bmay be\b|without (?:the |our |its |any )?(?:prior |express |written |explicit |specific )+(?:permission|consent|authori[sz]ation|approval|agreement)/i;
+const BAN_JA = /禁止|禁じ|できません|出来ません|お断り|ご遠慮|認められません|認めておりません|してはなりません|行わないで|固くお断り/;
+/** A clause that declines liability or a warranty: its "shall not" forbids the reader nothing. */
+const LIABILITY = /\b(?:shall|will|does|do|can|may|would)\s*not\s+(?:be\s+(?:held\s+)?(?:liable|responsible)|accept|assume|bear|warrant|guarantee|represent|have any (?:liability|responsibility))\b[^.;]*/gi;
+const REUSE_EN = /\b(?:cop(?:y|ies|ied|ying)|reproduc\w*|re-?distribut\w*|distribut\w*|re-?publish\w*|publish\w*|re-?transmi\w*|transmit\w*|re-?deliver\w*|re-?sell\w*|sell|duplicat\w*|stor(?:e|ed|ing)|download\w*|extract\w*|derivative works?|fram(?:e|ing)|mirror\w*|secondary use|re-?use\w*)\b/i;
+const REUSE_JA = /複製|複写|転載|再配信|再配布|配布|頒布|転送|二次利用|再利用|引用|蓄積|データ収集/;
+const AUTO_EN = /\b(?:automat\w*|robots?|scrap\w*|crawl\w*|spiders?|data[- ]?mining|harvest\w*|bots?|screen[- ]scrap\w*|programmatic\w*)\b/i;
+const AUTO_JA = /自動|機械的|クローラ|スクレイピング|ロボット|プログラムによる/;
+/** The ban is said to hold whatever the purpose or the means. */
+const UNIVERSAL = /\bany purpose|whatever (?:the )?purpose|regardless of (?:the |its )?(?:purpose|use)|for any reason|in any (?:form|manner|way|medium)|by any means|whether or not for profit|いかなる目的|目的の如何|如何なる用途|用途に関わらず|用途にかかわらず|目的を問わず|いかなる方法|方法を問わず|有料・無料を問わず/i;
+/** The ban is limited to a purpose (commercial use), or leaves a use free (personal, private, non-commercial, internal). */
+const LIMITED = /\b(?:for|of|to) (?:any |a |all )?(?:commercial|business|profit[- ]making)(?: or [a-z-]+)? (?:purposes?|use|uses|gain|ends|exploitation|advantage)|\bcommercial(?:ly)? (?:use|uses|purposes?|exploit\w*|gain)|\bfor (?:a )?profit\b|\b(?:other than|except|save|apart from|unless|outside)\b[^.]{0,80}\b(?:personal|private|non-?commercial|own|internal)\b|\b(?:personal|private|non-?commercial|internal)\b[^.]{0,40}\b(?:use|purposes?)\b[^.]{0,30}\b(?:only|is permitted|are permitted|is allowed|excepted)\b|商用目的|営利目的|商業目的|営利を目的|私的使用(?:の場合)?を除|個人的な(?:利用|使用)を除|非営利(?:目的)?(?:の場合)?を除/i;
+const sentencesOf = (line: string): string[] => line.split(/(?<=[.!?。！？])\s+|(?<=[。！？])/).map((x) => x.trim()).filter(Boolean);
+/** Whether a line of a site's terms holds its data files, and why: "automated" (it forbids automated reading) or
+ *  "re-use" (it forbids copying, reproducing, storing or redistributing and names no purpose the ban is limited to).
+ *  Null for a line that does neither. Read sentence by sentence. */
+export function termsBar(line: string): { kind: "automated" | "re-use"; sentence: string } | null {
+  for (const raw of sentencesOf(line)) {
+    const s = raw.replace(LIABILITY, " ");   // what is left once a clause that only declines liability is taken out
+    const ban = BAN_EN.test(s) || BAN_JA.test(s);
+    if (!ban) continue;
+    if (AUTO_EN.test(s) || AUTO_JA.test(s)) return { kind: "automated", sentence: raw };
+    if ((REUSE_EN.test(s) || REUSE_JA.test(s)) && (UNIVERSAL.test(s) || !LIMITED.test(s))) return { kind: "re-use", sentence: raw };
+  }
+  return null;
+}
 /** Prints a terms page for the record: its title, its date lines, then the lines on each subject, those that name
  *  personal or non-commercial use first and by name (each line once, cut at 500 characters; a line matching `never`,
  *  by default one that names a password, is counted, not printed). Returns the lines that bar automated reading or
- *  any re-use: with one, the caller leaves the site's data files unread. */
-export function printTerms(html: string, opts: { never?: RegExp | null; max?: number; forRecord?: boolean } = {}): { personal: string[]; bars: string[]; lines: number } {
+ *  re-use (termsBar): with one, the caller leaves the site's data files unread; and on how many of the four subjects
+ *  the page carries a line at all (`subjects`: a page with fewer than two is hardly a site's terms). */
+export function printTerms(html: string, opts: { never?: RegExp | null; max?: number; forRecord?: boolean } = {}): { personal: string[]; bars: string[]; lines: number; subjects: number } {
   const ls = textLines(html), seen = new Set<string>(), never = opts.never ?? /pass ?word|passwd|\bpwd\b|パスワード/i, max = opts.max ?? 8;
   console.log(`  title: ${titleOf(html) || "–"}; ${ls.length} lines of text${ls.length < 15 ? " (few: the page may be built by scripts)" : ""}`);
   for (const l of ls.filter((x) => x.length < 200 && /(last (updated|modified|revised)|effective( date| as of)?|updated|改定|改訂|制定|更新)[^.。]{0,40}((19|20)\d\d|令和|平成)/i.test(x)).slice(0, 3)) console.log(`  date line: ${masked(l)}`);
@@ -290,18 +384,27 @@ export function printTerms(html: string, opts: { never?: RegExp | null; max?: nu
   }
   const held = never ? ls.filter((l) => never.test(l) && TOPICS.some(([, re]) => re.test(l))).length : 0;
   if (held) console.log(`  ${held} matching line(s) that name a login or a password: not printed`);
-  const bars = ls.filter((l) => BARS.test(l) && !(never && never.test(l)));
-  console.log(`  lines that bar automated reading, or any re-use whatever the purpose: ${bars.length ? `${bars.length}: FOR THE OWNER; ${opts.forRecord ? "printed for the record: this is a feed the Monitor already reads, which the plan's gate does not stop" : "this site's data files are left unread by this probe"}` : "none matched (a person still reads the lines above before any job is built)"}`);
-  for (const l of bars.slice(0, 4)) console.log(`  ! ${masked(l.slice(0, 500))}${l.length > 500 ? " …" : ""}`);
-  return { personal: out["personal or non-commercial use"] ?? [], bars, lines: seen.size };
+  const found = ls.map((l) => ({ l, bar: never && never.test(l) ? null : termsBar(l) })).filter((x) => x.bar), bars = found.map((x) => x.l);
+  console.log(`  lines that bar automated reading, or re-use with no purpose the ban is limited to: ${bars.length ? `${bars.length}: FOR THE OWNER; ${opts.forRecord ? "printed for the record: this is a feed the Monitor already reads, which the plan's gate does not stop" : "this site's data files are left unread by this probe"}` : "none found (a person still reads the lines above before any job is built)"}`);
+  for (const x of found.slice(0, 6)) console.log(`  ! (${x.bar!.kind === "automated" ? "automated reading" : "re-use"}) ${masked(x.l.slice(0, 500))}${x.l.length > 500 ? " …" : ""}`);
+  if (found.length > 6) console.log(`  … ${found.length - 6} more such lines not printed`);
+  return { personal: out["personal or non-commercial use"] ?? [], bars, lines: seen.size, subjects: Object.values(out).filter((h) => h.length > 0).length };
 }
 
+/** A page's first heading (h1, else h2), as text. */
+const firstHeading = (html: string): string => decoded((html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ?? html.match(/<h2\b[^>]*>([\s\S]*?)<\/h2>/i)?.[1] ?? "").replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+/** Whether a page that a "terms" link led to is a site's terms: its title or its first heading names terms or
+ *  conditions of use, or it carries lines on two of the four subjects or more. A link that only says "legal",
+ *  "disclaimer" or "copyright" may lead to a hub or a library of documents, where one stray line on a subject (an
+ *  advertisement for a robotics fund) used to count as "terms read, no bar" (the checks of round 3b: PR-8). */
+export const isTermsPage = (html: string, subjects: number): boolean => TERMS_FIRST.test(titleOf(html)) || TERMS_FIRST.test(firstHeading(html)) || subjects >= 2;
+
 /** Reads a site's terms starting from one of its pages: the page's own terms link (termsLink), read and printed
- *  (printTerms). Where the page that link gives carries no line on use at all and itself links a page named terms (a
- *  "legal" hub does), that page is read too, once. Up to two requests, `gapMs` apart. `allows` (the site's
+ *  (printTerms). Where the page that link gives is not the site's terms (isTermsPage) and itself links a page named
+ *  terms (a "legal" hub does), that page is read too, once. Up to two requests, `gapMs` apart. `allows` (the site's
  *  robots.txt) is asked for a terms page on the same site; one that stands on another site (the group's) is read as
- *  the link gives it. Returns whether a terms page was read, and whether a line of it bars automated reading or any
- *  re-use. */
+ *  the link gives it. Returns whether the site's terms were read, and whether a line of any page read bars automated
+ *  reading or re-use. */
 export async function readTerms(from: { html: string; final: string }, opts: { allows?: (url: string) => boolean; gapMs?: number; never?: RegExp | null; forRecord?: boolean } = {}): Promise<{ read: boolean; barred: boolean }> {
   const allows = opts.allows ?? (() => true);
   let t = termsLink(from.html, from.final), read = false, barred = false;
@@ -311,14 +414,13 @@ export async function readTerms(from: { html: string; final: string }, opts: { a
     const p = await page(t.href, { timeoutMs: 45000 });
     await pause(opts.gapMs ?? 1000);
     if (!p.ok) break;
-    read = true;
     const res = printTerms(p.html, { ...(opts.never ? { never: opts.never } : {}), ...(opts.forRecord ? { forRecord: true } : {}) });
     if (res.bars.length) barred = true;
-    if (res.lines > 0) break;
+    if (isTermsPage(p.html, res.subjects)) { read = true; break; }
     const here = t.href, more = linksOf(p.html, p.final).filter((l) => /^https?:/i.test(l.href) && TERMS_FIRST.test(l.text) && !NOT_TERMS.test(l.text) && l.text.length < 80 && l.href !== here);
     const better = more.find((l) => siteOf(l.href) === siteOf(here)) ?? more.find((l) => !THIRD_PARTY.test(hostOf(l.href)));
-    if (!better || hop === 1) { console.log("  that page carries no line on use: the site's terms proper were not found"); read = false; break; }
-    console.log(`  that page carries no line on use; it links "${better.text.slice(0, 50)}" -> ${masked(better.href)}: read too`);
+    if (!better || hop === 1) { console.log(`  that page is not the site's terms (its title and first heading do not name terms of use, and it carries lines on ${res.subjects} of the four subjects): TERMS NOT FOUND`); read = false; break; }
+    console.log(`  that page is not the site's terms (lines on ${res.subjects} of the four subjects); it links "${better.text.slice(0, 50)}" -> ${masked(better.href)}: read too`);
     t = better;
   }
   return { read, barred };
@@ -340,14 +442,15 @@ export function tablesOf(html: string): Array<{ heading: string; rows: string[][
 }
 
 /** Fetches a file as bytes; one line printed like look()'s (its size, type and last-modified), nothing of the file. */
-export async function bytes(url: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<{ ok: boolean; status: number | null; type: string; data: Uint8Array | null; final: string }> {
+export async function bytes(url: string, init: RequestInit & { timeoutMs?: number; only?: (url: string) => boolean } = {}): Promise<{ ok: boolean; status: number | null; type: string; data: Uint8Array | null; final: string }> {
   const t0 = Date.now();
   const hold = heldWhy(url);
   if (hold) { notAsked(url, hold); return { ok: false, status: null, type: "", data: null, final: url }; }
   made++;
   try {
-    const r = await fetch(url, { redirect: "follow", ...init, headers: { "user-agent": UA, accept: "*/*", ...(init.headers as Record<string, string> | undefined) }, signal: AbortSignal.timeout(init.timeoutMs ?? 60000) });
-    const data = new Uint8Array(await r.arrayBuffer()), type = r.headers.get("content-type") ?? "", final = r.url || url, lm = r.headers.get("last-modified");
+    const g = await guarded(url, { ...init, headers: { "user-agent": UA, accept: "*/*", ...(init.headers as Record<string, string> | undefined) }, signal: AbortSignal.timeout(init.timeoutMs ?? 60000) });
+    if (g.held !== undefined) { notAsked(g.at, `${g.held}\n  (a redirect from ${masked(url)} leads there: not followed)`); return { ok: false, status: null, type: "", data: null, final: url }; }
+    const r = g.r, data = new Uint8Array(await r.arrayBuffer()), type = r.headers.get("content-type") ?? "", final = g.final, lm = r.headers.get("last-modified");
     console.log(`${r.status} ${r.ok ? "OK" : "NOT OK"}  ${type || "no type"}  ${data.length} bytes  ${Date.now() - t0} ms  ${masked(url)}${final !== url ? `  (ended at ${masked(final)})` : ""}${lm ? `  last-modified ${lm}` : ""}`);
     return { ok: r.ok, status: r.status, type, data: r.ok ? data : null, final };
   } catch (e) {

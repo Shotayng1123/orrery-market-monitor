@@ -1,5 +1,11 @@
 // What the session table rests on, read from the source itself (the reviewer's check of "when a closed market
 // opens", 21 Nov 2026: findings O-1 and O-2). Read-only, no key, nothing written. Yahoo Finance only.
+//   0. Right now (added after the checks of round 3b, PR-11): the quote's own time and the newest one-minute bar of
+//      USDJPY=X and ES=F, by the request the server's minute job makes (range=1d, interval=1m). The run of 21 Nov 2026
+//      showed the feed's first bar of the FX week at Monday 00:00 UTC on four weekends, two hours after the session
+//      table opens the week (Sunday 17:00 New York; three hours in New York's summer time). Whether the quote's own
+//      time moves in those hours is in no log, and the server's feed-health rule expects prints in them. RUN BETWEEN
+//      SUNDAY 22:30 AND 23:59 UTC this section answers it; at any other hour it only says how old the quote is.
 //   1. O-1, the FX week. Since 21 Nov 2026 both session tables keep it by New York's clock, Sunday 17:00 to Friday 17:00
 //      there (the server's fxTrading); before, Monday 05:00 to Saturday 06:00 SGT all year. Which of the two the feed
 //      follows was in no log. Here: Yahoo's five-minute bars of USDJPY=X and EURUSD=X over a month, and for each weekend
@@ -12,9 +18,9 @@
 //      for ^GSPC beside them: the exchange and time zone Yahoo names, the regular session it declares for today, and
 //      the first and last one-minute bar of each of the last five days, in New York's time: the hours the feed prints.
 // The third finding, O-3 (Tokyo's holidays against JPX's own calendar page), was this probe's section 3 until 21 Nov
-// 2026. It asked jpx.co.jp, which no probe does until the owner answers the question of that day: that read is now in
-// pf_jpx, held, and pf_holidays sets the Monitor's Tokyo rows against Japan's national-holiday file meanwhile.
-// Requests: at most 10, all to Yahoo, 1.2 s apart. Runtime: node.
+// 2026. It asked jpx.co.jp, which no probe but pf_jpx does: that read is now in pf_jpx (the owner released JPX's
+// calendar on 21 Nov 2026), and pf_holidays sets the Monitor's Tokyo rows against Japan's national-holiday file as well.
+// Requests: at most 12, all to Yahoo, 1.2 s apart. Runtime: node.
 //   Actions > source-probe > Run workflow: probe = sessions_check, runtime = node
 import { head, look, pause, requestsMade } from "./lib.ts";
 
@@ -46,6 +52,18 @@ const session = (m: J): string => {
   const reg = (m.currentTradingPeriod as { regular?: { start?: number; end?: number } } | undefined)?.regular;
   return reg?.start && reg.end ? `${inZone(NY, reg.start)} to ${inZone(NY, reg.end)} New York (${utc(reg.start)} to ${utc(reg.end)})` : "not given";
 };
+
+head("0. Right now: the quote's own time and the newest one-minute bar of a currency and a Globex future (the minute job's own request)");
+{
+  const now = Math.floor(Date.now() / 1000);
+  console.log(`  now ${three(now)}. The session table opens the FX week at Sunday 17:00 New York and Globex at 18:00; the log of 21 Nov 2026 has the feed's first FX bar of the week at Monday 00:00 UTC`);
+  for (const sym of ["USDJPY=X", "ES=F"]) {
+    const c = await chart(sym, "1d", "1m");
+    if (!c) continue;
+    const t = priced(c), qt = Number(c.meta.regularMarketTime), at = Math.floor(Date.now() / 1000);
+    console.log(`  ${sym}: the quote's own time (regularMarketTime) ${Number.isFinite(qt) && qt > 0 ? `${three(qt)}, ${((at - qt) / 60).toFixed(1)} minutes before this reading` : "not given"}; ${t.length} one-minute bars with a price in the answer${t.length ? `, the newest ${three(t[t.length - 1])}, ${((at - t[t.length - 1]) / 60).toFixed(1)} minutes before this reading` : ""}; regular session declared for today: ${session(c.meta)}`);
+  }
+}
 
 head("1. The FX week in Yahoo's bars (O-1): each weekend's last bar before it and first bar after");
 console.log("  by New York's clock the week ends Friday 17:00 and opens Sunday 17:00 there: 21:00 UTC until 31 Oct 2026, 22:00 UTC from 1 Nov 2026;");
@@ -79,4 +97,4 @@ for (const sym of ["^GSPC", "^VIX", "^VXN", "^FVX", "^TNX", "^TYX", "DX-Y.NYB"])
   if (!byDay.size) console.log("    no one-minute bar with a price");
 }
 
-console.log(`\n${requestsMade()} requests made (at most 10)`);
+console.log(`\n${requestsMade()} requests made (at most 12)`);

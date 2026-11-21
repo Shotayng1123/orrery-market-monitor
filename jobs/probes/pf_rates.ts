@@ -66,7 +66,14 @@ head("1. FedInvest (TreasuryDirect): end-of-day prices of Treasury securities, f
         if (submit) body.set(submit.name, submit.value);
         const target = new URL(form.action || path, sel.final).toString();
         console.log(`  the price-date form: ${form.method.toUpperCase()} ${masked(target)}; asking for ${D.toISOString().slice(0, 10)} with ${[...body.keys()].join(", ")}${submit ? ` (the button "${submit.value}")` : ""}`);
-        if (!rb.allows(target)) console.log("  not asked: robots.txt holds the form's address");
+        // A form is not POSTED to a site that refused its robots.txt (401, 403 or 418: "the site may refuse automated
+        // readers altogether", in the helper's own words). The run of 21 Nov posted this form after the RBI's
+        // robots.txt had answered 418. Whether such a site may be read at all is a question for the owner; a POST waits
+        // for the answer.
+        const refused = rb.outcome === "none" && (rb.status === 401 || rb.status === 403 || rb.status === 418);
+        if (!submit) console.log("  not asked: the form's own button was not found");
+        else if (!rb.allows(target)) console.log("  not asked: robots.txt holds the form's address");
+        else if (refused && form.method === "post") console.log(`  NOT POSTED: this site answered HTTP ${rb.status} to the request for its robots.txt, and a form is not posted to a site that refuses that. The archive has not been asked: nothing here says whether it holds the rates. FOR THE OWNER`);
         else {
           const res = form.method === "post"
             ? await page(target, { method: "POST", body: body.toString(), headers: { "content-type": "application/x-www-form-urlencoded" }, timeoutMs: 60000 })
@@ -110,17 +117,33 @@ head("2. An INR reference rate: the Reserve Bank of India's reference-rate archi
         const dmy = (d: Date) => `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
         const body = new URLSearchParams(), from = new Date(t0 - 10 * 86400e3);
         let radio = false;
+        const ticked: string[] = [];
         for (const x of form.fields) {
           if (x.type === "hidden") body.set(x.name, x.value);
           else if (x.type === "text" || x.tag === "textarea" || x.type === "") { if (/from/i.test(x.name)) body.set(x.name, dmy(from)); else if (/to/i.test(x.name)) body.set(x.name, dmy(now)); }
           else if (x.type === "radio" && !body.has(x.name)) { body.set(x.name, x.value); radio = true; }
+          // the archive's currencies are tick boxes: an archive asked with none ticked is asked for nothing (the run of
+          // 21 Nov sent none, and its "0 rows" said nothing of the archive: the checks of round 3b, PR-2)
+          else if (x.type === "checkbox") { body.set(x.name, x.value || "on"); ticked.push(x.name); }
           else if (x.tag === "select" && !body.has(x.name)) body.set(x.name, x.value);
         }
-        const submit = form.fields.find((x) => x.type === "submit" || x.type === "image");
+        // the button that sends the archive's question stands after its date fields. The page is one form, and its
+        // first button is the site's search beside the header's search box: that is the one the run of 21 Nov pressed
+        const isSubmit = (x: Field) => x.type === "submit" || x.type === "image";
+        const lastDate = form.fields.reduce((at, x, i) => (x.type !== "hidden" && /from|to/i.test(x.name) && (x.type === "text" || x.type === "") ? i : at), -1);
+        const submit = form.fields.find((x, i) => i > lastDate && isSubmit(x)) ?? null;
         if (submit) { if (submit.type === "image") { body.set(`${submit.name}.x`, "5"); body.set(`${submit.name}.y`, "5"); } else body.set(submit.name, submit.value); }
+        console.log(`  the button after the date fields: ${submit ? `${submit.name} ("${submit.value.trim().slice(0, 20)}")` : "none found: nothing is submitted"}; boxes ticked: ${ticked.length ? ticked.join(", ").slice(0, 300) : "none on the form"}`);
         const target = new URL(form.action || path, p.final).toString();
         console.log(`  the archive's form: ${form.method.toUpperCase()} ${masked(target)}; asking for ${dmy(from)} to ${dmy(now)} (day/month/year, a candidate format) with ${[...body.keys()].filter((k) => !/^__/.test(k)).join(", ")} and ${[...body.keys()].filter((k) => /^__/.test(k)).length} hidden page-state fields${radio ? "; the first choice of each radio group" : ""}`);
-        if (!rb.allows(target)) console.log("  not asked: robots.txt holds the form's address");
+        // A form is not POSTED to a site that refused its robots.txt (401, 403 or 418: "the site may refuse automated
+        // readers altogether", in the helper's own words). The run of 21 Nov posted this form after the RBI's
+        // robots.txt had answered 418. Whether such a site may be read at all is a question for the owner; a POST waits
+        // for the answer.
+        const refused = rb.outcome === "none" && (rb.status === 401 || rb.status === 403 || rb.status === 418);
+        if (!submit) console.log("  not asked: the form's own button was not found");
+        else if (!rb.allows(target)) console.log("  not asked: robots.txt holds the form's address");
+        else if (refused && form.method === "post") console.log(`  NOT POSTED: this site answered HTTP ${rb.status} to the request for its robots.txt, and a form is not posted to a site that refuses that. The archive has not been asked: nothing here says whether it holds the rates. FOR THE OWNER`);
         else {
           const res = form.method === "post"
             ? await page(target, { method: "POST", body: body.toString(), headers: { "content-type": "application/x-www-form-urlencoded" }, timeoutMs: 60000 })

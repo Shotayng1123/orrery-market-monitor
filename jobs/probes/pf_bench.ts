@@ -3,7 +3,8 @@
 // not asked again: the iShares fund pages' links (each page links a latest-holdings.csv and a "Data Download Excel":
 // l.53, l.71, l.89, l.126, l.143, l.161, l.177: the addresses used here are those lines'), SPY's holdings workbook and
 // page, Nikkei's pages. Set aside by the owner's answer of 21 Nov 2026: JPX's TOPIX weight file, Nomura's holdings files,
-// Cboe's VIX files (lib.ts refuses them); every other read of jpx.co.jp is in pf_jpx, held. For the issuers' files
+// Cboe's VIX files (lib.ts refuses them); every other read of jpx.co.jp is in pf_jpx (its rule pages and its holiday
+// calendar, which the owner released on 21 Nov 2026; its ETF list is still held). For the issuers' files
 // the owner's "personal use, credited" of 20 Nov stands (iShares, State Street), each read with its own terms: so
 // HERE A SITE'S robots.txt AND TERMS ARE READ FIRST, and a site whose terms bar automated reading, or any re-use
 // whatever the purpose, keeps its data files unread: that finding goes to the owner.
@@ -68,27 +69,35 @@ async function holdings(what: string, url: string, rb: Robots | null): Promise<M
   if (hi < 0) { console.log(`  no header line found; the first five lines: ${ls.slice(0, 5).map((l) => l.slice(0, 120)).join(" · ")}`); return null; }
   const H = csvCells(ls[hi]), rows = ls.slice(hi + 1).map(csvCells).filter((c) => c.length >= H.length - 2 && c.length >= 5);
   const col = (re: RegExp) => H.findIndex((h) => re.test(h));
-  const iW = col(/^Weight|保有比率|構成比/i), iAC = col(/^Asset Class|資産クラス/i), iLoc = col(/^Location|国・地域|国$/i), iCur = col(/^Market Currency/i) >= 0 ? col(/^Market Currency/i) : col(/^Currency|通貨/i), iSec = col(/^Sector|セクター|業種/i), iMat = col(/^Maturity|償還/i), iDur = col(/^Mod\. Duration/i) >= 0 ? col(/^Mod\. Duration/i) : col(/^Duration|デュレーション/i);
+  const iW = col(/^(Market )?Weight|保有比率|構成比/i), iMV = col(/^Market Value|時価総額|評価額/i), iAC = col(/^Asset Class|資産クラス/i), iLoc = col(/^Location|国・地域|国$/i), iCur = col(/^Market Currency/i) >= 0 ? col(/^Market Currency/i) : col(/^Currency|通貨/i), iSec = col(/^Sector|セクター|業種/i), iMat = col(/^Maturity|償還/i), iDur = col(/^Mod\. Duration/i) >= 0 ? col(/^Mod\. Duration/i) : col(/^Duration|デュレーション/i);
   console.log(`  header (${H.length} columns): ${H.join(" | ").slice(0, 600)}`);
-  console.log(`  ${rows.length} rows; a line carries: weight ${iW >= 0 ? "yes" : "NO"}, currency ${iCur >= 0 ? `yes (${H[iCur]})` : "NO"}, maturity ${iMat >= 0 ? "yes" : "no"}, duration ${iDur >= 0 ? `yes (${H[iDur]})` : "no"}, sector ${iSec >= 0 ? "yes" : "no"}, country ${iLoc >= 0 ? `yes (${H[iLoc]})` : "no"}`);
+  console.log(`  ${rows.length} rows; a line carries: weight ${iW >= 0 ? `yes (${H[iW]})` : "NO"}, market value ${iMV >= 0 ? `yes (${H[iMV]})` : "no"}, currency ${iCur >= 0 ? `yes (${H[iCur]})` : "NO"}, maturity ${iMat >= 0 ? "yes" : "no"}, duration ${iDur >= 0 ? `yes (${H[iDur]})` : "no"}, sector ${iSec >= 0 ? "yes" : "no"}, country ${iLoc >= 0 ? `yes (${H[iLoc]})` : "no"}`);
   console.log(`  the first two rows: ${rows.slice(0, 2).map((c) => c.join(" | ").slice(0, 260)).join(" · ")}`);
-  const by = (i: number) => { const m = new Map<string, number>(); if (i >= 0 && iW >= 0) for (const c of rows) { const w = numOf(c[iW]); if (w != null) m.set(c[i] ?? "", (m.get(c[i] ?? "") ?? 0) + w); } return m; };
-  const total = iW >= 0 ? rows.reduce((a, c) => a + (numOf(c[iW]) ?? 0), 0) : null;
-  if (total != null) console.log(`  the weights sum to ${total.toFixed(2)}%${iAC >= 0 ? `; by asset class: ${top(by(iAC), 8)}` : ""}`);
-  if (iLoc >= 0 && iW >= 0) { const m = by(iLoc); console.log(`  by country (${m.size}): ${top(m, 30)}`); }
+  // A line's weight. The issuer prints "Weight (%)" to two decimals: over a bond fund's thousands of small lines the
+  // column does not add up (AGG's summed to 81.62% on 21 Nov 2026, IAGG's to 87.54%), and what is lost is the small
+  // lines, so shares, the dollar share and durations worked out of it stood on the larger lines alone (the checks of
+  // round 3b: PR-9). Where the file has a Market Value column, a line's weight is its market value over the file's
+  // total; the file's own column is summed beside it, for the record.
+  const mvTotal = iMV >= 0 ? rows.reduce((a, c) => a + (numOf(c[iMV]) ?? 0), 0) : 0, exact = iMV >= 0 && mvTotal > 0, hasW = exact || iW >= 0;
+  const wOf = (c: string[]): number | null => (exact ? (numOf(c[iMV]) == null ? null : (numOf(c[iMV]) as number) / mvTotal * 100) : iW >= 0 ? numOf(c[iW]) : null);
+  const by = (i: number) => { const m = new Map<string, number>(); if (i >= 0 && hasW) for (const c of rows) { const w = wOf(c); if (w != null) m.set(c[i] ?? "", (m.get(c[i] ?? "") ?? 0) + w); } return m; };
+  const colSum = iW >= 0 ? rows.reduce((a, c) => a + (numOf(c[iW]) ?? 0), 0) : null;
+  const total = hasW ? rows.reduce((a, c) => a + (wOf(c) ?? 0), 0) : null;
+  if (total != null) console.log(`  weights: ${exact ? `each line's "${H[iMV]}" over the file's total, so they sum to ${total.toFixed(2)}%${colSum != null ? `; the file's own "${H[iW]}" column, printed to two decimals, sums to ${colSum.toFixed(2)}%` : ""}` : `the file's own "${H[iW]}" column (it has no market value to work exact weights from), which sums to ${total.toFixed(2)}%${total < 99 || total > 101 ? ": NOT about 100%, so every share below stands on that part of the fund only" : ""}`}${iAC >= 0 ? `; by asset class: ${top(by(iAC), 8)}` : ""}`);
+  if (iLoc >= 0 && hasW) { const m = by(iLoc); console.log(`  by country (${m.size}): ${top(m, 30)}`); }
   const cur = by(iCur);
   if (cur.size) console.log(`  by currency (${cur.size}): ${top(cur, 12)}${iDur >= 0 && total ? ` · THE DOLLAR SHARE (V-14): ${(cur.get("USD") ?? 0).toFixed(2)}% of ${total.toFixed(2)}%` : ""}`);
-  if (iDur >= 0 && iW >= 0) {
+  if (iDur >= 0 && hasW) {
     // a bond file's profile: weights by sector and maturity, duration in all and by currency
     let wd = 0, ww = 0; const dc = new Map<string, number>();
-    for (const c of rows) { const w = numOf(c[iW]), d = numOf(c[iDur]); if (w == null || d == null) continue; wd += w * d; ww += w; if (iCur >= 0) dc.set(c[iCur] ?? "", (dc.get(c[iCur] ?? "") ?? 0) + w * d / 100); }
-    console.log(`  duration (${H[iDur]}), weight-averaged over the ${ww.toFixed(1)}% of lines that carry one: ${ww ? (wd / ww).toFixed(2) : "–"} years${dc.size ? `; its contribution by currency, in years: ${top(dc, 8, "")}` : ""}`);
+    for (const c of rows) { const w = wOf(c), d = numOf(c[iDur]); if (w == null || d == null) continue; wd += w * d; ww += w; if (iCur >= 0) dc.set(c[iCur] ?? "", (dc.get(c[iCur] ?? "") ?? 0) + w * d / 100); }
+    console.log(`  duration (${H[iDur]}), weight-averaged over the lines that carry one (their weights sum to ${ww.toFixed(2)}% of ${(total ?? 0).toFixed(2)}%): ${ww ? (wd / ww).toFixed(2) : "–"} years${dc.size ? `; its contribution by currency, in years (they add up to ${[...dc.values()].reduce((a, x) => a + x, 0).toFixed(2)}: a line without a duration counts as zero there): ${top(dc, 8, "")}` : ""}`);
     if (iSec >= 0) console.log(`  by sector: ${top(by(iSec), 10)}`);
     if (iMat >= 0) {
       const asOf = Date.parse((ls.slice(0, hi).join(" ").match(/as of[^A-Za-z0-9]*"?([A-Za-z]{3,9}\.? \d{1,2}, \d{4}|\d{1,2}[-/][A-Za-z]{3}[-/]\d{4}|\d{4}-\d{2}-\d{2})/i)?.[1]) ?? "") || t0;
       const bk = new Map<string, number>(), name = (y: number) => (y < 1 ? "under 1y" : y < 3 ? "1–3y" : y < 5 ? "3–5y" : y < 7 ? "5–7y" : y < 10 ? "7–10y" : y < 20 ? "10–20y" : "20y and over");
       let undated = 0;
-      for (const c of rows) { const w = numOf(c[iW]), t = Date.parse(c[iMat] ?? ""); if (w == null) continue; if (!Number.isFinite(t)) { undated += w; continue; } const k = name((t - asOf) / (365.25 * 86400e3)); bk.set(k, (bk.get(k) ?? 0) + w); }
+      for (const c of rows) { const w = wOf(c), t = Date.parse(c[iMat] ?? ""); if (w == null) continue; if (!Number.isFinite(t)) { undated += w; continue; } const k = name((t - asOf) / (365.25 * 86400e3)); bk.set(k, (bk.get(k) ?? 0) + w); }
       console.log(`  by years to maturity: ${["under 1y", "1–3y", "3–5y", "5–7y", "7–10y", "10–20y", "20y and over"].map((k) => `${k} ${(bk.get(k) ?? 0).toFixed(2)}%`).join(", ")}; with no maturity date ${undated.toFixed(2)}%`);
     }
   }
