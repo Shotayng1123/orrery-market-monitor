@@ -35,17 +35,23 @@ export const RANGE_52W_TIP = "Where the last print sits in its 52-week range: 0%
 export const upperSigma = (s: string): string => s.replace(/[^σ]+/g, (x) => x.toUpperCase());
 /** A future's day across a change of contract (B-27): what the ROLL mark beside its name says. */
 export const rollTip = (r: TableRow): string => !r.roll ? "" : `A change of contract on ${fmtDate(r.roll.d)}: Yahoo's front-month series moved ${r.roll.from ? `from ${monthOf(r.roll.from)} (${codeOf(r.roll.from)}) ` : ""}to ${monthOf(r.roll.to)} (${codeOf(r.roll.to)}). ${r.roll.step != null ? `The 1D is the change within ${monthOf(r.roll.to)}; the change of contract (${r.roll.step >= 0 ? "+" : ""}${r.roll.step.toFixed(2)}%) is not a move and is left out of the 1D, its σ and the alerts.` : "The source does not give the new contract's close before it: the 1D is the series' own, across the change of contract, and has no σ."}`;
-function Badges({ r }: { r: TableRow }) {
-  const m = marketOf(r.market);
-  return (
-    <>
-      {r.roll && <span className="badge roll" title={rollTip(r)}>ROLL</span>}
-      {r.proxyFor && <span className="badge proxy" title={`${r.name} stands in for ${r.proxyFor}; table closes use the official index value when available`}>PROXY</span>}
-      {r.live && m && m.delayMin > 0 && <span className="badge delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>{delayed(m.delayMin, true)}</span>}
-      {r.live && m && m.delayMin === 0 && <span className="badge live">LIVE</span>}
-    </>
-  );
+/** The marks beside a name in the table, in their order: a change of contract today, a stand-in instrument, a delayed
+ *  or a live feed. One list for the screen and for the panel's CSV, where they are a column of their own. */
+function marksOf(r: TableRow): Array<{ cls: string; text: string; tip?: string }> {
+  const m = marketOf(r.market), out: Array<{ cls: string; text: string; tip?: string }> = [];
+  if (r.roll) out.push({ cls: "roll", text: "ROLL", tip: rollTip(r) });
+  if (r.proxyFor) out.push({ cls: "proxy", text: "PROXY", tip: `${r.name} stands in for ${r.proxyFor}; table closes use the official index value when available` });
+  if (r.live && m && m.delayMin > 0) out.push({ cls: "delay", text: delayed(m.delayMin, true), tip: `${m.name} feed is delayed about ${m.delayMin} minutes` });
+  if (r.live && m && m.delayMin === 0) out.push({ cls: "live", text: "LIVE" });
+  return out;
 }
+/** `nocsv`: the marks are not part of the name in the panel's CSV (components/Panel.tsx); the name cell names them there. */
+function Badges({ r }: { r: TableRow }) {
+  return <>{marksOf(r).map((b) => <span key={b.cls} className={`badge ${b.cls} nocsv`} title={b.tip}>{b.text}</span>)}</>;
+}
+/** The two columns the name cell adds to the panel's CSV: its marks, and the day its figures are of where that is not
+ *  today in Singapore (what stands after the name on screen). */
+export const NAME_CSV_HEADS = ["Marks", "Figures of (blank: today in SGT)"];
 
 /** A level as every screen writes it: the instrument's own decimals (the instruments table), "%" after a yield
  *  (the designer's D-05 and D-44, I-5): USD/JPY "158.400", the Nikkei "57,000.00", UST 2Y "4.510%". The table used
@@ -74,7 +80,7 @@ function OneTable({ rows, bySigma, onSigma }: { rows: TableRow[]; bySigma: boole
       <colgroup><col className="nm" /><col className="lv" />{PERIODS.map((p) => <Col key={p.key} d1={p.key === "d1"} />)}<col className="n" /><col className="n" /><col className="n" /></colgroup>
       <thead>
         <tr>
-          <th className="l">Name</th><th>Last</th>
+          <th className="l" data-csv={JSON.stringify(NAME_CSV_HEADS)}>Name</th><th>Last</th>
           {PERIODS.map((p) => (
             <Head key={p.key} d1={p.key === "d1"} bySigma={bySigma} onSigma={onSigma}>
               <th className={p.key === "d1" ? "grp" : ""} title={`Change from the close at the start of the ${p.label} window to the last print (bp for yields)`}>{p.label}</th>
@@ -125,7 +131,7 @@ function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
         // Its tooltip says whether its market is open, and when a closed one next opens, in SGT (lib/opens.ts)
         return (
           <tr key={r.symbol} className={`click${r.live ? " live" : ""}`} title={`${r.symbol} · ${rowAsOfTitle(r)}${rowStateWords(r)} · open its page`} onClick={(e) => { if (!(e.target as HTMLElement).closest("a")) openAsset(r.symbol); }}>
-            <td className="l" title={`${r.name} (${r.symbol})`}><a className="lnk" href={`#${pageHash(r.symbol)}`}>{shortName(r.symbol, r.name)}</a><Badges r={r} />{day && <span className="asday" title={rowDayTip(day)}>{dayWords(day)}</span>}</td>
+            <td className="l" title={`${r.name} (${r.symbol})`} data-csv={JSON.stringify([marksOf(r).map((b) => b.text).join(" "), day ? fmtDate(day) : ""])}><a className="lnk" href={`#${pageHash(r.symbol)}`}>{shortName(r.symbol, r.name)}</a><Badges r={r} />{day && <span className="asday nocsv" title={rowDayTip(day)}>{dayWords(day)}</span>}</td>
             <td className="num"><Flash value={r.last}><b>{levelOf(r, r.last)}</b></Flash></td>
             {PERIODS.map((p) => {
               const c = r.closes[p.key];

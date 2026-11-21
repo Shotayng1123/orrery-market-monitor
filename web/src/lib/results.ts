@@ -61,6 +61,17 @@ export function resultsDayLabel(ymd: string): string {
   return `${WD[wd]} ${Number(m[3])} ${MON[Number(m[2]) - 1]}`;
 }
 
+/** Whether a results date is still "next": ahead, or no more than a day old. The server stores an index member's date
+ *  with its list's quote runs, which stop for the weekend: a company that reported on a Friday kept Friday's date under
+ *  "Next results" until Monday's first run, 41 hours on (the checks of round 3b, 21 Nov 2026: RM-3), while RESULTS AHEAD
+ *  beside it, the results calendar and the company's own page had dropped it. One rule for every place that draws one. */
+export const RESULTS_KEPT_MS = 86400e3;
+export function resultsAhead(at: string | null | undefined, now: number = Date.now()): boolean {
+  if (at == null || at.trim() === "") return false;
+  const t = Date.parse(at);
+  return Number.isFinite(t) && t > now - RESULTS_KEPT_MS;
+}
+
 /** Rows with a results date in the order of their days (each in its own market), then of their moments: a list
  *  under day bars never shows a day twice. Rows without a date are left out. */
 export function byResultsDay<T>(rows: readonly T[], at: (r: T) => string | null | undefined, symbol: (r: T) => string, indices?: (r: T) => readonly string[] | null | undefined): Array<T & { day: string }> {

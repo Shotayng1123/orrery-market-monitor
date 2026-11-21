@@ -106,6 +106,40 @@ export function lastSessionOf(closes: Booked[], units: Units, rolls: Array<RollL
   return lastSession(c0, c1, units, { sd: s.sdx, n: s.nx, from: s.fromx, to: s.tox }, r ? { from: r.from ?? null, to: r.to ?? "", prevClose: r.prevClose } : null);
 }
 
+// ---- which closes the market table hands lastSession (table.ts; the checks of round 3b, 21 Nov 2026: CK-5, LS-5) ----
+// These few lines decide the last session of every row, and no check ran them: table.ts cannot be loaded outside the
+// server (it reads the database), so the logic checks tested lastSession with closes they picked themselves. They are
+// here, pure, and table.ts calls them.
+/** What fn_table_anchors gives for an instrument, as far as the last session needs it: its newest booked close, and
+ *  the close the 1D is measured from. Where the quote is the newer view the SQL hands back the newest close itself as
+ *  that one (`d1_d === last_d`), and the close before it is read apart (`prevCloses`). */
+export interface AnchorLite { last_d?: string | null; last_close?: number | null; d1_d?: string | null; d1?: number | null }
+/** A recorded change of contract (fut_rolls). */
+export interface RollRecLite { d: string; from_contract: string | null; to_contract: string; prev_close: number | null }
+/** fn_table_stats' σ of the 63 daily changes that end one session before the newest close. */
+export interface StatX { sd63x?: number | null; n63x?: number | null; from63x?: string | null; to63x?: string | null }
+/** For each symbol, its newest booked close before `lastOf`'s date: the close before the last one, from rows in any
+ *  order (a paged read gives them page by page). A symbol with no row before its last close is not in the answer. */
+export function prevCloses(rows: ReadonlyArray<{ symbol: string; d: string; close: number }>, lastOf: ReadonlyMap<string, string>): Map<string, Booked> {
+  const out = new Map<string, Booked>();
+  for (const r of rows) {
+    const last = lastOf.get(r.symbol);
+    if (last == null || !(r.d < last)) continue;
+    const had = out.get(r.symbol);
+    if (!had || r.d > had.d) out.set(r.symbol, { d: r.d, close: r.close });
+  }
+  return out;
+}
+/** A table row's last session: the instrument's last two booked closes (the anchors' newest and the one before: the
+ *  anchors' own `d1` where the row is itself its last close, `prev` where the quote is the newer view), a change of
+ *  contract between the two (a future's, counted within the new contract), over the σ of the 63 changes before it. */
+export function tableLastSession(a: AnchorLite | null | undefined, prev: Booked | null | undefined, rolls: ReadonlyArray<RollRecLite>, st: StatX | null | undefined, units: Units, future: boolean): LastSession | null {
+  const c0 = a?.last_d && a.last_close != null ? { d: a.last_d, close: a.last_close } : null;
+  const c1 = !a?.last_d ? null : a.d1_d === a.last_d ? prev ?? null : a.d1_d && a.d1 != null ? { d: a.d1_d, close: a.d1 } : null;
+  const lr = future && c0 && c1 ? rolls.filter((r) => r.d <= c0.d && r.d > c1.d).sort((x, y) => y.d.localeCompare(x.d))[0] : undefined;
+  return lastSession(c0, c1, units, { sd: st?.sd63x, n: st?.n63x, from: st?.from63x, to: st?.to63x }, lr ? { from: lr.from_contract, to: lr.to_contract, prevClose: lr.prev_close } : null);
+}
+
 // ---- σ alerts ----
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** "19 Nov 2026", as the page writes a date (web/src/lib/time.ts fmtDate). */

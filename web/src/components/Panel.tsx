@@ -1,14 +1,20 @@
 import { useRef, type ReactNode } from "react";
 
 /** The largest table of a panel as CSV text (what is on screen: headers, section rows, figures). A control inside a
- *  cell (`.nocsv`, the statements' "‹ earlier years") is not part of the data. */
-function tableCsv(table: HTMLTableElement): string {
+ *  cell (`.nocsv`, the statements' "‹ earlier years") is not part of the data.
+ *  A cell may hold several things that are one column on screen and several in a file: MARKETS' name cell holds the
+ *  name, its marks (PROXY, LIVE …) and the day of a figure that is not today's, and its text run together read
+ *  "S&P 50023 Nov" (the checks of round 3b, 21 Nov 2026). Such a cell marks the extra parts `.nocsv` and names them in
+ *  `data-csv`, a JSON list of texts: each becomes a column of its own right after the cell's, in the head as in the
+ *  rows. */
+export function tableCsv(table: HTMLTableElement): string {
   const text = (c: Element) => { const x = c.cloneNode(true) as Element; x.querySelectorAll(".nocsv").forEach((n) => n.remove()); return x.textContent ?? ""; };
-  const cell = (c: Element) => { const t = text(c).replace(/\s+/g, " ").trim().replace(/−/g, "-"); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const quote = (raw: string) => { const t = raw.replace(/\s+/g, " ").trim().replace(/−/g, "-"); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const more = (c: Element): string[] => { try { const v: unknown = JSON.parse(c.getAttribute("data-csv") ?? "[]"); return Array.isArray(v) ? v.map((x) => quote(String(x ?? ""))) : []; } catch { return []; } };
   const lines: string[] = [];
   for (const tr of table.querySelectorAll("tr")) {
     const cells: string[] = [];
-    for (const c of tr.querySelectorAll("th,td")) { cells.push(cell(c)); for (let i = 1; i < ((c as HTMLTableCellElement).colSpan || 1); i++) cells.push(""); }
+    for (const c of tr.querySelectorAll("th,td")) { cells.push(quote(text(c)), ...more(c)); for (let i = 1; i < ((c as HTMLTableCellElement).colSpan || 1); i++) cells.push(""); }
     if (cells.some((x) => x !== "")) lines.push(cells.join(","));
   }
   return lines.join("\r\n");

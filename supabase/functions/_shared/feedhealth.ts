@@ -7,6 +7,8 @@
 // that printed most recently, allowing each market its feed's own delay. If even that one is more than twenty
 // minutes behind, no price is arriving. One quiet instrument proves nothing; all of them at once do. It is made
 // twice, for crypto and for everything else, and the one further behind is the state (see feedState).
+// The week's first hours are read apart: a currency's or a future's print from before the weekend says nothing
+// about the feed until the source's own week has begun (WEEK_FIRST_PRINT, below).
 // No network and no database here; checked in sim/logic.test.ts.
 import { marketById, marketState, partsIn, type Holidays } from "./sessions.ts";
 
@@ -23,6 +25,12 @@ export interface FeedState {
 export const FEED_LATE_MIN = 20;   // behind, after the feed's own delay, before the feed counts as stopped
 const WORLD_SHUT = new Set(["12-25", "01-01"]);   // month-day, UTC
 export const FEED_OPEN_MIN = 30;   // a market open for less than this (plus its delay) may not have printed yet
+/** When the source's week of currency prices has begun, whatever the session table says: the first midnight UTC
+ *  after Sunday 17:00 New York (ms), given that Sunday's 17:00 (ms). The session table opens currencies on Sunday at
+ *  17:00 New York; Yahoo's bars for them begin on Monday at 00:00 UTC, two hours later in New York's winter and
+ *  three in its summer: USD/JPY and EUR/USD on all four weekends of the probe's log (jobs/probes/sessions_check.ts,
+ *  21 Nov 2026). What Yahoo's futures do on a Sunday evening is in no log yet. */
+export const weekFirstPrint = (sunday17Ms: number): number => (Math.floor(sunday17Ms / 86400e3) + 1) * 86400e3;
 
 export function feedState(prints: Print[], nowMs: number, holidays: Holidays = {}): FeedState {
   const now = new Date(nowMs);
@@ -34,9 +42,17 @@ export function feedState(prints: Print[], nowMs: number, holidays: Holidays = {
   // stood still for seven and a half hours: read together, crypto's fresh prints vouched for a feed that had
   // stopped, and the bar this reading exists for was never raised.
   const best: Record<"crypto" | "rest", { late: number; p: Print } | null> = { crypto: null, rest: null };
+  // The week's first hours (Sunday evening in New York). Until the source's own week has begun and had its half
+  // hour, a currency's or a future's print from before Sunday 17:00 New York is last week's: it says nothing about
+  // the feed, as a print from before an open says nothing in that open's first half hour. Without this the Monitor
+  // would call the feed stopped every Monday from 06:30 SGT until the first bar of the week (08:00 SGT), and ask the
+  // second path to take over (the checks of round 3b, 21 Nov 2026: PR-11; the rule of 19 Nov met its first Monday
+  // on the 23rd). One that has printed since the week began is judged as at any other hour.
+  const ny = partsIn("America/New_York", now), weekBegan = ny.wd === 0 && ny.h >= 17 ? zonedMs("America/New_York", ny.ymd, 17 * 60) : null;
   for (const p of prints) {
     const m = marketById(p.market), t = Date.parse(p.marketTime);
     if (!m || !Number.isFinite(t)) continue;
+    if ((m.id === "FX" || m.id === "CME") && weekBegan != null && t < weekBegan && nowMs < weekFirstPrint(weekBegan) + (FEED_OPEN_MIN + m.delayMin) * 60000) continue;
     // currencies and futures have no exchange calendar here, and on the two days the whole world is shut they do
     // not trade either: without this, 25 December and 1 January would read as a feed that has stopped
     if ((m.id === "FX" || m.id === "CME") && WORLD_SHUT.has(now.toISOString().slice(5, 10))) continue;

@@ -8,6 +8,8 @@
 //   - WATCHLIST: MY NAMES' Next results, RESULTS AHEAD (computer) and Results ahead under its days' bars (phone); MY
 //     NAMES carries the same marks as RESULTS AHEAD (A's A-37, 21 Nov 2026): "conf." for a date Yahoo marks confirmed
 //     (the stand-in AAPL, added to the list here), a dash where it gives no mark (the stand-in AVGO), "est." otherwise;
+//   - a stored date more than a day old is not a next one (the checks of round 3b: RM-3): MY NAMES reads a dash for
+//     it, as RESULTS AHEAD leaves the name out; one under a day old is still drawn by both;
 //   - NEWS › Results calendar: every company under the bar of its own market's day, its mark where the time was, a
 //     mark the source does not give as a dash, and no time of day anywhere; from a server before 20 Nov 2026, which sent a
 //     missing mark as false, no "conf." at all (the reviewer's F4).
@@ -86,6 +88,29 @@ const mockAnswer = (p, action, params) => p.evaluate(async ([a, q]) => { const {
       }
       ck("no page errors", errs.length === 0, errs);
       await ctx.close(); }
+
+    // A stored date that is past (RM-3). The server sends an index member's stored date as it is, and nothing rewrites it
+    // from a list's last run on Friday to its first on Monday: a company that reported on Friday kept Friday's date under
+    // "Next results", now with "conf.", for 41 hours, while RESULTS AHEAD beside it had dropped it. On the stand-in
+    // server: the list's own answers with AAPL's results 30 hours ago (confirmed) and NVIDIA's 20 hours ago.
+    if (!phone) {
+      console.log(`\n[WATCHLIST, ${dev}, on the stand-in server: a results date more than a day old]`);
+      const { ctx: c0, p: p0 } = await page(b, opts, [...S.watch.start, "AAPL"]); await go(p0, MOCK, "#watch", "table.wlT tbody tr");
+      const ans = { watch_syms: await mockAnswer(p0, "watch_syms"), watch_list: await mockAnswer(p0, "watch_list"), watch_feed: await mockAnswer(p0, "watch_feed"), table: await mockAnswer(p0, "table") }; await c0.close();
+      const ago = (h) => new Date(Date.now() - h * 3600e3).toISOString(), nameOf = (sym) => ans.watch_list.rows.find((r) => r.symbol === sym)?.name;
+      ans.watch_list = { ...ans.watch_list, rows: ans.watch_list.rows.map((r) => (r.symbol === "AAPL" ? { ...r, earningsAt: ago(30), earningsEst: false } : r.symbol === "NVDA" ? { ...r, earningsAt: ago(20), earningsEst: true } : r)) };
+      const { ctx, p, errs } = await page(b, opts);
+      await p.route("**/fakeapi?*", (r) => { const a = new URL(r.request().url()).searchParams.get("action"), now = new Date().toISOString();
+        const ok = (body) => r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(body) });
+        return ok(a in ans ? ans[a] : a === "health" ? { ok: true, at: now, tick: { lastAt: now, ageMin: 1, ok: true }, daily: { lastAt: now, ok: true }, sources: [], holidays: {}, holidaysVerified: true } : { rows: [] }); });
+      await go(p, STANDIN, "#watch", "table.wlT tbody tr");
+      const v = await p.evaluate(() => { const heads = [...document.querySelectorAll("table.wlT thead th")].map((t) => t.textContent), ni = heads.indexOf("Next results");
+        return { my: [...document.querySelectorAll("table.wlT tbody tr")].map((tr) => ({ sym: tr.querySelector(".nm .mut")?.textContent ?? "", cell: tr.cells[ni].textContent, tip: tr.cells[ni].getAttribute("title") })), ahead: [...document.querySelectorAll('.panel[data-k="wl-earn"] tbody tr')].map((tr) => tr.cells[1]?.textContent ?? "") }; });
+      const aapl = v.my.find((m) => m.sym === "AAPL"), nvda = v.my.find((m) => m.sym === "NVDA"), nvDay = dayIn(ago(20), "America/New_York").date;
+      ck(`AAPL's stored date is 30 hours old: MY NAMES reads "${aapl?.cell}" under Next results, with no tooltip (it read the date with "conf."), and RESULTS AHEAD does not list ${nameOf("AAPL")}`, aapl?.cell === "–" && aapl.tip === null && !v.ahead.includes(nameOf("AAPL")) && v.my.length === S.watch.start.length + 1, { aapl, ahead: v.ahead });
+      ck(`NVIDIA's is 20 hours old, still within the day: MY NAMES reads "${nvda?.cell}" and RESULTS AHEAD lists ${nameOf("NVDA")}: the two agree`, nvda?.cell === `${nvDay} est.` && v.ahead.includes(nameOf("NVDA")) && errs.length === 0, { nvda, ahead: v.ahead, errs });
+      await ctx.close();
+    }
 
     // the server since 20 Nov 2026 sends Yahoo's mark as Yahoo gives it and says so; one from before sent a missing mark as
     // false, which must never read as confirmed (the reviewer's F4)

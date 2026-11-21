@@ -12,7 +12,7 @@ import { fmtPct, fmtSigma, signCls } from "../lib/fmt";
 import { sigmaNoteLine } from "../lib/alertline";
 import { asOfLine, asOfOf, asOfTitle, fmtDate, fmtWhen } from "../lib/time";
 import { classLabel, hitLine, PERIOD, RESULTS_AHEAD, TAB } from "../lib/labels";
-import { byResultsDay, MARKS_NOTE, RESULTS_NOTE, resultsDayLabel, resultsStatusShort } from "../lib/results";
+import { byResultsDay, MARKS_NOTE, RESULTS_NOTE, resultsAhead, resultsDayLabel, resultsStatusShort } from "../lib/results";
 import { cellBp } from "./Market";
 import { ClosedNow } from "../components/ClosedNow";
 import { closedWords, decode, lastOf, sourcesOf, useWatchMarkets, WINDOWS, WL_ALERTS_EMPTY, type Feed, type WatchRow } from "./Watchlist";
@@ -40,7 +40,7 @@ export function WatchlistPhone({ tick }: { tick: number }) {
   const market = useWatchMarkets(tick);   // each name's market, for the line of those that are shut and a row's tooltip
   const alerts = feed.data?.alerts ?? [], news = feed.data?.news ?? [], research = feed.data?.research ?? [];
   // each name's next results under the day bar of its own market's day, no time of day (A-30)
-  const ahead = byResultsDay(rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3), (r) => r.earningsAt, (r) => r.symbol);
+  const ahead = byResultsDay(rows.filter((r) => resultsAhead(r.earningsAt)), (r) => r.earningsAt, (r) => r.symbol);
   const name = (s: string) => rows.find((r) => r.symbol === s)?.name ?? s;
   return (
     <Screen title={TAB.watch} sub={list.data ? `${rows.length} name${rows.length === 1 ? "" : "s"}${rows.length ? " · times in SGT" : ""}` : list.error ? <span className="warn">{list.error}</span> : "loading…"} right={<Pick label={PERIOD} value={k} options={KEYS} onChange={setK} />}>

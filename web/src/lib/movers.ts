@@ -16,7 +16,7 @@ import type { TableRow } from "./types";
 import { fmtDate, fmtDayMon, isOfficialRow, partsIn, rowAsOf, rowSource, SGT } from "./time";
 import { cellBp, cellPct, fmtLevel, fmtSigma, isYield } from "./fmt";
 import { monthOf } from "./futures";
-import { FX_BELL, FX_TZ, zonedMs } from "./sessions";
+import { FX_BELL, FX_TZ, marketOf, zonedMs } from "./sessions";
 import { LAST_SESSION } from "./labels";
 
 /** Ten cells, largest |σ| first; the alert line (2.5σ) gets an amber border, under 1.5σ the cell is lettered muted. */
@@ -71,10 +71,26 @@ export function moveLine(r: TableRow, mode: SigmaMode = "today"): string {
 export const sgtDay = (now: Date = new Date()): string => partsIn(SGT, now).ymd;
 /** The day a row's last figure is of: a print's date in Singapore, a booked close's or a published figure's own date. */
 export const rowDay = (r: Pick<TableRow, "lastAt" | "source">, now: Date = new Date()): string | null => rowAsOf(r, now)?.ymd ?? null;
-/** The day to write beside a row's figures where they are not today's: none for a live row, for a figure dated today
- *  in Singapore, and for a row from a server that does not send the last session (the page is then as before). */
-export function staleDay(r: Pick<TableRow, "lastAt" | "source" | "live" | "ls">, now: Date = new Date()): string | null {
-  if (r.ls === undefined || r.live) return null;
+/** For how long after its print a row the server called live still counts as live on the page: the server's own rule
+ *  (the feed's delay plus fifteen minutes: table.ts) and three minutes for the page's own refresh. */
+export const LIVE_PRINT_MIN = 15, LIVE_SLACK_MIN = 3;
+/** Whether a row is live NOW. `live` is the server's word at the moment of its answer, and the page can show an answer
+ *  long after: the table it kept on the device, read with no connection the next morning, or a page left open while
+ *  its refreshes fail. A row that was live then carried no day beside figures of the day before, while the closed rows
+ *  beside it were dated (the checks of round 3b, 21 Nov 2026: H-3). So the page keeps the server's word only while the
+ *  row's own print is recent; past that the print's date decides, as for any other row. A row without a print time
+ *  keeps the server's word. */
+export function stillLive(r: Pick<TableRow, "lastAt" | "live" | "market">, now: Date = new Date()): boolean {
+  if (!r.live) return false;
+  const t = r.lastAt ? Date.parse(r.lastAt) : NaN;
+  if (!Number.isFinite(t)) return true;
+  return now.getTime() - t <= ((marketOf(r.market)?.delayMin ?? 0) + LIVE_PRINT_MIN + LIVE_SLACK_MIN) * 60e3;
+}
+/** The day to write beside a row's figures where they are not today's: none for a row that is live now, for a figure
+ *  dated today in Singapore, and for a row from a server that does not send the last session (the page is then as
+ *  before). */
+export function staleDay(r: Pick<TableRow, "lastAt" | "source" | "live" | "ls" | "market">, now: Date = new Date()): string | null {
+  if (r.ls === undefined || stillLive(r, now)) return null;
   const d = rowDay(r, now);
   return d && d !== sgtDay(now) ? d : null;
 }
@@ -86,16 +102,32 @@ export const dayWords = (ymd: string | null | undefined): string => fmtDayMon(ym
 
 /** For how long after 17:00 New York a currency's or a CME future's new day counts as young. */
 export const YOUNG_HOURS = 3;
+const ymdPlus = (ymd: string, days: number): string => new Date(Date.parse(`${ymd}T00:00:00Z`) + days * 86400e3).toISOString().slice(0, 10);
+const weekdayOf = (ymd: string): number => new Date(`${ymd}T00:00:00Z`).getUTCDay();   // 0 Sunday … 6 Saturday
+/** The most recent 17:00 New York at or before `now` (the bell a currency's and a future's day ends and begins at),
+ *  and the New York date it falls on. */
+export function lastBell(now: Date = new Date()): { ms: number; ymd: string } {
+  const today = partsIn(FX_TZ, now).ymd, t = zonedMs(FX_TZ, today, FX_BELL);
+  if (now.getTime() >= t) return { ms: t, ymd: today };
+  const y = ymdPlus(today, -1);
+  return { ms: zonedMs(FX_TZ, y, FX_BELL), ymd: y };
+}
 /** Whether a row's day began under three hours ago: its market is FX or CME (the two the session table keeps round the
- *  clock), and now is less than three hours after 17:00 New York on the date of the close its 1D is measured from. In
- *  New York's winter that is from the booking at 06:35 SGT until 09:00 SGT, in its summer until 08:00 SGT. Before the
- *  booking the 1D still runs from the close before, so the figure is the whole day that has just ended. */
+ *  clock), now is less than three hours after the last 17:00 New York, and its 1D is measured from the close of the
+ *  day that ended there. From Monday to Thursday that day is the bell's own date: in New York's winter the rule holds
+ *  from the booking at 06:35 SGT until 09:00 SGT, in its summer until 08:00 SGT (before the booking the 1D still runs
+ *  from the close before, so the figure is the whole day that has just ended). At Sunday's bell the week opens and no
+ *  day has ended since Friday's: the day before is then Friday's, so the week's first hours count too, from the first
+ *  print (the checks of round 3b, 21 Nov 2026: LS-3; the rule counted from the bell of the close's own date, which on
+ *  a Monday morning is two days back, so the line never showed then). After Friday's bell and Saturday's no day begins. */
 export function youngDay(r: Pick<TableRow, "market" | "closeDates">, now: Date = new Date()): boolean {
   if (r.market !== "FX" && r.market !== "CME") return false;
   const d = r.closeDates.d1;
   if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
-  const since = now.getTime() - zonedMs(FX_TZ, d, FX_BELL);
-  return since >= 0 && since < YOUNG_HOURS * 3600e3;
+  const bell = lastBell(now);
+  if (now.getTime() - bell.ms >= YOUNG_HOURS * 3600e3) return false;
+  const wd = weekdayOf(bell.ymd), ended = wd >= 1 && wd <= 4 ? bell.ymd : wd === 0 ? ymdPlus(bell.ymd, -2) : null;
+  return ended !== null && d === ended;
 }
 /** Whether a cell under Today shows the last session's figure in place of the change and the level: a young day whose
  *  1D is measured from that session's close, with that session's σ in hand. */

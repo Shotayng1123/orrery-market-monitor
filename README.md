@@ -30,7 +30,9 @@ web/        Vite + React + TypeScript. src/styles/tokens.css is the design syste
             on each device elsewhere, and never while an account is being created; `?opening=1` plays it again. While it
             plays the Monitor's answers are held (lib/hold.ts), so nothing else is drawn and it stays smooth.
             src/lib/nav.ts: a page opened from a list (a name's, or an index's on EQUITIES) starts at its top; Back
-            returns the list to where it stood, holding the place while a late answer draws the list and while
+            returns the page to where it stood (the window's place: a list that scrolls in a box of its own, a
+            computer's HEADLINES or a panel of the one-screen layout, starts again at its first row), holding the
+            place until the reader's first touch, wheel or key, while a late answer draws the list and while
             a view says an answer that draws at or above its list is still on its way (an element marked
             data-nav-wait: a phone's WATCHLIST is first drawn without its names, and its line of the markets that
             are shut grows when the market table comes; a phone's MARKETS draws its morning note above the list),
@@ -79,12 +81,18 @@ hour. Without the key the clock is the machine's and the rows keep fixed states 
 not), so the browser checks see the same rows at any hour; at most hours those rows contradict the lines beside
 them (a pair LIVE on a Saturday beside "Closed now: FX opens …"), so set the key before judging what a screen says
 of a market's hours. The holidays it passes over are the Monitor's own calendar rows, not stand-ins. With the clock
-set, each stand-in row's daily closes also end at the last session its market has completed and booked (35 minutes
-after its close, as the server's history job runs; `bookedDays` in `web/src/lib/mock.ts`), so MOVERS IN σ's LAST
-SESSION and the dates beside figures can be looked at for any hour: `2026-11-23T23:10:00Z` is Tue 24 Nov 07:10 SGT,
-an hour after the FX day of the 23rd ended, with USD/JPY's stand-in last session at -2.2σ. Two things differ from
-the live Monitor there and are named in the files that hold them: the local copy shows a future live from 18:00 New
-York, and its rows are prints, never a booked close with its date.
+set, each stand-in row's daily closes also end at the last session its market has completed and booked (an
+exchange's at its last bell, a currency's and a CME future's 35 minutes after 17:00 New York; `bookedDays` in
+`web/src/lib/mock.ts`), so MOVERS IN σ's LAST SESSION and the dates beside figures can be looked at for any hour:
+`2026-11-23T23:10:00Z` is Tue 24 Nov 07:10 SGT, an hour after the FX day of the 23rd ended, with USD/JPY's stand-in
+last session at -2.2σ. Three things differ from the live Monitor there: the local copy shows a future live from
+18:00 New York (on the live Monitor a future's row is its booked close until midnight in New York, so "last session"
+under a future's figure is seen there on a Monday morning only); its rows are prints, never a booked close with its
+date; and it books a day at the moment above, where the server books it at its history job's next run (07:05, 17:05
+and 22:35 UTC: Hong Kong's close of 16:00 there is booked at 01:05 SGT unless GitHub's catch-up run of 19:20 SGT has
+it first, New York's 95 minutes after its bell in its winter, and in New York's summer a CME future's only at 15:05
+SGT the next day), so between a close and that run the local copy's "last session" is a session ahead of the live
+Monitor's.
 
 ## Deploy
 
@@ -99,7 +107,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 2,590 checks in 40 suites on 21 Nov 2026): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 2,687 checks in 41 suites on 21 Nov 2026): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -115,22 +123,35 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   computer, and Back returns the list to where it stood with its open line, also when the answers come late; on a
   phone's WATCHLIST of eleven names the browser's Back returns the line that was tapped to where it stood, in ten
   fresh contexts of ten, with the list's answers late, and with the market table a second after the names; MARKETS
-  the same when the morning note's answer comes a second after the table's), results
+  the same when the morning note's answer comes a second after the table's; `nav-hold`: that hold gives way to the
+  reader, a wheel or a key while the list is still on its way ending it, and is over once the answers have come, so
+  a later move of the page stays), results
   dates (`results-dates`: the day in each company's own market and no time of day, in KEY DATA, on WATCHLIST and in
   NEWS › Results calendar, both layouts; the mark after each date as its source gives it, "conf.", "est." or a dash
-  in WATCHLIST's MY NAMES as in RESULTS AHEAD), moves in σ (`sigma-moves`: MOVERS IN σ and the 1D IN σ
+  in WATCHLIST's MY NAMES as in RESULTS AHEAD; a stored date more than a day past reading a dash there, as RESULTS
+  AHEAD leaves it out), moves in σ (`sigma-moves`: MOVERS IN σ and the 1D IN σ
   column on both layouts and in the one-screen layout and at XL, sorting within each bar, the stand-in 2.7σ alert, gold's
   stand-in roll day kept out of its 1D, its σ, its volatility and its largest fall, the roll marked on its chart, the
   alert list whole on two phones and at five computer sizes, gold's KEY DATA whole at text L, and a
   server from before), MARKETS at the morning hour (`morning`: at 07:10 SGT on a Tuesday the choice TODAY · LAST
   SESSION on the strip and on a phone's cards, the date beside every figure that is not of today in Singapore, "last
-  session -2.2σ" under a currency's figure in its day's first three hours, the day after a name in the table and in a
-  phone line's pill, the heights the strip may take, and a server from before, which shows neither the choice nor a
-  day), the phone's first MARKETS screen (`phone-first`: every block above the list at its set height on an iPhone
-  SE, an iPhone 13 and a Pixel 7, in the machine's fonts and in a wide one, so that the σ cards and four whole rows
-  stand above the tab bar; the alert as one line of which only the name is ever cut; every tap 44 px), why a market
+  session -2.2σ" under a currency's figure in its day's first three hours and under a pair's and a future's on a
+  Monday morning, the day after a name in the table and in a phone line's pill, the room a name cell that carries a
+  day keeps for its name, its badge and the day (the one-screen layout at its smallest window, 1100×540, and at
+  1280×720 and 1440×900; the scrolling layout at five windows down to 760 px wide; the classic phone layout on two
+  phones), the table's CSV with the marks and
+  the day in columns of their own, the heights the strip may take, and a server from before, which shows neither the
+  choice nor a day), the phone's first MARKETS screen (`phone-first`: every block above the list at its set height
+  in a 375×667 window, on an iPhone 13 and on a Pixel 7, in the machine's fonts and drawn wider, so that the σ cards
+  and four whole rows stand above the tab bar; the alert as one line of which only the name is ever cut, its figure
+  whole when the alert is new, a σ move and of the day before; every tap 44 px. 375×667 is Playwright's "iPhone SE":
+  that phone's whole screen. With the alert, a fresh note and the install line all showing, four rows need a window
+  at least 648 px tall, and a browser on that phone leaves less: by the sums three rows at 647 px, which is not
+  measured on a phone; in the installed app, which has no install line, the sums give four rows at 647 px), why a
+  market
   is shut and an old price in market hours (`shut-reasons`: "Holiday", "Midday break", "Daily break" and "Closed
-  early" under a phone's names and at the start of a page's own chart line, a holiday that an opening passes over,
+  early" under a phone's names, the first two and the last at the start of a page's own chart line ("Daily break"
+  there is checked as words by the logic checks, not drawn), a holiday that an opening passes over,
   "Last print 08:40" in amber, the FX panel's "Next read 22:30 SGT: DXY"), the classic phone layout, the sign-in
   screen, creating an
   account by verification email, the manager's accounts list, the
@@ -169,6 +190,16 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   line of its own. These checks read no clock but that one and trust no font: the stamp's line that takes one line
   on the engineer's machine took two on GitHub's, and it carries a date on some days and none on others (the check
   they replace passed here by 2 px and stopped pull request #48 on GitHub on a Saturday).
+  **Room, not "not cut"** (`e2e/room.cjs`, since 2026-11-21, used by `morning`, `phone-first` and `install-hint`): a
+  check of "nothing is cut" that asks `scrollWidth > clientWidth + 1` passes a text one pixel too wide, which a
+  browser already ends with "…" (pull request #49: TOPIX's name cell in the one-screen layout at 1280×720 was 115 px
+  of text in 114, passed here by that pixel and failed on GitHub, whose machines draw the same faces about one per
+  cent wider), measures nothing on an inline box, and cannot see a part that a box around it hides. The helper
+  measures the text itself against the content edge of every box that would cut it, in CSS px, and a check asks for
+  a margin: in the machine's own fonts, and in a drawing that is really wider (every letter's spacing 2% of its size
+  wider, 3.3% more width in the monospaced figures, about three times what GitHub's machines add; on a phone also
+  with every face swapped for the generic monospace). A forced monospace alone widens next to nothing on a
+  computer: IBM Plex Mono's letters are 0.600 of their size wide, DejaVu Sans Mono's 0.602, Liberation Mono's 0.600.
   The **paper portfolio** (P-1, on the development servers, where its switch is always on) has three suites.
   `portfolio` (a computer): the seventh tab at six sizes with the header as tall as with six tabs, in the machine's
   fonts and in a wide one; the one-screen header's two rules (the seventh tab adds no row) and key 7; with no book,
@@ -189,10 +220,11 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   page, and `local-copy` opens the built site on both layouts to check the state the page's switch says: with it off,
   six tabs, no "PORTFOLIO" or "Portfolio" anywhere, `#portfolio/new` showing MARKETS, no portfolio route asked, and
   no file of the portfolio's screens or of its stand-in books among the published files.
-  `cd web && npm run e2e` starts the test servers it needs and runs them all, three suites at a time: about 19
-  minutes on the engineer's machine (1,136 s on 21 Nov 2026 with the paper portfolio's three suites; 1,029 s for the
-  37 suites and 2,337 checks before them; the 34 suites and 2,052 checks before that day's first three new suites
-  took 14.5 minutes there and 13 on GitHub). `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
+  `cd web && npm run e2e` starts the test servers it needs and runs them all, three suites at a time: about 19.5
+  minutes on the engineer's machine (1,169 s late on 21 Nov 2026 for the 41 suites, with `nav-hold` and the wider
+  drawings of the fixes after that day's checks; 1,136 s for the 40 suites with the paper portfolio's three; 1,029 s
+  for the 37 suites and 2,337 checks before them, which took 977 s on GitHub; the 34 suites and 2,052 checks before
+  that day's first three new suites took 14.5 minutes there and 13 on GitHub). `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
   A suite that fails once is tried again; when the second try passes, the lines that failed the first time are
   printed all the same, so a check that fails only now and then can be found from the publish job's log.
   Needs Playwright's browser once: `npx playwright install chromium`.
@@ -218,7 +250,16 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   statement first, a second account, the cap, a change's history and delete; with the server's switch off, all twelve
   routes refusing without reaching the store; the statement's words the same in the engine, the migration's seed and
   the owner's record; the page's copy of the engine equal to the server's files; no workflow, job or function naming
-  a private table; both switches off; the "personal use" paragraph in this file word for word). `cd jobs && npx tsx ../sim/logic.test.ts`.
+  a private table; both switches off; the "personal use" paragraph in this file word for word), the fixes after
+  the checks of round 3b (section [AG]: which closes the table's last session takes, whatever order the stored
+  closes come back in and however many rows an answer is cut at; a table kept on a device and read long after its
+  answer; the week's first hours on a Monday; a results date that is past), the feed's health in the week's first
+  hours, and the source probes' gates, run with a stand-in for `fetch` so that no request leaves the machine
+  (section [AH]: which line of a site's terms holds its files, on the lines the logs hold and on sample sentences;
+  the holds on an address as its request will go, and on every redirect; a `robots.txt` typed as HTML, and its
+  Crawl-delay kept; a "legal" page that is not the terms; what `pf_jpx` may print of a page, which links it follows,
+  and its calendar test by year, month and day; a distribution dated on a day without a session).
+  `cd jobs && npx tsx ../sim/logic.test.ts`.
   The same command checks the file itself, in its last section. GitHub installs `jobs/` alone before it runs the
   logic checks (`logic-tests`, and `deploy-server` before a deploy), so nothing the file imports, directly or through
   another file, may reach a package of the page's (`web/node_modules`: React, uPlot). On a machine that has
@@ -237,12 +278,14 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   (`sigma.test.cjs`); and the paper portfolio's store (`pf.test.cjs`: the migration applied twice, as a superuser, as
   a role that may make roles and as one that may not; no API role reading a table; one scenario of 53 calls run
   through the engine against the database's functions and against the local copy's store, every answer compared;
-  the append-only and fixed-column rules tried from outside the functions; an account's rows going with it).
+  the append-only and fixed-column rules tried from outside the functions; an account's rows going with it); and
+  the results mark's migration (`results-mark.test.cjs`: every stored "confirmed" becomes "not said", an estimate
+  and an unmarked date stay as they were, and a second run changes nothing).
   `cd sim/sql && npm ci && npm test`.
 
 The `deploy-web` workflow runs the browser and logic checks before it publishes: a failing check stops the publish.
 A pull request that touches `web/` runs them without publishing. `logic-tests` runs the logic and database checks
-when the server's functions or migrations change.
+when the server's functions or migrations, the page's `src/lib`, or the source probes change.
 
 ## Data sources (v1)
 
@@ -276,7 +319,7 @@ in Singapore, "opens 23 Nov 22:30 SGT" on another day. Nothing is fetched for it
 | On the page | Where it comes from |
 |---|---|
 | The time | The start of the market's next regular session in the session table (`web/src/lib/sessions.ts`; the server keeps the same table in `supabase/functions/_shared/sessions.ts`, and `sim/logic.test.ts` checks that the two agree). Each exchange's hours are in its own time zone, so a change of clocks there moves the time by itself: New York opens at 22:30 SGT in its winter and 21:30 SGT in its summer |
-| Currencies and CME Globex | Kept by New York's clock. The FX week runs from Sunday 17:00 to Friday 17:00 there, the server's own rule for when currencies trade (`fxTrading` in `_shared/feedhealth.ts`): Monday 06:00 to Saturday 06:00 SGT in New York's winter, 05:00 to 05:00 SGT in its summer. Until 21 Nov 2026 both session tables kept it as Monday 05:00 to Saturday 06:00 SGT all year, so a pair read "opens 05:00 SGT" an hour early in winter; `sim/logic.test.ts` now holds both tables to `fxTrading` at every half hour of 2026 and 2027 (bar its 25 December and 1 January, which the tables do not hold). Globex: Sunday 18:00 to Friday 17:00 there, with a break from 17:00 to 18:00 each day. What the feed itself does at the two ends of the FX week is not in a log yet: the probe `jobs/probes/sessions_check.ts` reads it |
+| Currencies and CME Globex | Kept by New York's clock. The FX week runs from Sunday 17:00 to Friday 17:00 there, the server's own rule for when currencies trade (`fxTrading` in `_shared/feedhealth.ts`): Monday 06:00 to Saturday 06:00 SGT in New York's winter, 05:00 to 05:00 SGT in its summer. Until 21 Nov 2026 both session tables kept it as Monday 05:00 to Saturday 06:00 SGT all year, so a pair read "opens 05:00 SGT" an hour early in winter; `sim/logic.test.ts` now holds both tables to `fxTrading` at every half hour of 2026 and 2027 (bar its 25 December and 1 January, which the tables do not hold). Globex: Sunday 18:00 to Friday 17:00 there, with a break from 17:00 to 18:00 each day. What the feed itself does at the two ends of the FX week is in the probe's log of 21 Nov 2026 (`jobs/probes/sessions_check.ts`, four weekends): Yahoo's bars for USD/JPY end on Friday at 16:55 to 17:00 New York and EUR/USD's at 17:25, and both begin again on Monday at 00:00 UTC (08:00 SGT), two hours after the table opens the week in New York's winter and three in its summer. From the table's opening to that first bar a pair is open by the timetable while its row is still Friday's close. The feed's health does not take Friday's prints for a stopped feed in those hours (`feedState` in `_shared/feedhealth.ts`, since 2026-11-21): from Sunday 17:00 New York until half an hour after Monday 00:00 UTC a currency's or a future's print from before the weekend is not counted, and one that has printed since is judged as at any hour; the rule of 19 Nov would have raised DATA ✕ and the red bar from Monday 06:30 SGT, and asked the second path to take over, on its first Monday. The quote's own time and a future's first bar on a Sunday evening are in no log yet: the probe's first section reads them when it is run on a Sunday between 22:30 and 23:59 UTC |
 | Holidays | The rows of `sessions_cal`, which the page receives with `health`: Tokyo's from JPX's calendar and New York's from NYSE's, each for 2026 and 2027, checked against the publishers' own pages on 7 Nov 2026 (migration `20261107000010`). A next open passes over them |
 | Early closes | New York's, at 13:00 there: 27 Nov and 24 Dec 2026, 26 Nov 2027, 3 Jul and 24 Nov 2028, as NYSE's page "Holidays & Trading Hours" gave them to the source-probe `pf_rules` on 20 Nov 2026 (its lines are quoted in the session table). After one the market is CLOSED on the page and on the server |
 | ", scheduled" | Every other market (Hong Kong, Shanghai, Seoul, Taipei, Mumbai, Singapore, Sydney, Frankfurt, Zurich, London, São Paulo, Mexico City, CME Globex, FX), New York and Tokyo after 31 Dec 2027, and any market when the calendar did not load: the Monitor does not hold those holidays, so the time is the timetable's and says so; on a local holiday the market stays shut |
@@ -321,9 +364,9 @@ York's hours keeps the usual colour while New York is shut: its print is not lat
 | On the page | Where it comes from |
 |---|---|
 | MOVERS IN σ (the ten largest of the day, any class) and the 1D IN σ column | Worked out by the Monitor from its stored daily closes (`_shared/sigma.ts`, and the database's `fn_table_stats` with the same rule): the day's change over the standard deviation of the instrument's own daily changes in the 63 sessions before it, a yield's in points of its level (bp), a price's in per cent. The newest change is never in its own yardstick. An official-curve yield's day counts once it is booked (Japan's, the euro area's, the UK's and Canada's curves are published a day late; the US Treasury's on the day itself, and its tooltip says "its newest published day"). Each figure's closes are on its tooltip |
-| TODAY · LAST SESSION (since 2026-11-21) | A currency's day ends at 17:00 New York and a CME future's with it, so at 07:00 SGT their day is an hour or two old and the strip had lost the session that had just ended. LAST SESSION is each instrument's newest completed day: the change between its two newest booked closes over the σ of the 63 daily changes before the earlier of them (`lastSession` in `_shared/sigma.ts`, sent with each row of the table as `ls`; the database's `sd63x`, which never holds the change it measures). A roll day is counted within the new contract; where the size of a change of contract is not known there is no σ. The page opens on TODAY. No new source and no migration |
-| The date beside a figure | A figure that is not of today in Singapore carries its day ("20 Nov"): on the strip and a phone's cards, after the name in the table, in a phone line's pill in place of "1D", and in the 1D IN σ tooltip. The day is the row's own (the SGT date of its last print, or the date of its booked close or published yield), so nothing is worked out for it. Under LAST SESSION every figure carries its session's date. A server from before sends no `ls`, and the page then shows neither the choice nor a day |
-| "last session -2.2σ" under a figure | For three hours after 17:00 New York (06:00 to 09:00 SGT in New York's winter, 05:00 to 08:00 in its summer) a currency's and a CME future's cell on TODAY shows the session that has just ended under the new day's figure, when that session is booked and has a σ (`youngDay` and `showsLast` in `web/src/lib/movers.ts`); a phone's opened row says the same in words, as it has no tooltip |
+| TODAY · LAST SESSION (since 2026-11-21) | A currency's day ends at 17:00 New York and a CME future's with it, so at 07:00 SGT their day is an hour or two old and the strip had lost the session that had just ended. LAST SESSION is each instrument's newest completed day: the change between its two newest booked closes over the σ of the 63 daily changes that end at the earlier of them (`lastSession` and `tableLastSession` in `_shared/sigma.ts`, sent with each row of the table as `ls`; the database's `sd63x`, which never holds the change it measures). A roll day is counted within the new contract; where the size of a change of contract is not known there is no σ. A day is "completed" here once it is booked: a currency's 35 minutes after 17:00 New York, and a CME future's with it in New York's winter. In New York's summer (from 15 Mar 2027) the booking run of 22:35 UTC finds Globex open again and leaves a future's day to the run of 07:05 UTC, so from Tuesday to Friday a future's LAST SESSION is the session before, with its date, until 15:05 SGT; booking a future's day by CME's trade date is in the backlog. The page opens on TODAY. No new source and no migration |
+| The date beside a figure | A figure that is not of today in Singapore carries its day ("20 Nov"): on the strip and a phone's cards, after the name in the table, in a phone line's pill in place of "1D", and in the strip cell's and the name's tooltips (the table's 1D IN σ tooltip gives the last session's date). The table's CSV gives it in a column of its own after the name ("Figures of (blank: today in SGT)"), with the row's marks (ROLL, PROXY, DELAYED ~10m, LIVE) in another; until 2026-11-21 both ran into the name ("S&P 50023 Nov"). A table kept on a device and read long after its answer came counts a row as live only while its print is recent (the feed's delay, fifteen minutes and three more: `stillLive` in `web/src/lib/movers.ts`), so an old print carries its day. The day is the row's own (the SGT date of its last print, or the date of its booked close or published yield), so nothing is worked out for it. Under LAST SESSION every figure carries its session's date. A server from before sends no `ls`, and the page then shows neither the choice nor a day |
+| "last session -2.2σ" under a figure | For three hours after 17:00 New York (to 09:00 SGT in New York's winter, 08:00 in its summer) a currency's cell on TODAY shows the session that has just ended under the new day's figure, once that session is booked (06:35 SGT) and has a σ (`youngDay` and `showsLast` in `web/src/lib/movers.ts`); a phone's opened row says the same in words, as it has no tooltip. A CME future's cell does not from Tuesday to Friday: the server dates a future's quote by New York's calendar day, so until midnight there its row is the booked close of the session that has just ended, with its date beside it, and the figure is that session's own. On a Monday morning no day has ended since Friday's, and a pair's and a future's cell both show Friday's session under the new week's figure, from the week's first print until three hours after Sunday 17:00 New York (since 2026-11-21; before, the three hours were counted from Friday's bell and the line never showed on a Monday). The local copy shows the line under a future on every morning, which the live Monitor does not |
 | σ moves in the alert list and as notifications | The same figure, for every currency, yield, commodity, volatility index, future and coin (the equity indices keep their ±3% alert): raised from 2σ, one per instrument and session, updated while the move grows; the lists everyone reads show them from 2.5σ, and each device chooses its kinds and its own line (2, 2.5 or 3σ) in Notifications. Each names its σ, its window and its source |
 
 ### A future's contract and its rolls (B-27, since 2026-11-20)
@@ -352,18 +395,36 @@ and never prints.
 
 Since 21 Nov 2026 (the paper portfolio's second run of probes, `pf_*`) a probe reads a site's `robots.txt` before any
 page or file of it, does not ask a path that file holds, and says what it read and what it did not (`robots()` in
-`jobs/probes/lib.ts`: a `robots.txt` that answers 404, or with an HTML page, is "no robots.txt read", never a file that
-allows; one that answers 5xx holds every path; one that answers 429 is asked once more). The probes of publishers'
-files (`pf_bench`, `pf_borrow`) also read the site's terms, by its own link, before any data file of it
-(`readTerms()`): a site whose terms bar automated reading, or any re-use whatever the purpose, keeps its files unread
-by the probe, and that finding goes to the owner. The probes of governments', central banks' and regulators' own pages
-(`pf_rules`, `pf_holidays`, `pf_rates`) read `robots.txt` only. The helper also refuses three kinds of address
-outright, whichever probe asks: `jpx.co.jp`, until the owner answers the question of 21 Nov 2026 on JPX's rule pages,
-holiday calendar and ETF list (`pf_jpx` holds those reads behind three switches, all off); Cboe's VIX-family history
-files and Nomura's holdings files, which the owner's answer of 21 Nov 2026 sets aside. The Monitor's own jobs, which
-read the JPX and Nikkei files it has always read, do not use that helper and run as before. A feed the Monitor already
-reads is not stopped by a probe's finding: for Yahoo Finance, `pf_yahoo_hist` prints what its `robots.txt` and its
-terms say, for the owner, and the probes of Yahoo read on.
+`jobs/probes/lib.ts`: a `robots.txt` that answers 404 or another 4xx, or with an HTML page in its place, is "no
+robots.txt read", never a file that allows, and the probe reads on, as RFC 9309 reads a 4xx; a file of directives is
+the site's rules whatever type it is served as; one that answers 5xx holds every path; one that answers 429 is asked
+once more; a Crawl-delay longer than the probe's own pace is kept, up to thirty seconds). Whether a site whose
+`robots.txt` answers 401, 403 or 418 should be read at all is a question put to the owner: until it is answered a probe
+still reads such a site's pages and says so, and sends it no form (`pf_rates` holds its one POST there). The probes of
+publishers' files (`pf_bench`, `pf_borrow`) also read the site's terms, by its own link, before any data file of it
+(`readTerms()`, `termsBar()`): a line that forbids automated reading, or that forbids copying, reproducing, storing or
+redistributing and names no purpose the ban is limited to, holds that site's files and is printed for a person to read,
+and that finding goes to the owner; a page reached by a "legal" link counts as the terms only when its title or first
+heading names them or its lines cover two of the subjects the gate reads, and where no terms are found the files that
+need them stay unread. Until 21 Nov 2026 the gate knew a ban only by the wordings it was modelled on (a word of
+automated reading; "any purpose", "any form", "any means"; JPX's, Nomura's and Cboe's lines): it printed "none matched"
+above iShares UK's sentence that forbids copying and reproducing, and `pf_bench` went on to ask that site's product
+data (the address answered 404; nothing was read). The probes of governments', central banks' and regulators' own pages (`pf_rules`, `pf_holidays`, `pf_rates`) read
+`robots.txt` only. The helper also refuses three kinds of address outright, whichever probe asks, reading each address
+as its request will go (the host without a trailing dot, escapes decoded) and putting every redirect to the same test,
+one hop at a time: `jpx.co.jp`; Cboe's VIX-family history files; Nomura's holdings files. On JPX the owner's answers of
+21 Nov 2026 are: do without its new files (the TOPIX weight file, 品貸料, margin balances by name, the OSE settlement and
+volume pages, the 決算発表予定日 workbook), as without Cboe's and Nomura's; and, asked whether that covers the rest of
+JPX's site, "(c) all": its rule pages, its market-holiday calendar and two statistics may be read. Its list of ETFs was
+not asked about and stays held. Only `pf_jpx` lifts the helper's hold on `jpx.co.jp`, for its own run, behind three
+switches: rules and calendar on, etfList off. It asks only addresses on `jpx.co.jp` that the log of 20 Nov gave or that
+a JPX page links by name, never one from memory, and prints only values: a table's cells, a clock time, a date or a
+percentage with at most two words on each side, each page's own title, a holiday as its date (`jobs/probes/jpx_read.ts`;
+its first run, on 21 Nov, printed whole lines of JPX's pages into the public job log and asked one address from memory,
+JPX's daily list of triggered stocks, which is not a rule page). The Monitor's own jobs, which read the JPX and Nikkei
+files it has always read, do not use that helper and run as before. A feed the Monitor already reads is not stopped by
+a probe's finding: for Yahoo Finance, `pf_yahoo_hist` prints what its `robots.txt` and its terms say, for the owner,
+and the probes of Yahoo read on.
 
 ### The stock page (`#asset/SYMBOL`, since 2026-11-18)
 
@@ -373,7 +434,7 @@ terms say, for the owner, and the probes of Yahoo read on.
 | Change over 1D, 1M, 3M, 6M, 12M, 36M, 60M against the benchmark | Worked out from those bars (`_shared/stockstats.ts`). Tokyo names are set against the Nikkei 225 and TOPIX; TOPIX is read from the `1306.T` fund (PROXY). Other names against their home index |
 | 52-week range, volatility, beta, largest fall, average daily volume and value | Worked out from the same bars |
 | Market cap, shares outstanding, float | Yahoo Finance quote and key statistics |
-| Next results (the date alone since 2026-11-20) | Yahoo Finance's quote gives it as a moment (`earningsTimestamp`), and in the source probe of 19 Nov 2026 that moment was a market's close (15:30 in Tokyo for Toyota, 16:00 in New York for NVIDIA), not a time the company announced. So every screen shows the day in the company's own market (`web/src/lib/results.ts`: NVIDIA's 17 Nov stays 17 Nov, although it is the 18th in Singapore), with confirmed or est. as Yahoo marks it (a dash where Yahoo gives no mark: since 2026-11-20 the results calendar's route passes a missing mark as none, where it used to send it as confirmed), and no time of day: KEY DATA, WATCHLIST and NEWS › Results calendar alike. The mark is Yahoo's `isEarningsDateEstimate` and nothing else (A-37, since 2026-11-21): until then the server (`earningsOf` in `_shared/yahoo.ts`) wrote "confirmed" by a rule of its own whenever the date was `earningsTimestamp` and `earningsTimestampStart` was another value or absent, whatever the flag said. WATCHLIST's MY NAMES writes the mark after each date as RESULTS AHEAD does ("conf.", "est.", or a dash where the source gives none); it wrote "est." or nothing, so a confirmed date and an unmarked one read alike. Which shapes Yahoo really sends is not in a log yet: the probe `jobs/probes/pf_yahoo.ts` prints every field of the quote named "earnings…" for 7203.T, 6758.T, NVDA and AAPL, each moment in UTC, JST and New York's time; how many index members and watchlist names come in each shape is not counted by anything yet. A Tokyo company's date is marked est. whatever Yahoo marks, until its date and "confirmed" come from JPX's 決算発表予定日 (A-30), which comes later |
+| Next results (the date alone since 2026-11-20) | Yahoo Finance's quote gives it as a moment (`earningsTimestamp`), and in the source probe of 19 Nov 2026 that moment was a market's close (15:30 in Tokyo for Toyota, 16:00 in New York for NVIDIA), not a time the company announced. So every screen shows the day in the company's own market (`web/src/lib/results.ts`: NVIDIA's 17 Nov stays 17 Nov, although it is the 18th in Singapore), with confirmed or est. as Yahoo marks it (a dash where Yahoo gives no mark: since 2026-11-20 the results calendar's route passes a missing mark as none, where it used to send it as confirmed), and no time of day: KEY DATA, WATCHLIST and NEWS › Results calendar alike. The mark is Yahoo's `isEarningsDateEstimate` and nothing else (A-37, since 2026-11-21): until then the server (`earningsOf` in `_shared/yahoo.ts`) wrote "confirmed" by a rule of its own whenever the date was `earningsTimestamp` and `earningsTimestampStart` was another value or absent, whatever the flag said. WATCHLIST's MY NAMES writes the mark after each date as RESULTS AHEAD does ("conf.", "est.", or a dash where the source gives none); it wrote "est." or nothing, so a confirmed date and an unmarked one read alike. A mark the old rule may have stored for an index member cannot be told from one of Yahoo's, so the migration of 2026-11-21 (`20261121000002_results_mark_as_given.sql`) turns every stored "confirmed" into "not said": such a date reads a dash until its list's next weekday quote run writes Yahoo's own flag again. MY NAMES shows a stored date for a day after it has passed and then a dash (`resultsAhead` in `web/src/lib/results.ts`, since 2026-11-21), as RESULTS AHEAD leaves it out; before, a Friday's date stood there through the weekend. Which shapes Yahoo really sends: the probe `jobs/probes/pf_yahoo_hist.ts` printed every field of the quote named "earnings…" for 7203.T, 6758.T, NVDA and AAPL on 21 Nov 2026, each moment in UTC, JST and New York's time (`pf_yahoo.ts` prints the same in a session). All four carried a start, and the old rule and the new give the same mark on each, so that log cannot say whether the old rule ever wrote a "confirmed" of its own on a real name; how many index members and watchlist names come in each shape is not counted by anything yet. A Tokyo company's date is marked est. whatever Yahoo marks, until its date and "confirmed" come from JPX's 決算発表予定日 (A-30), which comes later |
 | Short interest | Tokyo: the positions of 0.5% and above reported to JPX (already stored for the EQUITIES tab). Elsewhere: the exchange-reported short interest Yahoo republishes, with FINRA's daily short-volume share beside it |
 | Statements (income statement, balance sheet, cash flow), ratios, guidance | Tokyo: EDINET DB (有価証券報告書 and 決算短信): ten fiscal years, the company's guidance with later revision notices and the progress against it, and twelve single quarters as EDINET DB derives them. Share counts are the company's own from its latest 決算短信. Yahoo stands in, and the page says so, when no EDINET DB key is set or the day's allowance is used up. Elsewhere: Yahoo Finance fundamentals (about four years and five quarters; no guidance), with the lines of a company reporting under US GAAP or IFRS; a line the company does not report is left out |
 | A column's document (since 2026-11-20) | The address the source gives for it, never a made-up one: a year's 有価証券報告書 on EDINET (`edinetFilingUrl`, unless EDINET DB's `edinetFilingUrlAvailability` says the filing has aged out of EDINET's ~10-year retention: then no link, and the header's tip says so), the 決算短信 PDF of the guidance, of a quarter or of a year known only from it (`pdfUrl`, which EDINET DB gives on some rows only). A header without an address is plain and says so. Yahoo gives none |

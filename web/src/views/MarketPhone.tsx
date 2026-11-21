@@ -177,7 +177,8 @@ export function MarketPhone({ tick }: { tick: number }) {
   // The first screen (the designer's D-14 and note (b) of 21 Nov 2026): every block above the list has a fixed height on
   // one line, so no font can move the list: the title row 44 px (the as-of is in the strip's head), the strip's head 44,
   // the cards 76, the morning note and the install line 44 each in one block, the first class head 28. The first list
-  // row then starts 386 px down with everything showing, and four whole rows stand above the tab bar on an iPhone SE.
+  // row then starts 386 px down with everything showing, and four whole rows stand above the tab bar in a window of
+  // 375 x 667 (that is an iPhone SE's whole screen: four rows need 648 px, and a browser on that phone leaves less).
   return (
     <Screen title={TAB.market} slim={strip}
       sub={<>{table.data ? (strip ? null : <>as of {fmtStampSafe(table.data.asOf)}</>) : table.error ? <span className="warn">{table.error}</span> : "loading…"}{DEV_MOCK && <span className="badge est">MOCK</span>}</>}

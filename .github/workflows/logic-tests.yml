@@ -1,14 +1,14 @@
 name: logic-tests
 
 # The checks that need no browser and no live database: sim/logic.test.ts (exchange sessions, rolling bands, alert
-# measures, the push-notification encryption, accounts by email) and sim/sql (database functions, run on an
-# in-memory Postgres). Run when the code they cover changes.
+# measures, the push-notification encryption, accounts by email, the gates of the source probes) and sim/sql (database
+# functions, run on an in-memory Postgres). Run when the code they cover changes.
 on:
   push:
     branches: [main]
-    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/lib/**", "jobs/tools/**", ".github/workflows/logic-tests.yml"]
+    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/lib/**", "jobs/tools/**", "jobs/probes/**", ".github/workflows/logic-tests.yml"]
   pull_request:
-    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/lib/**", "jobs/tools/**", ".github/workflows/logic-tests.yml"]
+    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/lib/**", "jobs/tools/**", "jobs/probes/**", ".github/workflows/logic-tests.yml"]
   workflow_dispatch:
 
 permissions:

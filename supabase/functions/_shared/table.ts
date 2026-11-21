@@ -1,9 +1,9 @@
 // The market table: one row per active instrument with last print, period anchors and % changes.
 // Rebuilt by `tick` once a minute (and by `daily` after history runs) into snapshots.key = 'table'.
 import { fxDay, isFxPair } from "./fx.ts";
-import { db, type InstrumentRow } from "./db.ts";
+import { db, selectAll, type InstrumentRow } from "./db.ts";
 import { localDate, marketById, marketState, partsIn, type Holidays } from "./sessions.ts";
-import { lastSession, usableSd, z1mOf, zDay, type LastSession } from "./sigma.ts";
+import { prevCloses, tableLastSession, usableSd, z1mOf, zDay, type AnchorLite, type Booked, type LastSession } from "./sigma.ts";
 import { isFuture, rollDay, tradeDate } from "./futures.ts";
 
 type PeriodKey = "d1" | "w1" | "m1" | "m3" | "m12" | "m36";
@@ -75,13 +75,18 @@ export async function computeTable(now: Date = new Date()): Promise<{ rows: Tabl
   // quote is not a new session (a currency pair's Friday quote that Yahoo re-stamps on Saturday), the SQL hands
   // back the last close itself as the "previous close". Fetch the close before it for those symbols.
   const stuck = (anchors as Anchor[]).filter((a) => a.last_d && a.d1_d === a.last_d);
-  const prevBy = new Map<string, { d: string; close: number }>();
+  let prevBy = new Map<string, Booked>();
   if (stuck.length) {
     const lo = stuck.map((a) => a.last_d as string).sort()[0];
     const from = new Date(Date.parse(lo + "T00:00:00Z") - 14 * 86400e3).toISOString().slice(0, 10);
-    const { data: prevRows } = await db.from("prices_daily").select("symbol,d,close").in("symbol", stuck.map((a) => a.symbol)).gte("d", from).order("d");
-    const lastOf = new Map(stuck.map((a) => [a.symbol, a.last_d as string]));
-    for (const r of (prevRows ?? []) as Array<{ symbol: string; d: string; close: number }>) if (r.d < lastOf.get(r.symbol)!) prevBy.set(r.symbol, { d: r.d, close: r.close });   // ascending: the latest before last_d wins
+    // Read page by page (the checks of round 3b: LS-5). One request brought at most 1,000 rows, and in New York's
+    // hours this read asks for 650 to 740 (most instruments' quotes are then the newer view); with one instrument's
+    // closes unbooked for a week it passed 1,000, the newest dates were the ones left out, and those rows lost their
+    // earlier close without a word. Ordered by day, then symbol, so that the pages do not overlap. A read that fails
+    // leaves the rows without that close, as before, and the table is still built.
+    let prevRows: Array<{ symbol: string; d: string; close: number }> = [];
+    try { prevRows = await selectAll<{ symbol: string; d: string; close: number }>(() => db.from("prices_daily").select("symbol,d,close").in("symbol", stuck.map((a) => a.symbol)).gte("d", from).order("d").order("symbol")); } catch { prevRows = []; }
+    prevBy = prevCloses(prevRows, new Map(stuck.map((a) => [a.symbol, a.last_d as string])));
   }
   const rows: TableRow[] = [];
   for (const i of inst as InstrumentRow[]) {
@@ -131,10 +136,8 @@ export async function computeTable(now: Date = new Date()): Promise<{ rows: Tabl
     // B-32: the newest completed session, whatever the row shows now: the last booked close against the one before it
     // (the anchors give that one unless the quote is the newer view, when it was fetched above: `stuck`), over the σ of
     // the 63 changes before it; a roll between the two closes counted within the new contract
-    const c0 = a?.last_d && a.last_close != null ? { d: a.last_d, close: a.last_close } : null;
-    const c1 = !a?.last_d ? null : a.d1_d === a.last_d ? prevBy.get(i.symbol) ?? null : a.d1_d && a.d1 != null ? { d: a.d1_d as string, close: a.d1 as number } : null;
-    const lr = isFuture(i.symbol) && c0 && c1 ? (rollsOf.get(i.symbol) ?? []).filter((r) => r.d <= c0.d && r.d > c1.d).sort((x, y) => y.d.localeCompare(x.d))[0] : undefined;
-    const ls = lastSession(c0, c1, isYield(i) ? "yield" : "price", { sd: st?.sd63x, n: st?.n63x, from: st?.from63x, to: st?.to63x }, lr ? { from: lr.from_contract, to: lr.to_contract, prevClose: lr.prev_close } : null);
+    // (which closes, which roll and which window: sigma.ts tableLastSession, where the logic checks run it)
+    const ls = tableLastSession(a as AnchorLite | undefined, prevBy.get(i.symbol), rollsOf.get(i.symbol) ?? [], st, isYield(i) ? "yield" : "price", isFuture(i.symbol));
     const pos52 = st && st.hi252 != null && st.lo252 != null && st.hi252 > st.lo252 && last != null ? ((last - st.lo252) / (st.hi252 - st.lo252)) * 100 : null;
     const vs200 = st && st.mean200 && last != null ? (isYield(i) ? last - st.mean200 : (last / st.mean200 - 1) * 100) : null;
     rows.push({ marketTab: i.market_tab !== false, chart: i.chart !== false, z1m, pos52, vs200,

@@ -139,8 +139,12 @@ is kept).
 - **The last session** (B-32, 2026-11-21; no migration, no new source). Each row of the table also carries `ls`, the
   instrument's newest completed day: the change between its two newest booked closes (`fn_table_anchors`' `last_d` and
   the close before it) over `sd63x`, the σ of the 63 daily changes that end at the earlier of the two, so the change is
-  never in its own yardstick (`lastSession` in `_shared/sigma.ts`). It holds the session's date, both closes, the
-  change in % or bp, the σ with its window and count, and on a future's roll day the change within the new contract
+  never in its own yardstick (`lastSession` and `tableLastSession` in `_shared/sigma.ts`; the close before a newest
+  close that the anchors do not give is read from `prices_daily` in pages, `selectAll`: one answer ends at 1,000
+  rows, the read spans those instruments' closes from fourteen days before the oldest of their newest, and cut
+  short it left the newest dates out). It holds the session's date, both closes,
+  the change in % (for a yield, in points of its level: -0.064 is -6.4 bp), the σ with its window and count, and on a
+  future's roll day the change within the new contract
   (`fut_rolls.prev_close`); where that close is not known the change is the series' own and there is no σ. A σ is
   given only when the window the database returns ends at the earlier close. The page reads `ls` for MOVERS IN σ's
   LAST SESSION, for the line under a currency's figure in its day's first three hours, and as the sign that the
@@ -150,8 +154,11 @@ is kept).
   ("confirmed") by a rule of its own whenever the date it kept was `earningsTimestamp` and `earningsTimestampStart`
   was another value or absent. A stock's page and a watchlist name outside the indices are read at the request and
   follow at once; an index member's stored mark (`constituent_stats.earnings_est`) is rewritten by that list's next
-  quote run (`daily?job=flow`, `mflow` or `stats`: on weekdays, in each market's hours), so a mark stored before the
-  deploy can stay until that market's next session.
+  quote run (`daily?job=flow`, `mflow` or `stats`: on weekdays, in each market's hours) and by nothing else, and a
+  stored "confirmed" of the old rule cannot be told from one of Yahoo's. So the migration
+  `20261121000002_results_mark_as_given.sql` sets every stored false to null ("not said": the page writes a dash), and
+  each list's next run writes Yahoo's own flag again. Until that run a date Yahoo did mark confirmed reads a dash as
+  well: less than Yahoo said, never more (`sim/sql/results-mark.test.cjs`).
 - **σ alerts** (`alerts.kind` 'sigma', with `sigma` and `note`): the tick scans the table every minute
   (`scanSigmaAlerts`) for every currency, yield, commodity, volatility index, future and coin at 2σ or beyond; one row
   per instrument and session (a currency pair's FX day; a future's CME trade date, so an evening's move from 18:00 New
@@ -544,7 +551,11 @@ What the Monitor does about it:
 
 - **On screen.** `health.feed` (`_shared/feedhealth.ts`) reads the prints themselves: among the instruments whose
   market is open, and has been for half an hour, it takes the one that printed most recently, allowing each
-  market its feed's own delay; if even that one is more than twenty minutes behind, the feed has stopped. The
+  market its feed's own delay; if even that one is more than twenty minutes behind, the feed has stopped. In the
+  week's first hours a currency's or a future's print from before the weekend is not counted: the session table
+  opens currencies on Sunday at 17:00 New York, and the source's own bars for them begin on Monday at 00:00 UTC
+  (the probe `sessions_check`, 21 Nov 2026, four weekends), so until half an hour after that hour Friday's prints
+  say nothing about the feed; one that has printed since the week began is judged as at any hour. The
   page then shows DATA ✕ with the reason, and a red bar at the foot of every screen: "No new prices since … The
   source has stopped sending them; the figures on screen are as of then." Both go when prices arrive again. The
   prices already on screen stay, with their own times. While the feed is stopped no move can be seen, so no alert

@@ -550,9 +550,23 @@ body.term .cgrid.fit>.mtile.cp{flex:1 1 calc(100% / var(--c) - 3px);min-width:0;
 /* MARKET: table on the left over three rows, chart groups on the right */
 body.term #grid[data-view="market"]{grid-template-rows:auto minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr)}
 body.term table.mkt{min-width:0;height:100%}
-body.term table.mkt td{padding:0 3px}
-body.term table.mkt th{padding:1px 3px}
+body.term table.mkt td{padding:0 2px}
+body.term table.mkt th{padding:1px 2px}
 body.term table.mkt tr.cls td{height:1%}
+/* The name column holds a name, its PROXY mark and the day of a figure that is not today's on one line, with room to
+   spare ("TOPIX PROXY 20 Nov" is 106 CSS px; a ten-letter name and its day 96). It had 16.5% of the table: 116 px in a
+   1440-px window, where the day ended about a pixel from the cell's edge, and 98 px in a 1100-px one, where it was cut (the
+   checks of round 3b, 21 Nov 2026). The room comes from the cells' padding (2 px a side where it was 3) and from the
+   marks' own (1 px a side less in this cell), so no figure has less room than it had. In a layout from 1,150 to
+   1,500 CSS px wide, which is every window from 1100 px up at the AUTO text size unless it is wider than about 15:8,
+   the column is 120 px whatever the window, and the figures share the rest evenly. From 1,500 it is what the
+   figures' shares leave, 19.6% (143 px and more: a wide window keeps its wider name column). Under 1,150 CSS px,
+   which only a fixed text size in a small window reaches, the table does not fit at all (its figures are cut, as
+   before): the shares stand there too. The layout's width is the page's own, read on #wrap (the text size works by
+   zoom, so a window media query would not see it). */
+body.term table.mkt col.lv{width:9.2%} body.term table.mkt col.n{width:7.12%}
+@container wrap (min-width:1150px) and (max-width:1499.98px){body.term table.mkt col.nm{width:120px} body.term table.mkt col.n{width:auto}}
+body.term table.mkt td:first-child .badge{margin-left:4px;padding:0 3px}
 /* a roll day in the one-screen layout: ROLL leaves the narrow name cell, where it put DELAYED behind an ellipsis, for a
    one-letter mark after the 1D in σ (the reviewer's S3); the scrolling layout keeps ROLL beside the name */
 body.term table.mkt td:first-child .badge.roll{display:none}
@@ -1570,7 +1584,8 @@ body.term .pcols,body.term .pcol{display:contents}
 table.wlT td.nm{white-space:normal;overflow:visible;text-overflow:clip;max-width:240px;overflow-wrap:break-word}
 table.wlT td.nm .mut{white-space:nowrap}
 /* the alert line in the header, on a computer: label · name · figure · time, and only the name is ever cut (the
-   designer's I-9 note); a phone's header shows the whole message under the label instead */
+   designer's I-9 note). The whole message (`.msg`) is drawn on no layout's line: it is in the line's tooltip and in the
+   list the line opens (a phone's line is the same parts on one line: the rules under body.pv2 below) */
 #alerts .alrt .msg{display:none}
 #alerts .alrt .one{display:inline-flex;align-items:baseline;gap:6px;min-width:0;flex:0 1 auto;overflow:hidden}
 #alerts .alrt .one .kd{flex:none;color:var(--amber);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase}
@@ -1587,6 +1602,11 @@ body.pv2 #alerts .alrt{position:relative;display:flex;flex-wrap:nowrap;align-ite
 body.pv2 #alerts .alrt::before{content:"";position:absolute;inset:-3px -1px}   /* 2 px beyond the line's own border above and below: a 44-px tap */
 body.pv2 #alerts .alrt .k{font-size:11px}
 body.pv2 #alerts .alrt .one{flex:1 1 auto;gap:8px}
+/* The name gives way down to nothing before the figure is touched. With the computer's floor of three letters' width
+   under it, a line with the least room hid the end of its figure behind this box's edge, with no ellipsis: a σ move
+   that is lit (the label "NEW ALERT") and was raised before midnight (its time carries its day) on a 375-px phone read
+   "σ MOVE USD/… +2." (the checks of round 3b, 21 Nov 2026). The kind, the figure and the time are never cut */
+body.pv2 #alerts .alrt .one .nm{min-width:0}
 body.pv2 #alerts .alrt .one .kd{font-size:11px}
 body.pv2 #alerts .alrt .one .q,body.pv2 #alerts .alrt .one .src{display:none}
 body.pv2 #alerts .alrt .t{font-size:11.5px;margin-left:auto}
@@ -1794,6 +1814,10 @@ body.term .sgpick .chip-sm{margin-left:0;line-height:1.3;padding:0 5px}
 /* the table: a row whose last figure is not today's carries its day after the name and its badges; not a badge, no box */
 table.mkt td.l .asday{margin-left:6px;font-family:var(--mono);font-size:9.5px;color:var(--mut);white-space:nowrap}
 body.term table.mkt td.l .asday{font-size:9px;margin-left:4px}
+/* the classic phone layout: the name column is 104 px, for short names alone (the figures show beside it), and a day
+   after a name of seven letters or more was cut behind an ellipsis ("Nikkei 225 …"). There the day stands under its
+   name, whole, on a line of its own; a row without a day is as tall as it was */
+@media (max-width:720px){table.mkt td.l .asday{display:block;margin:1px 0 0;line-height:1.15}}
 /* The one-screen layout, where the server sends the last session: a cell takes two lines where it had one, as a date
    does not fit beside the longest name and its σ. Line 1: the name and the σ. Line 2, 9 px, one line: the day when it
    is not today's, then the change ("20 Nov · -1.74%"); "last session -2.2σ" while the day is young. */
@@ -1845,8 +1869,9 @@ table.mkt th.sortable:hover,table.mkt th.sortable.on{color:var(--amber)}
 /* ---- the phone's first MARKETS screen (the designer's D-14 and note (b) of 21 Nov 2026): every block above the list a
    fixed height on one line, so no font can move the list: the site header 52, the alert line 40 + 6, the title row 44,
    the strip's head 44, the cards 76 + 6, the morning note 44, the install line 44 + 1, the first class head 28 + 1. The
-   first list row then starts at y 386 with everything showing, and four whole rows stand above the tab bar on an iPhone
-   SE (it started at y 790 there, below the tab bar). ---- */
+   first list row then starts at y 386 with everything showing, and four whole rows stand above the tab bar in a window
+   of 375 x 667 (it started at y 790 there, below the tab bar). 375 x 667 is an iPhone SE's whole screen: four rows need
+   648 px, and a browser on that phone leaves less. ---- */
 /* the title row: 44 px, "Markets" at 26 px with the local copy's MOCK badge after it; the screen's as-of is in the
    strip's head (while the table loads, fails or sends no σ the line is under the title as before, and the row is taller) */
 .mp-head.one{height:44px;box-sizing:border-box;align-items:center;padding:0 8px 0 16px}

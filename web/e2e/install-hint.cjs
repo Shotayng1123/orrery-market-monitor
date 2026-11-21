@@ -4,11 +4,13 @@
 // data and the list. The words and the steps are the card's own, unchanged.
 // Run from web/:  node e2e/run.cjs install-hint   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
+const { ROOM, MONO, widen } = require("./room.cjs");
 const MOCK = "http://localhost:5179/orrery-market-monitor/";
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d)}`); };
 // the line on MARKETS: where it stands, what it says, what a finger can hit
 const line = (p) => p.evaluate(() => { const c = document.querySelector("#mk-install"); if (!c) return null; const R = (e) => e.getBoundingClientRect(), r = R(c), x = R(c.querySelector(".x")), o = R(c.querySelector(".open")), head = document.querySelector(".mp-head") ? R(document.querySelector(".mp-head")) : null, strip = document.querySelector("#mk-sigma") ? R(document.querySelector("#mk-sigma")) : null, note = document.querySelector("#mk-note") ? R(document.querySelector("#mk-note")) : null, t = c.querySelector(".t");
-  return { text: t.textContent, fs: parseFloat(getComputedStyle(t).fontSize), weight: getComputedStyle(t).fontWeight, cut: t.scrollWidth > t.clientWidth + 1, top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), h: Math.round(r.height * 10) / 10, vw: innerWidth, vh: innerHeight, headBottom: head ? Math.round(head.bottom) : null, stripBottom: strip ? Math.round(strip.bottom) : null, noteBottom: note ? Math.round(note.bottom) : null, inLines: !!c.closest(".mp-lines"), xW: Math.round(x.width), xH: Math.round(x.height), xTip: c.querySelector(".x").title, openH: Math.round(o.height), chevron: c.querySelector(".go")?.textContent ?? null, popup: c.querySelector(".open").getAttribute("aria-haspopup"), overflowX: document.documentElement.scrollWidth - innerWidth }; });
+  // the words' room: the CSS px between their end and the edge of their own line, which would end them in "…" (e2e/room.cjs)
+  return { text: t.textContent, fs: parseFloat(getComputedStyle(t).fontSize), weight: getComputedStyle(t).fontWeight, room: window.__room ? window.__room.spare(t, c) : null, top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), h: Math.round(r.height * 10) / 10, vw: innerWidth, vh: innerHeight, headBottom: head ? Math.round(head.bottom) : null, stripBottom: strip ? Math.round(strip.bottom) : null, noteBottom: note ? Math.round(note.bottom) : null, inLines: !!c.closest(".mp-lines"), xW: Math.round(x.width), xH: Math.round(x.height), xTip: c.querySelector(".x").title, openH: Math.round(o.height), chevron: c.querySelector(".go")?.textContent ?? null, popup: c.querySelector(".open").getAttribute("aria-haspopup"), overflowX: document.documentElement.scrollWidth - innerWidth }; });
 // the sheet: where it stands, what it says, how it is closed
 const sheet = (p) => p.evaluate(() => { const s = document.querySelector("#a2hs-sheet"); if (!s) return null; const R = (e) => e.getBoundingClientRect(), r = R(s), bg = s.closest(".sheet-bg"), x = R(s.querySelector(".sheet-head .x")), cs = getComputedStyle(s), body = s.querySelector(".sheet-body"); const fs = []; const w = document.createTreeWalker(body, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) if (n.textContent.trim()) fs.push(parseFloat(getComputedStyle(n.parentElement).fontSize));
   const go = s.querySelector(".a2hs-tx .go"), hide = s.querySelector("#a2hs-hide");
@@ -21,10 +23,16 @@ const openSheet = async (p) => { await p.locator("#mk-install .open").tap(); awa
 const gone = async (p) => { await p.waitForTimeout(350); return (await p.locator("#a2hs-sheet").count()) === 0; };
 (async () => { const b = await chromium.launch();
   console.log("\n[iPhone, in the browser]");
-  { const ctx = await b.newContext({ ...devices["iPhone 13"] }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+  { const ctx = await b.newContext({ ...devices["iPhone 13"] }); await ctx.addInitScript({ content: ROOM }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
     await p.goto(MOCK, { waitUntil: "networkidle" }); await p.waitForSelector(".mp-row"); await p.addStyleTag({ content: "#mockbar{display:none!important}" }); await p.waitForTimeout(900);
     const c = await line(p); await p.screenshot({ path: "a2hs-ios.png" });
-    ck(`the line is on the first screen, under the Markets title, Movers in σ and the morning note, in their block, inside the screen's width: "${c?.text}" on one line of ${c?.h} px (with its rule), ${c?.fs} px, a chevron and ✕`, !!c && c.left >= 0 && c.right <= c.vw && c.overflowX <= 0 && c.top >= c.headBottom && c.stripBottom != null && c.top >= c.stripBottom && (c.noteBottom == null || c.top >= c.noteBottom - 1) && c.bottom < c.vh - 60 && c.inLines && c.text === "Add Orrery to your Home Screen" && c.h === 45 && c.fs === 14.5 && Number(c.weight) >= 600 && !c.cut && c.chevron === "›", c);
+    ck(`the line is on the first screen, under the Markets title, Movers in σ and the morning note, in their block, inside the screen's width: "${c?.text}" on one line of ${c?.h} px (with its rule), ${c?.fs} px, whole with ${c?.room} px to spare (at least 8), a chevron and ✕`, !!c && c.left >= 0 && c.right <= c.vw && c.overflowX <= 0 && c.top >= c.headBottom && c.stripBottom != null && c.top >= c.stripBottom && (c.noteBottom == null || c.top >= c.noteBottom - 1) && c.bottom < c.vh - 60 && c.inLines && c.text === "Add Orrery to your Home Screen" && c.h === 45 && c.fs === 14.5 && Number(c.weight) >= 600 && c.room >= 8 && c.chevron === "›", c);
+    // the same words drawn wider (e2e/room.cjs): every letter 2% of its size wider, then the generic monospace in the
+    // page's proportional face's place (the narrower window, 375 px, is in the suite phone-first)
+    await widen(p); const cw = await line(p);
+    await p.reload({ waitUntil: "networkidle" }); await p.waitForSelector("#mk-install"); await p.addStyleTag({ content: "#mockbar{display:none!important}" + MONO }); await p.waitForTimeout(500); const cm = await line(p);
+    ck(`drawn wider the words are still whole and the line as tall: ${cw?.room} px to spare with every letter 2% of its size wider, ${cm?.room} px in a wide font (at least 2), ${cw?.h} and ${cm?.h} px`, !!cw && !!cm && cw.room >= 2 && cm.room >= 2 && cw.h === 45 && cm.h === 45 && cw.overflowX <= 0 && cm.overflowX <= 0, { cw, cm });
+    await p.reload({ waitUntil: "networkidle" }); await p.waitForSelector("#mk-install"); await p.addStyleTag({ content: "#mockbar{display:none!important}" }); await p.waitForTimeout(600);
     ck(`a finger can hit it: the row ${c?.openH} px high, its ✕ ${c?.xW}×${c?.xH}px ("${c?.xTip}")`, !!c && c.openH >= 44 && c.xW >= 44 && c.xH >= 44 && /^Hide this line\. It can be opened again from the menu$/.test(c.xTip) && c.popup === "dialog", c);
     await openSheet(p); const s = await sheet(p); await p.screenshot({ path: "a2hs-ios-sheet.png" });
     ck(`a tap on the line opens a sheet at the bottom of the screen: as wide as the screen (${s?.left}–${s?.right} of ${s?.vw}), ${s?.h} px of ${s?.vh} (at most 80%), top corners ${s?.radius}, over a dimmed page (${s?.dim}); "${s?.title}"`, !!s && s.left === 0 && s.right === s.vw && s.bottom === s.vh && s.h <= s.vh * 0.8 + 1 && s.radius === "16px" && s.radiusB === "0px" && /rgba\(0, 0, 0, 0\.6\)/.test(s.dim) && s.bgTop === 0 && s.bgH === s.vh && s.title === "Add Orrery to your Home Screen" && s.overflowX <= 0, s);
@@ -54,6 +62,27 @@ const gone = async (p) => { await p.waitForTimeout(350); return (await p.locator
     await p.goto(MOCK, { waitUntil: "networkidle" }); await p.waitForSelector("#mk-install"); await p.waitForTimeout(500);
     await openSheet(p); await p.locator("#a2hs-hide").tap(); const closed = await gone(p);
     ck("\"Hide the line on Markets\" in the sheet hides the line, keeps the choice and closes the sheet", closed && (await line(p)) === null && (await p.evaluate(() => localStorage.getItem("om_a2hs_hide"))) === "1" && errs.length === 0, errs); await ctx.close(); }
+
+  // The browser keeps a sheet's history entry longer than the page keeps its memory (the checks of round 3b: PF-2).
+  // Loaded again while the sheet is open, or after Back has closed the sheet and Forward has gone onto its entry, the
+  // page stands on an entry marked as a sheet's, with no sheet. A sheet opened there added a second marked entry, and
+  // the first Back landed on the first: the sheet stayed open.
+  { const ctx = await b.newContext({ ...devices["iPhone 13"] }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+    await p.goto(MOCK + "#market", { waitUntil: "networkidle" }); await p.waitForSelector("#mk-install"); await p.waitForTimeout(500);
+    const state = () => p.evaluate(() => ({ marked: !!(history.state && history.state.omSheet === true), n: history.length, hash: location.hash, sheet: !!document.querySelector("#a2hs-sheet"), line: !!document.querySelector("#mk-install") }));
+    await openSheet(p); const open0 = await state();
+    await p.reload({ waitUntil: "networkidle" }); await p.waitForSelector("#mk-install"); await p.waitForTimeout(500); const reloaded = await state();
+    await openSheet(p); const open1 = await state(); await p.goBack(); const back1 = await gone(p), after1 = await state();
+    ck(`the page loaded again while the sheet was open (it stands on the sheet's entry, with no sheet): the sheet opened there adds no second entry (${reloaded.n} entries, then ${open1.n}), and one Back closes it and stays on MARKETS`, open0.marked && open0.sheet && reloaded.marked && !reloaded.sheet && open1.sheet && open1.n === reloaded.n && back1 && !after1.sheet && !after1.marked && after1.hash === "#market" && after1.line, { open0, reloaded, open1, back1, after1 });
+    // Back closes the sheet and leaves its entry ahead; Forward goes onto it
+    await openSheet(p); await p.goBack(); const closed = await gone(p); await p.goForward(); await p.waitForTimeout(400); const fwd = await state();
+    await openSheet(p); const open2 = await state(); await p.goBack(); const back2 = await gone(p), after2 = await state();
+    ck(`Back closes the sheet, Forward goes onto its entry (no sheet there): the sheet opened again adds no entry (${fwd.n}, then ${open2.n}), and one Back closes it`, closed && fwd.marked && !fwd.sheet && fwd.hash === "#market" && open2.sheet && open2.n === fwd.n && back2 && !after2.sheet && !after2.marked && after2.hash === "#market", { closed, fwd, open2, back2, after2 });
+    // and ✕ on a sheet opened on such an entry steps out of it: the next sheet is opened from the page's own entry
+    await p.goForward(); await p.waitForTimeout(400); await openSheet(p); await p.locator("#a2hs-sheet .sheet-head .x").tap(); const x = await gone(p); await p.waitForTimeout(300); const afterX = await state();
+    await openSheet(p); await p.goBack(); const back3 = await gone(p), after3 = await state();
+    ck("✕ on a sheet opened there steps out of the entry; the next sheet opens from the page's own entry and one Back closes it", x && !afterX.marked && afterX.hash === "#market" && back3 && !after3.sheet && after3.hash === "#market" && errs.length === 0, { x, afterX, back3, after3, errs });
+    await ctx.close(); }
 
   console.log("\n[Android phone, in the browser]");
   { const ctx = await b.newContext({ ...devices["Pixel 7"] }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));

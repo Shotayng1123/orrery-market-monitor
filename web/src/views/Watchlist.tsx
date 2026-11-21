@@ -11,7 +11,7 @@ import { useWatch } from "../lib/watch";
 import { fallbackDecimals, fmtLevel, fmtPct, fmtSigma, signCls } from "../lib/fmt";
 import { sigmaNoteLine } from "../lib/alertline";
 import { asOfCell, asOfOf, asOfTitle, fmtDate, fmtWhen, type AsOfKind } from "../lib/time";
-import { byResultsDay, fmtResultsDate, MARKS_NOTE, RESULTS_SOURCE, resultsStatus, resultsStatusShort, resultsTip } from "../lib/results";
+import { byResultsDay, fmtResultsDate, MARKS_NOTE, RESULTS_SOURCE, resultsAhead, resultsStatus, resultsStatusShort, resultsTip } from "../lib/results";
 import { classLabel, hitLine, MKT_CAP, NEXT_RESULTS, RESULTS_AHEAD, VS_200D, VS_50D } from "../lib/labels";
 import { cellBp, changeShade, RANGE_52W, RANGE_52W_TIP } from "./Market";
 import { marketSession, panelRowOf, symbolMarket, type PanelRow } from "../lib/opens";
@@ -108,7 +108,7 @@ export function WatchlistView({ tick }: { tick: number }) {
   // a yield's changes in bp with MARKETS' own figures and tints (full at 50bp; 75bp from the 200-day average)
   const bp = (v: number | null | undefined, full: number) => <td className={`num ${signCls(v == null ? null : v * 100, 1)}`} style={{ background: changeShade(v ?? null, full) }}>{cellBp(v)}</td>;
   // each name's next results in the order of their days, each day the company's own market's (A-30)
-  const ahead = byResultsDay(rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3), (r) => r.earningsAt, (r) => r.symbol);
+  const ahead = byResultsDay(rows.filter((r) => resultsAhead(r.earningsAt)), (r) => r.earningsAt, (r) => r.symbol);
   const name = (s: string) => rows.find((r) => r.symbol === s)?.name ?? s;
   const how = "Press the star beside a name on its own page, in the screener or in the results calendar, or type part of a name or of a symbol above (toyota, nvid, 7203, ^N225) and choose from the list.";
   const sources = sourcesOf(rows);
@@ -163,8 +163,9 @@ export function WatchlistView({ tick }: { tick: number }) {
                   <td className="num mut">{r.pos52 == null ? "–" : `${Math.round(r.pos52)}%`}</td>
                   <td className="num mut">{r.mcap == null ? "–" : money(r.mcap, r.ccy)}</td>
                   {/* the date and its mark, the same marks as RESULTS AHEAD below: "est.", "conf." as the source marks it, a dash
-                      where it gives none (A's A-37: a confirmed date and an unmarked one read alike, both without a mark) */}
-                  <td className="l mut" title={r.earningsAt ? resultsTip(r.symbol, r.earningsEst) : undefined}>{r.earningsAt ? <>{fmtResultsDate(r.earningsAt, r.symbol)} <span className="rmark">{resultsStatusShort(r.earningsEst, r.symbol)}</span></> : "–"}</td>
+                      where it gives none (A's A-37: a confirmed date and an unmarked one read alike, both without a mark).
+                      A stored date more than a day old is not a next one: a dash, as RESULTS AHEAD leaves it out (RM-3) */}
+                  <td className="l mut" title={resultsAhead(r.earningsAt) ? resultsTip(r.symbol, r.earningsEst) : undefined}>{resultsAhead(r.earningsAt) ? <>{fmtResultsDate(r.earningsAt, r.symbol)} <span className="rmark">{resultsStatusShort(r.earningsEst, r.symbol)}</span></> : "–"}</td>
                 </tr>
               );
             })}</tbody>

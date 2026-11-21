@@ -11,12 +11,21 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
 // closes the sheet. The entry is kept in one place for every sheet on the page, and taken away a moment after the
 // last one has gone: a sheet that is drawn, removed and drawn again at once (React's development mode does this to
 // every component) keeps the one entry instead of adding a second and stepping back out of it.
+//
+// The browser keeps the entry longer than the page keeps its memory (the checks of round 3b, 21 Nov 2026: PF-2). A page
+// loaded again while a sheet was open, or a reader who closes a sheet with Back and then goes Forward, stands on an
+// entry marked as a sheet's with no sheet on the page. A sheet opened there used to add a second marked entry, and the
+// first Back then landed on the first one: the sheet stayed open. A sheet that finds the page on such an entry now
+// takes it as its own and adds none: Back leaves it and closes the sheet, and ✕ steps out of it as out of any other.
+// (Until a sheet has been opened and closed there, one Back press on that entry changes nothing on screen: it leaves
+// the sheet's old entry for the page's own.)
 const MARK = "omSheet";
 let openSheets = 0, entry = false;
 const marked = (): boolean => { try { const s = history.state as Record<string, unknown> | null; return !!s && typeof s === "object" && s[MARK] === true; } catch { return false; } };
 function sheetShown(): void {
   openSheets++;
   if (entry) return;
+  if (marked()) { entry = true; return; }   // the page stands on a sheet's entry already: it is this sheet's
   try { const s = history.state as Record<string, unknown> | null; history.pushState({ ...(s && typeof s === "object" ? s : {}), [MARK]: true }, ""); entry = true; } catch { /* no history: Back leaves the page, as before */ }
 }
 // Stepping out of the sheet's entry is not done at once: the browser goes back a moment after it is asked. An address
