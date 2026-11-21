@@ -2,6 +2,9 @@
 // C/portfolio-plan.md §3.1 item 1; OD-P5 (b), the owner's yes of 20 Nov 2026 to Yahoo's named contract months, "used
 // only after its probe shows it is there and current"). Yahoo Finance is unofficial; the exchanges (CME Group, ICE)
 // are the primary source. Read-only, no key, nothing written; the session cookie and crumb are never printed.
+// It ran on 20 Nov 2026 (C/probes/yahoo_futures.log). P-0b (§3.1b item 7, with the PMs' additions of 21 Nov) runs it
+// AGAIN AFTER 1 DECEMBER 2026, when BZF27 and ZQX26 have expired: for the rolls of BZ=F and ZQ=F as the names then
+// give them, and with the five additions marked "P-0b" below. What need not wait is read by yahoo_futures_now.
 //
 // B-27, for I-6. The Monitor's 15 front-month series (ES=F NQ=F YM=F RTY=F NKD=F ZN=F CL=F BZ=F NG=F GC=F SI=F HG=F
 // PL=F TIO=F ALI=F: supabase/migrations/…0002_seed.sql, …0018_market_universe.sql) move to the next contract on
@@ -12,38 +15,44 @@
 //   2. its daily closes over six months as spark gives them, date by date against the named contracts' closes: which
 //      contract each close is, hence each roll date in the window and its step (the series' change that day, the new
 //      contract's own change, and the gap between the two contracts the day before: the part that is no move);
+//      P-0b: for silver, platinum and gold the spot months are read too (every calendar month from last month to
+//      three on), since SI=F's closes equalled none of its main-cycle months on 20 Nov (B-27's second point); a
+//      roll whose series still differs from the new contract on the session after the change is FLAGGED, never
+//      adjusted, and so is a series that is not on the contract its quote names;
 //   3. whether an expired contract's closes are still served (C-8): if they are, past roll days can be found from
 //      Yahoo; if not, from the exchanges' last-trade calendars, kept by hand with a source each;
 //   4. the 1D the quote gives now: its price against its own previous close, against the series' last close and
 //      against the contract's own previous close (they differ on a roll day; MARKETS' 1D needs to know which);
 //   5. ZQ=F's closes of 16 to 19 Nov against those printed on 19 Nov (96.12, 96.12, 96.12, 95.835): whether Yahoo
 //      keeps a series' past closes after a roll or rewrites them to the new contract's.
-// One run sees each name on one day only. Run it again after the next expiries this run prints (each contract's
-// expireIsoDate): the names before and after a known roll then show whether they follow the contract.
 //
 // P-5 (named months): for ES NQ YM RTY NKD NIY ZT ZF ZN TN ZB UB CL BZ GC SI HG NG, the front and the next two months:
 // whether each answers; its closes on the series' last 60 dates and their gaps; volume, average volumes, open interest,
-// bid, ask, sizes and the declared delay. For six fronts (ES, NKD, NIY, ZN, CL, GC): the daily bars' volume and
-// timestamps (the time a daily close stands for; CME's trade date ends 17:00 New York) and whether one-minute bars
-// carry volume (BP-2). Then seven searches: has Yahoo any symbol for OSE's, Eurex's, ICE's (Long Gilt), Montréal's or
-// ASX's bond and index futures?
+// bid, ask, sizes and the declared delay. P-0b: the same for ZQ's, SR3's (one close in five sessions on 19 Nov) and
+// TPY's months (CME's yen TOPIX future: A wants it only if a month has 20 sessions of its own closes and 100
+// contracts a day, V-12). For six fronts (ES, NKD, NIY, ZN, CL, GC): the daily bars' volume and timestamps (the time
+// a daily close stands for; CME's trade date ends 17:00 New York) and whether one-minute bars carry volume (BP-2);
+// P-0b: every pair of consecutive sessions whose daily volume is exactly the same, and the volumes of 18 and 19 Nov
+// beside those the run of 20 Nov printed (the same figure twice on all six: is a repeated volume corrected? C-36).
+// The seven searches of 20 Nov (other exchanges' futures) are not asked again: that log answers them.
 //
-// Requests: at most 37, all to Yahoo, 1.2 s apart: the session (2), quotes (3), spark (7 of 20 symbols, and 2 more
-// only if a batch is refused), four =F charts (4), six contracts' daily and minute bars (12), seven searches (7). A 429
-// is asked again once after 5 s, three times at most in all (so at most 40); after three 429s in a row nothing more
+// Requests: at most 31, all to Yahoo, 1.2 s apart: the session (2), quotes (3), spark (7 of 20 symbols, and 2 more
+// only if a batch is refused), four =F charts (4), six contracts' daily and minute bars (12), TPY's front (1). A 429
+// is asked again once after 5 s, three times at most in all (so at most 34); after three 429s in a row nothing more
 // is asked.
 // Runtime: node.
 //   Actions > source-probe > Run workflow: probe = yahoo_futures, runtime = node
 import { head, look, masked, pause, requestsMade, yahooSession } from "./lib.ts";
 
-const GAP = 1200, MAX = 37;
+const GAP = 1200, MAX = 31;
 const MON = "FGHJKMNQUVXZ", ALL = MON;
 const MNAME = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 // cycle: the months listed; from, count: the contracts read start at the first cycle month on or after the current
 // month + from, `count` of them (so the one that expired last, the front and the next ones). ex: Yahoo's suffix, as a
 // fallback when the =F quote does not name the exchange. monitor: a series the Monitor carries (B-27); p5: a root of P-5.
-interface Spec { root: string; ex: string; cycle: string; from: number; count: number; monitor: boolean; p5: boolean; name: string }
+// also (P-0b): a second run of months read for the root, the spot months of a metal whose main cycle skips them.
+interface Spec { root: string; ex: string; cycle: string; from: number; count: number; monitor: boolean; p5: boolean; name: string; also?: { cycle: string; from: number; count: number } }
 const SPECS: Spec[] = [
   { root: "ES", ex: "CME", cycle: "HMUZ", from: -3, count: 4, monitor: true, p5: true, name: "S&P 500 E-mini" },
   { root: "NQ", ex: "CME", cycle: "HMUZ", from: -3, count: 4, monitor: true, p5: true, name: "Nasdaq 100 E-mini" },
@@ -60,14 +69,21 @@ const SPECS: Spec[] = [
   { root: "CL", ex: "NYM", cycle: ALL, from: 0, count: 5, monitor: true, p5: true, name: "WTI crude" },
   { root: "BZ", ex: "NYM", cycle: ALL, from: 1, count: 4, monitor: true, p5: true, name: "Brent crude" },
   { root: "NG", ex: "NYM", cycle: ALL, from: 0, count: 4, monitor: true, p5: true, name: "Natural gas" },
-  { root: "GC", ex: "CMX", cycle: "GJMQVZ", from: -2, count: 4, monitor: true, p5: true, name: "Gold" },
-  { root: "SI", ex: "CMX", cycle: "HKNUZ", from: -3, count: 4, monitor: true, p5: true, name: "Silver" },
+  { root: "GC", ex: "CMX", cycle: "GJMQVZ", from: -2, count: 4, monitor: true, p5: true, name: "Gold", also: { cycle: ALL, from: -1, count: 5 } },
+  { root: "SI", ex: "CMX", cycle: "HKNUZ", from: -3, count: 4, monitor: true, p5: true, name: "Silver", also: { cycle: ALL, from: -1, count: 5 } },
   { root: "HG", ex: "CMX", cycle: ALL, from: -2, count: 6, monitor: true, p5: true, name: "Copper" },
-  { root: "PL", ex: "NYM", cycle: "FJNV", from: -2, count: 4, monitor: true, p5: false, name: "Platinum" },
+  { root: "PL", ex: "NYM", cycle: "FJNV", from: -2, count: 4, monitor: true, p5: false, name: "Platinum", also: { cycle: ALL, from: -1, count: 5 } },
   { root: "TIO", ex: "NYM", cycle: ALL, from: -1, count: 4, monitor: true, p5: false, name: "Iron ore 62% (TSI)" },
   { root: "ALI", ex: "CMX", cycle: ALL, from: -1, count: 4, monitor: true, p5: false, name: "Aluminium" },
-  { root: "ZQ", ex: "CBT", cycle: ALL, from: 0, count: 3, monitor: false, p5: false, name: "30-day fed funds (the 19 Nov roll)" },
+  { root: "ZQ", ex: "CBT", cycle: ALL, from: -1, count: 4, monitor: false, p5: false, name: "30-day fed funds (the 19 Nov roll)" },
+  { root: "SR3", ex: "CME", cycle: "HMUZ", from: -3, count: 5, monitor: false, p5: false, name: "Three-month SOFR (P-0b: its named months)" },
+  { root: "TPY", ex: "CME", cycle: "HMUZ", from: -3, count: 4, monitor: false, p5: false, name: "TOPIX future (CME, JPY) (P-0b: V-12)" },
 ];
+/** The roots read date by date against their months though the Monitor does not carry them, and listed with P-5's. */
+const EXTRA = ["ZQ", "SR3", "TPY"];
+// What the run of 20 Nov 2026, 12:38 UTC, printed as the daily volume of the trade dates of 18 Nov and of 19 Nov, the
+// same figure twice, for the six fronts it read (yahoo_futures.log l.411–456): C-36.
+const VOL_20NOV: Record<string, number> = { "ESZ26.CME": 2057168, "NKDZ26.CME": 9091, "NIYZ26.CME": 27016, "ZNZ26.CBT": 2126348, "CLF27.NYM": 268900, "GCZ26.CMX": 244253 };
 // What the probe of 19 Nov 2026, 17:44 UTC, printed for ZQ=F (rate_futures_yahoo.log, dates as there: UTC).
 const ZQ_19NOV: Array<[string, number]> = [["2026-11-16", 96.12000274658203], ["2026-11-17", 96.12000274658203], ["2026-11-18", 96.12000274658203], ["2026-11-19", 95.83499908447266]];
 
@@ -83,7 +99,7 @@ const nyTime = (t: number) => NYT.format(new Date(t * 1000));
 const wd = (d: string) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date(d + "T12:00:00Z").getUTCDay()];
 const pct = (x: number | null, dp = 2) => (x == null || !Number.isFinite(x) ? "–" : `${x >= 0 ? "+" : ""}${(x * 100).toFixed(dp)}%`);
 const same = (a: number, b: number) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a));
-const parseSym = (s: string) => { const m = s.match(/^([A-Z]+?)([FGHJKMNQUVXZ])(\d{2})\.([A-Z]+)$/); return m ? { root: m[1], code: m[2], yy: Number(m[3]), ex: m[4] } : null; };
+const parseSym = (s: string) => { const m = s.match(/^([A-Z][A-Z0-9]*?)([FGHJKMNQUVXZ])(\d{2})\.([A-Z]+)$/); return m ? { root: m[1], code: m[2], yy: Number(m[3]), ex: m[4] } : null; };
 const order = (s: string) => { const p = parseSym(s); return p ? p.yy * 12 + MON.indexOf(p.code) : 1e9; };
 const label = (s: string) => { const p = parseSym(s); return p ? `${MNAME[MON.indexOf(p.code)]} 20${String(p.yy).padStart(2, "0")}` : s; };
 
@@ -91,12 +107,12 @@ let left429 = 3, inRow = 0, stopped = false;
 /** One Yahoo request through look(): JSON, or null with the reason printed. */
 async function yget(url: string, headers: Record<string, string> = {}): Promise<J | null> {
   if (stopped) { console.log(`  not asked (Yahoo refused three times in a row): ${masked(url)}`); return null; }
-  for (;;) {
+  for (let again = false; ; again = true) {
     const r = await look(url, { headers: { accept: "application/json", ...headers }, show: 0, timeoutMs: 40000 });
     await pause(GAP);
     if (r.status === 429) {
       if (++inRow >= 3) { stopped = true; console.log("  Yahoo answered 429 three times in a row: nothing more is asked"); return null; }
-      if (left429-- > 0) { await pause(5000); continue; }
+      if (!again && left429-- > 0) { await pause(5000); continue; }
       return null;
     }
     inRow = 0;
@@ -107,12 +123,20 @@ async function yget(url: string, headers: Record<string, string> = {}): Promise<
   }
 }
 
-/** Contracts of a spec from the run date: the first cycle month on or after (this month + from), `count` of them. */
+/** Contracts of a spec from the run date: the first cycle month on or after (this month + from), `count` of them;
+ *  and the months of its `also` run (a metal's spot months), each contract once. */
 function contracts(s: Spec, ex: string, now: Date): string[] {
-  const out: string[] = [], y0 = now.getUTCFullYear(), m0 = now.getUTCMonth() + s.from;
-  for (let k = 0; out.length < s.count && k < 40; k++) {
-    const m = m0 + k, mm = ((m % 12) + 12) % 12, yy = y0 + Math.floor(m / 12);
-    if (s.cycle.includes(MON[mm])) out.push(`${s.root}${MON[mm]}${String(yy % 100).padStart(2, "0")}.${ex}`);
+  const out: string[] = [];
+  for (const run of [s, ...(s.also ? [s.also] : [])]) {
+    const y0 = now.getUTCFullYear(), m0 = now.getUTCMonth() + run.from;
+    let n = 0;
+    for (let k = 0; n < run.count && k < 40; k++) {
+      const m = m0 + k, mm = ((m % 12) + 12) % 12, yy = y0 + Math.floor(m / 12);
+      if (!run.cycle.includes(MON[mm])) continue;
+      n++;
+      const c = `${s.root}${MON[mm]}${String(yy % 100).padStart(2, "0")}.${ex}`;
+      if (!out.includes(c)) out.push(c);
+    }
   }
   return out;
 }
@@ -161,7 +185,7 @@ const quoteBatch = async (syms: string[], what: string) => {
     console.log(`  ${rows.length} of ${syms.slice(i, i + 100).length} symbols answered`);
   }
 };
-head("1. The v7 quote of every =F series (22): its names, the contract it is on (underlyingSymbol), its expiry");
+head(`1. The v7 quote of every =F series (${SPECS.length}): its names, the contract it is on (underlyingSymbol), its expiry`);
 const FSYMS = SPECS.map((x) => `${x.root}=F`);
 await quoteBatch(FSYMS, "the =F series");
 const firstF = FSYMS.map((f) => quotes.get(f)).find(Boolean);
@@ -224,7 +248,7 @@ const contractLine = (c: string): string => {
   const ss = rows.length ? `spark ${rows.length} closes ${ny(rows[0][0])} to ${ny(rows[rows.length - 1][0])}` : "spark: no closes";
   return `${c} (${label(c)}): ${qs} · ${ss}`;
 };
-for (const sp of SPECS.filter((x) => x.monitor || x.root === "ZQ")) {
+for (const sp of SPECS.filter((x) => x.monitor || EXTRA.includes(x.root))) {
   const f = `${sp.root}=F`, q = quotes.get(f), fc = closes.get(f), list = named.get(sp.root) ?? [];
   console.log(`\n-- ${f} · ${sp.name}${sp.monitor ? "" : " (not a Monitor instrument)"}`);
   if (q) console.log(`  quote: shortName "${q.shortName ?? "–"}", longName "${q.longName ?? "–"}", underlyingSymbol ${q.underlyingSymbol ?? "–"}, expires ${str(q.expireIsoDate) ?? (num(q.expireDate) ? iso(num(q.expireDate)) : "–")}; ${q.fullExchangeName ?? q.exchange ?? "–"}, delayed by ${q.exchangeDataDelayedBy ?? "–"} min (${q.quoteSourceName ?? "–"}), state ${q.marketState ?? "–"}; last ${q.regularMarketPrice ?? "–"} at ${iso(num(q.regularMarketTime))}, previous close ${q.regularMarketPreviousClose ?? "–"}, volume ${q.regularMarketVolume ?? "–"}, open interest ${q.openInterest ?? "–"}`);
@@ -257,6 +281,18 @@ for (const sp of SPECS.filter((x) => x.monitor || x.root === "ZQ")) {
     rolls.push({ date: d, from: a, to: b, fChg, inNew, gap });
     const bp = sp.root === "ZQ" && dPrev && B.get(dPrev) != null && A.get(dPrev) != null ? ` (${((A.get(dPrev)! - B.get(dPrev)!) * 100).toFixed(1)} bp in the rate it implies)` : "";
     console.log(`  ROLL on ${d} (${wd(d)}): ${a} → ${b}${i - k > 1 ? ` (after ${segs.slice(k + 1, i).reduce((n, g) => n + g.n, 0)} date(s) matching neither)` : ""}. ${f} that day ${pct(fChg)}; within ${b} ${pct(inNew)}; the change of contract (${b} ÷ ${a} on ${dPrev ?? "–"} − 1) ${pct(gap)}${bp}; ${a}'s own closes ${A.size ? `end ${[...A.keys()].sort().slice(-1)[0]}` : "–"}`);
+    // P-0b (B-27's second point): on the session after the change the series should be the new contract's close
+    const dNext = dates[dates.indexOf(d) + 1], today = ny(now.getTime() / 1000);
+    if (dNext && dNext < today) { const sv = fc.get(dNext)!, bv = B.get(dNext); if (bv == null || !same(sv, bv)) console.log(`  FLAG (B-27): on ${dNext}, the session after that change, ${f}'s close ${sv} ${bv == null ? `has no close of ${b} beside it` : `differs from ${b}'s ${bv} (${pct(sv / bv - 1, 3)})`}: flagged, not adjusted`); }
+  }
+  // P-0b: is the series on the contract its quote names? The last ten complete sessions.
+  {
+    const quoted = str(q?.underlyingSymbol), today = ny(now.getTime() / 1000), done = dates.filter((d) => d < today).slice(-10), Q = quoted ? closes.get(quoted) : undefined;
+    if (quoted && Q && done.length) {
+      const on = done.filter((d) => { const x = Q.get(d); return x != null && same(x, fc.get(d)!); });
+      const lastD = done[done.length - 1], lastOn = cs.filter(([, m]) => { const x = m.get(lastD); return x != null && same(x, fc.get(lastD)!); }).map(([c]) => c);
+      console.log(`  over its last ${done.length} complete sessions ${f} equals the contract its quote names (${quoted}) on ${on.length}${on.length < done.length ? `; on ${lastD} it ${lastOn.length ? `equals ${lastOn.join(" = ")}` : `equals none of the contracts read (${quoted}'s close ${Q.get(lastD) ?? "–"}, the series' ${fc.get(lastD)})`}` : ""}${!lastOn.includes(quoted) ? `. FLAG (B-27): the series is not on the contract its quote names: a roll taken from the quote's contract would be a step the series did not make` : ""}`);
+    }
   }
   if (!rolls.length) console.log("  no change of contract found in the window between two of the contracts read");
   // the 1D the quote gives now, against the series' last close and the contract's own previous close
@@ -292,17 +328,20 @@ head("6. Summary for I-6 (B-27): one line per series");
 for (const l of summary) console.log(`  ${l}`);
 
 // ---- P-5: named months ----
-head("7. P-5 (OD-P5 (b)): the front and the next two months of each root; their closes on the series' last 60 dates");
+head("7. P-5 (OD-P5 (b)): the front and the next two months of each root, and of ZQ, SR3 and TPY (P-0b); their closes on the series' last 60 dates");
 const fronts = new Map<string, string>();
-for (const sp of SPECS.filter((x) => x.p5)) {
+// the sessions a liquid series traded on: a thin series (SR3=F had one close in five sessions) is no yardstick
+const liquid = [...(closes.get("ES=F")?.keys() ?? [])].sort().slice(-60);
+for (const sp of SPECS.filter((x) => x.p5 || EXTRA.includes(x.root))) {
   const list = named.get(sp.root) ?? [], f = quotes.get(`${sp.root}=F`), u = str(f?.underlyingSymbol);
   const today = ny(now.getTime() / 1000);
   const live = list.filter((c) => { const e = str(quotes.get(c)?.expireIsoDate); return e ? e.slice(0, 10) >= today : (closes.get(c)?.size ?? 0) > 0; });
   const front = u && list.includes(u) ? u : live[0] ?? list[0];
   fronts.set(sp.root, front);
   const three = list.slice(Math.max(0, list.indexOf(front)), list.indexOf(front) + 3);
-  const fd = [...(closes.get(`${sp.root}=F`)?.keys() ?? [])].sort().slice(-60);
-  console.log(`\n  ${sp.root} · ${sp.name} (front ${front}${u ? ", from the =F quote" : ", the first unexpired"}):`);
+  const own = [...(closes.get(`${sp.root}=F`)?.keys() ?? [])].sort().slice(-60);
+  const fd = EXTRA.includes(sp.root) && liquid.length ? liquid : own;
+  console.log(`\n  ${sp.root} · ${sp.name} (front ${front}${u ? ", from the =F quote" : ", the first unexpired"})${fd === liquid && fd !== own ? `; counted against ES=F's last ${liquid.length} sessions (${sp.root}=F itself has a close on ${liquid.filter((d) => closes.get(`${sp.root}=F`)?.has(d)).length} of them)` : ""}:`);
   for (const c of three) {
     const q = quotes.get(c), m = closes.get(c) ?? new Map<string, number>();
     const inWin = fd.filter((d) => m.has(d)).length, first = [...m.keys()].sort()[0];
@@ -312,9 +351,18 @@ for (const sp of SPECS.filter((x) => x.p5)) {
   }
 }
 
-head("8. Six fronts by the chart endpoint: daily bars (volume, timestamps) over three months and one-minute bars over five days (BP-2)");
+head("8. Six fronts by the chart endpoint: daily bars (volume, timestamps) over three months and one-minute bars over five days (BP-2); a repeated daily volume (C-36); TPY's front (V-12)");
+/** P-0b, C-36: the pairs of consecutive trade dates whose daily volume is exactly the same, and 18 and 19 Nov's beside the figure of 20 Nov's run. */
+const repeats = (c: string, dayVol: Map<string, number>): void => {
+  const ds = [...dayVol.keys()].sort(), twins: string[] = [];
+  for (let i = 1; i < ds.length; i++) if (dayVol.get(ds[i]) === dayVol.get(ds[i - 1]) && (dayVol.get(ds[i]) as number) > 0) twins.push(`${ds[i - 1]} and ${ds[i]} (${dayVol.get(ds[i])})`);
+  console.log(`    consecutive trade dates with exactly the same daily volume among the last ${ds.length}: ${twins.length ? twins.join("; ") : "none"}`);
+  const then = VOL_20NOV[c], v18 = dayVol.get("2026-11-18"), v19 = dayVol.get("2026-11-19");
+  if (then != null) console.log(`    on 20 Nov, 12:38 UTC, this contract's 18 Nov and 19 Nov both read ${then}. Now: 18 Nov ${v18 ?? "–"}, 19 Nov ${v19 ?? "–"}: ${v19 == null ? "19 Nov's bar is not among those read" : v19 !== then ? "19 Nov's volume is its own now (CORRECTED after that read)" : v18 === v19 ? "19 Nov's still repeats 18 Nov's (NOT corrected)" : "19 Nov's is the figure read then, and 18 Nov's is another now"}`);
+};
 for (const root of ["ES", "NKD", "NIY", "ZN", "CL", "GC"]) {
-  const c = fronts.get(root);
+  // the contract 20 Nov's run read for this root, while Yahoo still serves it (its volumes of 18 and 19 Nov are the test of C-36); else the front
+  const then = Object.keys(VOL_20NOV).find((k) => parseSym(k)?.root === root), c = then && closes.get(then)?.size ? then : fronts.get(root);
   if (!c) continue;
   const d = chartOf(await yget(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(c)}?range=3mo&interval=1d`));
   const dayVol = new Map<string, number>();
@@ -325,6 +373,7 @@ for (const root of ["ES", "NKD", "NIY", "ZN", "CL", "GC"]) {
     for (const x of last60) if (x.v != null) dayVol.set(Number(nyTime(x.t).slice(0, 2)) >= 17 ? ny(x.t + 7 * 3600) : ny(x.t), x.v);
     const reg = (d.meta.currentTradingPeriod as { regular?: { start?: number; end?: number } } | undefined)?.regular;
     console.log(`  ${c} daily: ${d.ts.length} bars; of the last ${last60.length}: ${withVol} with volume, ${nulls} with none given; time zone ${d.meta.exchangeTimezoneName ?? "–"}; the last three stamped ${last60.slice(-3).map((x) => `${iso(x.t)} (${nyTime(x.t)} NY) close ${x.c ?? "–"} volume ${x.v ?? "–"}`).join("; ")}; regular session ${reg?.start ? nyTime(reg.start) : "–"} to ${reg?.end ? nyTime(reg.end) : "–"} NY`);
+    repeats(c, dayVol);
   } else console.log(`  ${c} daily: no chart`);
   const m = chartOf(await yget(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(c)}?range=5d&interval=1m`));
   if (m) {
@@ -341,12 +390,20 @@ for (const root of ["ES", "NKD", "NIY", "ZN", "CL", "GC"]) {
   } else console.log(`  ${c} one-minute: no chart`);
 }
 
-head("9. Searches: has Yahoo a symbol for these exchanges' futures? (futures among the first ten results)");
-for (const term of ["Euro Bund futures", "Long Gilt futures", "JGB futures", "Nikkei 225 futures OSE", "TOPIX futures", "Canadian 10 Year Bond futures", "ASX 10 Year Bond futures"]) {
-  const j = await yget(`https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(term)}&quotesCount=10&newsCount=0&listsCount=0`);
-  const qs = ((j?.quotes as Q[] | undefined) ?? []);
-  const fut = qs.filter((x) => String(x.quoteType ?? "").toUpperCase() === "FUTURE");
-  console.log(`  "${term}": ${qs.length} results, ${fut.length} futures${fut.length ? `: ${fut.slice(0, 8).map((x) => `${x.symbol} (${x.shortname ?? x.longname ?? "–"}; ${x.exchDisp ?? x.exchange ?? "–"})`).join("; ")}` : qs.length ? `; the others: ${qs.slice(0, 5).map((x) => `${x.symbol} (${x.quoteType ?? "–"}, ${x.exchDisp ?? x.exchange ?? "–"})`).join("; ")}` : ""}`);
+// P-0b, V-12 (A): TPY enters P-5's table only if a named month has 20 sessions of its own closes and at least 100
+// contracts a day on average; otherwise it is listed "not tradable here: too little volume".
+{
+  const c = fronts.get("TPY");
+  if (c) {
+    const d = chartOf(await yget(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(c)}?range=3mo&interval=1d`));
+    if (!d) console.log(`  ${c} daily: no chart`);
+    else {
+      const today = ny(now.getTime() / 1000), rows = d.ts.map((t, i) => ({ d: ny(t), v: d.volume[i], c: d.close[i] })).filter((x) => x.c != null && x.d < today), l20 = rows.slice(-20);
+      const a20 = l20.length ? l20.reduce((a, x) => a + (x.v ?? 0), 0) / l20.length : null;
+      console.log(`  ${c} daily: ${rows.length} complete bars with a close, ${rows[0]?.d ?? "–"} to ${rows[rows.length - 1]?.d ?? "–"}; average volume over its last ${l20.length} sessions ${a20 == null ? "–" : a20.toFixed(1)} contracts a day (${l20.filter((x) => !x.v).length} with none); the last six: ${rows.slice(-6).map((x) => `${x.d} close ${x.c} volume ${x.v ?? "–"}`).join("; ")}`);
+      console.log(`    A's line (V-12): 20 sessions of its own closes: ${l20.length >= 20 ? "yes" : `NO (${l20.length})`}; 100 contracts a day on average over them: ${a20 != null && a20 >= 100 ? "yes" : `NO (${a20 == null ? "–" : a20.toFixed(1)})`}: ${l20.length >= 20 && a20 != null && a20 >= 100 ? "it trades by A's line" : "not tradable here by A's line: too little volume"}`);
+    }
+  } else console.log("  TPY: no front found");
 }
 
 console.log(`\nrequests made: ${requestsMade()} (at most ${MAX} planned, and at most 3 asked again after a 429); ${Math.round((Date.now() - t0) / 1000)} s`);

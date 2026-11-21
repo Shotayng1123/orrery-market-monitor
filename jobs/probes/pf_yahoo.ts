@@ -1,302 +1,259 @@
-// The paper portfolio's probe of Yahoo Finance for stocks, funds, currencies, options and total-return indices (P-0:
-// C/portfolio-plan.md §3.1 item 1; its futures part is yahoo_futures.ts). Yahoo is unofficial; the owner said yes on
-// 20 Nov 2026 to four of its series (OD-P5: bid and ask, named futures months, US option chains, total-return
-// indices), each "used only after its probe shows it is there and current". Read-only, no key, nothing written; the
-// session cookie and crumb are never printed. Every symbol here is a candidate the PMs named from memory, unless a log
-// in C/probes/ shows it.
+// The paper portfolio's probe of Yahoo Finance IN SESSION (P-0b: C/portfolio-plan.md §3.1b item 2 with the PMs'
+// additions of 21 Nov 2026). The run of 20 Nov 2026 was at 12:38 UTC, before New York's open and after Tokyo's close
+// (C/probes/pf_yahoo.log): its bids, asks and option bids were not in-session. This one is run twice:
+//   once in New York's session, 14:30 to 21:00 UTC (not in its first or last quarter of an hour);
+//   once in Tokyo's, at about 09:30 JST = 00:30 UTC (the first bars are read then: see 4), or 03:30 to 06:30 UTC.
+// It finds by itself which of the two is open (the quotes' marketState) and says so in its first lines. With neither
+// open it prints the results-date fields and stops: an out-of-session quote is what the log of 20 Nov already holds.
+// Yahoo Finance is unofficial; the owner said yes on 20 Nov 2026 to its bid and ask and its US option chains, each
+// "used only after its probe shows it is there and current" (OD-P5). Read-only, no key, nothing written; the session
+// cookie and crumb are never printed. FX never takes Yahoo's bid and ask (C-37): USDJPY=X is read for its last price
+// only, to put a yen turnover in dollars.
 //
-// It prints, for P-2 and P-3 (the first usable version) first:
-//   1. NVDA, 7203.T, SPY and 1306.T: ten years of daily bars with their dividend and split events (is the series
-//      split-adjusted? the trackers' distributions for X-2); five days of one-minute bars per session: bars with
-//      volume, the first and last bars' share of the day (do they carry the auctions? X-5), the minute volumes
-//      against the daily bar's, gaps, the declared delay; bid, ask and sizes, and the quoted spread beside Abdi and
-//      Ranaldo's estimate from the last 21 daily bars (X-19: A gives a fallback by size if the estimate is above twice
-//      the quoted spread);
-//   2. bid, ask and sizes for ES=F, the front ES contract, USDJPY=X and EURUSD=X (B; OD-P5 (a));
-//   3. the proxy candidates of §2.20 (EWJ, HEWJ, DBJP, ACWI, 2559.T, EEM, EPP, an MSCI Europe fund, 1321.T, BNDW, the
-//      London Global Aggregate fund's USD-hedged class, a plain MSCI USA tracker if a search finds one): ten years of
-//      daily bars and distributions, and the year's total return from them (E); B's two measurements: BNDW against
-//      the London fund (tracking error on daily, weekly and monthly total returns) and BNDW's close against its NAV;
-//   4. B's bond funds (18): whether each answers, and the distributions of four;
-//   5. option chains for SPY, ^SPX, QQQ and NVDA (OD-P5 (c));
-//   6. ^SP500TR and any total-return symbol a search finds for TOPIX, the Nikkei 225 or MSCI ACWI (OD-P5 (d));
-//   7. how far back Yahoo's monthly bars reach for the factor list (BP-4: from 1 Jan 2013).
-// Bid and ask are worth most in session: run it once while New York is open (14:30–21:00 UTC) and once while Tokyo is
-// (00:00–06:30 UTC, lunch 02:30–03:30); each line says the market's state at the time.
+// It prints:
+//   1. the v7 quote read 12 times, 15 s apart (one request each time, every symbol in it): every reading of the open
+//      market's four names (NVDA, AAPL, SPY and QQQ in New York; 7203.T, 1306.T, 6758.T and 1321.T in Tokyo): bid ×
+//      size, ask × size, the spread, the last price and its age, the mid against the last price; and for every
+//      symbol (those eight, the trackers and bond funds of §2.20, ES=F and the front month of each of P-5's 18 roots)
+//      a summary: readings with a usable quote, the spread's minimum, median and maximum, ask − bid in price, the mid
+//      against the last price, the quote's age (the reading's time less regularMarketTime) beside the delay Yahoo
+//      declares (V-2, V-5; A-40), and on how many readings A's four tests of a quote pass (X-19a);
+//   2. for the open market's four names: the median quoted spread beside its tier (V-1: A's fallback by size; the
+//      tier of the 60-session average volume at the last complete close, in dollars): more than twice or less than
+//      half goes back to A; the larger of that tier and one tick, the smallest ask − bid seen standing for the tick
+//      (the tick table is JPX's, held in pf_jpx); and Abdi and Ranaldo's estimate beside it (X-19; not used for a
+//      fill since V-1);
+//   3. today's one-minute bars of the open market's names: the newest bar's age beside the declared delay (V-5);
+//   4. Tokyo only: today's first bars of 7203.T and 1306.T in full, read at the start of the run and again at its
+//      end, to see whether bars 09:00 to 09:04 exist before they are merged into a bar stamped 09:05 (V-3, V-4);
+//   5. New York only: the option chains of SPY, ^SPX, QQQ and NVDA, the nearest expiry and the first one 25 days or
+//      more ahead: how many contracts carry a bid, an ask and an implied volatility, the three strikes nearest the
+//      money on each side, and the implied volatility at the money (OD-P5 (c); P-11);
+//   6. Yahoo's results-date fields as it sends them (earningsTimestamp, earningsTimestampStart, earningsTimestampEnd,
+//      isEarningsDateEstimate and any other field named "earnings…") for 7203.T, 6758.T, NVDA and AAPL, each moment
+//      in UTC, JST and New York's time (A-37: no log holds them).
+// What needs no session is read by pf_yahoo_hist (complete sessions) and pf_yahoo_funds (funds), not here.
 //
-// Requests: at most 44, all to Yahoo, 1.2 s apart: the session (2), six searches (6), one quote of every symbol (1),
-// the four stocks' daily and minute bars (8), two trackers' distributions (2), up to 11 proxies (11), four bond funds'
-// distributions (4), four option chains (4), total-return series (up to 4), the factor list's reach (2). A 429 is
-// asked again once after 5 s, three times at most in all (so at most 47); after three 429s in a row nothing more is
-// asked.
+// Requests: at most 31, all to Yahoo, 1.2 s apart: the session (2), the =F quote that names each front month (1), the
+// quote 12 times (12), four names' daily bars (4), then in New York four names' one-minute bars (4) and eight chains
+// (8), or in Tokyo two names' one-minute bars read twice (4): 31 in New York, 23 in Tokyo, 4 with neither market open.
+// A 429 is asked again once after 5 s, three times at most in a run (so at most 34); after three 429s in a row nothing
+// more is asked.
+// The run takes about four minutes.
 // Runtime: node.
 //   Actions > source-probe > Run workflow: probe = pf_yahoo, runtime = node
-import { head, look, masked, pause, requestsMade, yahooSession } from "./lib.ts";
+import { head, pause, requestsMade, yahooSession } from "./lib.ts";
+import { GAP, abdiRanaldo, chart, daily, dayIn, f, hmIn, iso, median, minutesByDay, num, quotes, spreadBp, str, tierBp, yget, yahooStopped, type Day, type J } from "./yahoo_lib.ts";
 
-const GAP = 1200, MAX = 44;
-type J = Record<string, unknown>;
-const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
-const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
-const iso = (t: number | null) => (t == null ? "–" : new Date(t * 1000).toISOString().slice(0, 16).replace("T", " ") + " UTC");
-const fmts = new Map<string, Intl.DateTimeFormat>();
-const fmt = (key: string, make: () => Intl.DateTimeFormat) => fmts.get(key) ?? fmts.set(key, make()).get(key)!;
-const dayIn = (tz: string, t: number) => fmt(`d ${tz}`, () => new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" })).format(new Date(t * 1000));
-const hmIn = (tz: string, t: number) => fmt(`t ${tz}`, () => new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false })).format(new Date(t * 1000));
-const pct = (x: number | null, dp = 2) => (x == null || !Number.isFinite(x) ? "–" : `${x >= 0 ? "+" : ""}${(x * 100).toFixed(dp)}%`);
-const sd = (xs: number[]) => { if (xs.length < 2) return null; const m = xs.reduce((a, b) => a + b, 0) / xs.length; return Math.sqrt(xs.reduce((a, b) => a + (b - m) ** 2, 0) / (xs.length - 1)); };
+const MAX = 31, SAMPLES = 12, EVERY = 15000;
+const NY = "America/New_York", TK = "Asia/Tokyo";
+const US4 = ["NVDA", "AAPL", "SPY", "QQQ"], TK4 = ["7203.T", "1306.T", "6758.T", "1321.T"];
+const OTHERS = ["IVV", "EWJ", "HEWJ", "ACWI", "MLRG", "EEM", "EPP", "IEUR", "BNDW", "AGG", "IAGG", "BNDX", "SHY", "IEF", "TLT", "LQD", "HYG", "8306.T", "9984.T", "1475.T", "2559.T", "AGGU.L"];
+const ROOTS = ["ES", "NQ", "YM", "RTY", "NKD", "NIY", "ZT", "ZF", "ZN", "TN", "ZB", "UB", "CL", "BZ", "NG", "GC", "SI", "HG"];
+const RESULTS = ["7203.T", "6758.T", "NVDA", "AAPL"];
 
-let left429 = 3, inRow = 0, stopped = false;
-async function yget(url: string, headers: Record<string, string> = {}): Promise<J | null> {
-  if (stopped) { console.log(`  not asked (Yahoo refused three times in a row): ${masked(url)}`); return null; }
-  for (;;) {
-    const r = await look(url, { headers: { accept: "application/json", ...headers }, show: 0, timeoutMs: 40000 });
-    await pause(GAP);
-    if (r.status === 429) {
-      if (++inRow >= 3) { stopped = true; console.log("  Yahoo answered 429 three times in a row: nothing more is asked"); return null; }
-      if (left429-- > 0) { await pause(5000); continue; }
-      return null;
-    }
-    inRow = 0;
-    let j: unknown = null;
-    try { j = JSON.parse(r.text); } catch { /* below */ }
-    if (!r.ok || !j || typeof j !== "object") { if (r.text) console.log(`  answer: ${masked(JSON.stringify(r.text.slice(0, 220)))}`); return null; }
-    return j as J;
-  }
-}
+const t0 = Date.now();
+const sec = () => Math.floor(Date.now() / 1000);
+const clock = (tz: string, t: number) => `${dayIn(tz, t)} ${hmIn(tz, t)}`;
+const hms = (ms: number) => new Date(ms).toISOString().slice(11, 19);
+/** A price or a width without a float's tail. */
+const g = (x: number | null): string => (x == null || !Number.isFinite(x) ? "–" : String(Number(x.toPrecision(7))));
+console.log(`run at ${new Date(t0).toISOString().slice(0, 16).replace("T", " ")} UTC = ${clock(NY, t0 / 1000)} in New York = ${clock(TK, t0 / 1000)} in Tokyo`);
 
-interface Bars { meta: J; tz: string; ts: number[]; o: Array<number | null>; h: Array<number | null>; l: Array<number | null>; c: Array<number | null>; v: Array<number | null>; div: Array<{ t: number; amount: number }>; split: Array<{ t: number; num: number; den: number }> }
-function barsOf(j: J | null): Bars | null {
-  const res = ((j?.chart as { result?: Array<{ meta?: J; timestamp?: number[]; indicators?: { quote?: Array<Record<string, Array<number | null>>> }; events?: { dividends?: Record<string, { amount?: number; date?: number }>; splits?: Record<string, { numerator?: number; denominator?: number; date?: number }> } }> } | undefined)?.result ?? [])[0];
-  if (!res?.meta) return null;
-  const ts = res.timestamp ?? [], q = res.indicators?.quote?.[0] ?? {}, n = ts.length;
-  const arr = (a?: Array<number | null>) => (a && a.length === n ? a : new Array<number | null>(n).fill(null));
-  const div = Object.values(res.events?.dividends ?? {}).map((d) => ({ t: Number(d.date), amount: Number(d.amount) })).filter((d) => Number.isFinite(d.t) && Number.isFinite(d.amount)).sort((a, b) => a.t - b.t);
-  const split = Object.values(res.events?.splits ?? {}).map((d) => ({ t: Number(d.date), num: Number(d.numerator), den: Number(d.denominator) })).filter((d) => Number.isFinite(d.t)).sort((a, b) => a.t - b.t);
-  return { meta: res.meta, tz: String(res.meta.exchangeTimezoneName ?? "UTC"), ts, o: arr(q.open), h: arr(q.high), l: arr(q.low), c: arr(q.close), v: arr(q.volume), div, split };
-}
-/** Daily closes by the exchange's date, with each date's distribution (paid on its ex-date). */
-function daily(b: Bars): Array<{ d: string; t: number; o: number | null; h: number | null; l: number | null; c: number; v: number | null; div: number }> {
-  const dv = new Map<string, number>();
-  for (const x of b.div) dv.set(dayIn(b.tz, x.t), (dv.get(dayIn(b.tz, x.t)) ?? 0) + x.amount);
-  const out: Array<{ d: string; t: number; o: number | null; h: number | null; l: number | null; c: number; v: number | null; div: number }> = [];
-  b.ts.forEach((t, i) => { const c = b.c[i]; if (c == null) return; const d = dayIn(b.tz, t); const row = { d, t, o: b.o[i], h: b.h[i], l: b.l[i], c, v: b.v[i], div: dv.get(d) ?? 0 }; if (out.length && out[out.length - 1].d === d) out[out.length - 1] = row; else out.push(row); });
-  return out;
-}
-/** Total return over the last n days, from raw closes and distributions on their ex-dates (X-2), and the daily series. */
-function totalReturns(rows: ReturnType<typeof daily>): Array<{ d: string; r: number }> {
-  const out: Array<{ d: string; r: number }> = [];
-  for (let i = 1; i < rows.length; i++) out.push({ d: rows[i].d, r: (rows[i].c + rows[i].div) / rows[i - 1].c - 1 });
-  return out;
-}
-
-const t0 = Date.now(), now = new Date();
-console.log(`run at ${now.toISOString().slice(0, 16).replace("T", " ")} UTC`);
 head("Yahoo Finance: a session (cookie and crumb), as the server gets one");
 const s = await yahooSession();
 await pause(GAP);
+if (!s) { console.log("  no session: nothing more is asked"); console.log(`\nrequests made: ${requestsMade()} (at most ${MAX})`); }
 
-// ---- searches: symbols nobody could name for certain ----
-head("Searches: total-return indices (TOPIX, the Nikkei 225), an MSCI ACWI index symbol, an MSCI Europe fund, the London Global Aggregate fund's USD-hedged class, a plain MSCI USA tracker");
-type Hit = { symbol: string; name: string; type: string; exch: string };
-const searched = new Map<string, Hit[]>();
-for (const term of ["TOPIX Total Return", "Nikkei 225 Total Return", "MSCI ACWI index", "iShares Core MSCI Europe ETF", "iShares Core Global Aggregate Bond UCITS ETF USD Hedged", "MSCI USA ETF"]) {
-  const j = await yget(`https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(term)}&quotesCount=10&newsCount=0&listsCount=0`);
-  const hits = (((j?.quotes as J[] | undefined) ?? []).map((x) => ({ symbol: String(x.symbol ?? ""), name: String(x.longname ?? x.shortname ?? ""), type: String(x.quoteType ?? ""), exch: String(x.exchDisp ?? x.exchange ?? "") })).filter((x) => x.symbol));
-  searched.set(term, hits);
-  console.log(`  "${term}": ${hits.length ? hits.map((x) => `${x.symbol} (${x.name}; ${x.type}; ${x.exch})`).join(" · ") : "nothing"}`);
-}
-const pick = (term: string, ok: (h: Hit) => boolean): string | null => (searched.get(term) ?? []).find(ok)?.symbol ?? null;
-const US = /NYSE|Nasdaq|NASDAQ|Arca|BATS|Cboe|PCX|NGM|NMS|NYQ|BTS|ASE/i;
-const trTopix = pick("TOPIX Total Return", (h) => /INDEX/i.test(h.type) && /total return|TR\b|配当込/i.test(h.name));
-const trNikkei = pick("Nikkei 225 Total Return", (h) => /INDEX/i.test(h.type) && /total return|TR\b|配当込/i.test(h.name));
-const acwiIdx = pick("MSCI ACWI index", (h) => /INDEX/i.test(h.type) && /ACWI|All Country/i.test(h.name));
-const europeHit = pick("iShares Core MSCI Europe ETF", (h) => /ETF/i.test(h.type) && /MSCI Europe(?! ex)/i.test(h.name) && US.test(h.exch)), europe = europeHit ?? "IEUR";
-const londonHit = pick("iShares Core Global Aggregate Bond UCITS ETF USD Hedged", (h) => /Global Aggregate/i.test(h.name) && /USD H/i.test(h.name) && (/\.L$/.test(h.symbol) || /London|LSE/i.test(h.exch))), london = londonHit ?? "AGGU.L";
-const msciUsa = pick("MSCI USA ETF", (h) => /ETF/i.test(h.type) && /MSCI USA\b/i.test(h.name) && !/ESG|Min|Momentum|Quality|Value|Equal|Factor|Small|Mid|Dividend|Size|Climate|SRI|Leaders|Screened|Islamic|Growth|Select|Hedged|IMI|Paris/i.test(h.name));
-console.log(`  chosen: TOPIX TR ${trTopix ?? "none found"}; Nikkei 225 TR ${trNikkei ?? "none found"}; MSCI ACWI index ${acwiIdx ?? "none found"}; MSCI Europe fund ${europe}${europeHit ? "" : " (a candidate: the search found none)"}; London fund ${london}${londonHit ? "" : " (a candidate: the search found none)"}; plain MSCI USA tracker ${msciUsa ?? "none found"}`);
-
-// ---- one quote for every symbol: names, state, bid, ask, sizes, volumes, NAV ----
-const STOCKS = ["NVDA", "7203.T", "SPY", "1306.T"];
-const esFront = (() => { // the quarterly contract whose expiry (third Friday of its month) is still ahead
-  for (let k = 0; k < 15; k++) {
-    const y = now.getUTCFullYear() + Math.floor((now.getUTCMonth() + k) / 12), m = (now.getUTCMonth() + k) % 12;
-    if (m % 3 !== 2) continue;
-    const first = new Date(Date.UTC(y, m, 1)).getUTCDay(), third = 1 + ((5 - first + 7) % 7) + 14;
-    if (Date.UTC(y, m, third, 21) >= now.getTime()) return `ES${"HMUZ"[(m - 2) / 3]}${String(y % 100).padStart(2, "0")}.CME`;
-  }
-  return "ESZ26.CME";
-})();
-const FUTFX = ["ES=F", esFront, "USDJPY=X", "EURUSD=X"];
-const TRACKERS = ["QQQ", "1321.T", "1475.T"];
-const PROXIES = ["EWJ", "HEWJ", "DBJP", "ACWI", "2559.T", "EEM", "EPP", europe, "BNDW", london, ...(msciUsa ? [msciUsa] : [])];
-const BONDS = ["SHY", "IEI", "IEF", "TLH", "TLT", "AGG", "BND", "LQD", "MBB", "BNDX", "IAGG", "BWX", "IGOV", "HYG", "EMB", "EMLC", "TIP", "FLOT"];
-const TR = ["^SP500TR", ...[trTopix, trNikkei, acwiIdx].filter((x): x is string => !!x)];
-const ALLQ = [...new Set([...STOCKS, ...FUTFX, ...TRACKERS, ...PROXIES, ...BONDS, ...TR])];
-const quotes = new Map<string, J>();
-head(`The v7 quote of ${ALLQ.length} symbols: state, last, bid × size, ask × size, quoted spread, volume, average volumes, delay, NAV`);
+// ---- the front month of each of P-5's roots, as the =F quote names it ----
+const fronts: string[] = [];
 if (s) {
-  const j = await yget(`https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(ALLQ.join(","))}&crumb=${encodeURIComponent(s.crumb)}`, { cookie: s.cookie });
-  for (const q of ((j?.quoteResponse as { result?: J[] } | undefined)?.result ?? [])) if (typeof q.symbol === "string") quotes.set(q.symbol, q);
-  console.log(`  ${quotes.size} of ${ALLQ.length} answered${ALLQ.filter((x) => !quotes.has(x)).length ? `; not: ${ALLQ.filter((x) => !quotes.has(x)).join(" ")}` : ""}`);
-  const one = quotes.get("SPY") ?? [...quotes.values()][0];
-  if (one) console.log(`  the fields an ETF's quote carries (${one.symbol}): ${Object.keys(one).sort().join(", ")}`);
-} else console.log("  no session: no quote asked");
-const spreadBp = (q: J | undefined): number | null => { const b = num(q?.bid), a = num(q?.ask); return b != null && a != null && b > 0 && a > 0 && a >= b ? ((a - b) / ((a + b) / 2)) * 1e4 : null; };
-for (const sym of ALLQ) {
-  const q = quotes.get(sym);
-  if (!q) continue;
-  const extra = ["navPrice", "netExpenseRatio", "netAssets", "trailingAnnualDividendYield", "dividendYield", "ytdReturn"].filter((k) => q[k] != null).map((k) => `${k} ${q[k]}`).join(", ");
-  const sb = spreadBp(q);
-  console.log(`  ${sym}: "${q.longName ?? q.shortName ?? "–"}" · ${q.quoteType ?? "–"} · ${q.fullExchangeName ?? q.exchange ?? "–"} · ${q.currency ?? "–"} · state ${q.marketState ?? "–"} · last ${q.regularMarketPrice ?? "–"} at ${iso(num(q.regularMarketTime))} · delayed ${q.exchangeDataDelayedBy ?? "–"} min · bid ${q.bid ?? "–"} × ${q.bidSize ?? "–"}, ask ${q.ask ?? "–"} × ${q.askSize ?? "–"}${sb != null ? ` (spread ${sb.toFixed(2)} bp)` : ""} · volume ${q.regularMarketVolume ?? "–"}, average 10d ${q.averageDailyVolume10Day ?? "–"}, 3m ${q.averageDailyVolume3Month ?? "–"}${extra ? ` · ${extra}` : ""}`);
+  head("The front month of each of P-5's 18 roots, as its =F quote names it (underlyingSymbol)");
+  const fq = await quotes(ROOTS.map((r) => `${r}=F`), s);
+  for (const r of ROOTS) { const u = str(fq.get(`${r}=F`)?.underlyingSymbol); if (u) fronts.push(u); }
+  console.log(`  ${fq.size} of ${ROOTS.length} =F quotes answered; fronts: ${fronts.join(" ") || "none named"}${ROOTS.filter((r) => !str(fq.get(`${r}=F`)?.underlyingSymbol)).length ? `; no front named for ${ROOTS.filter((r) => !str(fq.get(`${r}=F`)?.underlyingSymbol)).join(" ")}` : ""}`);
 }
+const ALL = [...new Set([...US4, ...TK4, ...OTHERS, "ES=F", ...fronts, "USDJPY=X"])];
 
-// ---- 1. the four stocks ----
-const series = new Map<string, ReturnType<typeof daily>>();
-const oneYearTR = new Map<string, number>();
-head("1. NVDA, 7203.T, SPY and 1306.T: ten years of daily bars with events; five days of one-minute bars; the spread against the estimate");
-for (const sym of STOCKS) {
-  console.log(`\n-- ${sym}`);
-  const b = barsOf(await yget(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=10y&interval=1d&events=div%7Csplit`));
-  const q = quotes.get(sym);
-  let rows: ReturnType<typeof daily> = [];
-  if (b) {
-    rows = daily(b); series.set(sym, rows);
-    console.log(`  daily: ${rows.length} bars, ${rows[0]?.d ?? "–"} to ${rows[rows.length - 1]?.d ?? "–"} (${b.tz}); newest close ${rows[rows.length - 1]?.c ?? "–"}; ${b.div.length} dividends over the range${b.div.length ? `, the last four: ${b.div.slice(-4).map((x) => `${dayIn(b.tz, x.t)} ${x.amount}`).join(", ")}` : ""}; ${b.split.length} splits${b.split.length ? `: ${b.split.map((x) => `${dayIn(b.tz, x.t)} ${x.num}:${x.den}`).join(", ")}` : ""}`);
-    for (const x of b.split) {   // is the series adjusted for the split? (X-6)
-      const d = dayIn(b.tz, x.t), k = rows.findIndex((r) => r.d >= d);
-      if (k > 0) { const ratio = rows[k].c / rows[k - 1].c; console.log(`    split ${d} ${x.num}:${x.den}: close ${rows[k - 1].c} (${rows[k - 1].d}) then ${rows[k].c} (${rows[k].d}), ratio ${ratio.toFixed(3)}: ${Math.abs(ratio - 1) < 0.25 ? "the series is split-adjusted" : `NOT adjusted (a split of ${x.num}:${x.den} would show ${(x.den / x.num).toFixed(3)})`}`); }
-    }
-    const tr = totalReturns(rows).slice(-252);
-    if (tr.length) { const r = tr.reduce((a, x) => a * (1 + x.r), 1) - 1; oneYearTR.set(sym, r); console.log(`  total return over the last ${tr.length} sessions, from raw closes and distributions (worked out here, E): ${pct(r)}`); }
-    // Abdi and Ranaldo (2017), two-day corrected: s_t = sqrt(max(4 (c_t − η_t)(c_t − η_{t+1}), 0)), logs, η the mid-range
-    const inSession = /^(REGULAR|PRE)$/i.test(String(q?.marketState ?? ""));
-    const full = rows.filter((r) => r.h != null && r.l != null && (r.h as number) > 0 && (r.l as number) > 0).slice(0, inSession ? -1 : undefined);
-    const ss: number[] = [];
-    for (let i = Math.max(0, full.length - 22); i < full.length - 1; i++) {
-      const c = Math.log(full[i].c), e0 = (Math.log(full[i].h as number) + Math.log(full[i].l as number)) / 2, e1 = (Math.log(full[i + 1].h as number) + Math.log(full[i + 1].l as number)) / 2;
-      ss.push(Math.sqrt(Math.max(4 * (c - e0) * (c - e1), 0)));
-    }
-    const est = ss.length ? (ss.reduce((a, x) => a + x, 0) / ss.length) * 1e4 : null, quoted = spreadBp(q);
-    console.log(`  X-19: Abdi–Ranaldo over the ${ss.length} sessions to ${full[full.length - 1]?.d ?? "–"} (E): ${est != null ? `${est.toFixed(2)} bp` : "–"}; quoted now (${q?.marketState ?? "state unknown"}): ${quoted != null ? `${quoted.toFixed(2)} bp` : "no bid and ask"}${est != null && quoted ? `; the estimate is ${(est / quoted).toFixed(1)} times the quoted spread${est > 2 * quoted ? ": ABOVE TWICE IT (A gives a fallback by size before P-2)" : ""}` : ""}`);
-  } else console.log("  daily: no chart");
-  const m = barsOf(await yget(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=5d&interval=1m`));
-  if (m) {
-    const reg = (m.meta.currentTradingPeriod as { regular?: { start?: number; end?: number } } | undefined)?.regular;
-    console.log(`  one-minute: ${m.ts.length} bars (${m.tz}); regular session today ${reg?.start ? hmIn(m.tz, reg.start) : "–"} to ${reg?.end ? hmIn(m.tz, reg.end) : "–"}; the newest bar ${iso(m.ts[m.ts.length - 1] ?? null)}, ${m.ts.length ? Math.round((now.getTime() / 1000 - (m.ts[m.ts.length - 1] as number)) / 60) : "–"} min before this run; declared delay ${q?.exchangeDataDelayedBy ?? "–"} min`);
-    const days = new Map<string, Array<{ t: number; v: number; c: number }>>();
-    m.ts.forEach((t, i) => { const c = m.c[i]; if (c == null) return; const d = dayIn(m.tz, t); (days.get(d) ?? days.set(d, []).get(d)!).push({ t, v: m.v[i] ?? 0, c }); });
-    const dayVol = new Map(rows.map((r) => [r.d, r.v]));
-    for (const [d, bars] of [...days].sort()) {
-      const tot = bars.reduce((a, x) => a + x.v, 0), first = bars[0], last = bars[bars.length - 1];
-      let gap = 0, gapAt = "";
-      for (let i = 1; i < bars.length; i++) { const g = (bars[i].t - bars[i - 1].t) / 60 - 1; if (g > gap) { gap = g; gapAt = hmIn(m.tz, bars[i - 1].t); } }
-      const dv = dayVol.get(d);
-      console.log(`    ${d}: ${bars.length} bars, ${bars.filter((x) => x.v > 0).length} with volume; first ${hmIn(m.tz, first.t)} volume ${first.v} (${tot ? (first.v / tot * 100).toFixed(1) : "–"}% of the minutes'), last ${hmIn(m.tz, last.t)} volume ${last.v} (${tot ? (last.v / tot * 100).toFixed(1) : "–"}%); minutes sum to ${tot}${dv ? `, the daily bar ${dv} (${(tot / dv * 100).toFixed(1)}%)` : ""}; longest gap ${gap} min${gap ? ` after ${gapAt}` : ""}`);
-    }
-  } else console.log("  one-minute: no chart");
+// ---- the quote, read SAMPLES times ----
+interface Reading { at: number; q: J }
+const readings = new Map<string, Reading[]>();
+const take = async (): Promise<number> => {
+  if (!s) return 0;
+  const at = Date.now(), got = await quotes(ALL, s);
+  for (const [sym, q] of got) (readings.get(sym) ?? readings.set(sym, []).get(sym)!).push({ at, q });
+  return got.size;
+};
+const state = (sym: string) => String(readings.get(sym)?.[0]?.q.marketState ?? "–");
+let usOpen = false, tkOpen = false;
+if (s) {
+  head(`1. The v7 quote of ${ALL.length} symbols, reading 1: which market is in its regular session`);
+  const n = await take();
+  usOpen = ["NVDA", "SPY"].some((x) => state(x) === "REGULAR"); tkOpen = state("7203.T") === "REGULAR";
+  const jst = hmIn(TK, sec());
+  console.log(`  ${n} of ${ALL.length} answered${ALL.filter((x) => !readings.has(x)).length ? `; not: ${ALL.filter((x) => !readings.has(x)).join(" ")}` : ""}`);
+  console.log(`  marketState: NVDA ${state("NVDA")}, SPY ${state("SPY")}, 7203.T ${state("7203.T")}, 1306.T ${state("1306.T")}, ES=F ${state("ES=F")}, AGGU.L ${state("AGGU.L")}`);
+  console.log(`  IN SESSION: ${usOpen ? "New York" : tkOpen ? `Tokyo${jst >= "11:30" && jst < "12:30" ? " by Yahoo's state, but it is the midday break there (11:30 to 12:30 JST): a quote read now is not a trading quote" : ""}` : "NEITHER New York nor Tokyo. This run's bids and asks would be out of session, which the log of 20 Nov 2026 already holds: only the results-date fields are printed. Run it in New York's 14:30–21:00 UTC or Tokyo's 00:00–02:30 or 03:30–06:30 UTC"}`);
 }
+const four = usOpen ? US4 : tkOpen ? TK4 : [];
+const tz = usOpen ? NY : TK;
 
-// ---- 2. the trackers' distributions (X-2) ----
-head("2. QQQ and 1321.T: ten years of distributions (X-2; SPY's and 1306.T's are above)");
-for (const sym of ["QQQ", "1321.T"]) {
-  const b = barsOf(await yget(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=10y&interval=1mo&events=div%7Csplit`));
-  console.log(`  ${sym}: ${b ? `${b.div.length} distributions${b.div.length ? `, first ${dayIn(b.tz, b.div[0].t)}, the last four ${b.div.slice(-4).map((x) => `${dayIn(b.tz, x.t)} ${x.amount}`).join(", ")}` : ""}; ${b.split.length} splits` : "no chart"}`);
-}
-
-// ---- 3. the proxies, and B's two measurements ----
-head("3. The proxy candidates (§2.20): ten years of daily bars and distributions; the year's total return (E)");
-for (const sym of PROXIES) {
-  const b = barsOf(await yget(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=10y&interval=1d&events=div%7Csplit`));
-  if (!b) { console.log(`  ${sym}: no chart`); continue; }
-  const rows = daily(b); series.set(sym, rows);
-  const lastYear = b.div.filter((x) => x.t > now.getTime() / 1000 - 365 * 86400);
-  const tr = totalReturns(rows).slice(-252), r = tr.length ? tr.reduce((a, x) => a * (1 + x.r), 1) - 1 : null;
-  if (r != null) oneYearTR.set(sym, r);
-  console.log(`  ${sym}: "${b.meta.longName ?? b.meta.shortName ?? "–"}" · ${b.meta.fullExchangeName ?? b.meta.exchangeName ?? "–"} · ${b.meta.currency ?? "–"} · ${rows.length} daily bars ${rows[0]?.d ?? "–"} to ${rows[rows.length - 1]?.d ?? "–"} · newest close ${rows[rows.length - 1]?.c ?? "–"} · ${b.div.length} distributions (${lastYear.length} in the last 365 days, summing ${lastYear.reduce((a, x) => a + x.amount, 0).toFixed(4)})${b.div.length ? `, the last ${dayIn(b.tz, b.div[b.div.length - 1].t)} ${b.div[b.div.length - 1].amount}` : ""} · total return over ${tr.length} sessions ${pct(r)} (E)`);
-}
-head("3b. B's two measurements: BNDW against the London fund (daily, weekly, monthly total returns), and BNDW's close against its NAV");
-{
-  const a = series.get("BNDW"), b = series.get(london);
-  if (a && b) {
-    const ra = new Map(totalReturns(a).map((x) => [x.d, x.r])), rb = new Map(totalReturns(b).map((x) => [x.d, x.r]));
-    const common = [...ra.keys()].filter((d) => rb.has(d)).sort().slice(-252);
-    const diff = common.map((d) => (ra.get(d) as number) - (rb.get(d) as number));
-    const sa = common.map((d) => ra.get(d) as number), sb2 = common.map((d) => rb.get(d) as number);
-    const ma = sa.reduce((x, y) => x + y, 0) / (sa.length || 1), mb = sb2.reduce((x, y) => x + y, 0) / (sb2.length || 1);
-    const cov = sa.reduce((acc, x, i) => acc + (x - ma) * (sb2[i] - mb), 0) / Math.max(1, sa.length - 1);
-    const corr = sd(sa) && sd(sb2) ? cov / ((sd(sa) as number) * (sd(sb2) as number)) : null;
-    // weekly and monthly: total-return indices sampled at each week's and month's last common date
-    const idx = (rows: ReturnType<typeof daily>) => { const m = new Map<string, number>(); let v = 1; for (let i = 1; i < rows.length; i++) { v *= (rows[i].c + rows[i].div) / rows[i - 1].c; m.set(rows[i].d, v); } return m; };
-    const ia = idx(a), ib = idx(b), both = [...ia.keys()].filter((d) => ib.has(d)).sort();
-    const sample = (key: (d: string) => string) => { const last = new Map<string, string>(); for (const d of both) last.set(key(d), d); return [...last.values()].sort(); };
-    const week = (d: string) => { const t = new Date(d + "T12:00:00Z"); t.setUTCDate(t.getUTCDate() + (5 - t.getUTCDay() + 7) % 7); return t.toISOString().slice(0, 10); };
-    const te = (dates: string[], n: number, k: number) => { const ds = dates.slice(-(n + 1)), x: number[] = []; for (let i = 1; i < ds.length; i++) x.push((ia.get(ds[i])! / ia.get(ds[i - 1])! - 1) - (ib.get(ds[i])! / ib.get(ds[i - 1])! - 1)); const v = sd(x); return v == null ? "–" : `${(v * Math.sqrt(k) * 100).toFixed(2)}% a year over ${x.length}`; };
-    console.log(`  daily: ${common.length} common dates to ${common[common.length - 1] ?? "–"}; tracking error ${sd(diff) != null ? `${((sd(diff) as number) * Math.sqrt(252) * 100).toFixed(2)}% a year` : "–"}; correlation ${corr != null ? corr.toFixed(3) : "–"} (as B recalls them, the London fund closes at 16:30 London and BNDW at 16:00 New York: asynchronous)`);
-    console.log(`  weekly (Friday weeks): tracking error ${te(sample(week), 52, 52)} weeks; monthly: ${te(sample((d) => d.slice(0, 7)), 36, 12)} months`);
-    console.log(`  over the last ${common.length} common dates: BNDW ${pct(sa.reduce((x, y) => x * (1 + y), 1) - 1)}, ${london} ${pct(sb2.reduce((x, y) => x * (1 + y), 1) - 1)} (E; in each fund's own currency: ${quotes.get("BNDW")?.currency ?? "–"} and ${quotes.get(london)?.currency ?? "–"})`);
-  } else console.log(`  not worked out: ${a ? "" : "BNDW "}${b ? "" : london} without a series`);
-  const q = quotes.get("BNDW"), px = num(q?.regularMarketPrice), nav = num(q?.navPrice);
-  console.log(`  BNDW's last ${px ?? "–"} against its NAV in the quote ${nav ?? "–"}${px && nav ? `: ${((px / nav - 1) * 1e4).toFixed(1)} bp` : ""} (one date only; a NAV history is looked for on the issuer's page by pf_bench)`);
-}
-
-// ---- 4. B's bond funds ----
-head("4. B's bond funds: each answers? (the quote above); four funds' distributions over ten years");
-console.log(`  answered the quote: ${BONDS.filter((x) => quotes.has(x)).join(" ") || "none"}; not: ${BONDS.filter((x) => !quotes.has(x)).join(" ") || "none"}`);
-for (const sym of ["TLT", "AGG", "BNDX", "EMLC"]) {
-  const b = barsOf(await yget(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=10y&interval=1mo&events=div%7Csplit`));
-  console.log(`  ${sym}: ${b ? `${b.div.length} distributions${b.div.length ? `, first ${dayIn(b.tz, b.div[0].t)}, the last three ${b.div.slice(-3).map((x) => `${dayIn(b.tz, x.t)} ${x.amount}`).join(", ")}` : ""}` : "no chart"}`);
-}
-
-// ---- 5. option chains ----
-head("5. Option chains (OD-P5 (c)): SPY, ^SPX, QQQ, NVDA, the nearest expiry");
-for (const sym of ["SPY", "^SPX", "QQQ", "NVDA"]) {
-  if (!s) { console.log(`  ${sym}: no session, not asked`); continue; }
-  const j = await yget(`https://query2.finance.yahoo.com/v7/finance/options/${encodeURIComponent(sym)}?crumb=${encodeURIComponent(s.crumb)}`, { cookie: s.cookie });
-  const res = ((j?.optionChain as { result?: J[] } | undefined)?.result ?? [])[0];
-  if (!res) { console.log(`  ${sym}: no chain`); continue; }
-  const exps = (res.expirationDates as number[] | undefined) ?? [], strikes = (res.strikes as number[] | undefined) ?? [];
-  const uq = (res.quote ?? {}) as J, spot = num(uq.regularMarketPrice);
-  const o = ((res.options as J[] | undefined) ?? [])[0] ?? {};
-  const calls = (o.calls as J[] | undefined) ?? [], puts = (o.puts as J[] | undefined) ?? [];
-  const count = (xs: J[], k: string) => xs.filter((x) => (num(x[k]) ?? 0) > 0).length;
-  console.log(`  ${sym}: underlying ${res.underlyingSymbol ?? "–"} last ${spot ?? "–"} at ${iso(num(uq.regularMarketTime))} (${uq.marketState ?? "–"}); ${exps.length} expiries (${exps.slice(0, 3).map((t) => iso(t).slice(0, 10)).join(", ")} … ${exps.length ? iso(exps[exps.length - 1]).slice(0, 10) : "–"}), ${strikes.length} strikes; nearest ${iso(num(o.expirationDate)).slice(0, 10)}: ${calls.length} calls, ${puts.length} puts`);
-  for (const [side, xs] of [["calls", calls], ["puts", puts]] as Array<[string, J[]]>) {
-    console.log(`    ${side}: bid > 0 ${count(xs, "bid")}, ask > 0 ${count(xs, "ask")}, implied vol > 0 ${count(xs, "impliedVolatility")}, volume > 0 ${count(xs, "volume")}, open interest > 0 ${count(xs, "openInterest")}`);
-    const near = spot == null ? xs.slice(0, 3) : [...xs].sort((a, b) => Math.abs((num(a.strike) ?? 0) - spot) - Math.abs((num(b.strike) ?? 0) - spot)).slice(0, 3);
-    for (const x of near) console.log(`      ${x.contractSymbol ?? "–"}: strike ${x.strike ?? "–"}, bid ${x.bid ?? "–"}, ask ${x.ask ?? "–"}, last ${x.lastPrice ?? "–"} at ${iso(num(x.lastTradeDate))}, implied vol ${x.impliedVolatility ?? "–"}, volume ${x.volume ?? "–"}, open interest ${x.openInterest ?? "–"}`);
+// ---- the four names' daily bars: X-3's 60-session turnover for the tier, and Abdi and Ranaldo's estimate ----
+const days = new Map<string, Day[]>();
+if (s && four.length) {
+  head(`2a. ${four.join(", ")}: six months of daily bars (the 60-session average volume for A's tier; Abdi and Ranaldo's estimate)`);
+  for (const sym of four) {
+    const b = await chart(sym, "range=6mo&interval=1d");
+    if (!b) { console.log(`  ${sym}: no chart`); continue; }
+    // a session still open has no complete bar: today's is left out
+    const rows = daily(b).filter((r) => r.d < dayIn(b.tz, sec()));
+    days.set(sym, rows);
+    console.log(`  ${sym}: ${rows.length} complete daily bars to ${rows[rows.length - 1]?.d ?? "–"} (${b.tz}; today's bar left out)`);
   }
 }
 
-// ---- 6. total-return indices ----
-head("6. Total-return indices (OD-P5 (d)): ^SP500TR, and the symbols the searches found");
-for (const sym of TR) {
-  const b = barsOf(await yget(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=${sym === "^SP500TR" ? "1y" : "1mo"}&interval=1d`));
-  if (!b) { console.log(`  ${sym}: no chart`); continue; }
-  const rows = daily(b), r = rows.length > 1 ? rows[rows.length - 1].c / rows[0].c - 1 : null;
-  console.log(`  ${sym}: "${b.meta.longName ?? b.meta.shortName ?? "–"}" · ${b.meta.fullExchangeName ?? b.meta.exchangeName ?? "–"} · ${rows.length} daily closes ${rows[0]?.d ?? "–"} to ${rows[rows.length - 1]?.d ?? "–"}, newest ${rows[rows.length - 1]?.c ?? "–"}; change over the range ${pct(r)}`);
-  if (sym === "^SP500TR" && r != null && oneYearTR.has("SPY")) {
-    const n = rows.length - 1, spy = series.get("SPY");
-    const tr = spy ? totalReturns(spy).filter((x) => x.d > rows[0].d && x.d <= rows[rows.length - 1].d) : [];
-    const spyR = tr.reduce((a, x) => a * (1 + x.r), 1) - 1;
-    console.log(`    against SPY's total return over the same dates (${tr.length} of ${n} sessions; E): ${pct(spyR)}; the gap ${((r - spyR) * 100).toFixed(2)} pp (a fund's fee, its cash and the timing of its distributions would show in it)`);
+// ---- today's one-minute bars: the newest bar's age; Tokyo's first bars ----
+const firstBars = async (sym: string, when: string): Promise<void> => {
+  const b = await chart(sym, "range=1d&interval=1m");
+  if (!b) { console.log(`  ${sym} (${when}): no chart`); return; }
+  const today = dayIn(b.tz, sec()), bars = (minutesByDay(b).get(today) ?? []);
+  const newest = bars[bars.length - 1], declared = readings.get(sym)?.[0]?.q.exchangeDataDelayedBy;
+  console.log(`  ${sym} (${when}, read at ${hmIn(b.tz, sec())} local): ${bars.length} one-minute bars today with a price; the newest ${newest ? `${newest.hm}, ${((sec() - newest.t) / 60).toFixed(1)} min before this reading` : "–"}; declared delay ${declared ?? "–"} min`);
+  for (const x of bars.slice(0, b.tz === TK ? 10 : 3)) console.log(`    ${x.hm}  open ${g(x.o)} high ${g(x.h)} low ${g(x.l)} close ${g(x.c)} volume ${x.v}`);
+  if (b.tz === TK) { const early = bars.filter((x) => x.hm < "09:05"); console.log(`    bars stamped 09:00 to 09:04: ${early.length ? `${early.length} (${early.map((x) => `${x.hm} volume ${x.v}`).join(", ")})` : "none"}; the first bar is stamped ${bars[0]?.hm ?? "–"}`); }
+};
+if (s && four.length) {
+  head(usOpen ? "3. Today's one-minute bars: the newest bar's age beside the declared delay (V-5); the first three bars" : "3 and 4. Tokyo: today's one-minute bars of 7203.T and 1306.T, the first reading: the first ten bars in full (V-3, V-4), the newest bar's age (V-5)");
+  for (const sym of usOpen ? US4 : ["7203.T", "1306.T"]) await firstBars(sym, "first reading");
+}
+
+// ---- readings 2 to SAMPLES ----
+if (s && four.length) {
+  head(`1 (continued). Readings 2 to ${SAMPLES}, ${EVERY / 1000} s apart`);
+  for (let k = 2; k <= SAMPLES && !yahooStopped(); k++) {
+    await pause(Math.max(0, EVERY - GAP));
+    const n = await take();
+    console.log(`  reading ${k} at ${hms(Date.now())} UTC: ${n} symbols`);
   }
 }
 
-// ---- 7. the factor list's reach ----
-head("7. How far back Yahoo's monthly bars reach (BP-4, from 1 Jan 2013): the factor list");
-const FACTORS = ["^GSPC", "^N225", "^STOXX50E", "^NDX", "^DJI", "^RUT", "^TNX", "^VIX", "DX-Y.NYB", "USDJPY=X", "EURUSD=X", "GBPUSD=X", "AUDUSD=X", "USDCAD=X", "USDCHF=X", "CL=F", "BZ=F", "GC=F", "HG=F", "SI=F", "NG=F", "1306.T"];
-for (let i = 0; i < FACTORS.length; i += 20) {
-  const b = FACTORS.slice(i, i + 20);
-  const j = await yget(`https://query1.finance.yahoo.com/v8/finance/spark?symbols=${encodeURIComponent(b.join(","))}&range=max&interval=1mo`);
-  // two shapes: the flat one the server reads ({SYM: {timestamp, close}}), and v7's ({spark: {result: [{symbol, response}]}})
-  const v7 = ((j?.spark as { result?: Array<{ symbol?: string; response?: Array<{ timestamp?: number[]; indicators?: { quote?: Array<{ close?: Array<number | null> }> } }> }> } | undefined)?.result ?? []);
-  for (const sym of b) {
-    const r7 = v7.find((x) => x.symbol === sym)?.response?.[0];
-    const o = (r7 ? { timestamp: r7.timestamp, close: r7.indicators?.quote?.[0]?.close } : (j?.[sym] ?? null)) as { timestamp?: number[]; close?: Array<number | null> } | null;
-    const ts = (o?.timestamp ?? []).filter((t, k) => o?.close?.[k] != null);
-    const since = ts.filter((t) => t >= Date.UTC(2013, 0, 1) / 1000).length;
-    console.log(`  ${sym}: ${ts.length ? `monthly bars from ${iso(ts[0]).slice(0, 10)}, ${ts.length} in all, ${since} since 1 Jan 2013: ${ts[0] <= Date.UTC(2013, 0, 1) / 1000 ? "reaches 2013" : "DOES NOT reach 1 Jan 2013"}` : "no bars"}`);
+// ---- the summary of the readings ----
+const usdJpy = num(readings.get("USDJPY=X")?.[0]?.q.regularMarketPrice);
+/** The 60-session average volume from complete daily bars (X-3; a session whose volume repeats the one before is
+ *  left out, C-36), or the quote's three-month figure where no bars were read. */
+const adtv = (sym: string): { shares: number | null; from: string } => {
+  const rows = days.get(sym)?.slice(-60) ?? [];
+  const vols = rows.map((r, i) => (r.v != null && r.v > 0 && !(i > 0 && rows[i - 1].v === r.v) ? r.v : null)).filter((v): v is number => v != null);
+  if (vols.length >= 20) return { shares: vols.reduce((a, b) => a + b, 0) / vols.length, from: `${vols.length} complete sessions' daily bars` };
+  return { shares: num(readings.get(sym)?.[0]?.q.averageDailyVolume3Month), from: "the quote's three-month average" };
+};
+/** A's tier for a name (V-1): its average volume × its last complete close (the quote's last price where no daily
+ *  bars were read), in dollars at USDJPY's last price for a yen name. */
+const tierOf = (sym: string): { bp: number; usd: number; from: string } | null => {
+  const q = readings.get(sym)?.[0]?.q, rows = days.get(sym), close = rows?.length ? rows[rows.length - 1].c : null, px = close ?? num(q?.regularMarketPrice), a = adtv(sym), cur = String(q?.currency ?? "");
+  if (px == null || a.shares == null) return null;
+  const fx = cur === "USD" ? 1 : cur === "JPY" && usdJpy ? 1 / usdJpy : null;
+  if (fx == null) return null;
+  const usd = a.shares * px * fx;
+  return { bp: tierBp(usd), usd, from: `${a.from}, at ${close != null ? `the last complete close ${g(close)}` : "the quote's last price"}${cur === "JPY" ? ` and USDJPY ${g(usdJpy)}` : ""}` };
+};
+if (s && four.length) {
+  head("1 (summary). Every symbol over the readings: a usable quote is a bid above zero and an ask above the bid");
+  console.log("  A's four tests of a quote (X-19a): (1) the exchange is in its regular session; (2) bid > 0 and ask > bid; (3) bid − (ask − bid) ≤ last ≤ ask + (ask − bid); (4) the spread is at most 20 times the name's tier. Here (1) is Yahoo's marketState REGULAR, and (4) is worked out for stocks and funds in USD or JPY only");
+  for (const sym of ALL.filter((x) => x !== "USDJPY=X")) {
+    const rs = readings.get(sym) ?? [];
+    if (!rs.length) { console.log(`  ${sym}: no quote`); continue; }
+    if (!rs.some((r) => String(r.q.marketState) === "REGULAR")) { console.log(`  ${sym}: state ${rs[0].q.marketState ?? "–"} on every reading: its market is not in session, so its quote is not summarized (last ${rs[0].q.regularMarketPrice ?? "–"} at ${iso(num(rs[0].q.regularMarketTime))}; declared delay ${rs[0].q.exchangeDataDelayedBy ?? "–"} min)`); continue; }
+    const q0 = rs[0].q, tier = /=F$|\.(CME|CBT|NYM|CMX)$/.test(sym) ? null : tierOf(sym);
+    const sp: number[] = [], width: number[] = [], off: number[] = [], age: number[] = [], sizes: string[] = [];
+    let t1 = 0, t2 = 0, t3 = 0, t4 = 0, all4 = 0;
+    const distinct = new Set<string>();
+    for (const r of rs) {
+      const b = num(r.q.bid), a = num(r.q.ask), last = num(r.q.regularMarketPrice), tm = num(r.q.regularMarketTime), bp = spreadBp(r.q);
+      distinct.add(`${b}/${a}`);
+      if (tm != null) age.push(r.at / 1000 - tm);
+      const ok1 = String(r.q.marketState) === "REGULAR", ok2 = bp != null;
+      const ok3 = ok2 && last != null && (b as number) - ((a as number) - (b as number)) <= last && last <= (a as number) + ((a as number) - (b as number));
+      const ok4 = ok2 && tier != null && (bp as number) <= 20 * tier.bp;
+      if (ok1) t1++; if (ok2) t2++; if (ok3) t3++; if (ok4) t4++; if (ok1 && ok2 && ok3 && (tier == null || ok4)) all4++;
+      if (bp != null) { sp.push(bp); width.push((a as number) - (b as number)); if (last) off.push((((a as number) + (b as number)) / 2 / last - 1) * 1e4); sizes.push(`${r.q.bidSize ?? "–"}×${r.q.askSize ?? "–"}`); }
+    }
+    const worst = off.length ? off.reduce((m, x) => (Math.abs(x) > Math.abs(m) ? x : m), 0) : null;
+    console.log(`  ${sym}: "${q0.shortName ?? q0.longName ?? "–"}" · ${q0.fullExchangeName ?? q0.exchange ?? "–"} · ${q0.currency ?? "–"} · state ${q0.marketState ?? "–"} · declared delay ${q0.exchangeDataDelayedBy ?? "–"} min${q0.quoteSourceName ? ` (${q0.quoteSourceName})` : ""} · last ${q0.regularMarketPrice ?? "–"} at ${iso(num(q0.regularMarketTime))}`);
+    console.log(`    usable on ${sp.length} of ${rs.length} readings; ${distinct.size} different bid/ask pairs; spread bp min ${f(sp.length ? Math.min(...sp) : null)} median ${f(median(sp))} max ${f(sp.length ? Math.max(...sp) : null)}; ask − bid median ${g(median(width))}; sizes (bid×ask) ${[...new Set(sizes)].slice(0, 4).join(", ") || "–"}; mid against last: median ${f(median(off), 1)} bp, widest ${f(worst, 1)} bp; the quote's age: median ${f(median(age) == null ? null : (median(age) as number) / 60, 1)} min (${f(age.length ? Math.min(...age) / 60 : null, 1)} to ${f(age.length ? Math.max(...age) / 60 : null, 1)})`);
+    console.log(`    A's tests pass on: (1) ${t1}, (2) ${t2}, (3) ${t3}${tier ? `, (4) ${t4}` : ""} of ${rs.length} readings; ${tier ? "all four" : "(1) to (3)"} on ${all4}${tier ? ` · tier ${tier.bp} bp (average value traded USD ${(tier.usd / 1e6).toFixed(1)}m a day, from ${tier.from})` : ""}`);
+  }
+
+  head(`2. ${four.join(", ")}: every reading; the median quoted spread beside A's tier (V-1) and beside Abdi and Ranaldo's estimate (X-19)`);
+  for (const sym of four) {
+    const rs = readings.get(sym) ?? [];
+    console.log(`\n-- ${sym}`);
+    for (const r of rs) {
+      const bp = spreadBp(r.q), tm = num(r.q.regularMarketTime), last = num(r.q.regularMarketPrice);
+      console.log(`  ${hms(r.at)} UTC  bid ${g(num(r.q.bid))} × ${r.q.bidSize ?? "–"}, ask ${g(num(r.q.ask))} × ${r.q.askSize ?? "–"}${bp != null ? ` (${bp.toFixed(2)} bp)` : " (not usable)"} · last ${r.q.regularMarketPrice ?? "–"} at ${tm != null ? hmIn(tz, tm) : "–"} local, ${tm != null ? ((r.at / 1000 - tm) / 60).toFixed(1) : "–"} min old${bp != null && last ? ` · the mid ${((((num(r.q.ask) as number) + (num(r.q.bid) as number)) / 2 / last - 1) * 1e4).toFixed(1)} bp from the last` : ""} · state ${r.q.marketState ?? "–"}`);
+    }
+    const sp = rs.map((r) => (String(r.q.marketState) === "REGULAR" ? spreadBp(r.q) : null)).filter((x): x is number => x != null), med = median(sp), tier = tierOf(sym);
+    const widths = rs.filter((r) => String(r.q.marketState) === "REGULAR" && spreadBp(r.q) != null).map((r) => (num(r.q.ask) as number) - (num(r.q.bid) as number)), least = widths.length ? Math.min(...widths) : null, px = num(rs[0]?.q.regularMarketPrice);
+    console.log(`  the smallest ask − bid seen: ${g(least)}${least != null && px ? ` (${(least / px * 1e4).toFixed(2)} bp of the last price): one tick is no more than that` : ""}`);
+    const est = days.has(sym) ? abdiRanaldo(days.get(sym) as Day[]) : { bp: null, sessions: 0, to: null };
+    console.log(`  median quoted spread over ${sp.length} in-session readings: ${f(med)} bp; A's tier ${tier ? `${tier.bp} bp (USD ${(tier.usd / 1e6).toFixed(1)}m a day, from ${tier.from})` : "–"}${med != null && tier ? `: the tier is ${(tier.bp / med).toFixed(2)} times the median: ${tier.bp > 2 * med ? "MORE THAN TWICE IT: back to A (V-1)" : tier.bp < med / 2 ? "LESS THAN HALF OF IT: back to A (V-1)" : "within half to twice"}` : ""}`);
+    // V-1's fallback is the larger of one tick and the tier; the tick table is JPX's (pf_jpx, held), so the smallest ask − bid seen stands for one tick here
+    const tickBp = least != null && px ? (least / px) * 1e4 : null, fallback = tier && tickBp != null ? Math.max(tier.bp, tickBp) : null;
+    if (fallback != null && med) console.log(`  A's fallback spread (V-1: the larger of one tick and the tier), the smallest ask − bid seen standing for one tick: ${fallback.toFixed(2)} bp, ${(fallback / med).toFixed(2)} times the median quoted spread`);
+    console.log(`  Abdi–Ranaldo over the ${est.sessions} sessions to ${est.to ?? "–"} (E): ${f(est.bp)} bp${est.bp != null && med ? `, ${(est.bp / med).toFixed(1)} times the median quoted spread${est.bp > 2 * med ? ": ABOVE TWICE IT" : ""}` : ""} (not used for a fill since V-1)`);
   }
 }
 
-console.log(`\nrequests made: ${requestsMade()} (at most ${MAX} planned, and at most 3 asked again after a 429); ${Math.round((Date.now() - t0) / 1000)} s`);
+// ---- Tokyo: the first bars again ----
+if (s && tkOpen) {
+  head("4. Tokyo: the first bars of 7203.T and 1306.T, the second reading (are bars 09:00 to 09:04 still there, or merged?)");
+  for (const sym of ["7203.T", "1306.T"]) await firstBars(sym, "second reading");
+}
+
+// ---- New York: the option chains ----
+if (s && usOpen) {
+  head("5. Option chains in session (OD-P5 (c); P-11): SPY, ^SPX, QQQ, NVDA; the nearest expiry and the first 25 days or more ahead");
+  const show = (sym: string, res: J, label: string) => {
+    const uq = (res.quote ?? {}) as J, spot = num(uq.regularMarketPrice);
+    const o = ((res.options as J[] | undefined) ?? [])[0] ?? {};
+    const calls = (o.calls as J[] | undefined) ?? [], puts = (o.puts as J[] | undefined) ?? [];
+    const count = (xs: J[], k: string) => xs.filter((x) => (num(x[k]) ?? 0) > 0).length;
+    console.log(`  ${sym}, ${label} ${iso(num(o.expirationDate)).slice(0, 10)}: underlying last ${spot ?? "–"} at ${iso(num(uq.regularMarketTime))} (${uq.marketState ?? "–"}); ${calls.length} calls, ${puts.length} puts`);
+    for (const [side, xs] of [["calls", calls], ["puts", puts]] as Array<[string, J[]]>) {
+      const two = xs.filter((x) => (num(x.bid) ?? 0) > 0 && (num(x.ask) ?? 0) > (num(x.bid) ?? 0));
+      const near = spot == null ? [] : two.filter((x) => Math.abs((num(x.strike) ?? 0) / spot - 1) <= 0.02);
+      const ivs = near.map((x) => num(x.impliedVolatility)).filter((x): x is number => x != null && x > 0.001);
+      const rel = near.map((x) => (((num(x.ask) as number) - (num(x.bid) as number)) / (((num(x.ask) as number) + (num(x.bid) as number)) / 2)) * 100);
+      console.log(`    ${side}: bid > 0 ${count(xs, "bid")}, ask > 0 ${count(xs, "ask")}, a bid and an ask above it ${two.length}, implied vol > 0 ${count(xs, "impliedVolatility")}, volume > 0 ${count(xs, "volume")}, open interest > 0 ${count(xs, "openInterest")}; within 2% of the money with a two-sided quote: ${near.length}, their implied vol median ${f(median(ivs), 4)} (${f(ivs.length ? Math.min(...ivs) : null, 4)} to ${f(ivs.length ? Math.max(...ivs) : null, 4)}), their spread median ${f(median(rel), 1)}% of the mid`);
+      const three = spot == null ? xs.slice(0, 3) : [...xs].sort((a, b) => Math.abs((num(a.strike) ?? 0) - spot) - Math.abs((num(b.strike) ?? 0) - spot)).slice(0, 3);
+      for (const x of three) console.log(`      ${x.contractSymbol ?? "–"}: strike ${x.strike ?? "–"}, bid ${x.bid ?? "–"}, ask ${x.ask ?? "–"}, last ${x.lastPrice ?? "–"} at ${iso(num(x.lastTradeDate))}, implied vol ${x.impliedVolatility ?? "–"}, volume ${x.volume ?? "–"}, open interest ${x.openInterest ?? "–"}`);
+    }
+  };
+  for (const sym of ["SPY", "^SPX", "QQQ", "NVDA"]) {
+    const base = `https://query2.finance.yahoo.com/v7/finance/options/${encodeURIComponent(sym)}?crumb=${encodeURIComponent(s.crumb)}`;
+    const res = ((((await yget(base, { cookie: s.cookie }))?.optionChain as { result?: J[] } | undefined)?.result) ?? [])[0];
+    if (!res) { console.log(`  ${sym}: no chain`); continue; }
+    const exps = (res.expirationDates as number[] | undefined) ?? [];
+    console.log(`  ${sym}: ${exps.length} expiries (${exps.slice(0, 3).map((t) => iso(t).slice(0, 10)).join(", ")} … ${exps.length ? iso(exps[exps.length - 1]).slice(0, 10) : "–"}), ${((res.strikes as number[] | undefined) ?? []).length} strikes`);
+    show(sym, res, "the nearest expiry");
+    const later = exps.find((t) => t >= sec() + 25 * 86400);
+    if (later == null) { console.log(`  ${sym}: no expiry 25 days or more ahead`); continue; }
+    const res2 = ((((await yget(`${base}&date=${later}`, { cookie: s.cookie }))?.optionChain as { result?: J[] } | undefined)?.result) ?? [])[0];
+    if (res2) show(sym, res2, "the first expiry 25 days or more ahead,"); else console.log(`  ${sym}: no chain for ${iso(later).slice(0, 10)}`);
+  }
+}
+
+// ---- A-37: the results-date fields as Yahoo sends them ----
+if (s) {
+  head("6. Yahoo's results-date fields as sent (A-37): every field of the quote named \"earnings…\", each moment in UTC, JST and New York's time");
+  for (const sym of RESULTS) {
+    const q = readings.get(sym)?.[0]?.q;
+    if (!q) { console.log(`  ${sym}: no quote`); continue; }
+    const keys = Object.keys(q).filter((k) => /earnings/i.test(k)).sort();
+    console.log(`  ${sym}: ${["earningsTimestamp", "earningsTimestampStart", "isEarningsDateEstimate"].map((k) => `${k} ${k in q ? JSON.stringify(q[k]) : "ABSENT"}`).join("; ")}`);
+    for (const k of keys) { const v = q[k], t = num(v); console.log(`    ${k}: ${JSON.stringify(v)}${t != null && t > 1e9 && t < 4e9 ? ` = ${iso(t)} = ${clock(TK, t)} JST = ${clock(NY, t)} New York` : ""}`); }
+    if (!keys.length) console.log("    no field named \"earnings…\" in this quote");
+  }
+}
+
+if (s) console.log(`\nrequests made: ${requestsMade()} (at most ${MAX} planned, and at most 3 asked again after a 429); ${Math.round((Date.now() - t0) / 1000)} s`);

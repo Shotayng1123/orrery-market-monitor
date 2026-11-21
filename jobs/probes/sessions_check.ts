@@ -1,5 +1,5 @@
-// What the session table rests on, read from the sources themselves (the reviewer's check of "when a closed market
-// opens", 21 Nov 2026: findings O-1, O-2 and O-3). Read-only, no key, nothing written.
+// What the session table rests on, read from the source itself (the reviewer's check of "when a closed market
+// opens", 21 Nov 2026: findings O-1 and O-2). Read-only, no key, nothing written. Yahoo Finance only.
 //   1. O-1, the FX week. Since 21 Nov 2026 both session tables keep it by New York's clock, Sunday 17:00 to Friday 17:00
 //      there (the server's fxTrading); before, Monday 05:00 to Saturday 06:00 SGT all year. Which of the two the feed
 //      follows was in no log. Here: Yahoo's five-minute bars of USDJPY=X and EURUSD=X over a month, and for each weekend
@@ -11,16 +11,12 @@
 //      market: the dollar index (DX-Y.NYB), the yield indices ^FVX, ^TNX and ^TYX, and ^VIX and ^VXN. For each, and
 //      for ^GSPC beside them: the exchange and time zone Yahoo names, the regular session it declares for today, and
 //      the first and last one-minute bar of each of the last five days, in New York's time: the hours the feed prints.
-//   3. O-3, Tokyo's holidays. The Monitor holds JPX's for 2026 and 2027 (migrations 20261107000002 and 20261107000010,
-//      "checked against the publishers' own pages on 2026-11-07"); no log of this cycle shows the page. Here: JPX's
-//      market-holiday calendar page (the address in HOLIDAY_SOURCES), its lines that carry a date, and for each of the
-//      Monitor's Tokyo rows from 1 Nov 2026 to 31 Jan 2027 whether a line of the page names that day. Two pages, the
-//      English and the Japanese, read once each: JPX's terms ask readers to refrain from high-frequency, high-load
-//      automated retrieval (C/probes/pf_bench.log).
-// Requests: at most 13 (Yahoo 10, 1.2 s apart; JPX 3). Runtime: node.
+// The third finding, O-3 (Tokyo's holidays against JPX's own calendar page), was this probe's section 3 until 21 Nov
+// 2026. It asked jpx.co.jp, which no probe does until the owner answers the question of that day: that read is now in
+// pf_jpx, held, and pf_holidays sets the Monitor's Tokyo rows against Japan's national-holiday file meanwhile.
+// Requests: at most 10, all to Yahoo, 1.2 s apart. Runtime: node.
 //   Actions > source-probe > Run workflow: probe = sessions_check, runtime = node
-import { readFileSync } from "node:fs";
-import { head, look, page, pause, printLines, requestsMade, robots, textLines, titleOf } from "./lib.ts";
+import { head, look, pause, requestsMade } from "./lib.ts";
 
 type J = Record<string, unknown>;
 const NY = "America/New_York", SG = "Asia/Singapore";
@@ -83,32 +79,4 @@ for (const sym of ["^GSPC", "^VIX", "^VXN", "^FVX", "^TNX", "^TYX", "DX-Y.NYB"])
   if (!byDay.size) console.log("    no one-minute bar with a price");
 }
 
-head("3. Tokyo's market holidays (O-3): JPX's calendar page beside the rows the Monitor holds");
-// the Monitor's rows, read from the two migrations that write them
-const mine: string[] = [];
-for (const f of ["20261107000002_seed.sql", "20261107000010_holidays_verified.sql"]) {
-  try { for (const m of readFileSync(new URL(`../../supabase/migrations/${f}`, import.meta.url), "utf8").matchAll(/\('TSE',\s*'(\d{4}-\d{2}-\d{2})',\s*'((?:[^']|'')*)'/g)) if (!mine.includes(`${m[1]} ${m[2].replace(/''/g, "'")}`)) mine.push(`${m[1]} ${m[2].replace(/''/g, "'")}`); }
-  catch (e) { console.log(`  ${f} not read: ${e instanceof Error ? e.message.slice(0, 120) : String(e)}`); }
-}
-mine.sort();
-console.log(`  the Monitor holds ${mine.length} Tokyo rows (2026 and 2027); those from 1 Nov 2026 to 31 Jan 2027: ${mine.filter((x) => x >= "2026-11-01" && x < "2027-02-01").join(" · ")}`);
-await robots("https://www.jpx.co.jp", ["/english/corporate/about-jpx/calendar/index.html", "/corporate/about-jpx/calendar/index.html"]);
-const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-for (const [what, url] of [["English", "https://www.jpx.co.jp/english/corporate/about-jpx/calendar/index.html"], ["Japanese", "https://www.jpx.co.jp/corporate/about-jpx/calendar/index.html"]] as const) {
-  console.log(`  -- the ${what} page`);
-  const p = await page(url);
-  if (!p.ok) continue;
-  const ls = textLines(p.html);
-  console.log(`  title: ${titleOf(p.html)}; ${ls.length} lines of text`);
-  // every line that carries a date of the calendar: a month's name with a day, a slashed or dotted date, or 月 and 日
-  printLines(ls, /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2}\b|\b\d{1,2}\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)|\b20(26|27)[\/.\-年]\s*\d{1,2}|\d{1,2}月\s*\d{1,2}日|holiday|休業日|休日/i, 80);
-  // each of the Monitor's rows of the next weeks: is there a line of the page that names that day?
-  for (const row of mine.filter((x) => x >= "2026-11-01" && x < "2027-02-01")) {
-    const [y, mo, d] = row.slice(0, 10).split("-").map(Number);
-    const res = [new RegExp(`\\b(${MON[mo - 1]}\\.?|${LONG[mo - 1]})\\s+0?${d}\\b`, "i"), new RegExp(`\\b0?${d}\\s+(${MON[mo - 1]}\\.?|${LONG[mo - 1]})\\b`, "i"), new RegExp(`(^|\\D)0?${mo}月\\s*0?${d}日`), new RegExp(`${y}[\\/.\\-]0?${mo}[\\/.\\-]0?${d}(\\D|$)`), new RegExp(`(^|\\D)0?${mo}\\/0?${d}(\\D|$)`)];
-    const hit = ls.find((l) => res.some((re) => re.test(l)));
-    console.log(`  ${row}: ${hit ? `a line of the page names the day: "${hit.slice(0, 160)}"` : "no line of the page names this day in the forms looked for (the page may give its dates another way, or in a file it links)"}`);
-  }
-}
-
-console.log(`\n${requestsMade()} requests made (at most 13)`);
+console.log(`\n${requestsMade()} requests made (at most 10)`);

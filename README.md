@@ -253,6 +253,21 @@ name: the input `sec_user_agent` = true gives the probe's own step, and no other
 contact the SEC asks automated readers to declare), which a probe of sec.gov (`pf_sec`) sends only as its User-Agent
 and never prints.
 
+Since 21 Nov 2026 (the paper portfolio's second run of probes, `pf_*`) a probe reads a site's `robots.txt` before any
+page or file of it, does not ask a path that file holds, and says what it read and what it did not (`robots()` in
+`jobs/probes/lib.ts`: a `robots.txt` that answers 404, or with an HTML page, is "no robots.txt read", never a file that
+allows; one that answers 5xx holds every path; one that answers 429 is asked once more). The probes of publishers'
+files (`pf_bench`, `pf_borrow`) also read the site's terms, by its own link, before any data file of it
+(`readTerms()`): a site whose terms bar automated reading, or any re-use whatever the purpose, keeps its files unread
+by the probe, and that finding goes to the owner. The probes of governments', central banks' and regulators' own pages
+(`pf_rules`, `pf_holidays`, `pf_rates`) read `robots.txt` only. The helper also refuses three kinds of address
+outright, whichever probe asks: `jpx.co.jp`, until the owner answers the question of 21 Nov 2026 on JPX's rule pages,
+holiday calendar and ETF list (`pf_jpx` holds those reads behind three switches, all off); Cboe's VIX-family history
+files and Nomura's holdings files, which the owner's answer of 21 Nov 2026 sets aside. The Monitor's own jobs, which
+read the JPX and Nikkei files it has always read, do not use that helper and run as before. A feed the Monitor already
+reads is not stopped by a probe's finding: for Yahoo Finance, `pf_yahoo_hist` prints what its `robots.txt` and its
+terms say, for the owner, and the probes of Yahoo read on.
+
 ### The stock page (`#asset/SYMBOL`, since 2026-11-18)
 
 | On the page | Where it comes from |
