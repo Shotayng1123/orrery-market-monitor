@@ -6,7 +6,8 @@
 // big-move look-up is queued for an instrument; the only outside reads are a quote and daily bars from Yahoo, through
 // readers the caller hands in.
 import { selectAll } from "./paging.ts";
-import { INSTRUMENT_QUOTES, instrumentFigures, isOfficial, legacyStockFields, type InstrumentDef, type InstrumentFigures, type QuoteLike, type RowLike } from "./instrstats.ts";
+import { futuresInfo, INSTRUMENT_QUOTES, instrumentFigures, isOfficial, legacyStockFields, type FuturesInfo, type InstrumentDef, type InstrumentFigures, type QuoteLike, type RowLike } from "./instrstats.ts";
+import { isFuture } from "./futures.ts";
 import { EVENTS_AHEAD_DAYS, EVENTS_BACK_DAYS, INSTR_FEED_DAYS, eventCurrencies, eventsFor, matchHeadlines, newsWords, wordsPg, type EventRow } from "./instrfeed.ts";
 import { isYieldQuote } from "./watchrow.ts";
 import type { Bar } from "./stockstats.ts";
@@ -25,12 +26,13 @@ export const FEED_DAYS = 90, FEED_NEWS = 60, FEED_ALERTS = 40;
 export interface StockFeed {
   days: number;
   news: Array<{ id: number; publishedAt: string; source: string; title: string; url: string; category: string | null }>;
-  alerts: Array<{ id: number; at: string; kind: string; pct: number | null; market: string; msg: string; url: string | null }>;
+  alerts: Array<{ id: number; at: string; kind: string; pct: number | null; market: string; msg: string; url: string | null; sigma?: number | null; note?: string | null }>;
   error?: string;   // a table could not be read: what it said (the other's rows are still sent)
 }
-const NEWS_COLS = "id,published_at,source,title,url,category", ALERT_COLS = "id,at,kind,pct,market,msg,url";
+const NEWS_COLS = "id,published_at,source,title,url,category", ALERT_COLS = "id,at,kind,pct,market,msg,url,sigma,note";
 const headline = (r: Record<string, unknown>): StockFeed["news"][number] => ({ id: r.id as number, publishedAt: r.published_at as string, source: r.source as string, title: r.title as string, url: r.url as string, category: (r.category as string | null) ?? null });
-const alertRow = (a: Record<string, unknown>): StockFeed["alerts"][number] => ({ id: a.id as number, at: a.at as string, kind: a.kind as string, pct: (a.pct as number | null) ?? null, market: a.market as string, msg: a.msg as string, url: (a.url as string | null) ?? null });
+const alertRow = (a: Record<string, unknown>): StockFeed["alerts"][number] => ({ id: a.id as number, at: a.at as string, kind: a.kind as string, pct: (a.pct as number | null) ?? null, market: a.market as string, msg: a.msg as string, url: (a.url as string | null) ?? null,
+  ...(a.kind === "sigma" ? { sigma: (a.sigma as number | null) ?? null, note: (a.note as string | null) ?? null } : {}) });
 /** The alerts on a symbol since `since`, newest first (the same order the page lists them in). */
 const alertsOf = (db: Db, symbol: string, since: string) => db.from("alerts").select(ALERT_COLS).eq("symbol", symbol).gte("at", since).order("at", { ascending: false }).order("id", { ascending: false }).limit(FEED_ALERTS);
 const failed = (nw: { error?: { message: string } | null }, al: { error?: { message: string } | null }): string => [nw.error ? `headlines: ${nw.error.message}` : null, al.error ? `alerts: ${al.error.message}` : null].filter(Boolean).join("; ");
@@ -107,7 +109,19 @@ export async function instrFeed(db: Db, symbol: string, words: string[], now: nu
 /** What an instrument's page reads from outside the database: Yahoo's daily bars, for a name the Monitor does not
  *  store (assets.ts dailyBars on the server). `now` in ms, for the windows (the checks fix it). */
 export interface InstrumentDeps { db: Db; dailyBars: (symbol: string) => Promise<Bar[]>; now?: number }
-export type InstrumentAnswer = ReturnType<typeof legacyStockFields> & { symbol: string; name: string; feed: StockFeed; instrument: InstrumentFigures & { events: InstrumentEvents; matched: string[] } };
+export type InstrumentAnswer = ReturnType<typeof legacyStockFields> & { symbol: string; name: string; feed: StockFeed; instrument: InstrumentFigures & { events: InstrumentEvents; matched: string[]; futures?: FuturesInfo } };
+type RollRead = { d: string; from_contract: string | null; to_contract: string; prev_close: number | null; source: string };
+type ContractRead = { d: string; contract: string; expires: string | null; seen_at: string | null };
+/** A Monitor future's record of contracts (B-27): every roll, the latest session's contract and the first session read. */
+export async function futuresOf(db: Db, symbol: string): Promise<{ rolls: RollRead[]; latest: ContractRead | null; first: string | null }> {
+  const [r, l, f] = await Promise.all([
+    db.from("fut_rolls").select("d,from_contract,to_contract,prev_close,source").eq("symbol", symbol).order("d").limit(400),
+    db.from("fut_contracts").select("d,contract,expires,seen_at").eq("symbol", symbol).order("d", { ascending: false }).limit(1),
+    db.from("fut_contracts").select("d").eq("symbol", symbol).order("d").limit(1),
+  ]);
+  if (r.error || l.error) throw new Error((r.error ?? l.error).message);
+  return { rolls: (r.data ?? []) as RollRead[], latest: ((l.data ?? []) as ContractRead[])[0] ?? null, first: ((f.data ?? []) as Array<{ d: string }>)[0]?.d ?? null };
+}
 /** The page of a Monitor instrument (`def`) or of a plain quote that is not a stock (`q`). The answer keeps every
  *  field of a stock's (filled for what an instrument has, empty for the rest: legacyStockFields), so the page from
  *  before 20 Nov 2026 still draws it, and adds `instrument` with the figures in the instrument's own units. */
@@ -115,18 +129,22 @@ export async function instrumentPage(deps: InstrumentDeps, symbol: string, def: 
   const { db } = deps, now = deps.now ?? Date.now();
   const name = def?.name ?? q?.name ?? symbol, currency = def?.currency ?? q?.currency ?? null;
   const words = newsWords(symbol, name), ccys = eventCurrencies(symbol, name, currency);
-  const [row, bars, events, feed] = await Promise.all([
+  const fut = !!def && isFuture(symbol);
+  const [row, bars, events, feed, rec] = await Promise.all([
     def ? soft(tableRow(db, symbol), null, "market table") : Promise.resolve(null),
     def ? soft(storedCloses(db, symbol, now), [] as Bar[], "stored closes") : soft(deps.dailyBars(symbol), [] as Bar[], "price history"),
     soft(eventsOf(db, ccys, now), { ccys, from: "", to: "", rows: [], error: "the calendar could not be read" }, "calendar"),
     soft(instrFeed(db, symbol, words, now), { days: INSTR_FEED_DAYS, news: [], alerts: [], error: "the headlines and alerts could not be read" } as StockFeed, "news and alerts"),
+    fut ? soft(futuresOf(db, symbol), null, "futures record") : Promise.resolve(null),
   ]);
-  const f = instrumentFigures({ symbol, def, row, quote: q, bars, yieldQuote: !def && !!q && isYieldQuote(symbol, q.name, q.quoteType), now });
+  const rolls = (rec?.rolls ?? []).map((r) => ({ d: r.d, prevClose: r.prev_close }));
+  const f = instrumentFigures({ symbol, def, row, quote: q, bars, yieldQuote: !def && !!q && isYieldQuote(symbol, q.name, q.quoteType), now, rolls });
   return {
     symbol, name,
     ...legacyStockFields(f, q, bars),
     feed,
-    instrument: { ...f, events, matched: words },   // since 20 Nov 2026; a page from before ignores it
+    // since 20 Nov 2026; a page from before ignores it. A Monitor future's contract and rolls since 20 Nov 2026 (B-27)
+    instrument: { ...f, events, matched: words, ...(fut && rec ? { futures: futuresInfo(rec.latest, rec.rolls, rec.first, bars) } : {}) },
   };
 }
 

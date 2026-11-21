@@ -11,7 +11,8 @@ import type { TableRow } from "../lib/types";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtDate, fmtStamp } from "../lib/time";
 import { MKT_CAP } from "../lib/labels";
-import { marketOf, StatementTable, type AssetFull } from "./AssetLegacy";
+import { stockMarketOf, StatementTable, type AssetFull } from "./AssetLegacy";
+import { pageLive } from "../lib/opens";
 
 /** A stock's page for a phone as it was before 18 Nov 2026. Kept for a server that does not yet answer the `stock`
  *  action: views/AssetPhone.tsx falls back to it. */
@@ -36,7 +37,7 @@ export function AssetPhoneLegacy({ symbol, tick }: { symbol: string; tick: numbe
     </div>
   );
   const dec = d.price != null && d.price >= 1000 ? 0 : 2;
-  const row: TableRow = { symbol: d.symbol, name: d.name, cls: "Equities", market: marketOf(d.symbol), currency: d.currency ?? "", decimals: dec, group: "equity", order: 0, last: d.price, lastAt: d.asOf, live: false, closes: { d1: d.prevClose }, closeDates: {}, pct: { d1: d.pct } };
+  const row: TableRow = { symbol: d.symbol, name: d.name, cls: "Equities", market: stockMarketOf(d.symbol), currency: d.currency ?? "", decimals: dec, group: "equity", order: 0, last: d.price, lastAt: d.asOf, live: pageLive(stockMarketOf(d.symbol), d.asOf), closes: { d1: d.prevClose }, closeDates: {}, pct: { d1: d.pct } };
   const st = d.statements, f = st?.forecast;
   return (
     <div className="mp">

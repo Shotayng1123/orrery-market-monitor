@@ -138,19 +138,20 @@ export function periodDoc(p: Pick<FinPeriod, "kind" | "label" | "doc" | "url" | 
 export interface StockFeed {
   days: number;
   news: Array<{ id: number; publishedAt: string; source: string; title: string; url: string; category: string | null }>;
-  alerts: Array<{ id: number; at: string; kind: string; pct: number | null; market: string; msg: string; url: string | null }>;
+  alerts: Array<{ id: number; at: string; kind: string; pct: number | null; market: string; msg: string; url: string | null; sigma?: number | null; note?: string | null }>;
   error?: string;
 }
 export type FeedFilter = "all" | "headlines" | "alerts";
 /** One row of the panel: line 1 the time, the kind and where it came from; line 2 the headline or the alert. */
 export interface FeedRow { key: string; at: string; kind: "headline" | "alert"; source: string; title: string; url: string | null }
-const ALERT_KIND: Record<string, string> = { stock: "move", index: "index move", buyback: "buyback", revision: "guidance", mna: "M&A" };
+const ALERT_KIND: Record<string, string> = { stock: "move", index: "index move", buyback: "buyback", revision: "guidance", mna: "M&A", sigma: "σ move" };
 /** The panel's rows for a filter, newest first: a headline with its publisher, an alert with what it is and where it
  *  was read (the exchange for a move, the publisher for a headline's alert). */
 export function feedRows(feed: StockFeed | null | undefined, filter: FeedFilter = "all"): FeedRow[] {
   if (!feed) return [];
   const news: FeedRow[] = filter === "alerts" ? [] : (feed.news ?? []).map((n) => ({ key: `h${n.id}`, at: n.publishedAt, kind: "headline", source: n.source, title: n.title, url: n.url || null }));
-  const alerts: FeedRow[] = filter === "headlines" ? [] : (feed.alerts ?? []).map((a) => ({ key: `a${a.id}`, at: a.at, kind: "alert", source: [ALERT_KIND[a.kind] ?? a.kind, a.market].filter(Boolean).join(", "), title: a.msg, url: a.url || null }));
+  // a σ move names its window and source where a move names its exchange (I-6: "σ of 63 daily changes to 19 Nov 2026 · Yahoo Finance")
+  const alerts: FeedRow[] = filter === "headlines" ? [] : (feed.alerts ?? []).map((a) => ({ key: `a${a.id}`, at: a.at, kind: "alert", source: [ALERT_KIND[a.kind] ?? a.kind, a.kind === "sigma" && a.note ? a.note : a.market].filter(Boolean).join(", "), title: a.msg, url: a.url || null }));
   const t = (s: string): number => { const v = Date.parse(s); return Number.isFinite(v) ? v : -Infinity; };
   return [...news, ...alerts].sort((x, y) => t(y.at) - t(x.at) || x.key.localeCompare(y.key));
 }

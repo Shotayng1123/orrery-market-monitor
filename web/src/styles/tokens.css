@@ -411,7 +411,6 @@ body.term .bigwrap{height:100%}
 body.term .sqgrid{height:100%;grid-template-rows:repeat(2,minmax(0,1fr))}
 body.term .cgrid{grid-auto-rows:minmax(0,1fr);height:100%}
 body.term .cgrid .mtile.cp{aspect-ratio:auto;height:100%;min-height:0}
-body.term #grid[data-view="market"] .panel[data-no="01"]{grid-row:span 2}
 body.term #grid[data-view="news"] .panel[data-no="01"]{grid-row:span 2}
 body.term #grid[data-view="asset"] .panel[data-no="01"],body.term #grid[data-view="asset"] .panel[data-no="02"]{grid-row:span 2}
 body.term .c12 .chips,body.term .c12 .pbar{margin:0}
@@ -481,9 +480,6 @@ body.term #grid[data-view="equities"]>.panel[data-k="eq-short"]{grid-column:5 / 
 body.term #grid[data-view="equities"]>.panel[data-k="eq-heat"]{grid-column:9 / span 4;grid-row:4 / span 2}
 body.term #grid[data-view="equities"]>.panel[data-k="eq-movers"]{grid-column:1 / span 8;grid-row:5}
 body.term #grid[data-view="equities"]>.panel[data-k="eq-screener"]{grid-column:1 / -1;grid-row:6}
-body.term #grid[data-view="market"] .panel[data-no="01"]{grid-column:span 6;grid-row:span 3}
-body.term #grid[data-view="market"] .panel[data-no="02"],body.term #grid[data-view="market"] .panel[data-no="03"]{grid-column:span 6;grid-row:span 1}
-body.term #grid[data-view="market"] .panel[data-no="04"],body.term #grid[data-view="market"] .panel[data-no="05"]{grid-column:span 3;grid-row:span 1}
 body.term #grid[data-view="market"] .cgrid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
 body.term #grid[data-view="news"] .panel[data-no="01"]{grid-column:span 7;grid-row:span 2}
 body.term #grid[data-view="news"] .panel[data-no="02"],body.term #grid[data-view="news"] .panel[data-no="03"]{grid-column:span 5;grid-row:span 1}
@@ -557,6 +553,10 @@ body.term table.mkt{min-width:0;height:100%}
 body.term table.mkt td{padding:0 3px}
 body.term table.mkt th{padding:1px 3px}
 body.term table.mkt tr.cls td{height:1%}
+/* a roll day in the one-screen layout: ROLL leaves the narrow name cell, where it put DELAYED behind an ellipsis, for a
+   one-letter mark after the 1D in σ (the reviewer's S3); the scrolling layout keeps ROLL beside the name */
+body.term table.mkt td:first-child .badge.roll{display:none}
+body.term table.mkt td.z.rolled::after{content:"R";display:inline-block;margin-left:2px;padding:0 2px;border:1px solid var(--bord2);border-radius:2px;font-size:7.5px;line-height:1.3;color:var(--txt2);vertical-align:middle}
 
 /* RATES & CURRENCY: FX table and pairs, the curves at most four to a row, then policy rates and yields */
 body.term #grid[data-view="rates"] .panel[data-k="fx"]{grid-column:span 4}
@@ -681,9 +681,15 @@ td[style*="background"]{color:#fff!important}
 /* MARKET, one-screen layout (Shota, 15 Nov): every chart tile the size of UST 2Y yield. The four chart panels
    stack beside the table, each as wide as RATES (three tiles across); EQUITIES and RATES show two rows,
    CURRENCY and COMMODITIES one, and the rest scrolls. TileGrid gives all four the same tile height. */
-body.term #grid[data-view="market"]:has(>.c12:not(.panel)){grid-template-rows:auto minmax(0,2fr) minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)}   /* :has() to outrank the generic selector-strip rule above */
-body.term #grid[data-view="market"] .panel[data-no="01"]{grid-column:span 6;grid-row:span 4}
-body.term #grid[data-view="market"] .panel[data-no="02"],body.term #grid[data-view="market"] .panel[data-no="03"],body.term #grid[data-view="market"] .panel[data-no="04"],body.term #grid[data-view="market"] .panel[data-no="05"]{grid-column:span 6;grid-row:span 1}
+/* I-6: MOVERS IN σ is the first row (its own height: the names and σ on one line), then the table beside the four
+   chart panels; placed by the panels' kind, not their number (the designer's §3.4) */
+body.term #grid[data-view="market"]:has(>.c12:not(.panel)){grid-template-rows:auto auto minmax(0,2fr) minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)}   /* :has() to outrank the generic selector-strip rule above */
+body.term #grid[data-view="market"] .panel[data-k="sigma"]{grid-column:1 / -1;grid-row:2}
+body.term #grid[data-view="market"] .panel[data-k="mkt"]{grid-column:1 / span 6;grid-row:3 / span 4}
+body.term #grid[data-view="market"] .panel[data-k="mk-eq"]{grid-column:7 / span 6;grid-row:3}
+body.term #grid[data-view="market"] .panel[data-k="mk-rates"]{grid-column:7 / span 6;grid-row:4}
+body.term #grid[data-view="market"] .panel[data-k="mk-fx"]{grid-column:7 / span 6;grid-row:5}
+body.term #grid[data-view="market"] .panel[data-k="mk-cmdty"]{grid-column:7 / span 6;grid-row:6}
 
 /* NEWS: the note folded away (HIDE / SHOW in its header). Only the header bar stays; in the one-screen layout
    the calendar and the news share the freed space. */
@@ -1114,6 +1120,19 @@ body.pv2 .pick select{font-size:17px;top:-5px;bottom:auto;height:calc(100% + 10p
 /* a line of plain text under a name ends in an ellipsis when it does not fit (it was cut mid-word:
    "Information Techno") */
 .mp-st.one{display:block;text-overflow:ellipsis}
+/* a line's state and, beside it, when its closed market opens (lib/opens.ts): the opening goes under the state,
+   whole, where the two do not fit on one line; a line of one item (WATCHLIST's) keeps its one line */
+.mp-st:not(.one){flex-wrap:wrap;row-gap:1px}
+.mp-st .opens{flex:0 1 auto;min-width:0;color:var(--txt2);font-variant-numeric:tabular-nums;white-space:normal}   /* wider than the line (a large system font): it wraps inside itself, never cut */
+/* An instrument's line (MARKETS, RATES & FX, EQUITIES): its state runs under the name and the level together, so
+   that "Closed" and "opens 23 Nov 09:30 SGT, scheduled" stay on one line on a phone 375 px wide. The name and its
+   state stay one element in the page (`.mp-nm`), laid out as two cells of the line. */
+.mp-row.inst{grid-template-rows:auto auto;row-gap:2px;align-content:center}
+.mp-row.inst>.mp-nm{display:contents}
+.mp-row.inst>.mp-nm>.n{grid-column:1;grid-row:1;min-width:0;align-self:end}
+.mp-row.inst>.mp-nm>.mp-st{grid-column:1/3;grid-row:2;align-self:start;column-gap:6px;font-size:11px}
+.mp-row.inst>.mp-px{grid-column:2;grid-row:1;align-self:end}
+.mp-row.inst>.mp-chg{grid-column:3;grid-row:1/span 2;align-self:center}
 .mp-st .live::before,.mp-st .delay::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;vertical-align:1px;background:var(--up)}
 .mp-st .delay::before{background:var(--warn)}
 .mp-px{font-family:var(--mono);font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
@@ -1225,6 +1244,17 @@ body.pv2 .pick select{font-size:17px;top:-5px;bottom:auto;height:calc(100% + 10p
 .mp-row.plain+.mp-row.plain{border-top:1px solid var(--bord)}
 .mp-row.starred{grid-template-columns:34px minmax(0,1fr) auto 88px;gap:8px;padding-left:8px}
 .mp-row.starred .star{margin:0}
+/* A watchlist line's "SYMBOL · as of" runs under the name and the level together, as an instrument's state does
+   (.mp-row.inst): on a phone 375 px wide "^N225 · 20 Nov 14:30", an instrument whose market has been shut since the day
+   before, had 105 px under its name and ended in an ellipsis that cut its time (found by the layout guard run on a
+   weekend clock, 21 Nov 2026). */
+.mp-row.starred{grid-template-rows:auto auto;row-gap:2px;align-content:center}
+.mp-row.starred>.star{grid-column:1;grid-row:1/span 2;align-self:center}
+.mp-row.starred>.mp-nm{display:contents}
+.mp-row.starred>.mp-nm>.n{grid-column:2;grid-row:1;min-width:0;align-self:end}
+.mp-row.starred>.mp-nm>.mp-st{grid-column:2/4;grid-row:2;align-self:start}
+.mp-row.starred>.mp-px{grid-column:3;grid-row:1;align-self:end}
+.mp-row.starred>.mp-chg{grid-column:4;grid-row:1/span 2;align-self:center}
 .mp-card.gap{margin-top:10px}
 .mp-card.hmap{padding:6px;overflow:hidden}
 .mp-cap{padding:8px 15px 7px;font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--txt2);background:var(--panel2);border-bottom:1px solid var(--bord)}
@@ -1312,7 +1342,16 @@ div.nw-row{cursor:pointer}
 .mp-head.doc .star{width:44px;height:44px;margin:0;border:1px solid var(--bord2);border-radius:11px;font-size:23px}
 .mp-doc.asset{padding:14px 8px 2px}
 .mp-doc.asset h1{margin:8px 0 12px}
-.mp-hero .mtile.cp{height:clamp(410px,58vh,540px);min-height:0;aspect-ratio:auto;padding:2px 2px 0;border:0;border-radius:0;background:transparent;box-shadow:none}
+/* A phone's page of one name: the chart keeps its room whatever the lines above it (21 Nov 2026). The tile was
+   clamp(410px,58vh,540px) tall, no more and no less, and the chart had what the head left of it: about 290 px on a
+   664-px screen, which is what that height was chosen for. Since the stamp is followed by when the market opens
+   ("CLOSED 20 Nov 14:30 SGT" "opens 24 Nov 08:00 SGT"), the stamp's line takes two lines on a weekend, when the stamp
+   carries its date, and in a wider font whenever the opening carries one; the chart paid for the second line and
+   stood at 273 px. That height is now the tile's least and 290 px the chart's least: the tile grows by what its head
+   needs beyond them. The chart box's own content never counts towards its height (basis 0), so the chart follows the
+   screen both ways. */
+.mp-hero .mtile.cp{height:auto;min-height:clamp(410px,58vh,540px);aspect-ratio:auto;padding:2px 2px 0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.mp-hero .mtile.cp>.chartbox{flex:1 1 0;min-height:290px}
 .mp-hero .mtile.cp .lb{margin:0 0 6px;font-size:12px}
 .mp-hero .mtile.cp .lbtxt{display:none}
 .mp-hero .mtile.cp .badge{margin:0 6px 0 0;font-size:11px;padding:1px 6px;border-radius:4px}
@@ -1464,12 +1503,24 @@ body.pv2 .modal.ntf button.go+button.go{margin-top:10px}
 .mtile.cp>.vl>.tags{margin-left:auto;display:inline-flex;flex-wrap:wrap;justify-content:flex-end;align-items:baseline;gap:2px 4px;font-weight:400;line-height:1.25}
 .mtile.cp>.vl>.tags .badge{margin-left:0}
 .mtile.cp>.vl>.tags .asof .st{margin-right:3px}
+/* When a closed market opens ("opens 22:30 SGT", lib/opens.ts; the owner's request of 20 Nov 2026). A large tile
+   (a page's chart) has it after the stamp. A small tile has it under the stamp, at the right of the change's line:
+   the change keeps its place and its ellipsis, the opening goes under it, whole, where the two do not fit on one
+   line, and wraps inside itself only where it is wider than the tile. Never cut. The one-screen layout's tiles show
+   no stamp, so none there. */
+.mtile.cp .opens{flex:0 1 auto;min-width:0;font-size:10px;font-weight:400;letter-spacing:.02em;color:var(--txt2);font-variant-numeric:tabular-nums;white-space:normal;text-align:right}
+.mtile.cp>.ch{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;column-gap:8px;row-gap:1px;white-space:normal;overflow:visible}
+.mtile.cp>.ch>.chv{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mtile.cp>.ch>.opens{margin-left:auto}
+.mtile.cp>.vl>.tags>.opens{margin-left:4px}
+body.term .mtile.cp>.ch>.opens{display:none}
 body.term .mtile.cp>.vl>.tags{display:none}
 /* the stock page's hero on a phone keeps its stamp line above the big price */
 .mp-hero .mtile.cp>.lb{display:none}
 .mp-hero .mtile.cp>.vl{flex-direction:column-reverse;align-items:flex-start}
 .mp-hero .mtile.cp>.vl>.tags{margin:0 0 6px;justify-content:flex-start;gap:4px 6px}
 .mp-hero .mtile.cp>.vl>.tags .badge{margin:0}
+.mp-hero .mtile.cp>.vl>.tags .opens{font-size:12px;text-align:left}
 /* SHORT INTEREST (D-07): three columns at natural height (two for FINRA), one when the panel is narrow or on a phone */
 .msg3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:12px 18px;align-items:start}
 .msg3>div{min-width:0}
@@ -1710,3 +1761,99 @@ body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]):not(:has
 body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"]:not([data-screen])) .panel[data-k="in-news"]{grid-column:9 / span 4;grid-row:4}
 body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"][data-screen="news"]){grid-template-rows:auto minmax(0,1fr)}
 body.term #grid[data-view="asset"]:has(>.pcols[data-page="instrument"][data-screen="news"]) .panel[data-k="in-news"]{grid-column:1 / -1;grid-row:2}
+
+/* I-6 (20 Nov 2026), the designer's I-6 note: MOVERS IN σ on MARKETS. Ten cells in one row (two rows of five under a
+   1,100-CSS-px layout), each a link: the name in teal (it opens the page; it may wrap, never cut), the day in σ in its
+   sign's colour, the change and the level under it. At the alert line (2.5σ) an amber border; under 1.5σ muted. */
+.sgstrip{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:6px}
+.sgcell{display:flex;flex-direction:column;gap:2px;min-width:0;padding:6px 8px 7px;border:1px solid var(--bord);border-radius:3px;background:var(--panel2);color:var(--txt);text-decoration:none}
+.sgcell .nm{font-size:11px;line-height:1.25;color:var(--cyan);overflow-wrap:anywhere}
+.sgcell .z{font-family:var(--mono);font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sgcell .mv{font-family:var(--mono);font-size:10.5px;color:var(--mut);font-variant-numeric:tabular-nums;white-space:normal}
+.sgcell.hot{border-color:var(--amber)}
+.sgcell.quiet .z{color:var(--mut)}
+.sgcell:hover .nm{text-decoration:underline}
+.sgnote{margin-top:6px}
+.sgempty{min-height:40px}
+@container wrap (max-width:1100px){.sgstrip{grid-template-columns:repeat(5,minmax(0,1fr))}}
+body.term .panel[data-k="sigma"] .pbody{padding:2px 6px}
+body.term .sgstrip{gap:3px}
+body.term .sgcell{flex-direction:row;align-items:baseline;gap:5px;padding:1px 5px}
+body.term .sgcell .nm{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+body.term .sgcell .z{font-size:11px}
+body.term .sgcell .mv,body.term .sgnote{display:none}
+/* the 1D IN σ header sorts (▼ while sorted), and a future's ROLL mark beside its name (B-27) */
+table.mkt th.sortable{cursor:pointer;user-select:none}
+table.mkt th.sortable:hover,table.mkt th.sortable.on{color:var(--amber)}
+.badge.roll{color:var(--txt2);border-color:var(--bord2);cursor:help}
+.mp-st .roll{color:var(--txt2)}
+/* the phone: Movers in σ first, one row of cards that moves sideways and stops on a card, no scrollbar; 132 x 76 px */
+.mp-sgrow{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:0 0 2px}
+.mp-sgrow::-webkit-scrollbar{display:none}
+.mp-sgcard{flex:0 0 132px;box-sizing:border-box;height:76px;scroll-snap-align:start;display:flex;flex-direction:column;justify-content:space-between;padding:8px 10px;border:1px solid var(--bord2);border-radius:10px;background:var(--panel);color:var(--txt);text-decoration:none;overflow:hidden}
+.mp-sgcard .nm{font-size:14px;line-height:1.15;color:var(--cyan);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-sgcard .z{font-family:var(--mono);font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mp-sgcard .mv{font-family:var(--mono);font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-sgcard.hot{border-color:var(--amber)}
+.mp-sgcard.quiet .z{color:var(--mut)}
+#mk-sigma.mp-sec h2{margin-top:10px}
+/* a roll's card on the chart: a hollow diamond for its dot (B-27) */
+.mvtip .t .dot.roll{width:7px;height:7px;border-radius:0;transform:rotate(45deg);background:transparent;border:1.5px solid var(--txt2);margin-right:7px}
+/* a σ move in the alert list: its window and source under its line (I-6) */
+.aldrop .alnote,table.wlal .alnote{display:block;color:var(--mut);font-size:10px;line-height:1.3;white-space:normal}
+.nw-note{color:var(--mut);font-size:12px;line-height:1.3}   /* a σ move's kind, window and source under its line (WATCHLIST, phone) */
+/* the notifications window: which kinds reach this device, and its σ line (I-6, the designer's I-6 note) */
+.ntf-kinds{margin:10px 0 12px}
+.ntf-kinds>.k{color:var(--mut);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}
+.ntf-kind{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:26px}
+.ntf-kind label.chk{flex:1 1 auto;min-width:0}
+.ntf-kind .ntf-new{margin-left:2px}
+.ntf-kind .pick{margin:0}
+body.pv2 .ntf-kinds>.k{font-size:11.5px}
+body.pv2 .ntf-kind{min-height:44px}
+/* a future's contract and last roll on the phone's Key data: long values wrap at the right instead of widening the table */
+table.mp-t.kv td .wv{display:inline-block;white-space:normal;max-width:52vw;text-align:right;overflow-wrap:anywhere;font-weight:600;line-height:1.35}
+/* ---- "Closed now: …" above a table (the designer's D-62, 21 Nov 2026): which of the panel's markets are shut and when
+   each opens, on screen without a hover. A note line: the market names in the text colour, the rest a step quieter. It
+   may wrap and is never cut; on a computer an entry goes to the next line as a whole where it fits there. ---- */
+.finnote.closednow{margin:0 0 6px;color:var(--txt2)}
+.closednow b{font-weight:400;color:var(--txt)}
+.finnote.closednow .e{display:inline-block;max-width:100%;vertical-align:top}
+.mp-note.closednow{margin:0 8px 8px}
+/* the one-screen layout: the line takes its height from the table's rows */
+body.term .finnote.closednow{flex:0 0 auto;margin:0 0 1px;font-size:9px;line-height:1.3}
+body.term .pbody>.mktbox{flex:1 1 0;min-height:0}   /* the table fills what the line above it leaves: its rows give the height */
+/* The one-screen layout, a page's own chart (a stock's, an instrument's, EQUITIES' index): it keeps its stamp and, beside
+   CLOSED, when its market opens, as in the scrolling layout (the designer's D-62: on those pages nothing else said it).
+   One line: the price, the change, then the badges, the stamp and the opening at the right; they wrap under where the
+   panel is narrow, never cut. The small tiles stay bare (they do not fit a 130px tile). */
+body.term .mtile.cp.large{grid-template-columns:auto auto minmax(0,1fr)}
+body.term .mtile.cp.large>.vl{display:contents}
+body.term .mtile.cp.large>.vl>.px{grid-column:1;grid-row:2}
+body.term .mtile.cp.large>.ch{grid-column:2;grid-row:2}
+body.term .mtile.cp.large>.vl>.tags{display:inline-flex;grid-column:3;grid-row:2;justify-self:end;margin-left:0;min-width:0}
+body.term .mtile.cp.large .asof{display:inline;font-size:9px}
+body.term .mtile.cp.large .badge{display:inline}
+body.term .mtile.cp.large .opens{font-size:9px}
+/* ---- an instrument's KEY DATA (the designer's D-64, 21 Nov 2026): a future's "Last change of contract" was one unbroken
+   value that forced the value column wide, so at text L the panel scrolled sideways and every figure lost its end. The
+   label column is never narrower than 9.5em (a label takes at most two lines), and a value of several parts goes onto
+   a second line between its parts, each part whole. ---- */
+table#in-key td.l{min-width:9.5em}
+.kvT td.num.wv{white-space:normal}
+/* ---- the alert list behind the header's line (the designer's D-63, 21 Nov 2026; B-34). A computer: the message wraps,
+   the time, the kind and the figure keep their width, so nothing leaves the box and the box never scrolls sideways.
+   A phone: rows as on WATCHLIST (the time and, at the right, the figure; the message; a σ move's kind, window and
+   source), each at least 44 px, the box as wide as the alert card. ---- */
+.aldrop{overflow-x:hidden}
+.aldrop table.secT{width:100%}
+.aldrop table.secT td.al-msg{white-space:normal;overflow-wrap:anywhere}
+.aldrop table.secT td.al-t,.aldrop table.secT td.al-kind,.aldrop table.secT td.al-fig{width:1%}
+.aldrop.ph{left:0;right:0;width:auto;min-width:0;max-width:none;max-height:70vh;padding:10px 0 8px;border-radius:12px}
+.aldrop.ph .minih{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 14px 2px;font-size:11px;line-height:1.5}
+.aldrop.ph .alntf{float:none;margin:0;font-size:13px;min-height:44px;display:inline-flex;align-items:center}
+.aldrop.ph .nw-row{min-height:44px;box-sizing:border-box}
+.aldrop.ph .nw-row:last-of-type{border-bottom:1px solid var(--bord)}
+.aldrop.ph .al-fig{margin-left:auto;font-size:13.5px;font-variant-numeric:tabular-nums}
+.aldrop.ph .al-msg{overflow-wrap:anywhere}
+.aldrop.ph .alrules{margin:10px 14px 2px}

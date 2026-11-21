@@ -11,20 +11,25 @@ import { ScreenChips, screensOf, type ScreenSection } from "../components/Screen
 import { useApi } from "../lib/useApi";
 import { termMode } from "../lib/prefs";
 import type { TableRow } from "../lib/types";
-import type { MarketId } from "../lib/sessions";
+import { pageLive } from "../lib/opens";
 import { fmtNum, fmtPct, signCls, stockDecimals } from "../lib/fmt";
 import { fmtDate, fmtStamp } from "../lib/time";
 import { avgTurnover, avgVolume, LARGEST_FALL, MKT_CAP, NEWS, NEXT_RESULTS, RANGE_52W, REALISED_VOL } from "../lib/labels";
 import { chartMarks, finSections, fmtCount, fmtPc, fmtPp, fmtX, isSmallMove, moveParts, moveRule, noDocWhy, periodDoc, siteOf, whyText, type Fin, type MoveRow, type StockPage } from "../lib/stock";
-import { AssetViewLegacy } from "./AssetLegacy";
+import { fmtResultsDate, resultsTip, resultsWords } from "../lib/results";
+import { AssetViewLegacy, stockMarketOf } from "./AssetLegacy";
 import { InstrumentView } from "./Instrument";
 import { isInstrumentPage } from "../lib/instrument";
 
-export const marketOf = (symbol: string): MarketId => (/\.T$/.test(symbol) ? "TSE" : /\.KS$/.test(symbol) ? "KRX" : /\.HK$/.test(symbol) ? "HKEX" : /\.SS$|\.SZ$/.test(symbol) ? "SSE" : /\.L$/.test(symbol) ? "LSE" : /\.SI$/.test(symbol) ? "SGX" : "NYSE");
+/** The exchange whose hours a stock keeps, by its symbol (the server's rule, lib/sessions.ts stockMarket); "" for an
+ *  exchange the Monitor keeps no session times for. Until 20 Nov 2026 every suffix it did not know read as New York. */
+export { stockMarketOf };
 /** A stock's decimals: the stocks' rule of every screen (lib/fmt.ts stockDecimals). */
 export const decimalsOf = (price: number | null): number => stockDecimals(price);
-/** The row the chart tile wants, made from the stock's quote. */
-export const chartRow = (d: StockPage): TableRow => ({ symbol: d.symbol, name: d.name, cls: "Equities", market: marketOf(d.symbol), currency: d.currency ?? "", decimals: decimalsOf(d.price), group: "equity", order: 0, last: d.price, lastAt: d.asOf, live: false, closes: { d1: d.prevClose }, closeDates: {}, pct: { d1: d.pct } });
+/** The row the chart tile wants, made from the stock's quote. The stock route sends no `live`: the page reads it from
+ *  the session table and the quote's own time (lib/opens.ts pageLive), so the tile says LIVE in the exchange's hours,
+ *  and CLOSED with when it next opens outside them (until 20 Nov 2026 a stock's tile said CLOSED at every hour). */
+export const chartRow = (d: StockPage): TableRow => { const market = stockMarketOf(d.symbol); return { symbol: d.symbol, name: d.name, cls: "Equities", market, currency: d.currency ?? "", decimals: decimalsOf(d.price), group: "equity", order: 0, last: d.price, lastAt: d.asOf, live: pageLive(market, d.asOf), closes: { d1: d.prevClose }, closeDates: {}, pct: { d1: d.pct } }; };
 
 /** What the short figure is, in a few words, by its source. */
 export function shortLine(d: StockPage): { label: string; value: string; title: string } {
@@ -191,7 +196,8 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
               <KV k="P/E, last year / guidance" title={d.val.basis ?? undefined}>{fmtX(d.val.pe)} / {fmtX(d.val.peGuide)}</KV>
               <KV k="P/B" title={d.val.basis ?? undefined}>{fmtX(d.val.pb, 2)}</KV>
               <KV k="Dividend yield, last year / guidance" title={d.val.basis ?? undefined}>{fmtPc(d.val.yield, false, 2)} / {fmtPc(d.val.yieldGuide, false, 2)}</KV>
-              <KV k={NEXT_RESULTS} title={d.earningsEst ? "Estimated by Yahoo Finance; not confirmed by the company" : undefined}>{d.earningsAt ? `${fmtStamp(d.earningsAt)}${d.earningsEst ? " (est.)" : ""}` : "–"}</KV>
+              {/* A-30: the day as the source gives it, in the company's own market, and no time of day (lib/results.ts) */}
+              <KV k={NEXT_RESULTS} title={d.earningsAt ? resultsTip(d.symbol, d.earningsEst) : undefined}>{d.earningsAt ? <><span className="vl1" id="st-results">{fmtResultsDate(d.earningsAt, d.symbol)}</span><small className="vl2" id="st-results-src">{resultsWords(d.earningsEst, d.symbol)}</small></> : "–"}</KV>
               {prof && <KV k="Fiscal year end · standard" title={`From the 有価証券報告書 for ${prof.label} (EDINET DB)`}>{prof.month} · {prof.std}</KV>}
               {prof && <KV k="Annual report" title={prof.doc?.tip ?? prof.none}>{prof.doc ? <a href={prof.doc.href} target="_blank" rel="noreferrer" id="st-yuho">有報 {prof.label} ↗</a> : `有報 ${prof.label}`}</KV>}
             </tbody></table>

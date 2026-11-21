@@ -6,10 +6,11 @@
 import { db, sourceOk, type InstrumentRow } from "./db.ts";
 import { marketById, marketState, recentlyClosed, type Holidays } from "./sessions.ts";
 import { computeTable } from "./table.ts";
-import { chart, lastPrint, spark } from "./yahoo.ts";
-import { scanIndexAlerts, scanStockAlerts } from "./alerts.ts";
+import { chart, futuresQuotes, lastPrint, spark } from "./yahoo.ts";
+import { scanIndexAlerts, scanSigmaAlerts, scanStockAlerts } from "./alerts.ts";
 import type { Print } from "./feedhealth.ts";
 import { newerOnly } from "./relay.ts";
+import { checkRoll, fromReading, QUOTE_SOURCE, tradeDate, type ContractRow, type RollRow } from "./futures.ts";
 
 const CONCURRENCY = 6;
 export interface Pulled { i: InstrumentRow; ts: number[]; close: Array<number | null>; prevClose: number | null; ok: boolean }
@@ -88,17 +89,90 @@ export async function store(got: Pulled[], now: Date): Promise<{ quotes: number;
   return { quotes: write.length, bars: bars.length, older: quotes.length - write.length };
 }
 
-/** The table snapshot from what is stored, then the alerts: indices every minute from the table, single stocks
- *  every fifth minute (one spark batch per 20 names). Returns the table's row count and a note for the job log. */
+/** Which contract each future's quote is on, this minute (B-27; futures.ts): one quote request for the futures whose
+ *  market is open (or closed within the last 45 minutes), with the contract each was last recorded on where its expiry
+ *  is not stored yet. It records the session's contract, a roll when the contract is not the one recorded for the last
+ *  session before, and, once a roll's next session is read, on which day the series really changed contract. Returns
+ *  the futures read: a future not read this minute raises no σ alert (a roll could not be told from a move). */
+export async function readFutures(now: Date, holidays: Holidays): Promise<{ read: Set<string>; note: string }> {
+  const { data: inst, error } = await db.from("instruments").select("symbol,market").eq("active", true).eq("provider", "yahoo").like("symbol", "%=F");
+  if (error) throw new Error(error.message);
+  const futs = ((inst ?? []) as Array<{ symbol: string; market: string }>).filter((i) => {
+    const m = marketById(i.market); if (!m) return false;
+    const st = marketState(m, now, holidays);
+    return st === "OPEN" || st === "BREAK" || recentlyClosed(m, now, 45, holidays);
+  }).map((i) => i.symbol);
+  if (!futs.length) return { read: new Set(), note: "" };
+  const since = new Date(now.getTime() - 15 * 86400e3).toISOString().slice(0, 10);
+  const [{ data: recs, error: e1 }, { data: rls, error: e2 }] = await Promise.all([
+    db.from("fut_contracts").select("symbol,d,contract,expires,prev_close").in("symbol", futs).gte("d", since).order("d", { ascending: false }),
+    db.from("fut_rolls").select("symbol,d,from_contract,to_contract,prev_close,source,checked").in("symbol", futs).gte("d", since),
+  ]);
+  if (e1 || e2) throw new Error("futures: " + (e1 ?? e2)!.message);
+  const bySym = new Map<string, ContractRow[]>();   // newest first
+  for (const r of (recs ?? []) as ContractRow[]) { if (!bySym.has(r.symbol)) bySym.set(r.symbol, []); bySym.get(r.symbol)!.push(r); }
+  const rolls = (rls ?? []) as RollRow[];
+  const extra = [...new Set(futs.map((f) => bySym.get(f)?.[0]).filter((r): r is ContractRow => !!r && !r.expires).map((r) => r.contract))];
+  const q = await futuresQuotes([...futs, ...extra]);
+  const read = new Set<string>(), recWrites: ContractRow[] = [], rollWrites: RollRow[] = [], rollDrops: Array<{ symbol: string; d: string }> = [];
+  const toCheck: Array<{ roll: RollRow; reading: { d: string; contract: string; prevClose: number | null } }> = [];
+  for (const f of futs) {
+    const x = q[f], list = bySym.get(f) ?? [];
+    if (!x || !x.underlying || x.time == null) continue;
+    // a quote that has not moved for a week names no current contract (the probe read TIO=F's at 2021): not recorded,
+    // and the future counts as not read (no σ alert)
+    if (now.getTime() / 1000 - x.time > 7 * 86400) continue;
+    const d = tradeDate(x.time), lastBefore = list.find((r) => r.d < d) ?? null, same = list.find((r) => r.d === d);
+    const expires = q[x.underlying]?.expires ?? (list.find((r) => r.contract === x.underlying && r.expires)?.expires ?? null);
+    const res = fromReading({ symbol: f, contract: x.underlying, prevClose: x.prevClose, at: x.time }, lastBefore, expires);
+    if (!res) continue;
+    read.add(f);
+    if (!same || same.contract !== res.record.contract || same.prev_close !== res.record.prev_close || (same.expires ?? null) !== res.record.expires) recWrites.push(res.record);
+    const had = rolls.find((r) => r.symbol === f && r.d === d);
+    if (res.roll && (!had || had.to_contract !== res.roll.to_contract || had.prev_close !== res.roll.prev_close)) rollWrites.push(res.roll);
+    // the quote back on the contract of the session before (a change seen earlier today, then undone): no roll today
+    if (!res.roll && had && had.source === QUOTE_SOURCE && !had.checked) rollDrops.push({ symbol: f, d });
+    for (const r of rolls) if (r.symbol === f && !r.checked && r.d < d) toCheck.push({ roll: r, reading: { d, contract: res.record.contract, prevClose: res.record.prev_close } });
+  }
+  // the session after a roll: on which day did the series move to the new contract?
+  let moved = 0;
+  if (toCheck.length) {
+    const from = toCheck.map((c) => c.roll.d).sort()[0];
+    const { data: px, error: pe } = await db.from("prices_daily").select("symbol,d,close").in("symbol", [...new Set(toCheck.map((c) => c.roll.symbol))]).gte("d", new Date(Date.parse(from + "T00:00:00Z") - 14 * 86400e3).toISOString().slice(0, 10)).order("d");
+    if (pe) throw new Error("futures: " + pe.message);
+    const closes = (px ?? []) as Array<{ symbol: string; d: string; close: number }>;
+    for (const c of toCheck) {
+      const mine = closes.filter((p) => p.symbol === c.roll.symbol);
+      const on = mine.find((p) => p.d === c.roll.d)?.close ?? null, before = [...mine].reverse().find((p) => p.d < c.roll.d)?.close ?? null, lastBefore = [...mine].reverse().find((p) => p.d < c.reading.d)?.d ?? null;
+      const out = checkRoll(c.roll, c.reading, { rollDay: on, before, lastBefore });
+      if (out.act === "keep") rollWrites.push(out.roll);
+      else if (out.act === "move") { rollDrops.push({ symbol: c.roll.symbol, d: c.roll.d }); rollWrites.push(out.roll); moved++; }
+    }
+  }
+  for (const r of rollDrops) { const { error: de } = await db.from("fut_rolls").delete().eq("symbol", r.symbol).eq("d", r.d); if (de) throw new Error("fut_rolls: " + de.message); }
+  const rollRows = [...new Map(rollWrites.map((r) => [`${r.symbol}|${r.d}`, r])).values()];   // one row per key in one upsert
+  if (rollRows.length) { const { error: we } = await db.from("fut_rolls").upsert(rollRows.map((r) => ({ ...r, seen_at: now.toISOString() })), { onConflict: "symbol,d" }); if (we) throw new Error("fut_rolls: " + we.message); }
+  if (recWrites.length) { const { error: ce } = await db.from("fut_contracts").upsert(recWrites.map((r) => ({ ...r, seen_at: now.toISOString() })), { onConflict: "symbol,d" }); if (ce) throw new Error("fut_contracts: " + ce.message); }
+  const newRolls = rollWrites.filter((r) => !r.checked).map((r) => `${r.symbol} ${r.from_contract ?? "?"}→${r.to_contract}`);
+  return { read, note: `, futures ${read.size}/${futs.length} read${newRolls.length ? `, roll: ${newRolls.join(" ")}` : ""}${moved ? `, ${moved} roll(s) moved a session later` : ""}` };
+}
+
+/** The table snapshot from what is stored, then the alerts: indices and σ moves every minute from the table, single
+ *  stocks every fifth minute (one spark batch per 20 names). First, which contract each future is on (readFutures), so
+ *  a roll day's 1D is the change within the new contract. Returns the table's row count and a note for the job log. */
 export async function tableAndAlerts(now: Date, holidays: Holidays): Promise<{ rows: number; note: string }> {
+  let fut: { read: Set<string>; note: string } = { read: new Set(), note: "" };
+  // the note is shown with the feed's health: no address and no crumb in it, whatever the error says
+  try { fut = await readFutures(now, holidays); } catch (e) { fut.note = `, futures not read: ${String(e instanceof Error ? e.message : e).replace(/https?:\/\/[^\s)]+/g, "(address)").replace(/crumb=[^&\s)]+/gi, "crumb=…")}`; }
   const table = await computeTable(now);
   const { error: se } = await db.from("snapshots").upsert({ key: "table", payload: table, at: table.asOf }, { onConflict: "key" });
   if (se) throw new Error(se.message);
-  let note = "";
+  let note = fut.note;
   try {
     const ia = await scanIndexAlerts(table.rows, now);
+    const ga = await scanSigmaAlerts(table.rows, now, fut.read);
     const sa = now.getUTCMinutes() % 5 === 0 ? await scanStockAlerts(now, holidays) : { scanned: 0, alerts: 0 };
-    note = `, alerts idx ${ia}${sa.scanned ? ` / stocks ${sa.alerts} of ${sa.scanned}` : ""}`;
-  } catch (e) { note = `, alerts failed: ${e instanceof Error ? e.message : e}`; }
+    note += `, alerts idx ${ia} / σ ${ga}${sa.scanned ? ` / stocks ${sa.alerts} of ${sa.scanned}` : ""}`;
+  } catch (e) { note += `, alerts failed: ${e instanceof Error ? e.message : e}`; }
   return { rows: table.rows.length, note };
 }

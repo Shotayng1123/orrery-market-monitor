@@ -8,10 +8,15 @@ import { Star } from "../components/Star";
 import { hideCard, money, openAsset, showCard } from "../components/CompanyCard";
 import { useApi } from "../lib/useApi";
 import { useWatch } from "../lib/watch";
-import { fallbackDecimals, fmtLevel, fmtPct, signCls } from "../lib/fmt";
-import { asOfCell, asOfOf, asOfTitle, fmtDate, fmtDayTime, fmtWhen, type AsOfKind } from "../lib/time";
+import { fallbackDecimals, fmtLevel, fmtPct, fmtSigma, signCls } from "../lib/fmt";
+import { sigmaNoteLine } from "../lib/alertline";
+import { asOfCell, asOfOf, asOfTitle, fmtDate, fmtWhen, type AsOfKind } from "../lib/time";
+import { byResultsDay, fmtResultsDate, RESULTS_SOURCE, resultsMark, resultsStatus, resultsTip } from "../lib/results";
 import { classLabel, hitLine, MKT_CAP, NEXT_RESULTS, RESULTS_AHEAD, VS_200D, VS_50D } from "../lib/labels";
 import { cellBp, changeShade, RANGE_52W, RANGE_52W_TIP } from "./Market";
+import { marketSession, panelRowOf, symbolMarket, type PanelRow } from "../lib/opens";
+import { ClosedNow } from "../components/ClosedNow";
+import type { TableRow } from "../lib/types";
 
 /** A row of the watch_list route. Since 19 Nov 2026 a market instrument's row also carries the change of its level
  *  over each window (`chg1d` …, points for a yield: the page prints them in bp, as MARKETS does) and a yield's
@@ -41,7 +46,9 @@ export function sourcesOf(rows: WatchRow[]): string {
   return [...market, ...(official.length ? [`yields: ${official.join(", ")}`] : [])].join("; ");
 }
 export interface Feed {
-  alerts: Array<{ id: number; at: string; symbol: string; name: string; kind: string; pct: number | null; msg: string; url: string | null }>;
+  /** A σ move (I-6) carries its size in σ and its window and source (`note`); a server before 20 Nov 2026 sends no σ
+   *  move, and neither field. */
+  alerts: Array<{ id: number; at: string; symbol: string; name: string; kind: string; pct: number | null; msg: string; url: string | null; sigma?: number | null; note?: string | null }>;
   news: Array<{ id: number; publishedAt: string; source: string; title: string; url: string; tickers: Array<{ s: string; n: string }> }>;
   research: Array<{ key: string; d: string; kind: string; title: string; symbols: string[] }>;
 }
@@ -55,6 +62,21 @@ export const decode = (t: string) => t.replace(/&amp;/g, "&").replace(/&#x([0-9a
 /** How many alerts and headlines WATCHLIST shows before "SHOW n MORE" (D-48: at the feed's own lengths, 40 alerts
  *  and 60 headlines, the results dates fell two screens down). */
 export const WL_ALERTS = 10, WL_NEWS = 15;
+/** What a watchlist row gives the "Closed now" line (lib/opens.ts closedLine): a Monitor instrument as the market
+ *  table has it (its market; nothing for an official yield, which has no session; its short name where the Monitor
+ *  only reads it in New York's hours: the dollar index, the Cboe yields, VIX); any other name the market its symbol
+ *  gives (a stock's exchange, the FX week for a pair), or nothing where the Monitor keeps no hours. */
+export function useWatchMarkets(tick: number): (r: WatchRow) => PanelRow {
+  // the table names each instrument's market; it changes with the instruments list, so half-hourly is plenty
+  const table = useApi<{ rows: TableRow[] }>("table", undefined, Math.floor(tick / 30));
+  // (whether a row read in New York's hours is being read now is New York's session's to say: this copy of the table can be half an hour old)
+  const by = new Map((table.data?.rows ?? []).map((t): [string, PanelRow] => { const p = panelRowOf(t); return [t.symbol, p.read ? { read: p.read } : p]; }));
+  return (r) => (r.asOfKind === "published" ? {} : by.get(r.symbol) ?? { market: symbolMarket(r.symbol) });
+}
+/** The same for one row's tooltip: " · market closed · opens 23 Nov 22:30 SGT", or nothing. */
+export const closedWords = (row: PanelRow): string => { const m = row.read ? null : row.market, s = m ? marketSession(m) : null; return s && s.now === "closed" ? ` · market closed${s.note ? ` · ${s.note.text}` : ""}` : ""; };
+/** What ALERTS ON MY NAMES holds, said where it has nothing yet (both layouts). */
+export const WL_ALERTS_EMPTY = "Moves beyond ±5% (large companies) or ±7%, index moves beyond ±3%, σ moves from 2.5σ, buybacks, guidance changes and large deals on your names appear here.";
 export function WatchlistView({ tick }: { tick: number }) {
   const w = useWatch();
   const [shownA, setShownA] = useState(WL_ALERTS), [shownN, setShownN] = useState(WL_NEWS);
@@ -80,10 +102,12 @@ export function WatchlistView({ tick }: { tick: number }) {
   const cell = (v: number | null | undefined, full: number) => <td className={`num ${signCls(v, 1)}`} style={{ background: shade(v ?? null, full) }}>{fmtPct(v, 1)}</td>;
   // a yield's changes in bp with MARKETS' own figures and tints (full at 50bp; 75bp from the 200-day average)
   const bp = (v: number | null | undefined, full: number) => <td className={`num ${signCls(v == null ? null : v * 100, 1)}`} style={{ background: changeShade(v ?? null, full) }}>{cellBp(v)}</td>;
-  const ahead = rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3).sort((a, b) => a.earningsAt!.localeCompare(b.earningsAt!));
+  // each name's next results in the order of their days, each day the company's own market's (A-30)
+  const ahead = byResultsDay(rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3), (r) => r.earningsAt, (r) => r.symbol);
   const name = (s: string) => rows.find((r) => r.symbol === s)?.name ?? s;
   const how = "Press the star beside a name on its own page, in the screener or in the results calendar, or type part of a name or of a symbol above (toyota, nvid, 7203, ^N225) and choose from the list.";
   const sources = sourcesOf(rows);
+  const market = useWatchMarkets(tick);
   return (
     <>
       <Panel no="01" title="MY NAMES" span={12} k="wl" aux={<>{rows.length} name{rows.length === 1 ? "" : "s"}{sources ? ` · ${sources}` : ""} · times in SGT</>}>
@@ -111,9 +135,12 @@ export function WatchlistView({ tick }: { tick: number }) {
           <span className="chip-sm" onClick={() => void box.submit()}>ADD</span>
           {box.msg && <span id="wl-msg" className={box.msg.kind === "err" ? "warn" : "mut"}>{box.msg.text}</span>}
         </div>
+        {/* the markets of my names that are shut, each with when it opens, in SGT (the owner's request of 20 Nov 2026):
+            above the table, as on MARKETS and RATES & FX (the designer's D-62) */}
+        {rows.length > 0 && <ClosedNow id="wl-opens" rows={rows.map(market)} />}
         {rows.length ? (
           <table className="secT wlT">
-            <thead><tr><th /><th className="l">Name</th><th className="l">Sector / kind</th><th>Last</th><th className="l asof" title="What the row's figures are as of, in SGT: the date of a close or of an official yield's publication, the time of today's last print">As of</th><th>1D</th><th>1W</th><th>1M</th><th>3M</th><th>12M</th><th title="% for prices, bp for yields">{VS_50D}</th><th title="% for prices, bp for yields">{VS_200D}</th><th title={RANGE_52W_TIP}>{RANGE_52W}</th><th>{MKT_CAP}</th><th className="l" title="The company's next results date, in SGT; est. = estimated, not confirmed by the company">{NEXT_RESULTS}</th></tr></thead>
+            <thead><tr><th /><th className="l">Name</th><th className="l">Sector / kind</th><th>Last</th><th className="l asof" title="What the row's figures are as of, in SGT: the date of a close or of an official yield's publication, the time of today's last print">As of</th><th>1D</th><th>1W</th><th>1M</th><th>3M</th><th>12M</th><th title="% for prices, bp for yields">{VS_50D}</th><th title="% for prices, bp for yields">{VS_200D}</th><th title={RANGE_52W_TIP}>{RANGE_52W}</th><th>{MKT_CAP}</th><th className="l" title={`The company's next results date as ${RESULTS_SOURCE} gives it: the day in the company's own market (Tokyo, New York …), without a time of day, as the source does not state the release time; est. = estimated, not confirmed by the company`}>{NEXT_RESULTS}</th></tr></thead>
             <tbody>{rows.map((r) => {
               const a = asOfOf(r.asOf, r.asOfKind);
               return (
@@ -122,13 +149,13 @@ export function WatchlistView({ tick }: { tick: number }) {
                   <td className="l nm" title={`${r.name} (${r.symbol})`}><span className="lnk" onMouseEnter={(e) => showCard(r.symbol, e)} onMouseLeave={hideCard} onClick={() => openAsset(r.symbol)}>{r.name}</span> <span className="mut">{r.symbol}</span></td>
                   <td className="l mut">{r.sector ?? classLabel(r.kind)}</td>
                   <td className="num"><b>{lastOf(r)}</b></td>
-                  <td className="l mut asof" title={asOfTitle(a, r.source)}>{asOfCell(a)}</td>
+                  <td className="l mut asof" title={`${asOfTitle(a, r.source)}${closedWords(market(r))}`}>{asOfCell(a)}</td>
                   {r.isYield
                     ? <>{WINDOWS.map(([, c]) => <Fragment key={c}>{bp(r[c], 0.5)}</Fragment>)}{bp(null, 0.5)}{bp(r.vs200chg, 0.75)}</>
                     : <>{cell(r.pct1d, 4)}{cell(r.pct1w, 8)}{cell(r.pct1m, 12)}{cell(r.pct3m, 20)}{cell(r.pct12m, 50)}{cell(r.vs50, 10)}{cell(r.vs200, 20)}</>}
                   <td className="num mut">{r.pos52 == null ? "–" : `${Math.round(r.pos52)}%`}</td>
                   <td className="num mut">{r.mcap == null ? "–" : money(r.mcap, r.ccy)}</td>
-                  <td className="l mut">{r.earningsAt ? `${fmtDate(r.earningsAt)}${r.earningsEst ? " est." : ""}` : "–"}</td>
+                  <td className="l mut" title={r.earningsAt ? resultsTip(r.symbol, r.earningsEst) : undefined}>{r.earningsAt ? `${fmtResultsDate(r.earningsAt, r.symbol)}${resultsMark(r.earningsEst, r.symbol) ? " est." : ""}` : "–"}</td>
                 </tr>
               );
             })}</tbody>
@@ -143,15 +170,17 @@ export function WatchlistView({ tick }: { tick: number }) {
           Under 1,100 CSS px of layout, and in the one-screen layout, the panels follow each other. */}
       <div className="pcols">
         <div className="pcol w4">
-          <Panel no="02" title={RESULTS_AHEAD.toUpperCase()} span={4} k="wl-earn" aux="my names · times in SGT">
+          <Panel no="02" title={RESULTS_AHEAD.toUpperCase()} span={4} k="wl-earn" aux={<span title="Each company's day in its own market (Tokyo, New York …), as the source gives it. No time of day: the source gives a time with the date but does not say that it is the company's release time.">my names · {RESULTS_SOURCE} · dates only</span>}>
             {ahead.length ? (
-              <table className="secT"><tbody>{ahead.map((r) => <tr key={r.symbol}><td className="l mut num">{fmtDayTime(r.earningsAt)}</td><td className="l wrap"><span className="lnk" onClick={() => openAsset(r.symbol)}>{r.name}</span></td><td className="l mut">{r.earningsEst ? "est." : "confirmed"}</td></tr>)}</tbody></table>
+              <table className="secT"><tbody>{ahead.map((r) => <tr key={r.symbol} title={resultsTip(r.symbol, r.earningsEst)}><td className="l mut num">{fmtDate(r.day)}</td><td className="l wrap"><span className="lnk" onClick={() => openAsset(r.symbol)}>{r.name}</span></td><td className="l mut">{resultsStatus(r.earningsEst, r.symbol) ?? "–"}</td></tr>)}</tbody></table>
             ) : <Empty title="No dates ahead">{rows.length ? "None of your names has a results date in the feed." : "Add names to see their results dates."}</Empty>}
           </Panel>
           <Panel no="04" title="ALERTS ON MY NAMES" span={4} k="wl-alerts" aux={feed.data ? `${alerts.length} recent · times in SGT` : ""}>
             {alerts.length ? (
-              <table className="secT wlal"><tbody>{alerts.slice(0, shownA).map((a) => <tr key={a.id}><td className="l mut num">{fmtWhen(a.at)}</td><td className="l wrap">{a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.msg}</a> : <span className="lnk" onClick={() => openAsset(a.symbol)}>{a.msg}</span>}</td><td className={`num ${signCls(a.pct, 1)}`}>{a.pct == null ? "" : fmtPct(a.pct, 1)}</td></tr>)}</tbody></table>
-            ) : <Empty title="No alerts">{feed.error ?? "Moves beyond ±5% (large companies) or ±7%, buybacks, guidance changes and large deals on your names appear here."}</Empty>}
+              // a σ move (I-6) says what it is, and its window and source, under its line, and its figure is its σ (a
+              // yield's has no per cent), as the header's list writes it (the reviewer's F3)
+              <table className="secT wlal"><tbody>{alerts.slice(0, shownA).map((a) => { const sg = a.kind === "sigma"; return <tr key={a.id} data-kind={a.kind}><td className="l mut num">{fmtWhen(a.at)}</td><td className="l wrap">{a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.msg}</a> : <span className="lnk" onClick={() => openAsset(a.symbol)}>{a.msg}</span>}{sg && <small className="alnote">{sigmaNoteLine(a)}</small>}</td><td className={`num ${signCls(sg ? a.sigma : a.pct, 1)}`}>{sg ? fmtSigma(a.sigma) : a.pct == null ? "" : fmtPct(a.pct, 1)}</td></tr>; })}</tbody></table>
+            ) : <Empty title="No alerts">{feed.error ?? WL_ALERTS_EMPTY}</Empty>}
             {alerts.length > shownA && <ShowMore id="wl-alerts-more" n={Math.min(WL_ALERTS, alerts.length - shownA)} shown={shownA} total={alerts.length} onMore={() => setShownA((n) => n + WL_ALERTS)} />}
           </Panel>
         </div>

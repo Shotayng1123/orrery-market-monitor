@@ -13,19 +13,30 @@ import type { EconEvent, TableRow } from "../lib/types";
 import { fmtLevel, fmtSigma, signCls } from "../lib/fmt";
 import { fmtClock, fmtDate, fmtStamp, SGT } from "../lib/time";
 import { EVENTS, LARGEST_FALL, LARGEST_RISE, LEVEL_THEN, NEWS, NEXT_MEETING, RANGE_52W, REALISED_VOL, SIGMA_1M, VS_200D, WORKED } from "../lib/labels";
-import { asOfWords, calSource, ccyWords, distCls, distText, impactOk, lastAndDay, matchedWords, moveCls, moveText, noEvents, perfNote, periodsOf, sourceNote, volLine, volTip, workedLine, workedOut, type ImpactPick, type InstrumentInfo, type InstrumentPage, type KeyLine } from "../lib/instrument";
+import { asOfWords, calSource, ccyWords, contractLine, contractSource, distCls, distText, impactOk, lastAndDay, lastRoll, matchedWords, moveCls, moveText, noEvents, perfNote, periodsOf, rollMarks, rollsOutLine, SERIES_LINE, sourceNote, volLine, volTip, workedLine, workedOut, type ImpactPick, type InstrumentInfo, type InstrumentPage, type KeyLine } from "../lib/instrument";
 import { dayLabel, dayOf, IMPACTS } from "./News";
 import { SIGMA_1M_TIP } from "./Market";
+import { pageLive, symbolMarket } from "../lib/opens";
 
 /** The chart tile's row: MARKETS' own, refreshed every minute, for a Monitor instrument (so its last print and its
  *  day agree with MARKETS to the minute); the page's answer otherwise. */
 export function useLiveRow(d: InstrumentPage, tick: number): TableRow {
   const t = useApi<{ rows: TableRow[] }>(d.instrument.monitor ? "table" : null, undefined, tick);
-  return t.data?.rows.find((r) => r.symbol === d.symbol) ?? d.instrument.row;
+  const row = t.data?.rows.find((r) => r.symbol === d.symbol) ?? d.instrument.row;
+  // A Monitor instrument's row carries its market and whether it is live, as MARKETS has them. For any other name the
+  // server sends a market it did not look up (New York for an index or a future from the search) and never live: the
+  // page keeps only the market the symbol itself gives (a pair trades the FX week, a coin never stops), reads live
+  // from the session table, and of the rest says neither CLOSED nor when it opens (lib/opens.ts)
+  if (d.instrument.monitor) return row;
+  const market = symbolMarket(d.symbol) ?? "";
+  return { ...row, market, live: pageLive(market, row.lastAt) };
 }
 function KV({ k, children, title, cls }: { k: ReactNode; children: ReactNode; title?: string; cls?: string }) {
   return <tr title={title}><td className="l">{k}</td><td className={`num${cls ? ` ${cls}` : ""}`}>{children}</td></tr>;
 }
+/** A value of several parts that may go onto a second line between its parts, each part whole (KV's `cls` "wv"): a
+ *  long value wraps rather than push every figure of the panel out of it (the designer's D-64). */
+const parts = (text: string): ReactNode => text.split(" · ").map((x, n, all) => <Fragment key={n}><span className="nb">{x}{n < all.length - 1 ? " ·" : ""}</span>{n < all.length - 1 ? " " : ""}</Fragment>);
 /** A KEY DATA label, with the designer's † after it where the Monitor works the figure out itself (the reviewer's
  *  R2B-05): the line under the panel says from what and over which dates. Both layouts. */
 export function keyLabel(i: Pick<InstrumentInfo, "monitor">, text: string, line: KeyLine): ReactNode {
@@ -83,13 +94,14 @@ export function InstrumentView({ d, tick }: { d: InstrumentPage; tick: number })
   const no = (k: string) => String(order.indexOf(k) + 1).padStart(2, "0");
   const asOf = i.asOfKind === "print" && row.lastAt ? fmtStamp(row.lastAt) : asOfWords(i);
   const p = period && periods.includes(period) ? period : "12M";
+  const fut = i.futures, marks = fut ? rollMarks(fut) : undefined, roll = lastRoll(fut);   // B-27: a future's rolls, marked on its daily chart
   return (
     <>
       <div className="c12"><PeriodBar periods={periods} period={p} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} extra={term ? <ScreenChips sections={sections} screen={scr} onScreen={setScreen} /> : undefined} /></div>
       <div className="pcols" data-page="instrument" data-screen={term ? scr : undefined}>
         <div className="pcol w8">
           {on("chart") && <Panel no={no("chart")} k="in-chart" title={d.name.toUpperCase()} span={8} aux={<><Star symbol={d.symbol} name={d.name} /> {d.symbol} · {i.kind} · {i.source}{i.official ? " · published once a day" : ""}</>}>
-            <div className="bigwrap"><ChartPanel row={row} period={p} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes /></div>
+            <div className="bigwrap"><ChartPanel row={row} period={p} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes marks={marks} /></div>
           </Panel>}
           {on("perf") && <Panel no={no("perf")} k="in-perf" title="PERFORMANCE" span={8} aux={u === "yield" ? "change in bp" : "price change"}>
             <table className="secT perfT inperf" id="in-perf">
@@ -111,7 +123,9 @@ export function InstrumentView({ d, tick }: { d: InstrumentPage; tick: number })
             <div className="kvwrap">
               <table className="secT kvT" id="in-key"><tbody>
                 <KV k="Day's range" title={i.official ? "A yield published once a day has no prices within the day" : i.session?.at ? `${i.source}: the session's low and high, as of ${fmtStamp(i.session.at)}` : "No session figures from the source"}>{i.session && i.session.low != null && i.session.high != null ? `${lvl(i.session.low)} – ${lvl(i.session.high)}` : "–"}</KV>
-                <KV k="Previous close" title={i.prev.date ? `the close of ${fmtDate(i.prev.date)}` : undefined}>{lvl(i.prev.level)}</KV>
+                <KV k="Previous close" title={row.roll?.step != null ? `the new contract's own close of ${fmtDate(i.prev.date)}: today is a change of contract` : i.prev.date ? `the close of ${fmtDate(i.prev.date)}` : undefined}>{lvl(i.prev.level)}</KV>
+                {fut && <KV k="Contract" cls="wv" title={`The named contract the last price is from, as ${fut.source}${fut.seenAt ? `, read ${fmtStamp(fut.seenAt)}` : ""}`}><span id="in-contract">{parts(contractLine(fut))}</span><small className="vl2" id="in-contract-src">{contractSource(fut)}</small></KV>}
+                {fut && <KV k="Last change of contract" cls="wv" title={fut.lastRoll ? `The first session on ${fut.lastRoll.toMonth}, from ${fut.lastRoll.fromMonth ?? "a contract no longer listed"}. ${fut.lastRoll.step != null ? "The step between the two contracts is not a move: it is left out of the 1D, the σ, realised volatility and the largest moves. " : "The source gave no close of the new contract before it, so the step was not measured. "}${fut.lastRoll.source}` : "No roll in the Monitor's record"}><span id="in-roll">{parts(roll.main)}</span>{roll.sub && <small className="vl2" id="in-roll-step">{roll.sub}</small>}</KV>}
                 <KV k={keyLabel(i, RANGE_52W, "range52")} title={`The lowest and highest of the last 252 closes: low ${fmtDate(r52.loDate)}, high ${fmtDate(r52.hiDate)}; ${r52.pos == null ? "–" : `${Math.round(r52.pos)}%`} of the way up, as on MARKETS`}>
                   <span className="rng"><span>{lvl(r52.lo)}</span><span className="bar">{r52.pos != null && <i style={{ left: `${Math.max(0, Math.min(100, r52.pos))}%` }} />}</span><span>{lvl(r52.hi)}</span></span>
                 </KV>
@@ -121,10 +135,11 @@ export function InstrumentView({ d, tick }: { d: InstrumentPage; tick: number })
                 <KV k={keyLabel(i, `${REALISED_VOL}, 1M / 3M / 12M`, "vol")} title={volTip(u)}><span className="vl1">{vol.main}</span><small className="vl2" id="in-volsub">{vol.sub}</small></KV>
                 <KV k={keyLabel(i, LARGEST_RISE, "rise")} title={i.rise ? `From the low of ${fmtDate(i.rise.from)} to the high of ${fmtDate(i.rise.to)}` : "No rise in the last twelve months"}>{i.rise ? <><span className={distCls(i.rise.chg, u)}>{distText(i.rise.chg, u)}</span><span className="mut"> · {fmtDate(i.rise.to)}</span></> : "–"}</KV>
                 <KV k={keyLabel(i, LARGEST_FALL, "fall")} title={i.fall ? `From the high of ${fmtDate(i.fall.from)} to the low of ${fmtDate(i.fall.to)}` : "No fall in the last twelve months"}>{i.fall ? <><span className={distCls(i.fall.chg, u)}>{distText(i.fall.chg, u)}</span><span className="mut"> · {fmtDate(i.fall.to)}</span></> : "–"}</KV>
-                <KV k="Source · as of" title={sourceNote(i)}><span id="in-src">{i.source} · {asOf}</span><small className="vl2">{WORKED} worked out by the Monitor</small></KV>
+                <KV k="Source · as of" cls="wv" title={sourceNote(i)}><span id="in-src">{parts(`${i.source} · ${asOf}`)}</span><small className="vl2">{WORKED} worked out by the Monitor</small></KV>
               </tbody></table>
             </div>
             <div className="mut finnote" id="in-worked">{workedLine(i)}</div>
+            {fut && <div className="mut finnote" id="in-rolls">{SERIES_LINE} {rollsOutLine(i)}</div>}
           </Panel>}
           {ev && on("events") && (
             <Panel no={no("events")} k="in-events" title={EVENTS.toUpperCase()} span={4} aux={<span className="chips" style={{ margin: 0 }}><Pick label="Impact" value={imp} options={IMPACTS} onChange={setImp} /><span className="mut">{ccyWords(ev.ccys)} · times in SGT{calSource(ev.rows) ? ` · ${calSource(ev.rows)}` : ""}</span></span>}>

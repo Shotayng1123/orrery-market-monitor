@@ -22,3 +22,8 @@ export function alertFigWord(a: { kind: string; msg: string }): "intraday" | "at
 /** A news alert's headline without the kind the server puts in front ("M&A: Two lenders agree …"), for the name's
  *  place on the line when the alert names no company with a page here (newsalerts.ts: symbol "news:<id>"). */
 export const alertHeadline = (msg: string): string => msg.replace(/^(?:M&A|Buyback|Guidance):\s*/, "");
+
+/** A σ move's second line in a list that has no column for its kind (WATCHLIST, both layouts): "σ move · σ of 63
+ *  daily changes to 19 Nov 2026 · Yahoo Finance", its kind and the window and source the server wrote with it
+ *  (supabase/functions/_shared/sigma.ts sigmaNote); the kind alone where an alert carries no note. */
+export const sigmaNoteLine = (a: { note?: string | null }): string => (a.note ? `σ move · ${a.note}` : "σ move");

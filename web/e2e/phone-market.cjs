@@ -8,7 +8,7 @@ const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
 (async () => { const b = await chromium.launch();
   // the classic table's figures, to compare the phone list against
   const classic = {}; { const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } }); const p = await ctx.newPage(); await p.goto(MOCK + "#market", { waitUntil: "networkidle" }); await p.waitForSelector("table.mkt tbody tr:not(.cls)"); await p.waitForTimeout(500);
-    Object.assign(classic, await p.evaluate(() => Object.fromEntries([...document.querySelectorAll("table.mkt tbody tr:not(.cls)")].map((tr) => { const td = [...tr.children]; const name = td[0].childNodes[0].textContent.trim(); return [name, { last: td[1].textContent.trim(), d1: td[2].textContent.trim(), w1: td[3].textContent.trim(), m12: td[6].textContent.trim() }]; }))));
+    Object.assign(classic, await p.evaluate(() => Object.fromEntries([...document.querySelectorAll("table.mkt tbody tr:not(.cls)")].map((tr) => { const td = [...tr.children]; const name = td[0].childNodes[0].textContent.trim(); return [name, { last: td[1].textContent.trim(), d1: td[2].textContent.trim(), w1: td[4].textContent.trim(), m12: td[7].textContent.trim() }]; }))));   // 1D IN σ follows 1D (I-6)
     const s = await state(p); ck("laptop: unaffected (no phone shell)", !s.pv2 && s.nav === 0 && s.table === 1, s);
     await p.goto(MOCK + "?phone=new#market", { waitUntil: "networkidle" }); await p.waitForTimeout(600); const s2 = await state(p);
     ck("laptop with the preview switched on: still the desktop layout", !s2.pv2 && s2.nav === 0 && s2.table === 1 && s2.list === 0, s2); await ctx.close(); }
@@ -32,7 +32,7 @@ const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
     ck("nothing overflows sideways", m.overflowX <= 0, m);
     await p.locator(".mp-row").nth(1).tap(); await p.waitForSelector(".mp-det canvas, .mp-det .chartbox"); await p.waitForTimeout(1200);
     const d = await p.evaluate(() => ({ open: document.querySelectorAll(".mp-item.open").length, chart: document.querySelectorAll(".mp-det canvas").length, cells: document.querySelectorAll(".mp-det .mp-grid > div").length, cur: document.querySelector(".mp-det .mp-grid .cur .k")?.textContent, more: !!document.querySelector(".mp-more") }));
-    ck("tap a line: its chart, six periods and three statistics open under it", d.open === 1 && d.chart >= 1 && d.cells === 9 && d.cur === "1D" && d.more, d);
+    ck("tap a line: its chart, six periods and four statistics (1D in σ first) open under it", d.open === 1 && d.chart >= 1 && d.cells === 10 && d.cur === "1D" && d.more, d);
     await p.locator(".mp-row").nth(3).tap(); await p.waitForTimeout(500); ck("tapping another line moves the detail there", (await p.evaluate(() => [...document.querySelectorAll(".mp-item")].map((e, i) => e.classList.contains("open") ? i : -1).filter((i) => i >= 0).join())) === "3");
     await p.locator(".mp-row").nth(3).tap(); await p.waitForTimeout(300); ck("tapping it again closes the detail", (await p.locator(".mp-item.open").count()) === 0);
     // an index's own page is its page on EQUITIES (Shota, 19 Nov 2026: the Nikkei 225 opened from MARKET was a different page from the one on EQUITIES)

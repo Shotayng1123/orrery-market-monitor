@@ -15,6 +15,7 @@ import { avgTurnover, avgVolume, LARGEST_FALL, MKT_CAP, NEWS, NEXT_RESULTS, PERI
 import { chartMarks, finSections, fmtCount, fmtPc, fmtPp, fmtX, isSmallMove, moveRule, siteOf, whyText, type MoveRow, type StockPage } from "../lib/stock";
 import { periodHolding } from "../lib/periods";
 import { chartRow, GuidanceLine, MoveText, profileOf, shortLine } from "./Asset";
+import { fmtResultsDate, resultsWords } from "../lib/results";
 import { AssetPhoneLegacy } from "./AssetPhoneLegacy";
 import { InstrumentPhone } from "./InstrumentPhone";
 import { isInstrumentPage } from "../lib/instrument";
@@ -99,7 +100,8 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
             <KV k="P/E, last year">{fmtX(d.val.pe)}</KV>
             <KV k="P/B">{fmtX(d.val.pb, 2)}</KV>
             <KV k="Dividend yield, last year / guidance">{fmtPc(d.val.yield, false, 2)} / {fmtPc(d.val.yieldGuide, false, 2)}</KV>
-            <KV k={NEXT_RESULTS} sub={d.earningsEst ? "estimated, not confirmed by the company" : undefined}>{d.earningsAt ? fmtStamp(d.earningsAt) : "–"}</KV>
+            {/* A-30: the day as the source gives it, in the company's own market, and no time of day (lib/results.ts) */}
+            <KV k={NEXT_RESULTS} sub={d.earningsAt ? <span id="st-results-src">{resultsWords(d.earningsEst, d.symbol)}</span> : undefined}><span id="st-results">{d.earningsAt ? fmtResultsDate(d.earningsAt, d.symbol) : "–"}</span></KV>
             {prof && <KV k="Fiscal year end · standard" sub={`有価証券報告書 ${prof.label} · EDINET DB`}>{prof.month} · {prof.std}</KV>}
             {prof && <KV k="Annual report" sub={prof.doc ? undefined : prof.none}>{prof.doc ? <a href={prof.doc.href} target="_blank" rel="noreferrer" id="st-yuho" title={prof.doc.tip}>有報 {prof.label} ↗</a> : `有報 ${prof.label}`}</KV>}
           </tbody></table>

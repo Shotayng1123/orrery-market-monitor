@@ -103,8 +103,9 @@ const calRows = (p, phone) => p.evaluate((phone) => phone
     // the alert list in the header: one of each kind (a stock's move, an index, a buyback, guidance, M&A)
     await p.evaluate(() => { location.hash = "market"; }); await p.waitForTimeout(500);
     if (phone) await p.evaluate(() => scrollTo(0, 0));
-    await p.locator("#alerts .alrt").click(); await p.waitForSelector(".aldrop tbody tr");
-    const kinds = await p.evaluate(() => [...document.querySelectorAll(".aldrop tbody tr td:nth-child(3)")].map((x) => x.textContent));
+    // (a computer's list is a table with a kind column; a phone's is rows, each of its kind: the designer's D-63)
+    await p.locator("#alerts .alrt").click(); await p.waitForSelector(".aldrop [data-kind]");
+    const kinds = await p.evaluate(() => [...document.querySelectorAll(".aldrop [data-kind]")].map((x) => x.querySelector(".al-kind")?.textContent ?? ({ index: "index", buyback: "buyback", revision: "guidance", mna: "M&A", sigma: "σ move", stock: "TSE" })[x.dataset.kind]));
     ck(`the alert list holds one of each kind: ${[...new Set(kinds)].join(", ")}`, ["index", "buyback", "guidance", "M&A"].every((k) => kinds.includes(k)) && kinds.some((k) => k === "TSE" || k === "NYSE"), kinds);
     await p.keyboard.press("Escape"); await p.mouse.click(5, phone ? 600 : 880);
     ck("nothing says the API is not configured; no page errors", (await noConfig(p)) && errs.length === 0, errs);
@@ -157,10 +158,13 @@ const calRows = (p, phone) => p.evaluate((phone) => phone
     const m = await p.evaluate(async () => { const { mockAction } = await import("/orrery-market-monitor/src/lib/mock.ts"); const a = (x, q) => mockAction(x, q);
       return { cal: a("calendar").rows.map((r) => r.title), news: a("news", { n: 150 }).rows.map((r) => r.title), notes: a("notes", { n: 1000 }).rows.map((r) => r.title), reports: a("reports", { n: 1000 }).rows.map((r) => r.title), earnings: a("earnings").rows.map((r) => r.symbol), alerts: a("alerts", { n: 50 }).rows.map((r) => r.msg), banks: a("policy").rows.map((r) => r.bank) }; });
     const t = (xs) => xs.map((r) => r.title);
-    ck("the local copy answers with the rows the browser checks use (calendar, headlines, notes, reports, earnings, alerts, policy rates)", JSON.stringify(m.cal) === JSON.stringify(t(S.calendar)) && JSON.stringify(m.news) === JSON.stringify(t(S.news)) && JSON.stringify(m.notes) === JSON.stringify(t(S.notes)) && JSON.stringify(m.reports) === JSON.stringify(t(S.reports)) && JSON.stringify(m.earnings) === JSON.stringify(S.earnings.map((r) => r.symbol)) && JSON.stringify(m.alerts) === JSON.stringify(S.alerts.map((r) => r.msg)) && JSON.stringify(m.banks) === JSON.stringify(S.policy.rows.map((r) => r.bank)), { cal: m.cal.length, news: m.news.length, notes: m.notes.length });
+    ck("the local copy answers with the rows the browser checks use (calendar, headlines, notes, reports, earnings, alerts from 2.5σ as the server lists them, policy rates)", JSON.stringify(m.cal) === JSON.stringify(t(S.calendar)) && JSON.stringify(m.news) === JSON.stringify(t(S.news)) && JSON.stringify(m.notes) === JSON.stringify(t(S.notes)) && JSON.stringify(m.reports) === JSON.stringify(t(S.reports)) && JSON.stringify(m.earnings) === JSON.stringify(S.earnings.map((r) => r.symbol)) && JSON.stringify(m.alerts) === JSON.stringify(S.alerts.filter((r) => r.kind !== "sigma" || Math.abs(r.sigma) >= 2.5).map((r) => r.msg)) && JSON.stringify(m.banks) === JSON.stringify(S.policy.rows.map((r) => r.bank)), { cal: m.cal.length, news: m.news.length, notes: m.notes.length });
     await ctx.close(); }
   { const js = fs.readdirSync(DIST).filter((f) => f.endsWith(".js")).map((f) => fs.readFileSync(path.join(DIST, f), "utf8")).join("\n");
-    const marks = [H120, T110, LONG, JP, ZEW, "om_mock_watch", "Nippon Stand-in Heavy Industries"].filter((s) => js.includes(s));
+    // I-6 and B-27's stand-ins too: the 2.7σ alert's note and the stand-in futures' contracts (lib/mock.ts); and the
+    // local copy's clock and its copy of the holiday calendar (lib/mockclock.ts; the live page takes the calendar from
+    // the server's health answer, so a day of it such as 22 Mar 2027 is in no script)
+    const marks = [H120, T110, LONG, JP, ZEW, "om_mock_watch", "Nippon Stand-in Heavy Industries", "σ of 63 daily changes to the last close", "GCG27.CMX", "GCZ26.CMX", "NKDZ26.CME", "om_mock_now", "2027-03-22"].filter((s) => js.includes(s));
     ck(`the site as published (a production build) carries none of the stand-in rows (${js.length} characters of script searched)`, js.length > 100000 && marks.length === 0, marks); }
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

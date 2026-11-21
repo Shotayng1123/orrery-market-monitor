@@ -53,6 +53,11 @@ const SUITES = [
   { name: "offline", needs: ["mock", "built"] },
   { name: "notifications", needs: ["mock", "built"] },
   { name: "local-copy", needs: ["mock", "built"] },
+  { name: "sigma-moves", needs: ["mock", "standin"] },
+  { name: "page-top", needs: ["mock", "standin"] },
+  { name: "results-dates", needs: ["mock", "standin"] },
+  { name: "opens", needs: ["mock", "standin"] },
+  { name: "layout-guard-closed", needs: ["mock"] },
 ];
 
 const args = process.argv.slice(2), serial = args.includes("--serial"), names = args.filter((a) => !a.startsWith("--"));

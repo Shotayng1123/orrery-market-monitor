@@ -165,15 +165,20 @@ export const rowAsOf = (r: { lastAt: string | null; source?: string | null }, no
 /** A row's as-of for a tooltip, with its source: "Japan MOF · published for 19 Nov 2026", "Yahoo Finance · close of
  *  19 Nov 2026", "Yahoo Finance · last print 20 Nov 2026 13:35 SGT". */
 export const rowAsOfTitle = (r: { lastAt: string | null; source?: string | null; symbol: string }, now: Date = new Date()): string => asOfTitle(rowAsOf(r, now), rowSource(r));
-export interface TileStamp { label: "LIVE" | "CLOSED" | "PUBLISHED"; text: string; tip: string }
+export interface TileStamp { label: "LIVE" | "CLOSED" | "PUBLISHED" | "LAST PRINT" | "LAST CLOSE"; text: string; tip: string }
 /** A chart tile's stamp: LIVE or CLOSED with the print's time and its zone ("13:35 SGT" today, "19 Nov 13:35 SGT"
  *  before: a tile's panel does not say its times are in SGT); CLOSED with the date of a booked close; PUBLISHED with
  *  the date an official yield was published for ("19 Nov 2026"). Never a time of day for a figure that has none. The
- *  tooltip names the source. */
-export function tileStamp(r: { lastAt: string | null; live: boolean; source?: string | null; symbol: string }, now: Date = new Date()): TileStamp {
-  const a = rowAsOf(r, now), tip = asOfTitle(a, rowSource(r));
-  if (!a) return { label: r.live ? "LIVE" : "CLOSED", text: "–", tip };
+ *  tooltip names the source.
+ *  `session` is what the Monitor's session table says of the row's market now (lib/opens.ts). A row that is not live
+ *  says CLOSED only where its market is shut, and the line beside it then says when it opens. In its regular hours
+ *  ("open": a delayed feed's first minutes of a session, a feed that has stopped, a holiday the Monitor does not know)
+ *  and for a market the table does not keep ("unknown") it says what the figure is instead, LAST PRINT with the
+ *  print's time or LAST CLOSE with the close's date: the Monitor does not call a market closed against its own table. */
+export function tileStamp(r: { lastAt: string | null; live: boolean; source?: string | null; symbol: string }, now: Date = new Date(), session: "closed" | "open" | "unknown" = "closed"): TileStamp {
+  const a = rowAsOf(r, now), tip = asOfTitle(a, rowSource(r)), shut = session === "closed";
+  if (!a) return { label: r.live ? "LIVE" : shut ? "CLOSED" : "LAST PRINT", text: "–", tip };
   if (a.kind === "published") return { label: "PUBLISHED", text: fmtDate(a.ymd), tip };
-  if (a.kind === "close") return { label: "CLOSED", text: fmtDate(a.ymd), tip };
-  return { label: r.live ? "LIVE" : "CLOSED", text: `${a.today ? a.time : `${a.date} ${a.time}`} SGT`, tip };
+  if (a.kind === "close") return { label: shut ? "CLOSED" : "LAST CLOSE", text: fmtDate(a.ymd), tip };
+  return { label: r.live ? "LIVE" : shut ? "CLOSED" : "LAST PRINT", text: `${a.today ? a.time : `${a.date} ${a.time}`} SGT`, tip };
 }

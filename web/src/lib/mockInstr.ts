@@ -5,7 +5,8 @@
 // a yield's changes in points (bp on the page), a price's in per cent; volatility over 21, 63 and 252 sessions with
 // its percentile among three years of readings; the largest rise and fall of twelve months.
 import type { Alert, EconEvent, NewsItem, PeriodKey, TableRow } from "./types";
-import type { InstrumentInfo, InstrumentPage, Swing, Units, VolStat } from "./instrument";
+import type { FuturesInfo, InstrumentInfo, InstrumentPage, Swing, Units, VolStat } from "./instrument";
+import { monthOf } from "./futures";
 import type { StockFeed } from "./stock";
 
 /** The words an instrument's headlines are matched by: the server's lists (instrfeed.ts newsWords) for the mock's
@@ -43,9 +44,25 @@ const chg = (a: number | null | undefined, b: number | null | undefined, u: Unit
 const monthsBack = (t: number, m: number) => { const d = new Date(t * 1000); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - m, Math.min(d.getUTCDate(), new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - m + 1, 0)).getUTCDate())) / 1000; };
 const onOrBefore = (bars: Array<{ t: number; c: number }>, t: number) => { let a: { t: number; c: number } | null = null; for (const b of bars) { if (b.t <= t) a = b; else break; } return a; };
 
-function vol(bars: Array<{ t: number; c: number }>, n: number, u: Units): VolStat {
+/** A future's series with its changes of contract taken out, by the server's rule (supabase/functions/_shared/futures.ts
+ *  rollSegments): the closes before a roll times the new contract's own close over the series' own; cut where that close
+ *  is not known. sim/logic.test.ts checks the two give the same figures. */
+type MockRoll = { d: string; prevClose: number | null };
+export function mockSegments(bars: Array<{ t: number; c: number }>, rolls: MockRoll[]): Array<Array<{ t: number; c: number }>> {
+  if (!rolls.length) return [bars];
+  const rs = [...rolls].sort((a, b) => b.d.localeCompare(a.d)), out: Array<Array<{ t: number; c: number }>> = [];
+  let seg: Array<{ t: number; c: number }> = [], f = 1, k = 0;
+  for (let i = bars.length - 1; i >= 0; i--) {
+    const b = bars[i], d = iso(b.t);
+    while (k < rs.length && rs[k].d > d) { const r = rs[k++]; if (r.prevClose != null && r.prevClose > 0 && b.c > 0) f *= r.prevClose / b.c; else { if (seg.length) out.unshift(seg.reverse()); seg = []; f = 1; } }
+    seg.push(f === 1 ? b : { t: b.t, c: b.c * f });
+  }
+  if (seg.length) out.unshift(seg.reverse());
+  return out;
+}
+function vol(bars: Array<{ t: number; c: number }>, n: number, u: Units, rolls: MockRoll[] = []): VolStat {
   const xs: Array<{ t: number; x: number }> = [];
-  for (let i = 1; i < bars.length; i++) xs.push({ t: bars[i].t, x: u === "yield" ? bars[i].c - bars[i - 1].c : Math.log(bars[i].c / bars[i - 1].c) });
+  for (const sg of mockSegments(bars, rolls)) for (let i = 1; i < sg.length; i++) xs.push({ t: sg[i].t, x: u === "yield" ? sg[i].c - sg[i - 1].c : Math.log(sg[i].c / sg[i - 1].c) });
   if (xs.length < n) return { day: null, ann: null, pctl: null, since: null };
   const sd = (w: number[]) => { const m = w.reduce((a, x) => a + x, 0) / w.length; return Math.sqrt(w.reduce((a, x) => a + (x - m) ** 2, 0) / (w.length - 1)); };
   const reads: Array<{ t: number; sd: number }> = [];
@@ -53,15 +70,18 @@ function vol(bars: Array<{ t: number; c: number }>, n: number, u: Units): VolSta
   const now = reads[reads.length - 1], start = monthsBack(now.t, 36), win = reads.filter((r) => r.t > start), covered = reads[0].t <= start + 10 * DAY, k = u === "yield" ? 1 : 100;
   return { day: now.sd * k, ann: now.sd * Math.sqrt(252) * k, pctl: covered ? (win.filter((r) => r.sd <= now.sd * (1 + 1e-9)).length / win.length) * 100 : null, since: covered ? iso(win[0].t) : null };
 }
-function swings(bars: Array<{ t: number; c: number }>, u: Units): { rise: Swing | null; fall: Swing | null } {
+function swings(bars: Array<{ t: number; c: number }>, u: Units, rolls: MockRoll[] = []): { rise: Swing | null; fall: Swing | null } {
   const end = bars[bars.length - 1], start = monthsBack(end.t, 12);
-  let lo: { t: number; c: number } | null = null, hi: { t: number; c: number } | null = null, rise: Swing | null = null, fall: Swing | null = null;
-  for (const b of bars) {
-    if (b.t < start) continue;
-    if (!lo || b.c < lo.c) lo = b; if (!hi || b.c > hi.c) hi = b;
-    const up = chg(b.c, lo.c, u), dn = chg(b.c, hi.c, u);
-    if (up != null && up > 0 && (!rise || up > rise.chg)) rise = { chg: up, from: iso(lo.t), to: iso(b.t) };
-    if (dn != null && dn < 0 && (!fall || dn < fall.chg)) fall = { chg: dn, from: iso(hi.t), to: iso(b.t) };
+  let rise: Swing | null = null, fall: Swing | null = null;
+  for (const sg of mockSegments(bars, rolls)) {
+    let lo: { t: number; c: number } | null = null, hi: { t: number; c: number } | null = null;
+    for (const b of sg) {
+      if (b.t < start) continue;
+      if (!lo || b.c < lo.c) lo = b; if (!hi || b.c > hi.c) hi = b;
+      const up = chg(b.c, lo.c, u), dn = chg(b.c, hi.c, u);
+      if (up != null && up > 0 && (!rise || up > rise.chg)) rise = { chg: up, from: iso(lo.t), to: iso(b.t) };
+      if (dn != null && dn < 0 && (!fall || dn < fall.chg)) fall = { chg: dn, from: iso(hi.t), to: iso(b.t) };
+    }
   }
   return { rise, fall };
 }
@@ -82,13 +102,19 @@ const CLS_WORD: Record<string, string> = { Currency: "FX", "Fixed income": "Rate
 
 /** The instrument's page as the server sends it: a stock's fields, empty where a stock's figure has no meaning, and
  *  `instrument` with its figures, its calendar and its headlines. */
-export function mockInstrument(row: TableRow, bars: Array<{ t: number; c: number }>, o: { official: string | null; monitor: boolean; calendar: EconEvent[]; news: NewsItem[]; alerts: Alert[]; now: number }): InstrumentPage {
+/** A stand-in future's record of contracts (B-27): the contract it names, its expiry, the first day recorded, its rolls. */
+export interface MockFutures { contract: string; expires: string; since: string; rolls: Array<{ d: string; from: string | null; to: string; prevClose: number | null }> }
+export function mockInstrument(row: TableRow, bars: Array<{ t: number; c: number }>, o: { official: string | null; monitor: boolean; futures?: MockFutures | null; calendar: EconEvent[]; news: NewsItem[]; alerts: Alert[]; now: number }): InstrumentPage {
   const u: Units = row.group === "rates" && !row.symbol.endsWith("=F") ? "yield" : "price";
   const last = row.last, c252 = bars.slice(-252);
   let hiB = c252[0], loB = c252[0];
   for (const b of c252) { if (b.c > hiB.c) hiB = b; if (b.c < loB.c) loB = b; }
   const withLast = last != null && !o.official ? [...bars, { t: bars[bars.length - 1].t + DAY, c: last }] : bars;
-  const { rise, fall } = swings(withLast, u);
+  const rolls = (o.futures?.rolls ?? []).map((r) => ({ d: r.d, prevClose: r.prevClose }));
+  const { rise, fall } = swings(withLast, u, rolls);
+  // the stand-in record as the server sends it (supabase/functions/_shared/instrstats.ts futuresInfo)
+  const views = (o.futures?.rolls ?? []).map((r) => { const before = [...bars].reverse().find((b) => iso(b.t) < r.d)?.c ?? null; return { d: r.d, from: r.from, to: r.to, fromMonth: r.from ? monthOf(r.from) : null, toMonth: monthOf(r.to), step: r.prevClose != null && before ? (r.prevClose / before - 1) * 100 : null, source: "stand-in (the local copy)" }; });
+  const futures: FuturesInfo | undefined = o.futures ? { contract: o.futures.contract, month: monthOf(o.futures.contract), expires: o.futures.expires, seen: iso(bars[bars.length - 1].t), seenAt: new Date(o.now).toISOString(), knownFrom: [o.futures.since, ...views.map((v) => v.d)].sort()[0], rolls: views, lastRoll: views.length ? views[views.length - 1] : null, source: "Yahoo Finance (unofficial) quote: the contract it names (underlyingSymbol)" } : undefined;
   const day = u === "yield" ? chg(last, row.closes.d1, u) : row.pct.d1 ?? null;
   const ccys = mockCcys(row.symbol, row.name, row.currency), from = o.now - 5 * 86400e3, to = o.now + 8 * 86400e3;
   const events = o.calendar.filter((e) => ccys.includes(e.currency ?? e.country) && Date.parse(e.at) >= from && Date.parse(e.at) <= to).sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
@@ -98,7 +124,8 @@ export function mockInstrument(row: TableRow, bars: Array<{ t: number; c: number
   const feed: StockFeed = {
     days: 30,
     news: re ? o.news.filter((n) => re.test(n.title) && Date.parse(n.publishedAt) >= since).sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt)).slice(0, 60).map((n) => ({ id: n.id, publishedAt: n.publishedAt, source: n.source, title: n.title, url: n.url, category: n.category ?? null })) : [],
-    alerts: o.alerts.filter((a) => a.symbol === row.symbol && Date.parse(a.at) >= since).slice(0, 40).map((a) => ({ id: a.id, at: a.at, kind: a.kind, pct: a.pct, market: a.market, msg: a.msg, url: a.url ?? null })),
+    // a σ move keeps its σ and its window and source, as the server's alertRow (pagefeed.ts)
+    alerts: o.alerts.filter((a) => a.symbol === row.symbol && Date.parse(a.at) >= since).slice(0, 40).map((a) => ({ id: a.id, at: a.at, kind: a.kind, pct: a.pct, market: a.market, msg: a.msg, url: a.url ?? null, ...(a.kind === "sigma" ? { sigma: a.sigma ?? null, note: a.note ?? null } : {}) })),
   };
   const closeDay = row.lastAt && /T00:00:00(\.000)?Z$/.test(row.lastAt) ? row.lastAt.slice(0, 10) : null;
   const asOfKind = o.official ? "published" : closeDay ? "close" : "print";
@@ -109,12 +136,13 @@ export function mockInstrument(row: TableRow, bars: Array<{ t: number; c: number
     session: o.official || last == null ? null : { open: last * (u === "yield" ? 1 : 0.998), low: last - (u === "yield" ? 0.031 : last * 0.004), high: last + (u === "yield" ? 0.024 : last * 0.003), at: row.lastAt },
     range52: { lo: loB.c, loDate: iso(loB.t), hi: hiB.c, hiDate: iso(hiB.t), pos: row.pos52 ?? null, fromHi: chg(last, hiB.c, u), fromLo: chg(last, loB.c, u) },
     z1m: row.z1m ?? null, vs200: row.vs200 ?? null,
-    vol: { m1: vol(bars, 21, u), m3: vol(bars, 63, u), m12: vol(bars, 252, u) },
+    vol: { m1: vol(bars, 21, u, rolls), m3: vol(bars, 63, u, rolls), m12: vol(bars, 252, u, rolls) },
     rise, fall,
     perf: KEYS.map((k) => ({ h: LABEL[k], from: row.closeDates[k] ?? null, base: row.closes[k] ?? null, chg: u === "yield" ? chg(last, row.closes[k], u) : row.pct[k] ?? null })),
     history: { from: iso(bars[0].t), to: iso(bars[bars.length - 1].t), n: bars.length, source: o.official ?? (o.monitor ? "the Monitor's stored daily closes" : "Yahoo Finance daily closes") },
     events: { ccys, from: new Date(from).toISOString(), to: new Date(to).toISOString(), rows: events },
     matched: words,
+    ...(futures ? { futures, rollsOut: rolls.length } : {}),
   };
   const none = { outstanding: null, diluted: null, dilutedNote: null, treasury: null, float: null, asOf: null, source: null };
   return {

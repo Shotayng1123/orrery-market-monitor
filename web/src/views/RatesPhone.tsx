@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Empty } from "../components/Panel";
 import { CHART_PERIODS, type ChartPeriod } from "../components/ChartPanel";
 import { CurveChart, shortTenor, spread } from "../components/CurveChart";
@@ -13,6 +12,7 @@ import { datesIn, fmtDate } from "../lib/time";
 import { bankName, dottedLine, FX, PERIOD, RATES, TAB } from "../lib/labels";
 import { InstrumentRow } from "./MarketPhone";
 import { CURVE_ORDER, type PolicyRow } from "./RatesFx";
+import { useEntryState } from "../lib/nav";
 
 /** RATES & FX for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026): the pairs and the yields as lines
  *  that open to their charts, one yield curve at a time (picked from a list) with its spreads and tenors, and the
@@ -46,9 +46,10 @@ function CurveCard({ code, ago, tick }: { code: string; ago: ChartPeriod; tick: 
 }
 
 export function RatesPhone({ tick }: { tick: number }) {
-  const [period, setPeriod] = useState<ChartPeriod>("1D");
-  const [open, setOpen] = useState<string | null>(null);
-  const [curve, setCurve] = useState("US");
+  // kept with this visit of the list, so Back from a page opened here finds the row open where it was (B-28)
+  const [period, setPeriod] = useEntryState<ChartPeriod>("period", "1D");
+  const [open, setOpen] = useEntryState<string | null>("open", null);
+  const [curve, setCurve] = useEntryState("curve", "US");
   const table = useApi<{ rows: TableRow[]; asOf: string }>("table", undefined, tick);
   const list = useApi<{ rows: Array<{ country: string }> }>("curves", undefined, Math.floor(tick / 30));
   const pol = useApi<{ rows: PolicyRow[] }>("policy", undefined, Math.floor(tick / 30));

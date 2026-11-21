@@ -117,6 +117,50 @@ reports gone are deleted. The encryption and signing are in `functions/_shared/w
 example of RFC 8291 in `sim/logic.test.ts`. On an iPhone, notifications exist only in the app added to the Home Screen
 (iOS 16.4 or later).
 
+Since 20 Nov 2026 (I-6; migration `20261120000001_sigma_moves.sql`) a device also chooses which kinds reach it
+(`push_subs.kinds`: big moves of stocks and indices, buybacks, guidance and M&A, σ moves) and its σ line
+(`push_subs.sigma_line`: 2, 2.5 or 3σ). A device that has not chosen (`kinds` null) receives exactly what it received
+before: every kind but the σ moves. A σ move grows through the day, so it is offered again to the devices whose line it
+has crossed since it was last offered (`alerts.pushed_sigma`); its notification names its window and source under the
+line ("σ move · σ of 63 daily changes to 19 Nov 2026 · Yahoo Finance · 20 Nov 11:10 SGT"). `api?action=push_state`
+returns the device's kinds and line, and `push_sub` takes them (a page from before sends neither, and the stored choice
+is kept).
+
+## Moves in σ, and a future's rolls (added 2026-11-20; migration `20261120000001_sigma_moves.sql`)
+
+- **The day in σ.** `fn_table_stats` also returns, for every active instrument, the sample standard deviation of its
+  daily changes over the 63 sessions ending at its newest booked close (`sd63`) and one session before it (`sd63x`), with
+  the changes counted and each window's first and last close: a yield's changes in points of its level, a price's in per
+  cent. The market table (`_shared/table.ts`) sets the day's change against the window that does not hold it (a print
+  after the last booked close against `sd63`; a day that is itself the last booked close, a closed market or an official
+  yield once its day is booked, against `sd63x`) and sends `z1d`, `sd1d`, `zFrom`, `zTo`, `zN` (`zN`, the changes counted,
+  also where they are too few for a σ: the page says how many). The rule is written once
+  in `_shared/sigma.ts`; `sim/sql/sigma.test.cjs` checks the database's figures against it.
+- **σ alerts** (`alerts.kind` 'sigma', with `sigma` and `note`): the tick scans the table every minute
+  (`scanSigmaAlerts`) for every currency, yield, commodity, volatility index, future and coin at 2σ or beyond; one row
+  per instrument and session (a currency pair's FX day; a future's CME trade date, so an evening's move from 18:00 New
+  York is the next session's), rewritten only when the move grows. `api?action=alerts` and the watchlist's feed list them
+  from 2.5σ, each with its σ and its note (WATCHLIST draws the kind and the note under the line); an instrument's own page
+  lists all of its own.
+- **Futures** (`fut_contracts`, `fut_rolls`; `_shared/futures.ts`). Every minute the tick (and the relay on GitHub,
+  with the same code) asks Yahoo's v7 quote, in one request, which named contract each open future's =F series is on
+  (`underlyingSymbol`) and that contract's previous close, and records the session's contract (CME's trade date, which
+  starts at 18:00 New York the evening before, as Yahoo dates the daily bars). A contract that differs from the one
+  recorded for the last session before is a roll on this session, measured from the new contract's own previous close.
+  On the session after a roll the series' booked close of the roll day is set against the new contract's own close of
+  that day: when it is the old contract's (Yahoo rewrote ZQ=F's close of 19 Nov 2026 so), the roll moves a session later.
+  A roll day's 1D is the change within the new contract (the row carries `roll`, and `contract` names the contract); the
+  database leaves the change of contract out of the 63-session σ and sets σ vs 1M avg's closes on the new contract's
+  level (a roll whose change of contract is not known leaves its day out, and σ vs 1M avg across it is none; the table
+  gives none either on the day of a roll after the newest booked close whose change is not known, and an instrument's
+  page shows the table's own σ vs 1M avg, none included, never one worked out across the step). A future not
+  read in a minute raises no σ alert in it; a quote that has not moved for a week (TIO=F's, in the probe) is not read.
+  The migration seeds what the source probe of 20 Nov 2026 read (`yahoo_futures`, run 44737367820): each future's
+  contract that day, its five measured rolls of that day, and the ten earlier rolls of its six months, dated but not
+  measured. Every reading is labelled Yahoo Finance (unofficial), as the owner decided for Yahoo's named contracts.
+  Yahoo keeps no expired contract, so a roll the Monitor did not record cannot be measured later. One quote request a
+  minute, at most two more when the crumb is renewed; a failed request's note names no address and no crumb.
+
 ## The Morning Note on time (added 2026-11-18)
 
 GitHub starts this repository's scheduled workflows hours late (the note, due 07:00 SGT, finished 09:36 on 17 Nov and
@@ -314,6 +358,13 @@ that records each query, `sim/sql/words.test.cjs` runs the headline pattern on P
   as a whole word, any case (`instrument.matched`, which the page shows): asked of the database as one pattern
   (PostgREST's `imatch` with PostgreSQL's word edges `[[:<:]]` and `[[:>:]]`) and checked again in the function; and the
   `alerts` on the symbol.
+- **A Monitor future** (since 2026-11-20, B-27): its record of contracts (`fut_contracts`, `fut_rolls`) is read too
+  (`futuresOf`), and the answer adds `instrument.futures`: the named contract the last price is from, its month and
+  expiry, when it was read, from when the record runs, and every roll with its change of contract (null where not
+  measured). Realised volatility, its percentile and the largest rise and fall are worked out with each change of
+  contract taken out (`_shared/futures.ts` rollSegments: the closes before a measured roll set on the new contract's
+  level, the series cut at one not measured), and `instrument.rollsOut` counts them. The `alerts` it lists include its σ
+  moves from 2σ, each with its σ and its note (window and source).
 - **Asked of no source but the ones above.** EDINET DB is never asked for an instrument, no statements are read and no
   big-move look-up is queued (those cost money).
 - **A page from before 20 Nov 2026** shows every name as a stock. The answer keeps every field a stock's answer has
@@ -442,6 +493,10 @@ What the Monitor does about it:
   the one further behind is the state: on 18 Nov crypto kept arriving, and read together with the rest its fresh
   prints vouched for the feed, so the first version of this check (deployed that evening, two hours into the stop) never raised
   the bar. Currencies and futures are judged only inside their real week, Sunday 17:00 New York to Friday 17:00.
+  Since 21 Nov 2026 the session table (`_shared/sessions.ts`, `marketState`) keeps the same FX week; until then it
+  was Monday 05:00 to Saturday 06:00 SGT all year, an hour early at the open in New York's winter and an hour late at
+  the close in its summer. So the minute job reads currency pairs, and the table calls one live, only from Sunday
+  17:00 New York to Friday 17:00: an hour a week fewer than before, never more.
 - **Daily closes.** After the bell on 18 Nov the daily history, on the server, booked the stopped prices as that
   day's closes (7303.98 for the S&P 500). `history` now reads how far the answers in hand reach (the newest
   minute bar it is given: for crypto, for everything else together, and for each market on its own) and books a
@@ -502,6 +557,14 @@ What the Monitor does about it:
   stores nothing.
 - Spot-check the table against the exchange: Nikkei 225 close on JPX/Nikkei, S&P 500 on S&P DJI, USD/JPY on a bank page, UST 10Y on treasury.gov for the same date.
 - Holidays: `sessions_cal` rows are `verified = false` until checked against each exchange's published calendar; the DATA chip says so.
+  The table holds Tokyo's and New York's for 2026 and 2027 (checked on 7 Nov 2026 against JPX's and NYSE's pages), and no
+  other market's. The page says when a closed market next opens from the session table and these rows, and marks the
+  time "scheduled" for a market whose holidays are not here (README, "When a closed market opens").
+- Early closes: `_shared/sessions.ts` keeps New York's 13:00 closes of 2026 to 2028 as NYSE's page gave them on 20 Nov
+  2026 (the lines are quoted there). After one, `marketState` is CLOSED: the table's rows stop being live at 13:00 and
+  the minute job reads New York's instruments for 45 minutes more, as after any close. The daily history's own
+  half-day rule (`feedhealth.ts`, `nyseHalfDay`) is older and separate; the paper portfolio's P-2 moves the dates into
+  `sessions_cal.early_close`.
 
 ## Notes
 

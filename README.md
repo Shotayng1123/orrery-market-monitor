@@ -29,6 +29,11 @@ web/        Vite + React + TypeScript. src/styles/tokens.css is the design syste
             solar system and into the mark): every time the app on a phone's home screen is opened, once a day
             on each device elsewhere, and never while an account is being created; `?opening=1` plays it again. While it
             plays the Monitor's answers are held (lib/hold.ts), so nothing else is drawn and it stays smooth.
+            src/lib/nav.ts: a page opened from a list (a name's, or an index's on EQUITIES) starts at its top; Back
+            returns the list to where it stood, holding the place while a late answer draws the list, and finds a
+            phone list's open line still open (each history entry carries a key in history.state). Which pages
+            open at their top is the rule in src/lib/pagetop.ts, a file with no imports, so that the logic checks
+            can read it where React is not installed.
 supabase/   migrations/ and functions/ (tick, daily, api), cron.sql.
 jobs/       TypeScript scripts for GitHub Actions.
 ```
@@ -48,10 +53,22 @@ npm run build          # typecheck + production build into web/dist
 
 The stand-in feed (`web/src/lib/mock.ts`) fills every tab: generated prices and charts, and the stand-in rows of
 `web/src/lib/standin.json` (calendar, headlines, research, earnings dates, alerts, a watchlist, policy rates), which
-the browser checks answer with too. Its times are counted from when the page opens; the headlines reach 31 hours
+the browser checks answer with too. Its times are counted from when the page opens (a results date: a day from today
+at its market's close, 06:30 UTC for Tokyo and 21:00 UTC for New York, as Yahoo stamps them); the headlines reach 31 hours
 back, so they always cross a midnight in Singapore and show their day bars at any hour. The watchlist is kept in the
 browser (`om_mock_watch`), so stars and the add box work; `?mock=empty` in the address shows every tab with no rows.
 None of it is in a production build.
+
+The local copy's clock can be set: `om_mock_now` in the browser's storage, an ISO time (`2026-11-24T02:45:00Z` is
+Tue 24 Nov 2026, 10:45 SGT), starts the page's clock at that moment on each load (`web/src/lib/mockclock.ts`), and the
+stand-in market rows then follow the session table: a market that is shut is CLOSED with its last print at its
+close, one in its regular hours is live. So a closed market, a midday break, a holiday or an early close can be
+looked at whatever the hour (the red bar at the top says the clock is set). `om_mock_now` = `now` keeps the
+machine's clock and makes the rows follow the session table all the same: what the live Monitor would show at this
+hour. Without the key the clock is the machine's and the rows keep fixed states (FX and the futures live, the rest
+not), so the browser checks see the same rows at any hour; at most hours those rows contradict the lines beside
+them (a pair LIVE on a Saturday beside "Closed now: FX opens …"), so set the key before judging what a screen says
+of a market's hours. The holidays it passes over are the Monitor's own calendar rows, not stand-ins.
 
 ## Deploy
 
@@ -66,7 +83,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, about 1,400 checks in 29 suites): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, about 1,910 checks in 34 suites): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -77,9 +94,17 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   5Y and 10Y, the two-column page and a server from before NEWS), an instrument's page (`instrument-pages`: a pair, two
   yields, gold and an index without an EQUITIES page on both layouts with no stock-only line, a yield's figures in bp,
   JGB 10Y from Japan MOF, USD/JPY's events and yen headlines, every instrument name on MARKETS and RATES & FX opening
-  its page, NEWS's Currency picker, and a server from before), the classic phone layout, the sign-in screen, creating an
+  its page, NEWS's Currency picker, and a server from before), where a page opens (`page-top`: a page opened from MARKETS,
+  RATES & FX, WATCHLIST, EQUITIES, a headline's company or search starts at its top with its name on a phone and on a
+  computer, and Back returns the list to where it stood with its open line, also when the answers come late), results
+  dates (`results-dates`: the day in each company's own market and no time of day, in KEY DATA, on WATCHLIST and in
+  NEWS › Results calendar, both layouts), moves in σ (`sigma-moves`: MOVERS IN σ and the 1D IN σ
+  column on both layouts and in the one-screen layout and at XL, sorting within each bar, the stand-in 2.7σ alert, gold's
+  stand-in roll day kept out of its 1D, its σ, its volatility and its largest fall, the roll marked on its chart, the
+  alert list whole on two phones and at five computer sizes, gold's KEY DATA whole at text L, and a
+  server from before), the classic phone layout, the sign-in screen, creating an
   account by verification email, the manager's accounts list, the
-  home-screen hint, the new-version bar, opening without a connection, notifications, a tab that fails
+  home-screen hint, the new-version bar, opening without a connection, notifications (with the kinds a device receives and its σ line), a tab that fails
   while it is drawn (it says so in its own space; the header and the other tabs stay), the welcome email as its
   reader sees it, a price feed that has stopped (the bar and the DATA chip say so), and the opening.
   The **layout guard** (`layout-guard`) opens all eight screens at five computer sizes (1280×720 to 2560×1440, and
@@ -95,30 +120,60 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   where they scroll sideways, are walked as a reader moves them (where they open, each press of "‹ earlier years",
   swipes of 40 px each way) on four phones and on a computer at text XL, and every place they come to rest must show
   each period whole, beside the line names and at the right edge. `layout-guard-instruments` runs the same checks on
-  four instruments' pages at the same sizes. It also cuts, clips and
+  five instruments' pages (gold, a future, among them) at the same sizes. The guard also opens the alert list behind
+  the header's line once at each size: nothing cut or sideways, and its box inside the window. It also cuts, clips and
   covers figures on purpose with throwaway styles, to show that it fails each time. XL text and the one-screen
   layout join it once they are fixed. `nothing-cut` checks the designer's findings behind it one by one (whole
   columns at both edges of a phone's statements, pressed back and swiped, short interest at its natural height, chart titles, long headlines under day
   bars, phone search, the watchlist's two columns at the feed's real lengths, curve labels, the header's alert line for every kind of alert),
-  in ways that hold at any time of day.
-  `cd web && npm run e2e` starts the test servers it needs and runs them all (about seven minutes, three suites at
+  in ways that hold at any time of day; and when a closed market opens (`opens`: beside every CLOSED, on both
+  layouts and at ten window sizes, at set moments of a set clock: a Friday evening, a weekend, a holiday, a midday
+  break, an early close, a session's first minutes on a delayed feed; the FX week by New York's clock; the dollar
+  index, the UST 10Y yield and VIX saying when they are next read, never CLOSED; a row with no live price in its
+  market's hours saying "open since" only where the Monitor holds that market's holidays; `layout-guard-closed`: the
+  layout guard again with the clock on a weekend, when every closed market's line carries its opening); and the room
+  the chart keeps at the top of a phone's page of one name (`stock-page` and `instrument-pages`, through
+  `e2e/hero.cjs`): at least 290 px whatever the lines after its stamp, the tile growing with its head between 410 and
+  540 px and no further than the head needs, at set moments of the same clock (a weekend, a Friday evening, an open
+  market), in the machine's fonts and in a wide one, and with every badge, the stamp and the opening forced onto a
+  line of its own. These checks read no clock but that one and trust no font: the stamp's line that takes one line
+  on the engineer's machine took two on GitHub's, and it carries a date on some days and none on others (the check
+  they replace passed here by 2 px and stopped pull request #48 on GitHub on a Saturday).
+  `cd web && npm run e2e` starts the test servers it needs and runs them all (about twelve minutes, three suites at
   a time); `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
   A suite that fails once is tried again; when the second try passes, the lines that failed the first time are
   printed all the same, so a check that fails only now and then can be found from the publish job's log.
   Needs Playwright's browser once: `npx playwright install chromium`.
-- **Logic checks** (`sim/logic.test.ts`): exchange sessions, rolling bands, alert measures, the push encryption,
+- **Logic checks** (`sim/logic.test.ts`): exchange sessions (the page's and the server's copies give the same
+  state for every market, and when a closed market next opens: across each change of clocks, a Friday close, a
+  midday break, a holiday, an early close, a market that never closes), rolling bands, alert measures, the push encryption,
   the verification email for a new account, and every figure of the stock page (performance, ratios, statements
   as read from each source, big moves, the reading of a move's reason), every figure of an instrument's page (its
   units, volatility and percentile, largest moves, the table's anchors and statistics for a name it does not keep, the
-  calendar's currencies and the headlines' words, and the fields a page from before still reads), the server's reads
+  calendar's currencies and the headlines' words, and the fields a page from before still reads), moves in σ and their
+  alerts (the σ of 63 daily changes in % or bp, the day against it live and closed, one alert per instrument and session,
+  who is notified at which σ line), a future's contract and its rolls (the trade date, a roll from the quote's contract,
+  the session after it, the series with the step taken out, and the page's own lines for both), the server's reads
   for a stock's NEWS and an instrument's page run against a stand-in database that records each query, and the second path for prices (when the
   relay takes over and hands back, its timetable against the database's own), where a statements table wider
   than the screen comes to rest, and the one formatting of figures, dates and words (`lib/fmt.ts`, `lib/time.ts`,
   `lib/labels.ts`). `cd jobs && npx tsx ../sim/logic.test.ts`.
+  The same command checks the file itself, in its last section. GitHub installs `jobs/` alone before it runs the
+  logic checks (`logic-tests`, and `deploy-server` before a deploy), so nothing the file imports, directly or through
+  another file, may reach a package of the page's (`web/node_modules`: React, uPlot). On a machine that has
+  `web/node_modules` such an import loads all the same: on 21 Nov 2026 the file read a rule from `lib/nav.ts`, which
+  imports React, passed here and stopped pull request #48's check on GitHub with "Cannot find module 'react'". The
+  section follows the imports as they are written, from file to file, and walks the files the run really loaded; it
+  fails on any machine, naming the file, the line and the way there. A rule of the page that the logic checks read
+  therefore lives in a module that imports no package (`lib/pagetop.ts` beside `lib/nav.ts`), and a type from a
+  module that does is imported with `import type`. To run the file exactly as GitHub does:
+  `git archive HEAD | tar -x -C <an empty folder>`, then `npm ci` and the command above in that folder's `jobs/`.
 - **Database checks** (`sim/sql`): the rules that live in database functions (the limits on verification emails;
   the queue for the reasons of big moves; the request for the second path),
   run with the migration file itself on PGlite, a Postgres inside Node; and the pattern an instrument's headlines are
-  matched by in the database (`words.test.cjs`). `cd sim/sql && npm ci && npm test`.
+  matched by in the database (`words.test.cjs`); and the market table's σ of daily changes and σ vs 1M avg against the
+  server's own rule, rolls included, with the probe's record of futures and the alerts' and devices' new columns
+  (`sigma.test.cjs`). `cd sim/sql && npm ci && npm test`.
 
 The `deploy-web` workflow runs the browser and logic checks before it publishes: a failing check stops the publish.
 A pull request that touches `web/` runs them without publishing. `logic-tests` runs the logic and database checks
@@ -138,9 +193,65 @@ when the server's functions or migrations change.
 
 TOPIX has no Yahoo ticker: the `1306.T` ETF stands in for the live level (badge PROXY) and the official JPX close is used for daily figures.
 
+### When a closed market opens (since 2026-11-21)
+
+Wherever the Monitor says CLOSED it says when that market next opens, in SGT: "opens 22:30 SGT" when that is today
+in Singapore, "opens 23 Nov 22:30 SGT" on another day. Nothing is fetched for it.
+
+| On the page | Where it comes from |
+|---|---|
+| The time | The start of the market's next regular session in the session table (`web/src/lib/sessions.ts`; the server keeps the same table in `supabase/functions/_shared/sessions.ts`, and `sim/logic.test.ts` checks that the two agree). Each exchange's hours are in its own time zone, so a change of clocks there moves the time by itself: New York opens at 22:30 SGT in its winter and 21:30 SGT in its summer |
+| Currencies and CME Globex | Kept by New York's clock. The FX week runs from Sunday 17:00 to Friday 17:00 there, the server's own rule for when currencies trade (`fxTrading` in `_shared/feedhealth.ts`): Monday 06:00 to Saturday 06:00 SGT in New York's winter, 05:00 to 05:00 SGT in its summer. Until 21 Nov 2026 both session tables kept it as Monday 05:00 to Saturday 06:00 SGT all year, so a pair read "opens 05:00 SGT" an hour early in winter; `sim/logic.test.ts` now holds both tables to `fxTrading` at every half hour of 2026 and 2027 (bar its 25 December and 1 January, which the tables do not hold). Globex: Sunday 18:00 to Friday 17:00 there, with a break from 17:00 to 18:00 each day. What the feed itself does at the two ends of the FX week is not in a log yet: the probe `jobs/probes/sessions_check.ts` reads it |
+| Holidays | The rows of `sessions_cal`, which the page receives with `health`: Tokyo's from JPX's calendar and New York's from NYSE's, each for 2026 and 2027, checked against the publishers' own pages on 7 Nov 2026 (migration `20261107000010`). A next open passes over them |
+| Early closes | New York's, at 13:00 there: 27 Nov and 24 Dec 2026, 26 Nov 2027, 3 Jul and 24 Nov 2028, as NYSE's page "Holidays & Trading Hours" gave them to the source-probe `pf_rules` on 20 Nov 2026 (its lines are quoted in the session table). After one the market is CLOSED on the page and on the server |
+| ", scheduled" | Every other market (Hong Kong, Shanghai, Seoul, Taipei, Mumbai, Singapore, Sydney, Frankfurt, Zurich, London, São Paulo, Mexico City, CME Globex, FX), New York and Tokyo after 31 Dec 2027, and any market when the calendar did not load: the Monitor does not hold those holidays, so the time is the timetable's and says so; on a local holiday the market stays shut |
+| LAST PRINT, with what the Monitor knows | A row that is not live while its market's timetable has a session is not called CLOSED. In a session's first minutes on a delayed feed (its start plus the feed's delay, and fifteen minutes more): "first print due ~08:20 SGT". After them, for Tokyo and New York, whose holidays are held: "open since 08:00 SGT". For every other market: "session 16:00–00:30 SGT, scheduled" (the FX week: "session to 28 Nov 06:00 SGT, scheduled"): on a local holiday the Monitor does not hold there is no session, and it does not say the market is open |
+| "next read 22:30 SGT" | The dollar index (`DX-Y.NYB`, ICE), the Cboe yield indices (`^FVX`, `^TNX`, `^TYX`) and `^VIX` and `^VXN` carry the market `NYSE` in the instruments table: that is when the server reads them, not their venue's session, and the Monitor holds neither Cboe's nor ICE's hours. The page's rule (`readInNewYork` in `web/src/lib/opens.ts`): a row whose market is `NYSE` and whose class is not Equities. Outside New York's session such a row says LAST PRINT and when it is next read, never CLOSED, an opening or NYSE's early close |
+| A stock's page | The stock route sends no live state: the page reads it from the session table and the quote's own time (the exchange from the symbol's suffix, as the server's alerts do), so the chart says LIVE in the exchange's hours and CLOSED with the opening outside them. A stock on an exchange the table does not keep (`MC.PA`) says neither |
+
+The words are made in `web/src/lib/opens.ts`. A midday break gives the afternoon's start; crypto, which never closes,
+and an official yield, published once a day, have no such line.
+
+Since 21 Nov 2026 a table says it without a hover too. The first line above the MARKETS table, RATES & FX's FX table
+and WATCHLIST's names (above the list on a phone), in the scrolling and the one-screen layout, reads "Closed now: New
+York opens 22:30 SGT · Hong Kong and Shanghai open 23 Nov 09:30 SGT, scheduled · Tokyo (holiday) opens 24 Nov 08:00
+SGT · next read 22:30 SGT: VIX, DXY, UST 10Y" (`closedLine` in `web/src/lib/opens.ts`, `components/ClosedNow.tsx`):
+the markets of that table's own rows that are shut, the soonest to open first, markets that open at the same moment in
+one entry, the reason in brackets where the Monitor knows one (a holiday in a calendar it holds, a midday or daily
+break, an early close today), then the rows it only reads in New York's hours. The line is absent while none of the
+table's markets is shut. In the one-screen layout a page's own chart (a stock's, an instrument's, EQUITIES' index)
+keeps its stamp with the opening after it; the small tiles there show neither.
+
+### Moves in σ (MARKETS, since 2026-11-20)
+
+| On the page | Where it comes from |
+|---|---|
+| MOVERS IN σ (the ten largest of the day, any class) and the 1D IN σ column | Worked out by the Monitor from its stored daily closes (`_shared/sigma.ts`, and the database's `fn_table_stats` with the same rule): the day's change over the standard deviation of the instrument's own daily changes in the 63 sessions before it, a yield's in points of its level (bp), a price's in per cent. The newest change is never in its own yardstick. An official-curve yield's day counts once it is booked (Japan's, the euro area's, the UK's and Canada's curves are published a day late; the US Treasury's on the day itself, and its tooltip says "its newest published day"). Each figure's closes are on its tooltip |
+| σ moves in the alert list and as notifications | The same figure, for every currency, yield, commodity, volatility index, future and coin (the equity indices keep their ±3% alert): raised from 2σ, one per instrument and session, updated while the move grows; the lists everyone reads show them from 2.5σ, and each device chooses its kinds and its own line (2, 2.5 or 3σ) in Notifications. Each names its σ, its window and its source |
+
+### A future's contract and its rolls (B-27, since 2026-11-20)
+
+The Monitor's futures (ES=F, CL=F, GC=F …) are Yahoo's front-month series: on a roll day the series moves to the next
+contract without adjustment, and that step is not a move. With each minute's prices the Monitor reads which named
+contract Yahoo's quote is on (`underlyingSymbol`; its short name can lag a roll) and that contract's own previous close,
+and records a roll when the contract changes (`fut_contracts`, `fut_rolls`; `_shared/futures.ts`). A roll day's 1D is the
+change within the new contract (MARKETS marks it ROLL), and the change of contract is left out of the 1D in σ and its
+63-session σ, σ vs 1M avg, the σ alerts, and the page's realised volatility, its percentile and the largest rise and fall.
+Where the source did not give a change of contract's size, σ vs 1M avg is none (a dash, on MARKETS and on the page alike)
+while its 21 closes hold that change, and on a roll day whose size is not known.
+The page names the contract, its expiry and the last change of contract (labelled Yahoo Finance (unofficial), as the
+owner decided for Yahoo's named contracts), and marks each roll on the chart. Yahoo keeps no expired contract, so rolls
+before the Monitor's record are not known: the record starts with what the source probe of 20 Nov 2026 read (five rolls
+of that day measured; earlier ones in its six months dated, their change of contract not known, those days left out),
+and the page says from when it runs. The 52-week range, vs 200D and the changes over 1W to
+36M stay the series' own.
+
 A new source is tried from GitHub's machines before a job is built on it: a read-only script in `jobs/probes/`
 (the pattern is `jobs/probes/example.ts`), run by the `source-probe` workflow on the branch that holds it
-(Actions › source-probe › Run workflow). It is given no secrets and writes nothing.
+(Actions › source-probe › Run workflow). It writes nothing and is given no secrets, with one exception asked for by
+name: the input `sec_user_agent` = true gives the probe's own step, and no other, the secret `SEC_USER_AGENT` (the
+contact the SEC asks automated readers to declare), which a probe of sec.gov (`pf_sec`) sends only as its User-Agent
+and never prints.
 
 ### The stock page (`#asset/SYMBOL`, since 2026-11-18)
 
@@ -149,7 +260,8 @@ A new source is tried from GitHub's machines before a job is built on it: a read
 | Chart with σ corridors and volume; price history; PERIOD 1D to 36M, and 5Y and 10Y (since 2026-11-20) | Yahoo Finance daily and intraday bars (split-adjusted, dividends not included; ten years of daily bars) |
 | Change over 1D, 1M, 3M, 6M, 12M, 36M, 60M against the benchmark | Worked out from those bars (`_shared/stockstats.ts`). Tokyo names are set against the Nikkei 225 and TOPIX; TOPIX is read from the `1306.T` fund (PROXY). Other names against their home index |
 | 52-week range, volatility, beta, largest fall, average daily volume and value | Worked out from the same bars |
-| Market cap, shares outstanding, float, next earnings date | Yahoo Finance quote and key statistics |
+| Market cap, shares outstanding, float | Yahoo Finance quote and key statistics |
+| Next results (the date alone since 2026-11-20) | Yahoo Finance's quote gives it as a moment (`earningsTimestamp`), and in the source probe of 19 Nov 2026 that moment was a market's close (15:30 in Tokyo for Toyota, 16:00 in New York for NVIDIA), not a time the company announced. So every screen shows the day in the company's own market (`web/src/lib/results.ts`: NVIDIA's 17 Nov stays 17 Nov, although it is the 18th in Singapore), with confirmed or est. as Yahoo marks it (a dash where Yahoo gives no mark: since 2026-11-20 the results calendar's route passes a missing mark as none, where it used to send it as confirmed), and no time of day: KEY DATA, WATCHLIST and NEWS › Results calendar alike. A Tokyo company's date is marked est. whatever Yahoo marks, until its date and "confirmed" come from JPX's 決算発表予定日 (A-30), which comes later |
 | Short interest | Tokyo: the positions of 0.5% and above reported to JPX (already stored for the EQUITIES tab). Elsewhere: the exchange-reported short interest Yahoo republishes, with FINRA's daily short-volume share beside it |
 | Statements (income statement, balance sheet, cash flow), ratios, guidance | Tokyo: EDINET DB (有価証券報告書 and 決算短信): ten fiscal years, the company's guidance with later revision notices and the progress against it, and twelve single quarters as EDINET DB derives them. Share counts are the company's own from its latest 決算短信. Yahoo stands in, and the page says so, when no EDINET DB key is set or the day's allowance is used up. Elsewhere: Yahoo Finance fundamentals (about four years and five quarters; no guidance), with the lines of a company reporting under US GAAP or IFRS; a line the company does not report is left out |
 | A column's document (since 2026-11-20) | The address the source gives for it, never a made-up one: a year's 有価証券報告書 on EDINET (`edinetFilingUrl`, unless EDINET DB's `edinetFilingUrlAvailability` says the filing has aged out of EDINET's ~10-year retention: then no link, and the header's tip says so), the 決算短信 PDF of the guidance, of a quarter or of a year known only from it (`pdfUrl`, which EDINET DB gives on some rows only). A header without an address is plain and says so. Yahoo gives none |
@@ -168,7 +280,8 @@ opens it (the name a teal link, the whole row a pointer, a chart tile's title a 
 | Chart with σ corridors; PERIOD 1D to 10Y (an official yield: 3M to 10Y, it is published once a day) | The Monitor's own series (the market table's instruments) or Yahoo Finance's bars for a name found by search |
 | Last, the day's change, previous close, the change over 1D to 36M, σ vs 1M avg, 52W range, vs 200D | A Monitor instrument: MARKETS' own figures, from the same market table, so the page and MARKETS agree. A name found by search: its Yahoo quote and daily closes, with the table's rules |
 | The day's range | The Yahoo quote's session high and low; none for an official yield |
-| Realised volatility 1M / 3M / 12M and its percentile among three years of daily readings; the 52-week high and low with their dates; the largest rise and fall of 12 months | Worked out from the stored daily closes (`_shared/instrstats.ts`), marked † on both layouts with a line under KEY DATA naming the closes and their dates. A yield in bp of its level (bp a day, bp a year), a price in per cent |
+| Realised volatility 1M / 3M / 12M and its percentile among three years of daily readings; the 52-week high and low with their dates; the largest rise and fall of 12 months | Worked out from the stored daily closes (`_shared/instrstats.ts`), marked † on both layouts with a line under KEY DATA naming the closes and their dates. A yield in bp of its level (bp a day, bp a year), a price in per cent. A future's changes of contract left out (above) |
+| A future's contract and its last change of contract (since 2026-11-20) | Yahoo Finance's quote: the named contract it is on and that contract's expiry, as the Monitor has recorded them, with its rolls (above) |
 | Events | The economic calendar the Monitor stores (FXStreet, ForexFactory as the fallback): the events of its currencies, five days back and eight ahead. A pair's two currencies; an index future's index's currency first, then the one it is quoted in where that differs (the CME's Nikkei 225 future: JPY and USD); otherwise the currency it is quoted in (`_shared/instrfeed.ts`). The banks' next meetings: a dash, "not kept yet", on both layouts until the Monitor keeps their calendars |
 | News | The Monitor's own headlines of the last 30 days whose title holds one of the instrument's words (USD/JPY: yen, JPY, BoJ, Bank of Japan; the page names them, `_shared/instrfeed.ts`), and its own alerts on it |
 

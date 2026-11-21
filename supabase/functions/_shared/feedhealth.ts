@@ -26,8 +26,8 @@ export const FEED_OPEN_MIN = 30;   // a market open for less than this (plus its
 
 export function feedState(prints: Print[], nowMs: number, holidays: Holidays = {}): FeedState {
   const now = new Date(nowMs);
-  // Currencies and futures are kept in sessions.ts by the day of the week alone; their real week runs from Sunday
-  // 17:00 New York to Friday 17:00 (fxTrading, which also knows 25 December and 1 January). Outside it their old
+  // Currencies and futures trade from Sunday 17:00 New York to Friday 17:00 (fxTrading, which also knows 25 December
+  // and 1 January; sessions.ts keeps the same FX week since 21 Nov 2026, and Globex from 18:00). Outside it their old
   // prints say nothing about the feed.
   const open = (m: NonNullable<ReturnType<typeof marketById>>, at: Date): boolean => marketState(m, at, holidays) === "OPEN" && ((m.id !== "FX" && m.id !== "CME") || fxTrading(at.getTime()));
   // Two readings, crypto and everything else. On 18 Nov 2026 crypto went on arriving while every other price

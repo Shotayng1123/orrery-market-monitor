@@ -1,5 +1,5 @@
 import { pageHash } from "./lib/indices";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Topbar, VIEWS, type ViewId } from "./components/Topbar";
 import { CrashSwitch, TabGuard } from "./components/TabGuard";
 import { Gate } from "./auth/Gate";
@@ -8,7 +8,8 @@ import { api, apiConfigured, clearToken, getToken, tokenId, type Me } from "./li
 import { AccountModal, ChangePassword } from "./auth/Account";
 import { Logo } from "./components/Logo";
 import { DEV_MOCK } from "./lib/useApi";
-import { anyOpen, setHolidays } from "./lib/sessions";
+import { anyOpen, noHolidays, setHolidays } from "./lib/sessions";
+import { clockIsNow, clockSet, mockHolidays } from "./lib/mock";
 import { applyPrefs, loadPrefs, savePrefs, type Prefs } from "./lib/prefs";
 import type { Health } from "./lib/types";
 import { feedFrom, lateText } from "./lib/feed";
@@ -34,6 +35,7 @@ import { RatesFxView } from "./views/RatesFx";
 import { AssetView } from "./views/Asset";
 import { WatchlistView } from "./views/Watchlist";
 import { CardLayer } from "./components/CompanyCard";
+import { navChanged, navDrawn, navPopped, navStart } from "./lib/nav";
 
 interface Route { view: ViewId; sub: string }
 function parseHash(): Route {
@@ -42,7 +44,7 @@ function parseHash(): Route {
   if (v === "asset") {
     // an address of the single-name page for an index that has its page on EQUITIES (an older link, a bookmark) goes there
     const [to, id] = pageHash(sub).split("/");
-    if (to === "equities") { history.replaceState(null, "", `#equities/${id}`); return { view: "equities", sub: id }; }
+    if (to === "equities") { history.replaceState(history.state, "", `#equities/${id}`); return { view: "equities", sub: id }; }   // the entry keeps its key (lib/nav.ts)
     return { view: "asset", sub };
   }
   return { view: VIEWS.some((x) => x.id === v) ? (v as ViewId) : "market", sub };
@@ -57,8 +59,13 @@ const DEV_BYPASS = import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS === "1
 
 const OPEN_INTERVAL = 60, CLOSED_INTERVAL = 60;   // one minute always (Shota): FX is open most of the week and the check is cheap
 
+// The local copy asks no server for its holiday calendar: it takes the mock's (the Monitor's own rows), before
+// anything is drawn, so "opens …" beside a CLOSED passes over the same holidays as on the live Monitor.
+if (DEV_MOCK) setHolidays(mockHolidays());
+
 export default function App() {
-  const [route, setRoute] = useState<Route>(parseHash);
+  // the entry the Monitor opens on is marked before anything is drawn, so a list's kept state has its entry (lib/nav.ts)
+  const [route, setRoute] = useState<Route>(() => { const r = parseHash(); navStart(r); return r; });
   const [token, setTok] = useState<string | null>(() => getToken());
   const [prefs, setPrefsState] = useState<Prefs>(loadPrefs);
   const [full, setFull] = useState(false);
@@ -89,7 +96,10 @@ export default function App() {
     return () => { live = false; };
   }, [token]);
 
-  useEffect(() => { const f = () => setRoute(parseHash()); window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
+  // B-28: a page opened from a list starts at its top, and Back returns the list to where it stood (lib/nav.ts)
+  useEffect(() => { const f = () => { const r = parseHash(); navChanged(r); setRoute(r); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
+  useEffect(() => { window.addEventListener("popstate", navPopped); return () => window.removeEventListener("popstate", navPopped); }, []);
+  useLayoutEffect(() => { navDrawn(); }, [route]);
   useEffect(() => { const f = () => setTok(null); window.addEventListener("om:unauth", f); return () => window.removeEventListener("om:unauth", f); }, []);
   // The scale and the one-screen layout follow the window: re-applied on every resize (and on monitor changes).
   const phone = usePhone(), pv2 = usePhoneV2();   // pv2: a phone in the layout made for phones (lib/phone.ts), the default there
@@ -131,8 +141,8 @@ export default function App() {
     try {
       const h = await api<Health>("health");
       setHealth(h); setHealthErr(null); feedFrom(h);
-      if (h.holidays) setHolidays(h.holidays);
-    } catch (e) { setHealthErr(e instanceof Error ? e.message : String(e)); feedFrom(null); }
+      if (h.holidays) setHolidays(h.holidays); else noHolidays();   // an answer without a calendar: a next open is then the scheduled one
+    } catch (e) { setHealthErr(e instanceof Error ? e.message : String(e)); feedFrom(null); noHolidays(); }   // no calendar: a next open is then the scheduled one (lib/opens.ts)
     finally { refreshing.current = false; }
     setUpdatedAt(new Date()); setTick((t) => t + 1);
     setHit(true); setTimeout(() => setHit(false), 2000);
@@ -184,7 +194,7 @@ export default function App() {
   const { view, sub } = route;
   return (
     <>
-      {DEV_MOCK && <div id="mockbar">MOCK PREVIEW — synthetic data for layout checks only. Nothing here is real. The live Monitor is at https://shotayng1123.github.io/orrery-market-monitor/</div>}
+      {DEV_MOCK && <div id="mockbar">MOCK PREVIEW — synthetic data for layout checks only. Nothing here is real. The live Monitor is at https://shotayng1123.github.io/orrery-market-monitor/{clockSet() && <span id="mockclock"> · {clockIsNow() ? "rows by the session table at the machine's clock" : "clock set"} (om_mock_now): {fmtStamp(new Date())}</span>}</div>}
       <CardLayer />
       {acct && me && <AccountModal me={me} onClose={() => setAcct(false)} onSignOut={signOut} onChanged={() => setTok(getToken())} />}
       {notify && <Notify onClose={() => setNotify(false)} />}
@@ -202,7 +212,8 @@ export default function App() {
       <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={me?.email ?? userId} onSignOut={() => (me ? setAcct(true) : signOut())} updatedAt={updatedAt} nextAt={nextAt} polling={polling} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} pv2={pv2} canPreview={phone} />
       <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–6 TABS · ESC</span><span>&#9974;</span></div>
       <div id="wrap">
-        {pv2 && <InstallHint home={view === "market"} />}
+        {/* on MARKETS the hint sits under the data's first block, in the screen itself (MarketPhone; the designer's I-6 check) */}
+        {pv2 && view !== "market" && <InstallHint home={false} />}
         <div id="grid" data-view={view}>
           <TabGuard key={`${view}/${pv2 ? "p" : "d"}`} resetKey={sub ?? ""}>
           {import.meta.env.DEV && <CrashSwitch view={view} />}

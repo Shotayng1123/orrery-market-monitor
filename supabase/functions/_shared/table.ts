@@ -3,13 +3,21 @@
 import { fxDay, isFxPair } from "./fx.ts";
 import { db, type InstrumentRow } from "./db.ts";
 import { localDate, marketById, marketState, partsIn, type Holidays } from "./sessions.ts";
+import { usableSd, z1mOf, zDay } from "./sigma.ts";
+import { isFuture, rollDay, tradeDate } from "./futures.ts";
 
 type PeriodKey = "d1" | "w1" | "m1" | "m3" | "m12" | "m36";
 const PERIODS: PeriodKey[] = ["d1", "w1", "m1", "m3", "m12", "m36"];
 
 interface Anchor { symbol: string; ref_d: string; last_d: string | null; last_close: number | null; [k: string]: string | number | null }
 interface Quote { symbol: string; price: number; prev_close: number | null; market_time: string; fetched_at: string }
-interface Stat { symbol: string; mean21: number | null; sd21: number | null; hi252: number | null; lo252: number | null; mean200: number | null }
+interface Stat {
+  symbol: string; mean21: number | null; sd21: number | null; hi252: number | null; lo252: number | null; mean200: number | null;
+  // since 20 Nov 2026 (I-6): the σ of daily changes over 63 sessions ending at the newest close and one session before
+  sd63?: number | null; n63?: number | null; from63?: string | null; to63?: string | null;
+  sd63x?: number | null; n63x?: number | null; from63x?: string | null; to63x?: string | null;
+}
+interface RollRec { symbol: string; d: string; from_contract: string | null; to_contract: string; prev_close: number | null }
 
 export interface TableRow {
   symbol: string; name: string; cls: string; group: string; market: string; currency: string; decimals: number; proxyFor?: string; order: number;
@@ -20,6 +28,14 @@ export interface TableRow {
   z1m: number | null;    // (last − 21-day mean) / 21-day standard deviation
   pos52: number | null;  // position in the 52-week range, 0–100
   vs200: number | null;  // % (bp for yields handled by the view) above the 200-day average
+  // I-6 (20 Nov 2026): the day's change over the σ of the instrument's daily changes in the 63 sessions before it
+  // (sigma.ts), that σ in the row's units (% for a price, points for a yield), and the window it was worked out from
+  // (`zN` the changes counted in it, sent also where they are too few for a σ, so the page can say how many)
+  z1d: number | null; sd1d: number | null; zFrom: string | null; zTo: string | null; zN: number | null;
+  // B-27: a future's named contract (the quote's underlyingSymbol, as last recorded), and the roll its 1D crosses: the
+  // 1D is then the change within the new contract; `step` the change of contract in % (null where not measured)
+  contract: string | null;
+  roll: { d: string; from: string | null; to: string; step: number | null } | null;
 }
 
 /** Yields are compared in points; a bond future in the rates group is a price and is compared in per cent. */
@@ -33,14 +49,22 @@ export async function loadHolidays(): Promise<Holidays> {
 }
 
 export async function computeTable(now: Date = new Date()): Promise<{ rows: TableRow[]; asOf: string }> {
-  const [{ data: inst, error: e1 }, { data: anchors, error: e2 }, { data: quotes, error: e3 }, holidays, { data: stats }] = await Promise.all([
+  const since = new Date(now.getTime() - 15 * 86400e3).toISOString().slice(0, 10);
+  const [{ data: inst, error: e1 }, { data: anchors, error: e2 }, { data: quotes, error: e3 }, holidays, { data: stats }, { data: futc }, { data: futr }] = await Promise.all([
     db.from("instruments").select("*").eq("active", true).order("ord"),
     db.rpc("fn_table_anchors"),
     db.from("quotes_latest").select("symbol,price,prev_close,market_time,fetched_at"),
     loadHolidays(),
     db.rpc("fn_table_stats"),
+    // B-27: each future's contract as last recorded, and its rolls of the last two weeks (none before the 20 Nov 2026 change)
+    db.from("fut_contracts").select("symbol,d,contract").gte("d", since).order("d", { ascending: false }),
+    db.from("fut_rolls").select("symbol,d,from_contract,to_contract,prev_close").gte("d", since),
   ]);
   if (e1 || e2 || e3) throw new Error((e1 ?? e2 ?? e3)!.message);
+  const contractOf = new Map<string, string>();
+  for (const c of (futc ?? []) as Array<{ symbol: string; d: string; contract: string }>) if (!contractOf.has(c.symbol)) contractOf.set(c.symbol, c.contract);   // newest first
+  const rollsOf = new Map<string, RollRec[]>();
+  for (const r of (futr ?? []) as RollRec[]) { if (!rollsOf.has(r.symbol)) rollsOf.set(r.symbol, []); rollsOf.get(r.symbol)!.push(r); }
   const sBy = new Map(((stats ?? []) as Stat[]).map((x) => [x.symbol, x]));
   const aBy = new Map((anchors as Anchor[]).map((a) => [a.symbol, a]));
   const qBy = new Map((quotes as Quote[]).map((q) => [q.symbol, q]));
@@ -70,23 +94,42 @@ export async function computeTable(now: Date = new Date()): Promise<{ rows: Tabl
     const ageMin = q ? (now.getTime() - Date.parse(q.market_time)) / 60000 : Infinity;
     const live = useQuote && open && ageMin < (m?.delayMin ?? 0) + 15;
     const closes: TableRow["closes"] = {}, closeDates: TableRow["closeDates"] = {}, pct: TableRow["pct"] = {}, chg: TableRow["chg"] = {};
+    // B-27: a future whose day runs across a change of contract (a roll after the close its 1D is measured from, and not
+    // after the session its last figure belongs to: a print's CME trade date, or the last booked close): its 1D is the
+    // change within the new contract, from that contract's own close before it; unmeasured, the day has no σ
+    const dayEnd = useQuote ? tradeDate(Date.parse(q!.market_time) / 1000) : a?.last_d ?? null;
+    const dayFrom = useQuote ? a?.last_d ?? null : a?.last_d && a.d1_d === a.last_d ? prevBy.get(i.symbol)?.d ?? null : a?.d1_d ?? null;
+    const rr = isFuture(i.symbol) && dayEnd ? (rollsOf.get(i.symbol) ?? []).filter((r) => r.d <= dayEnd && (!dayFrom || r.d > dayFrom)).sort((x, y) => y.d.localeCompare(x.d))[0] : undefined;
+    let roll: TableRow["roll"] = null;
     for (const p of PERIODS) {
       // When the quote is newer than the last booked close, that close is the previous close by definition. (The
       // SQL anchors date a quote in the instrument's time zone; a currency pair's day rolls at 17:00 New York, so
       // for the hours between that roll and London midnight the SQL "previous close" would be a day too old.)
       const prevIsLast = p === "d1" && useQuote && a?.last_close != null;
       const before = p === "d1" && !useQuote && a?.last_d && a.d1_d === a.last_d ? prevBy.get(i.symbol) : undefined;   // see `stuck` above
-      const c = prevIsLast ? a!.last_close : before ? before.close : a ? (a[p] as number | null) : null;
+      let c = prevIsLast ? a!.last_close : before ? before.close : a ? (a[p] as number | null) : null;
       const d = prevIsLast ? a!.last_d : before ? before.d : a ? (a[`${p}_d`] as string | null) : null;
+      if (p === "d1" && rr) { const x = rollDay(c, rr.prev_close); roll = { d: rr.d, from: rr.from_contract, to: rr.to_contract, step: x.step }; c = x.base; }
       closes[p] = c; closeDates[p] = d;
       pct[p] = c != null && last != null && c !== 0 ? (last / c - 1) * 100 : null;
       chg[p] = c != null && last != null ? last - c : null;
     }
     const st = sBy.get(i.symbol);
-    const z1m = st && st.mean21 != null && st.sd21 && last != null ? (last - st.mean21) / st.sd21 : null;
+    // σ vs 1M avg across a roll (B-27): a roll today, after the newest booked close, sets the booked closes on the new
+    // contract's level as the database sets those before a booked roll (times the new contract's own close over the
+    // series'); a day across a change of contract that is not known has none, as the database gives none for a booked
+    // one (the reviewer's F1: with f = 1 the print was set against the old contract's 21 closes)
+    const f = !rr ? 1 : rr.prev_close == null || !(rr.prev_close > 0) ? null : useQuote ? (a?.last_close ? rr.prev_close / a.last_close : null) : 1;
+    const z1m = z1mOf(last, st?.mean21, st?.sd21, f);
+    // the day in σ: a print after the last booked close against the 63 changes up to that close; a day that is the
+    // last booked close itself (a closed market, an official yield) against the 63 before it (sigma.ts)
+    const own = useQuote, sd = usableSd(own ? st?.sd63 : st?.sd63x, own ? st?.n63 : st?.n63x);
+    const z1d = roll && roll.step == null ? null : zDay(isYield(i) ? chg.d1 : pct.d1, sd);
     const pos52 = st && st.hi252 != null && st.lo252 != null && st.hi252 > st.lo252 && last != null ? ((last - st.lo252) / (st.hi252 - st.lo252)) * 100 : null;
     const vs200 = st && st.mean200 && last != null ? (isYield(i) ? last - st.mean200 : (last / st.mean200 - 1) * 100) : null;
-    rows.push({ marketTab: i.market_tab !== false, chart: i.chart !== false, z1m, pos52, vs200, symbol: i.symbol, name: i.name, cls: i.cls, group: i.grp, market: i.market, currency: i.currency, decimals: i.decimals, proxyFor: i.proxy_for ?? undefined, order: i.ord, last, lastAt, live, source: i.provider, closes, closeDates, pct, chg });
+    rows.push({ marketTab: i.market_tab !== false, chart: i.chart !== false, z1m, pos52, vs200,
+      z1d, sd1d: sd, zFrom: sd == null ? null : (own ? st?.from63 : st?.from63x) ?? null, zTo: sd == null ? null : (own ? st?.to63 : st?.to63x) ?? null, zN: (own ? st?.n63 : st?.n63x) ?? null,
+      contract: isFuture(i.symbol) ? contractOf.get(i.symbol) ?? null : null, roll, symbol: i.symbol, name: i.name, cls: i.cls, group: i.grp, market: i.market, currency: i.currency, decimals: i.decimals, proxyFor: i.proxy_for ?? undefined, order: i.ord, last, lastAt, live, source: i.provider, closes, closeDates, pct, chg });
   }
   return { rows, asOf: now.toISOString() };
 }

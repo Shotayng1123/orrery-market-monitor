@@ -8,12 +8,14 @@ import { Move, Screen, Section } from "../components/PhoneKit";
 import { NotifyNudge } from "../components/Notify";
 import { useApi } from "../lib/useApi";
 import { useWatch } from "../lib/watch";
-import { fmtPct, signCls } from "../lib/fmt";
-import { asOfLine, asOfOf, asOfTitle, fmtClock, fmtDate, fmtWhen, SGT } from "../lib/time";
+import { fmtPct, fmtSigma, signCls } from "../lib/fmt";
+import { sigmaNoteLine } from "../lib/alertline";
+import { asOfLine, asOfOf, asOfTitle, fmtDate, fmtWhen } from "../lib/time";
 import { classLabel, hitLine, PERIOD, RESULTS_AHEAD, TAB } from "../lib/labels";
-import { dayLabel, dayOf } from "./News";
+import { byResultsDay, MARKS_NOTE, RESULTS_NOTE, resultsDayLabel, resultsStatusShort } from "../lib/results";
 import { cellBp } from "./Market";
-import { decode, lastOf, sourcesOf, WINDOWS, type Feed, type WatchRow } from "./Watchlist";
+import { ClosedNow } from "../components/ClosedNow";
+import { closedWords, decode, lastOf, sourcesOf, useWatchMarkets, WINDOWS, WL_ALERTS_EMPTY, type Feed, type WatchRow } from "./Watchlist";
 
 /** WATCHLIST for a phone (preview, lib/phone.ts; Shota, 17 Nov 2026): the user's own names as lines with one
  *  change (the period is picked at the top), then their results dates, alerts, headlines and research mentions.
@@ -34,8 +36,10 @@ export function WatchlistPhone({ tick }: { tick: number }) {
   const [k, setK] = useState<Key>("pct1d");
   const box = useAddBox(w.has);
   const rows = list.data?.rows ?? [], src = sourcesOf(rows);
+  const market = useWatchMarkets(tick);   // each name's market, for the line of those that are shut and a row's tooltip
   const alerts = feed.data?.alerts ?? [], news = feed.data?.news ?? [], research = feed.data?.research ?? [];
-  const ahead = rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3).sort((a, b) => a.earningsAt!.localeCompare(b.earningsAt!));
+  // each name's next results under the day bar of its own market's day, no time of day (A-30)
+  const ahead = byResultsDay(rows.filter((r) => r.earningsAt && Date.parse(r.earningsAt) > Date.now() - 86400e3), (r) => r.earningsAt, (r) => r.symbol);
   const name = (s: string) => rows.find((r) => r.symbol === s)?.name ?? s;
   return (
     <Screen title={TAB.watch} sub={list.data ? `${rows.length} name${rows.length === 1 ? "" : "s"}${rows.length ? " · times in SGT" : ""}` : list.error ? <span className="warn">{list.error}</span> : "loading…"} right={<Pick label={PERIOD} value={k} options={KEYS} onChange={setK} />}>
@@ -56,11 +60,13 @@ export function WatchlistPhone({ tick }: { tick: number }) {
         </div>
       )}
       <Section title="My names" aux="times in SGT" card={false}>
+        {/* the markets of my names that are shut, each with when it opens: above the list (the designer's D-62) */}
+        {rows.length > 0 && <ClosedNow id="wl-opens" rows={rows.map(market)} phone />}
         <div className="mp-card">
           {rows.length ? rows.map((r) => {
             const a = asOfOf(r.asOf, r.asOfKind), c = change(r, k);
             return (
-              <div className="mp-row tap starred" key={r.symbol} role="button" tabIndex={0} title={`${r.name} (${r.symbol}) · ${asOfTitle(a, r.source)}`} onClick={() => openAsset(r.symbol)}>
+              <div className="mp-row tap starred" key={r.symbol} role="button" tabIndex={0} title={`${r.name} (${r.symbol}) · ${asOfTitle(a, r.source)}${closedWords(market(r))}`} onClick={() => openAsset(r.symbol)}>
                 <Star symbol={r.symbol} name={r.name} />
                 <span className="mp-nm"><span className="n">{r.name}</span><span className="mp-st one">{r.symbol} · <span className="nb">{asOfLine(a)}</span></span></span>
                 <span className="mp-px">{lastOf(r)}</span>
@@ -71,24 +77,28 @@ export function WatchlistPhone({ tick }: { tick: number }) {
         </div>
         {rows.length > 0 && <p className="mp-note" id="wl-src">{src ? `${/[,;]/.test(src) ? "Sources" : "Source"}: ${src}. ` : ""}A stock is at its last close, a market instrument at its last print; a yield's changes are in bp.</p>}
       </Section>
-      <Section title={RESULTS_AHEAD} aux="times in SGT">
-        {ahead.length ? ahead.map((r, i, arr) => (
-          <Fragment key={r.symbol}>
-            {(i === 0 || dayOf(r.earningsAt!) !== dayOf(arr[i - 1].earningsAt!)) && <div className="ev-day">{dayLabel(r.earningsAt!)}</div>}
-            <div className="ev-row tap" role="button" tabIndex={0} onClick={() => openAsset(r.symbol)}>
-              <span className="ev-t">{fmtClock(new Date(r.earningsAt!), SGT)}</span>
-              <span className="ev-m"><span className="ev-n">{r.name}</span><span className="ev-s">{r.symbol} · {r.sector ?? classLabel(r.kind)}</span></span>
-              <span className="ev-a sm">{r.earningsEst ? "est." : "confirmed"}</span>
-            </div>
-          </Fragment>
-        )) : <Empty title="No dates ahead">{rows.length ? "None of your names has a results date in the feed." : "Add names to see their results dates."}</Empty>}
+      <Section title={RESULTS_AHEAD} aux="Yahoo Finance · dates only" card={false}>
+        <div className="mp-card">
+          {ahead.length ? ahead.map((r, i, arr) => (
+            <Fragment key={r.symbol}>
+              {(i === 0 || r.day !== arr[i - 1].day) && <div className="ev-day">{resultsDayLabel(r.day)}</div>}
+              <div className="ev-row tap" role="button" tabIndex={0} onClick={() => openAsset(r.symbol)}>
+                <span className="ev-t">{resultsStatusShort(r.earningsEst, r.symbol)}</span>
+                <span className="ev-m"><span className="ev-n">{r.name}</span><span className="ev-s">{r.symbol} · {r.sector ?? classLabel(r.kind)}</span></span>
+              </div>
+            </Fragment>
+          )) : <Empty title="No dates ahead">{rows.length ? "None of your names has a results date in the feed." : "Add names to see their results dates."}</Empty>}
+        </div>
+        {ahead.length > 0 && <p className="mp-note" id="wl-results-note">{RESULTS_NOTE} · {MARKS_NOTE}.</p>}
       </Section>
       <Section title="Alerts on my names" aux={feed.data ? `${alerts.length} recent` : ""}>
         {rows.length > 0 && <NotifyNudge />}
         {alerts.length ? alerts.map((a) => {
-          const body = <><span className="nw-meta"><span>{fmtWhen(a.at)}</span>{a.pct != null && <b className={signCls(a.pct, 1)}>{fmtPct(a.pct, 1)}</b>}</span><span className="nw-title">{a.msg}</span></>;
-          return a.url ? <a className="nw-row" key={a.id} href={a.url} target="_blank" rel="noreferrer">{body}</a> : <div className="nw-row" key={a.id} role="button" tabIndex={0} onClick={() => openAsset(a.symbol)}>{body}</div>;
-        }) : <Empty title="No alerts">{feed.error ?? "Moves beyond ±5% (large companies) or ±7%, buybacks, guidance changes and large deals on your names appear here."}</Empty>}
+          // a σ move: its σ beside the time (a yield's has no per cent), what it is and its window and source under it (F3)
+          const sg = a.kind === "sigma", v = sg ? a.sigma ?? null : a.pct;
+          const body = <><span className="nw-meta"><span>{fmtWhen(a.at)}</span>{v != null && <b className={signCls(v, 1)}>{sg ? fmtSigma(v) : fmtPct(v, 1)}</b>}</span><span className="nw-title">{a.msg}</span>{sg && <span className="nw-note">{sigmaNoteLine(a)}</span>}</>;
+          return a.url ? <a className="nw-row" key={a.id} data-kind={a.kind} href={a.url} target="_blank" rel="noreferrer">{body}</a> : <div className="nw-row" key={a.id} data-kind={a.kind} role="button" tabIndex={0} onClick={() => openAsset(a.symbol)}>{body}</div>;
+        }) : <Empty title="No alerts">{feed.error ?? WL_ALERTS_EMPTY}</Empty>}
       </Section>
       <Section title="Headlines on my names" aux={feed.data ? `${news.length} in the feed` : ""}>
         {news.length ? news.slice(0, 30).map((it) => (

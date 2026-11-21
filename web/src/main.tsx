@@ -1,3 +1,4 @@
+import "./lib/mockclock";   // the local copy's clock, when one is set (dev server only); before anything reads the time
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles/tokens.css";

@@ -139,7 +139,7 @@ async function main(): Promise<void> {
   await part("alerts", "alerts of the last 48 hours", async () => {
     const rows = must(await sb.from("alerts").select("at,upd,d,symbol,name,kind,pct,market,msg,pushed_at").gte("at", new Date(now - 48 * 3600e3).toISOString()).order("at", { ascending: false }).limit(200)) as Array<{ at: string; upd: string; d: string; symbol: string; name: string; kind: string; pct: number | null; market: string; msg: string; pushed_at: string | null }>;
     const stock = rows.filter((r) => r.kind === "stock"), under7 = stock.filter((r) => r.pct != null && Math.abs(r.pct) < 7);
-    console.log(`  ${rows.length} in all: ${["stock", "index", "buyback", "revision", "mna"].map((k) => `${rows.filter((r) => r.kind === k).length} ${k}`).join(", ")}; of the stock alerts ${under7.length} are between 5% and 7% (the line for large companies); ${rows.filter((r) => r.pushed_at).length} went out as notifications`);
+    console.log(`  ${rows.length} in all: ${["stock", "index", "sigma", "buyback", "revision", "mna"].map((k) => `${rows.filter((r) => r.kind === k).length} ${k}`).join(", ")}; of the stock alerts ${under7.length} are between 5% and 7% (the line for large companies); ${rows.filter((r) => r.pushed_at).length} went out as notifications`);
     for (const r of rows.slice(0, 40)) console.log(`  ${utc(r.at)}  ${r.kind.padEnd(8)} ${r.symbol.padEnd(10)} ${r.pct == null ? "      " : (r.pct >= 0 ? "+" : "") + r.pct.toFixed(1) + "%"}  ${r.msg.slice(0, 110)}`);
     if (rows.length > 40) console.log(`  … and ${rows.length - 40} more`);
   });
@@ -192,13 +192,17 @@ async function main(): Promise<void> {
   // its fallback, the alerts). Read-only. No quote is asked for (the route asks Yahoo for one; the figures here are the
   // market table's) and no statements: EDINET DB is never asked from here.
   await part("stock", "an instrument's page and a stock's NEWS, read by the server's own code from the live tables (no quote, no EDINET DB)", async () => {
-    for (const symbol of ["USDJPY=X", "^TNX", "JGB10Y"]) {
+    for (const symbol of ["USDJPY=X", "^TNX", "JGB10Y", "CL=F"]) {
       const def = must(await sb.from("instruments").select(INSTRUMENT_COLS).eq("symbol", symbol).maybeSingle()) as InstrumentDef | null;
       if (!def) { console.log(`  ${symbol}: not in the instruments table`); continue; }
       const p = await instrumentPage({ db: sb, dailyBars: async () => { throw new Error("not asked from here"); } }, symbol, def, null);
       const i = p.instrument, f = p.feed, inTable = !!(await tableRow(sb, symbol));
       console.log(`  ${symbol}: instrument ${i ? "present" : "MISSING"}; units ${i.units}; ${i.official ? "official, " : ""}source ${i.source}; as of ${i.asOfKind ?? "–"} ${i.asOf ?? "–"}; last ${i.last ?? "–"}; ${inTable ? "the market table's row" : "NOT in the market table"}; ${i.history.n} stored closes (${i.history.from ?? "–"} to ${i.history.to ?? "–"})`);
       console.log(`    events ${i.events.rows.length} (${i.events.ccys.join(" and ") || "no currency"})${i.events.error ? `, error: ${i.events.error}` : ""}; headlines ${f.news.length}, alerts ${f.alerts.length}, feed rows ${f.news.length + f.alerts.length}${f.error ? `, error: ${f.error}` : ""}; matched by: ${i.matched.join(", ") || "no words"}`);
+      // B-27 (I-6): a future's record of contracts, as its page names them (the contract, its last roll, since when)
+      const fu = i.futures;
+      if (fu) console.log(`    futures: on ${fu.contract ?? "–"} (${fu.month ?? "–"}, expires ${fu.expires ?? "–"}), session ${fu.seen ?? "–"}; last roll ${fu.lastRoll ? `${fu.lastRoll.d} from ${fu.lastRoll.from ?? "a contract no longer listed"} to ${fu.lastRoll.to}, change of contract ${fu.lastRoll.step == null ? "not measured" : `${fu.lastRoll.step.toFixed(2)}%`}` : "none"}; record from ${fu.knownFrom ?? "–"}; ${i.rollsOut ?? 0} roll(s) left out of its volatility and largest moves`);
+      else if (symbol.endsWith("=F")) console.log("    futures: NO record of contracts in the answer");
       if (i.matched.length) {
         // whether the live database takes the headline pattern, or the route falls back to plain parts of the title
         const r = await headlineQuery(sb, i.matched, new Date(now - f.days * 86400e3).toISOString(), "pattern");

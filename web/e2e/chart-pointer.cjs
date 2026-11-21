@@ -40,6 +40,9 @@ const hover = async (p, x, y) => { await p.mouse.move(x, y, { steps: 3 }); await
     const ctx = await b.newContext({ viewport: { width: 1920, height: 1080 } }); await size(ctx, "AUTO"); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
     await p.goto(MOCK + "#" + tab, { waitUntil: "networkidle" }); await p.waitForSelector(".u-over"); await p.waitForTimeout(1200);
     await p.addStyleTag({ content: "#mockbar{display:none!important}" }); await p.waitForTimeout(200);
+    // a chart is drawn once it comes within 400 px of the window (ChartPanel): go down the page once so all are drawn
+    await p.evaluate(async () => { for (let y = 0; y < document.documentElement.scrollHeight; y += 500) { scrollTo(0, y); await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 30))); } scrollTo(0, 0); });
+    await p.waitForFunction((k) => document.querySelectorAll(".u-over").length >= k, least, { timeout: 15000 }).catch(() => undefined); await p.waitForTimeout(300);
     const n = await p.locator(".u-over").count(); let worst = 0, seen = 0; const bad = [];
     for (let i = 0; i < n; i++) {
       const el = p.locator(".u-over").nth(i); await el.scrollIntoViewIfNeeded().catch(() => undefined); await p.waitForTimeout(120);

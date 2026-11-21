@@ -1,5 +1,7 @@
 // Logic checks that need no browser and no database: exchange sessions (web and server copies must agree),
 // rolling sigma bands, exchange-local dating of Yahoo bars.  Run:  cd jobs && npx tsx ../sim/logic.test.ts
+// GitHub installs jobs/ alone before it runs this file: nothing imported here may reach a package of the page's
+// (React, uPlot), directly or through another file. The last section, [AB], fails on any machine when one does.
 import * as web from "../web/src/lib/sessions.ts";
 import * as srv from "../supabase/functions/_shared/sessions.ts";
 import { rollingBands, pct } from "../web/src/lib/stats.ts";
@@ -22,7 +24,7 @@ import { ALERTS, COMPANY, FIRST, PHILOSOPHY, PHONE, TABS, WELCOME_SUBJECT, welco
 import { FEED_LATE_MIN, OWN_SHORT_MIN, barDayEnd, barSettled, feedState, fxTrading, silence, stoppedBeforeClose, type Print } from "../supabase/functions/_shared/feedhealth.ts";
 import { OWN_FRESH_MIN, RELAY_BEAT_MAX_S, RELAY_CRON, RELAY_JOBS, RELAY_LATE_MIN, RELAY_OK_RUN, RELAY_WAIT_MIN, beatFresh, cronDue, current, newerOnly, reading, relayAct, relayJobsDue, usable, type RelayView } from "../supabase/functions/_shared/relay.ts";
 import { CBOE_YIELDS, closeDay, isYieldQuote, isYieldRow, sourceName, watchRowFromQuote, watchRowFromTable, type QuoteLike } from "../supabase/functions/_shared/watchrow.ts";
-import { alertFigWord, alertHeadline } from "../web/src/lib/alertline.ts";
+import { alertFigWord, alertHeadline, sigmaNoteLine } from "../web/src/lib/alertline.ts";
 import { asOfCell, asOfLine, asOfOf, asOfTitle, rowAsOfTitle, rowSource, tileStamp } from "../web/src/lib/time.ts";
 import { finBack, finFit, finRest } from "../web/src/lib/finscroll.ts";
 import { sectorShort } from "../web/src/lib/sectors.ts";
@@ -38,8 +40,24 @@ import { asOfWords, calSource, ccyWords, DAILY_PERIODS, distCls, distText, isIns
 import { FEED_ALERTS, FEED_DAYS, FEED_NEWS, INSTR_HISTORY_DAYS, INSTRUMENT_COLS, eventsOf, feedFor, instrFeed, pageOrQuote, type Db } from "../supabase/functions/_shared/pagefeed.ts";
 import { MOCK_WORDS, mockCcys } from "../web/src/lib/mockInstr.ts";
 import { calendarRows, currencyOptions, eventCcy } from "../web/src/lib/calendar.ts";
-import { readFileSync as readText, readdirSync as listDir } from "node:fs";
+import { checkRoll, contractName, fromReading, isFuture, knownFrom, monthWord, QUOTE_SOURCE, rollDay, rollSegments, rollViews, tradeDate, type RollRow } from "../supabase/functions/_shared/futures.ts";
+import { dailyChanges, dayWords, LISTED_ALERTS, listed, moveWords, SIGMA_CLASSES, SIGMA_LIST, SIGMA_MIN, SIGMA_N, SIGMA_RAISE, sessionDay, sigmaCandidate, sigmaMsg, sigmaNote, sigmaStats, sigmaWrites, usableSd, z1mOf, zDay } from "../supabase/functions/_shared/sigma.ts";
+import { ALERT_KINDS, DEFAULT_KINDS, prefsFromBody, PUSH_LINE, PUSH_LINES, sigmaReaches } from "../supabase/functions/_shared/pushrules.ts";
+import { futuresInfo } from "../supabase/functions/_shared/instrstats.ts";
+import { commonWindow, moveLine, moversInSigma, sigmaTip, sortBySigma, STRIP_N } from "../web/src/lib/movers.ts";
+import { codeOf, monthOf, rollWords } from "../web/src/lib/futures.ts";
+import { contractLine, contractSource, lastRoll, lastRollLine, rollMarks, rollsOutLine, SERIES_LINE } from "../web/src/lib/instrument.ts";
+import { mockSegments } from "../web/src/lib/mockInstr.ts";
+import type { TableRow } from "../web/src/lib/types.ts";
+import { byResultsDay, calendarFlag, fmtResultsDate, jpxDated, listingCity, listingTz, MARKS_NOTE, RESULTS_NOTE, resultsDay, resultsDayLabel, resultsMark, resultsStatus, resultsStatusShort, resultsTip, resultsWords } from "../web/src/lib/results.ts";
+import { opensAtTop } from "../web/src/lib/pagetop.ts";
+import { closedLine, closedLineText, DUE_GRACE_MIN, hoursText, marketSession, pageLive, PAGE_FRESH_MIN, panelRowOf, readInNewYork, rowSession, rowStateWords, shutLine, shutMarkets, stateWord, symbolMarket, type Cal } from "../web/src/lib/opens.ts";
+import { mockHolidays, printAt } from "../web/src/lib/mock.ts";
+import { readFileSync as readText, readdirSync as listDir, statSync as fileStat } from "node:fs";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
+import { builtinModules, createRequire } from "node:module";
+import { dirname, resolve as resolvePath } from "node:path";
+import { fileURLToPath } from "node:url";
 
 let pass = 0, fail = 0;
 const ck = (name: string, cond: boolean, detail?: unknown) => { if (cond) { pass++; console.log("  ✓ " + name); } else { fail++; console.log("  ✗ " + name + (detail !== undefined ? "  ->  " + JSON.stringify(detail) : "")); } };
@@ -72,13 +90,14 @@ console.log("\n[B] New York (09:30–16:00 ET, EST in November)");
   ck("21:00Z closed", web.marketStatus(m, at("2026-11-09T21:00:00Z")).state === "CLOSED");
 }
 
-console.log("\n[C] FX (Mon 05:00 SGT to Sat 06:00 SGT) and CME Globex (Sun 18:00 ET to Fri 17:00 ET, daily 17:00–18:00 break)");
+console.log("\n[C] FX (Sun 17:00 to Fri 17:00 New York: Mon 06:00 to Sat 06:00 SGT in New York's winter) and CME Globex (Sun 18:00 ET to Fri 17:00 ET, daily 17:00–18:00 break)");
 {
   const fx = web.marketById("FX"), cme = web.marketById("CME");
   ck("FX Sat 10:00 SGT closed", web.marketStatus(fx, at("2026-11-07T02:00:00Z")).state === "CLOSED");
   ck("FX Sat 04:00 SGT open", web.marketStatus(fx, at("2026-11-06T20:00:00Z")).state === "OPEN");
   ck("FX Mon 04:00 SGT closed", web.marketStatus(fx, at("2026-11-08T20:00:00Z")).state === "CLOSED");
-  ck("FX Mon 05:30 SGT open", web.marketStatus(fx, at("2026-11-08T21:30:00Z")).state === "OPEN");
+  ck("FX Mon 05:30 SGT closed in New York's winter (Sunday 16:30 there); open from 06:00 SGT", web.marketStatus(fx, at("2026-11-08T21:30:00Z")).state === "CLOSED" && web.marketStatus(fx, at("2026-11-08T21:59:00Z")).state === "CLOSED" && web.marketStatus(fx, at("2026-11-08T22:00:00Z")).state === "OPEN");
+  ck("FX Mon 05:30 SGT open in New York's summer (Sunday 17:30 there); closed from Sat 05:00 SGT", web.marketStatus(fx, at("2026-07-19T21:30:00Z")).state === "OPEN" && web.marketStatus(fx, at("2026-07-19T20:59:00Z")).state === "CLOSED" && web.marketStatus(fx, at("2026-07-17T20:59:00Z")).state === "OPEN" && web.marketStatus(fx, at("2026-07-17T21:00:00Z")).state === "CLOSED");
   ck("CME Sun 17:00 ET closed", web.marketStatus(cme, at("2026-11-08T22:00:00Z")).state === "CLOSED");
   ck("CME Sun 18:30 ET open", web.marketStatus(cme, at("2026-11-08T23:30:00Z")).state === "OPEN");
   ck("CME Thu 17:30 ET break", web.marketStatus(cme, at("2026-11-05T22:30:00Z")).state === "CLOSED");
@@ -1304,6 +1323,507 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
       s = stub(answer); const st = await pageOrQuote(deps(s.db, { quoteType: "EQUITY" }), "7203.T");
       ck("a share: its quote is handed back for a stock's page, and nothing else is read here", "stock" in st && st.stock.quoteType === "EQUITY" && s.asked.map((a) => a.table).join() === "instruments" && calls.bars.join() === "^STOXX50E", { asked: s.asked.map((a) => a.table) });
     }
+  }
+
+  console.log("\n[W] moves in σ and alerts on them (I-6), a future's contract and its rolls (B-27)");
+  {
+    const D = 86400, t0 = Date.parse("2026-01-02T00:00:00Z") / 1000;
+    // weekdays from 2 Jan 2026, oldest first, as stored closes are dated
+    const days: string[] = []; for (let t = t0; days.length < 300; t += D) { const wd = new Date(t * 1000).getUTCDay(); if (wd !== 0 && wd !== 6) days.push(new Date(t * 1000).toISOString().slice(0, 10)); }
+    const tOf = (d: string) => Date.parse(d + "T00:00:00Z") / 1000;
+    // a made-up price walk: deterministic, about 1% a day
+    let v = 100; const walk = days.map((d, i) => { v *= 1 + (((i * 7919) % 97) / 97 - 0.5) * 0.035; return { d, close: Math.round(v * 1e4) / 1e4 }; });
+    // the names of a contract and the day a CME session belongs to
+    ck("a named contract by CME's month codes: CLF27.NYM is January 2027, NKDZ26.CME December 2026, BZG27.NYM February 2027, ALIG27.CMX February 2027, ZNZ26.CBT December 2026; anything else none", contractName("CLF27.NYM")?.label === "Jan 2027" && contractName("CLF27.NYM")?.code === "CLF27" && contractName("NKDZ26.CME")?.label === "Dec 2026" && contractName("NKDZ26.CME")?.root === "NKD" && contractName("BZG27.NYM")?.ym === "2027-02" && contractName("ALIG27.CMX")?.root === "ALI" && contractName("ZNZ26.CBT")?.root === "ZN" && contractName("ES=F") === null && contractName(null) === null && monthWord("CLZ26.NYM") === "Dec" && isFuture("CL=F") && !isFuture("USDJPY=X"));
+    ck("CME's trade date: a session opens at 18:00 New York the evening before (19 Nov 23:30 UTC is 20 Nov's), 20 Nov 12:38 UTC is 20 Nov's, a Saturday stamp is Friday's, Sunday 18:00 New York is Monday's", tradeDate(Date.parse("2026-11-19T23:30:00Z") / 1000) === "2026-11-20" && tradeDate(Date.parse("2026-11-20T12:38:00Z") / 1000) === "2026-11-20" && tradeDate(Date.parse("2026-11-21T15:00:00Z") / 1000) === "2026-11-20" && tradeDate(Date.parse("2026-11-22T23:05:00Z") / 1000) === "2026-11-23" && tradeDate(Date.parse("2026-11-20T21:59:00Z") / 1000) === "2026-11-20");
+    // a reading of the quote: the session's record, and a roll when the contract changed since the last session recorded
+    const at20 = Date.parse("2026-11-20T12:38:00Z") / 1000;
+    const r0 = fromReading({ symbol: "BZ=F", contract: "BZG27.NYM", prevClose: 89.44, at: at20 }, null);
+    const r1 = fromReading({ symbol: "BZ=F", contract: "BZG27.NYM", prevClose: 89.44, at: at20 }, { d: "2026-11-20", contract: "BZG27.NYM" });
+    const r2 = fromReading({ symbol: "BZ=F", contract: "BZG27.NYM", prevClose: 89.44, at: at20 }, { d: "2026-11-19", contract: "BZF27.NYM" }, "2026-12-31");
+    ck("the first reading of a future: its session's record (CME's date, the contract, that contract's own previous close), no roll", !!r0 && r0.record.d === "2026-11-20" && r0.record.contract === "BZG27.NYM" && r0.record.prev_close === 89.44 && r0.roll === null, r0);
+    ck("the same contract as the session before: no roll; a new one (BZ=F, 20 Nov 2026, BZF27.NYM to BZG27.NYM, as the probe read it): a roll on that session, measured from the new contract's own close (89.44), to be checked", !!r1 && r1.roll === null && !!r2?.roll && r2.roll.d === "2026-11-20" && r2.roll.from_contract === "BZF27.NYM" && r2.roll.to_contract === "BZG27.NYM" && r2.roll.prev_close === 89.44 && r2.roll.source === QUOTE_SOURCE && !r2.roll.checked && r2.record.expires === "2026-12-31", r2);
+    ck("a quote that names no contract, or has no time, records nothing (the σ scan then hears nothing of that future)", fromReading({ symbol: "TIO=F", contract: null, prevClose: 1, at: at20 }, null) === null && fromReading({ symbol: "CL=F", contract: "CLF27.NYM", prevClose: 1, at: null }, null) === null);
+    // the session after a roll: on which day did the series change contract? (ZQ=F, 19 Nov 2026)
+    const roll: RollRow = { symbol: "ZQ=F", d: "2026-11-19", from_contract: "ZQX26.CBT", to_contract: "ZQF27.CBT", prev_close: 95.83, source: QUOTE_SOURCE, checked: false };
+    const next = { d: "2026-11-20", contract: "ZQF27.CBT", prevClose: 95.835 };
+    const moved = checkRoll(roll, next, { rollDay: 96.118, before: 96.12, lastBefore: "2026-11-19" });
+    const kept = checkRoll(roll, next, { rollDay: 95.835, before: 96.12, lastBefore: "2026-11-19" });
+    ck("ZQ=F: the quote moved to January on 19 Nov, but the day's bar was rewritten to November's close (96.118): the next session moves the roll to 20 Nov, measured from January's close of 19 Nov (95.835)", moved.act === "move" && moved.roll.d === "2026-11-20" && moved.roll.prev_close === 95.835 && moved.roll.checked, moved);
+    ck("when the series' close on the roll day is the new contract's own, the roll stands and is marked checked; before the next session, or with the roll day not booked, it waits; with sessions missed it stands", kept.act === "keep" && kept.roll.d === "2026-11-19" && kept.roll.checked && checkRoll(roll, { ...next, d: "2026-11-19" }, { rollDay: 96, before: 96, lastBefore: "2026-11-18" }).act === "wait" && checkRoll(roll, next, { rollDay: null, before: 96.12, lastBefore: "2026-11-18" }).act === "wait" && checkRoll(roll, { ...next, d: "2026-11-24" }, { rollDay: 96.118, before: 96.12, lastBefore: "2026-11-23" }).act === "keep");
+    // the statistics with the step taken out (B-27's check: "its realised vol and largest fall equal those of the same series with the step taken out")
+    const at = walk.length - 40, rd = walk[at].d, step = 1.03;   // a roll 40 sessions back: inside the 63-session windows and the 12 months
+    const stepped = walk.map((x, i) => ({ t: tOf(x.d), c: i < at ? x.close : x.close * step }));          // the series as Yahoo's =F gives it: a 3% step at the roll
+    const clean = walk.map((x) => ({ t: tOf(x.d), c: x.close * step }));                                 // the same series with the step taken out
+    const rolls = [{ d: rd, prevClose: walk[at - 1].close * step }];                                     // the new contract's own close before the roll
+    const segs = rollSegments(stepped, rolls);
+    ck("a measured roll: the series is set on the new contract's level, one piece, the roll day's change the change within the contract", segs.length === 1 && segs[0].length === stepped.length && segs[0].every((b, i) => Math.abs(b.c - clean[i].c) < 1e-9), segs.map((s) => s.length));
+    const vs = volStat(stepped, 63, "price", rolls), vc = volStat(clean, 63, "price"), vn = volStat(stepped, 63, "price");
+    const sw = swings(stepped, "price", 12, rolls), sc = swings(clean, "price", 12);
+    ck(`its realised vol equals that of the series with the step taken out (${vs.ann?.toFixed(4)}% against ${vc.ann?.toFixed(4)}%; ${vn.ann?.toFixed(4)}% with the step in)`, vs.ann != null && vc.ann != null && Math.abs(vs.ann - vc.ann) < 1e-9 && Math.abs((vn.ann ?? 0) - vc.ann) > 0.05, { vs, vc, vn });
+    ck(`its largest rise and fall equal those of the series with the step taken out (fall ${sw.fall?.chg.toFixed(3)}% from ${sw.fall?.from} to ${sw.fall?.to})`, !!sw.fall && !!sc.fall && Math.abs(sw.fall.chg - sc.fall.chg) < 1e-9 && sw.fall.from === sc.fall.from && sw.fall.to === sc.fall.to && !!sw.rise && Math.abs(sw.rise.chg - (sc.rise?.chg ?? 0)) < 1e-9, { sw, sc });
+    const cut = rollSegments(stepped, [{ d: rd, prevClose: null }]), vu = volStat(stepped, 63, "price", [{ d: rd, prevClose: null }]);
+    const changes = dailyChanges(walk, "price", [{ d: rd, prevClose: null }]);
+    ck("a roll whose change of contract is not known cuts the series: no change is measured across it (the day is left out)", cut.length === 2 && cut[0].length === at && cut[1].length === walk.length - at && vu.ann != null && changes.find((c) => c.d === rd)?.chg === null, cut.map((s) => s.length));
+    const views = rollViews([{ d: rd, from_contract: "GCZ26.CMX", to_contract: "GCG27.CMX", prev_close: walk[at - 1].close * step, source: "stand-in" }], stepped);
+    ck(`a roll as the page shows it: the months and the change of contract (${views[0]?.step?.toFixed(2)}%)`, views.length === 1 && views[0].fromMonth === "Dec 2026" && views[0].toMonth === "Feb 2027" && Math.abs((views[0].step ?? 0) - 3) < 1e-9, views);
+    const fi = futuresInfo({ d: "2026-11-20", contract: "CLF27.NYM", expires: "2026-12-21", seen_at: "2026-11-20T12:38:00Z" }, [{ d: "2026-10-21", from_contract: null, to_contract: "CLZ26.NYM", prev_close: null, source: "probe" }, { d: "2026-11-20", from_contract: "CLZ26.NYM", to_contract: "CLF27.NYM", prev_close: 82.44, source: "probe" }], "2026-11-20", [{ t: tOf("2026-11-19"), c: 83.21 }, { t: tOf("2026-11-20"), c: 82.22 }]);
+    ck(`CL=F's page, as the probe of 20 Nov left the record: on CLF27 (Jan 2027, expires 21 Dec 2026), last roll 20 Nov from CLZ26 (${fi.lastRoll?.step?.toFixed(2)}%), the record from 21 Oct (rolls before are not known)`, fi.contract === "CLF27.NYM" && fi.month === "Jan 2027" && fi.expires === "2026-12-21" && fi.lastRoll?.d === "2026-11-20" && fi.lastRoll.from === "CLZ26.NYM" && Math.abs((fi.lastRoll.step ?? 0) - (82.44 / 83.21 - 1) * 100) < 1e-9 && fi.knownFrom === "2026-10-21" && fi.rolls.length === 2 && fi.rolls[0].step === null && knownFrom([{ d: "2026-10-21" }], [{ d: "2026-11-20" }]) === "2026-10-21", fi);
+    const rdx = rollDay(83.21, 82.44), rdn = rollDay(83.21, null);
+    ck("a roll day's 1D (MARKETS): from the new contract's own close, with the change of contract apart; not measured: the series' own, no step", rdx.base === 82.44 && Math.abs((rdx.step ?? 0) - (82.44 / 83.21 - 1) * 100) < 1e-12 && rdn.base === 83.21 && rdn.step === null);
+    // σ of daily changes: in per cent for a price, points for a yield; the latest change never in its own yardstick
+    const st = sigmaStats(walk, "price"), ch = dailyChanges(walk, "price").map((x) => x.chg as number);
+    const sdOf = (xs: number[]) => { const m = xs.reduce((a, x) => a + x, 0) / xs.length; return Math.sqrt(xs.reduce((a, x) => a + (x - m) ** 2, 0) / (xs.length - 1)); };
+    ck(`σ of the last ${SIGMA_N} daily changes in per cent (${st.sd?.toFixed(4)}%), from the close of ${st.from} to that of ${st.to}; and of the ${SIGMA_N} before the newest (${st.sdx?.toFixed(4)}%)`, st.n === 63 && st.nx === 63 && Math.abs((st.sd ?? 0) - sdOf(ch.slice(0, 63))) < 1e-12 && Math.abs((st.sdx ?? 0) - sdOf(ch.slice(1, 64))) < 1e-12 && st.to === walk[walk.length - 1].d && st.from === walk[walk.length - 64].d && st.tox === walk[walk.length - 2].d && st.fromx === walk[walk.length - 65].d, st);
+    const ys = walk.map((x) => ({ d: x.d, close: 4 + x.close / 1000 })), sy = sigmaStats(ys, "yield"), cy = dailyChanges(ys, "yield").map((x) => x.chg as number);
+    ck(`a yield's in points of its level (${((sy.sd ?? 0) * 100).toFixed(2)}bp a day), never a per cent of it`, Math.abs((sy.sd ?? 0) - sdOf(cy.slice(0, 63))) < 1e-12 && Math.abs(cy[0] - (ys[ys.length - 1].close - ys[ys.length - 2].close)) < 1e-12, sy);
+    const sr = sigmaStats(stepped.map((b) => ({ d: new Date(b.t * 1000).toISOString().slice(0, 10), close: b.c })), "price", rolls);
+    const sc2 = sigmaStats(clean.map((b) => ({ d: new Date(b.t * 1000).toISOString().slice(0, 10), close: b.c })), "price");
+    ck("a future's σ with a roll in its window: the roll day counts its change within the new contract, as the series with the step taken out", walk.length - at < 63 && Math.abs((sr.sd ?? 0) - (sc2.sd ?? 0)) < 1e-9 && sr.n === 63, { sr, sc2 });
+    const su = sigmaStats(walk, "price", [{ d: walk[walk.length - 5].d, prevClose: null }]);
+    ck(`a roll not measured leaves its day out (${su.n} changes), and a σ needs ${SIGMA_MIN} of the ${SIGMA_N}`, su.n === 62 && usableSd(su.sd, su.n) === su.sd && usableSd(1, SIGMA_MIN - 1) === null && usableSd(0, 63) === null && usableSd(null, 63) === null);
+    ck("the day in σ: its change over that σ; none without a σ", Math.abs((zDay(2.7, 1) ?? 0) - 2.7) < 1e-12 && zDay(1, null) === null && zDay(null, 1) === null && zDay(1, 0) === null);
+    // σ alerts: what they say, which rows raise them, one per instrument and session
+    ck(`the message (the designer's I-6 note): "${sigmaMsg("USD/JPY", "price", 1.9, 2.7, 158.42, 3)}"; a yield's move in bp and its level in % ("${sigmaMsg("UST 10Y yield", "yield", -0.124, -2.6, 4.983, 3)}"); its note "${sigmaNote(63, "2026-11-19", "Yahoo Finance")}"`, sigmaMsg("USD/JPY", "price", 1.9, 2.7, 158.42, 3) === "USD/JPY +1.9% · 2.7σ · 158.420" && sigmaMsg("UST 10Y yield", "yield", -0.124, -2.6, 4.983, 3) === "UST 10Y yield -12.4bp · 2.6σ · 4.983%" && sigmaMsg("EUR/USD", "price", -0.41, -2.5, 1.0984, 4) === "EUR/USD -0.41% · 2.5σ · 1.0984" && sigmaMsg("Nikkei 225 future (CME)", "price", -2.4, -2.1, 56530, 0) === "Nikkei 225 future (CME) -2.4% · 2.1σ · 56,530" && sigmaNote(63, "2026-11-19", "Yahoo Finance") === "σ of 63 daily changes to 19 Nov 2026 · Yahoo Finance" && moveWords(0.004, "price") === "0.00%" && dayWords("2026-11-05") === "5 Nov 2026");
+    const row = (o: Record<string, unknown>) => ({ symbol: "USDJPY=X", name: "USD/JPY", cls: "Currency", group: "fx", market: "FX", decimals: 3, source: "yahoo", last: 158.42, lastAt: "2026-11-20T03:10:00Z", z1d: 2.7, pct: { d1: 1.9 }, chg: { d1: 2.95 }, zTo: "2026-11-19", zN: 63, ...o }) as Parameters<typeof sigmaCandidate>[0];
+    const src = (r: { source?: string | null }) => (r.source === "yahoo" ? "Yahoo Finance" : "Japan MOF"), none = new Set<string>();
+    const c1 = sigmaCandidate(row({}), none, src);
+    ck(`USD/JPY at 2.7σ: a σ alert, filed under its FX day (${c1?.d}), with its σ, its move, its level, its window and source`, !!c1 && c1.kind === "sigma" && c1.sigma === 2.7 && c1.pct === 1.9 && c1.price === 158.42 && c1.d === "2026-11-20" && c1.msg === "USD/JPY +1.9% · 2.7σ · 158.420" && c1.note === "σ of 63 daily changes to 19 Nov 2026 · Yahoo Finance", c1);
+    const jgb = sigmaCandidate(row({ symbol: "JGB10Y", name: "JGB 10Y yield", cls: "Fixed income", group: "rates", market: "TSE", source: "mof", last: 2.817, lastAt: "2026-11-19T00:00:00Z", z1d: -3.1, pct: { d1: -2.4 }, chg: { d1: -0.069 }, zTo: "2026-11-18" }), none, src);
+    ck("an official yield once its day is booked: filed under the day it was published for, its move in bp, its publisher named", !!jgb && jgb.d === "2026-11-19" && jgb.msg === "JGB 10Y yield -6.9bp · 3.1σ · 2.817%" && jgb.pct === null && /Japan MOF$/.test(jgb.note), jgb);
+    ck(`not raised: an equity index (it has the ±3% index alert), a move under ${SIGMA_RAISE}σ, a row with no σ`, sigmaCandidate(row({ symbol: "^N225", cls: "Equities", group: "equity", market: "TSE" }), none, src) === null && sigmaCandidate(row({ z1d: 1.99 }), none, src) === null && sigmaCandidate(row({ z1d: null }), none, src) === null && SIGMA_CLASSES.has("Futures") && SIGMA_CLASSES.has("Crypto") && !SIGMA_CLASSES.has("Equities"));
+    const gc = row({ symbol: "GC=F", name: "Gold", cls: "Commodities", group: "cmdty", market: "CME", decimals: 2, last: 4074.9, lastAt: "2026-11-20T14:05:00Z", z1d: 2.9, pct: { d1: 3.2 } });
+    ck("a future at 2.9σ raises one only when its contract was read this minute (B-27: else a roll could not be told from a move)", sigmaCandidate(gc, none, src) === null && sigmaCandidate(gc, new Set(["GC=F"]), src)?.d === "2026-11-20");
+    // B-27, the stand-in roll day: gold's naive 1D across a 3% change of contract reads about 2.9σ; measured within the new contract it is an ordinary day, and raises nothing
+    const prev = 3950, prevNew = prev * 1.03, lastGC = prevNew * 1.0021, sdGC = 1.1;
+    const naive = zDay((lastGC / prev - 1) * 100, sdGC), within = zDay((lastGC / rollDay(prev, prevNew).base! - 1) * 100, sdGC);
+    ck(`a roll day: gold +${((lastGC / prev - 1) * 100).toFixed(2)}% across the change of contract would read ${naive?.toFixed(1)}σ; within the new contract it is +${((lastGC / prevNew - 1) * 100).toFixed(2)}%, ${within?.toFixed(2)}σ, and raises no σ alert`, (naive ?? 0) > SIGMA_LIST && Math.abs(within ?? 9) < 0.5 && sigmaCandidate({ ...gc, z1d: within, pct: { d1: (lastGC / prevNew - 1) * 100 } }, new Set(["GC=F"]), src) === null);
+    const stored = new Map([["USDJPY=X|2026-11-20", { sigma: 2.6 }], ["EURUSD=X|2026-11-20", { sigma: -2.9 }]]);
+    const eur = { ...c1!, symbol: "EURUSD=X", sigma: -2.7 }, grow = { ...c1!, sigma: 2.7 }, more = { ...c1!, sigma: 2.64 };
+    ck("one alert per instrument and session: written when new or when the move has grown (by more than 0.05σ), not when it eases", sigmaWrites([grow], stored).length === 1 && sigmaWrites([more], stored).length === 0 && sigmaWrites([eur], stored).length === 0 && sigmaWrites([{ ...c1!, symbol: "AUDUSD=X" }], stored).length === 1);
+    ck("the session of a row: a booked close's own date, a currency pair's FX day, a market's own date otherwise", sessionDay({ symbol: "JGB10Y", market: "TSE", lastAt: "2026-11-19T00:00:00Z" }) === "2026-11-19" && sessionDay({ symbol: "USDJPY=X", market: "FX", lastAt: "2026-11-19T22:30:00Z" }) === "2026-11-20" && sessionDay({ symbol: "USDJPY=X", market: "FX", lastAt: "2026-11-20T22:30:00Z" }) === "2026-11-20" && sessionDay({ symbol: "GC=F", market: "CME", lastAt: "2026-11-20T14:05:00Z" }) === "2026-11-20" && sessionDay({ symbol: "X", market: "CME", lastAt: null }) === null);
+    ck("a future's evening print (18:30 New York) is the next session's, as CME dates it: a σ move then is the new day's, not the one before", sessionDay({ symbol: "CL=F", market: "NYMEX", lastAt: "2026-11-19T23:30:00Z" }) === "2026-11-20" && sessionDay({ symbol: "CL=F", market: "NYMEX", lastAt: "2026-11-19T21:30:00Z" }) === "2026-11-19" && sessionDay({ symbol: "ES=F", market: "CME", lastAt: "2026-11-22T23:10:00Z" }) === "2026-11-23");
+    ck(`the lists everyone reads show a σ alert from ${SIGMA_LIST}σ (PostgREST "${LISTED_ALERTS}")`, LISTED_ALERTS === "kind.neq.sigma,sigma.gte.2.5,sigma.lte.-2.5" && listed({ kind: "sigma", sigma: -2.5 }) && !listed({ kind: "sigma", sigma: 2.2 }) && listed({ kind: "stock" }) && listed({ kind: "index", sigma: null }));
+    // a device's kinds and its σ line (B's correction to B-03; the designer's Notifications window)
+    const usd: AlertLite = { id: 31, at: "2026-11-20T03:10:00Z", symbol: "USDJPY=X", name: "USD/JPY", kind: "sigma", pct: 1.9, msg: "USD/JPY +1.9% · 2.7σ · 158.420", sigma: 2.7, note: "σ of 63 daily changes to 19 Nov 2026 · Yahoo Finance", pushedSigma: null };
+    const all = new Set<string>(), dev = (sigmaLine: number, kinds: string[] | null = [...DEFAULT_KINDS, "sigma"]) => ({ scope: "all" as const, kinds, sigmaLine });
+    ck("B's check: a stand-in 2.7σ USD/JPY move reaches a device set at 2.5σ, not one set at 3.0σ, nor one that has not chosen σ moves (devices that exist keep what they received before)", notesFor([usd], dev(2.5), all).length === 1 && notesFor([usd], dev(3), all).length === 0 && notesFor([usd], dev(2), all).length === 1 && notesFor([usd], "all", all).length === 0 && notesFor([usd], dev(2.5, null), all).length === 0 && !DEFAULT_KINDS.includes("sigma") && ALERT_KINDS.includes("sigma") && PUSH_LINE === 2.5 && PUSH_LINES.join() === "2,2.5,3");
+    const n31 = alertNote(usd);
+    ck(`its notification: a green mark and the alert's line, then "σ move", its window and source and the time ("${n31.body}"); a tap opens USD/JPY's page`, n31.title === "\u{1F7E2} USD/JPY +1.9% · 2.7σ · 158.420" && n31.body === "σ move · σ of 63 daily changes to 19 Nov 2026 · Yahoo Finance · 20 Nov 11:10 SGT" && n31.hash === "#asset/USDJPY%3DX" && n31.tag === "alert-31", n31);
+    ck("a move that grows is told again to the devices whose line it has crossed since: raised at 2.2σ (a device at 2σ hears), at 3.1σ a device at 3σ hears, the one at 2σ not again", sigmaReaches(2, 2.2, null) && !sigmaReaches(2.5, 2.2, null) && sigmaReaches(3, 3.1, 2.2) && !sigmaReaches(2, 3.1, 2.2) && sigmaReaches(2.5, 3.1, 2.2) && notesFor([{ ...usd, sigma: 3.1, pushedSigma: 2.2 }], dev(3), all).length === 1 && notesFor([{ ...usd, sigma: 3.1, pushedSigma: 2.2 }], dev(2), all).length === 0 && alertNote({ ...usd, sigma: 3.1, pushedSigma: 2.2 }).tag === "alert-31-31");
+    ck("what a page may send: kinds out of the six and a line of 2, 2.5 or 3; neither from a page of before (the stored choice is kept)", JSON.stringify(prefsFromBody({ kinds: ["stock", "sigma", "sigma"], sigmaLine: 3 })) === JSON.stringify({ kinds: ["stock", "sigma"], sigmaLine: 3 }) && prefsFromBody({ kinds: ["stock", "guessed"] }).error === "bad kinds" && prefsFromBody({ sigmaLine: 2.7 }).error === "bad σ line" && JSON.stringify(prefsFromBody({})) === "{}" && prefsFromBody({ kinds: "stock" }).error === "bad kinds");
+    ck("the kinds of before still reach a device that never chose (a stock move, an index move, a buyback)", ["stock", "index", "buyback", "revision", "mna"].every((k) => wanted("all", all, { ...usd, kind: k, sigma: null })) && !wanted("all", all, usd));
+  }
+
+  console.log("\n[X] MARKETS' moves in σ and a future's lines, as the page writes them (I-6, B-27)");
+  {
+    const tr = (o: Partial<TableRow>): TableRow => ({ symbol: "X", name: "X", cls: "Currency", market: "FX", currency: "USD", decimals: 3, group: "fx", order: 1, last: 100, lastAt: "2026-11-20T03:00:00Z", live: true, source: "yahoo", closes: { d1: 99 }, closeDates: { d1: "2026-11-19" }, pct: { d1: 1.0101 }, marketTab: true, z1d: 0.5, sd1d: 0.6, zFrom: "2026-08-20", zTo: "2026-11-19", zN: 63, ...o } as TableRow);
+    const rows = [tr({ symbol: "A", name: "A", cls: "Equities", order: 1, z1d: -1.2 }), tr({ symbol: "B", name: "B", cls: "Equities", order: 2, z1d: 2.1 }), tr({ symbol: "C", name: "C", cls: "Currency", order: 3, z1d: 2.7 }), tr({ symbol: "D", name: "D", cls: "Currency", order: 4, z1d: null }),
+      tr({ symbol: "E", name: "E", cls: "Currency", order: 5, z1d: -0.3, marketTab: false }), ...Array.from({ length: 12 }, (_, k) => tr({ symbol: `F${k}`, name: `F${k}`, cls: "Commodities", order: 10 + k, z1d: 0.1 * k, zFrom: k < 3 ? "2026-08-21" : "2026-08-20" }))];
+    const top = moversInSigma(rows);
+    ck(`MOVERS IN σ: the ${STRIP_N} largest |σ| of the rows MARKETS shows, any class (${top.map((r) => r.symbol).join(" ")}); none without a σ, none off the table`, top.length === 10 && top[0].symbol === "C" && top[1].symbol === "B" && top[2].symbol === "A" && !top.some((r) => r.symbol === "D" || r.symbol === "E"));
+    const sorted = sortBySigma(rows).map((r) => r.symbol);
+    ck(`sorting by 1D in σ keeps the class bars and their members, each bar by |σ| (${sorted.slice(0, 5).join(" ")} …), rows without a σ last in their bar`, sorted.slice(0, 2).join() === "B,A" && sorted.slice(2, 5).join() === "C,E,D" && sorted.slice(5).join() === Array.from({ length: 12 }, (_, k) => `F${11 - k}`).join());
+    const win = commonWindow(top);
+    ck(`the window most cells share (${win?.from} – ${win?.to}); none without windows`, win?.from === "2026-08-20" && win.to === "2026-11-19" && commonWindow([tr({ zFrom: null, zTo: null })]) === null);
+    ck(`a cell's change and level ("${moveLine(rows[2])}"); a yield's in bp ("${moveLine(tr({ group: "rates", cls: "Fixed income", symbol: "UST2Y", last: 4.51, closes: { d1: 4.574 }, decimals: 3 }))}")`, moveLine(rows[2]) === "+1.01% · 100.000" && moveLine(tr({ group: "rates", cls: "Fixed income", symbol: "UST2Y", last: 4.51, closes: { d1: 4.574 }, decimals: 3 })) === "-6.4bp · 4.510%");
+    const tip = sigmaTip(rows[2]), jgb = sigmaTip(tr({ symbol: "JGB10Y", group: "rates", cls: "Fixed income", source: "mof", lastAt: "2026-11-19T00:00:00Z", sd1d: 0.031, z1d: -1.1 }));
+    ck(`its tooltip: "${tip}"; an official yield's: "…${jgb.split(" · ").slice(1).join(" · ")}"`, tip === "The day's change over the σ of the 63 daily changes before it (0.60% a day), worked out † from the daily closes of 20 Aug 2026 – 19 Nov 2026 (Yahoo Finance)" && /\(3\.1bp a day\).*\(Japan MOF\) · measured on 19 Nov 2026's close \(published a day late\)$/.test(jgb));
+    // D-67: the US Treasury publishes its curve on the day itself; the others a day late (Help, "Curves")
+    const ust = sigmaTip(tr({ symbol: "UST2Y", group: "rates", cls: "Fixed income", source: "treasury", lastAt: "2026-11-20T00:00:00Z", sd1d: 0.058, z1d: -1.1 })), bund = sigmaTip(tr({ symbol: "DE10Y", group: "rates", cls: "Fixed income", source: "curve", lastAt: "2026-11-19T00:00:00Z", sd1d: 0.04, z1d: 0.4 }));
+    ck(`a US Treasury yield's does not say "a day late": "…${ust.split(" · ").slice(1).join(" · ")}"; a Bund's keeps it`, /\(US Treasury\) · measured on 20 Nov 2026's close, its newest published day$/.test(ust) && !/a day late/.test(ust) && /\(Bundesbank\) · measured on 19 Nov 2026's close \(published a day late\)$/.test(bund));
+    const rolled = sigmaTip(tr({ symbol: "GC=F", roll: { d: "2026-11-20", from: "GCZ26.CMX", to: "GCG27.CMX", step: 3 } })), unmeasured = sigmaTip(tr({ symbol: "GC=F", z1d: null, roll: { d: "2026-11-20", from: null, to: "GCG27.CMX", step: null } }));
+    ck(`a roll day: "…${rolled.split(" · ").pop()}"; not measured: "${unmeasured}"`, /a change of contract today: \+3\.00% from Dec 2026 to Feb 2027, left out \(the day is the change within Feb 2027\)$/.test(rolled) && /^A change of contract today \(to Feb 2027\): .* has no σ$/.test(unmeasured));
+    const none = (o: Partial<TableRow>) => sigmaTip(tr({ z1d: null, ...o }));
+    ck(`a cell without a σ says why: "${none({ sd1d: null, zN: 12 })}"; "${none({ sd1d: null, zN: 63 })}"; "${none({ sd1d: 0.6 })}"; from a server before I-6: "${sigmaTip(tr({ z1d: undefined }))}"`, none({ sd1d: null, zN: 12 }) === "No σ: 12 daily changes stored, 60 needed" && none({ sd1d: null, zN: 63 }) === "No σ: its 63 daily changes before the day do not move" && none({ sd1d: null, zN: null }) === "No σ: fewer than 60 daily changes stored" && none({ sd1d: 0.6 }) === "No σ: there is no close to measure the day's change from" && sigmaTip(tr({ z1d: undefined })) === "No σ yet: the server sends it with the table once its update is deployed");
+    ck("a contract's month and code by CME's month codes, as the server reads them", monthOf("CLF27.NYM") === "Jan 2027" && monthOf("ZNZ26.CBT") === contractName("ZNZ26.CBT")?.label && monthOf("XYZ") === "XYZ" && monthOf(null) === "–" && codeOf("CLF27.NYM") === "CLF27" && rollWords("CLZ26.NYM", "CLF27.NYM") === "roll from Dec to Jan" && rollWords(null, "ESZ26.CME") === "roll to Dec");
+    const fi = futuresInfo({ d: "2026-11-20", contract: "CLF27.NYM", expires: "2026-12-21", seen_at: "2026-11-20T12:38:00Z" }, [{ d: "2026-10-21", from_contract: null, to_contract: "CLZ26.NYM", prev_close: null, source: "probe" }, { d: "2026-11-20", from_contract: "CLZ26.NYM", to_contract: "CLF27.NYM", prev_close: 82.44, source: "probe" }], "2026-11-20", [{ t: Date.parse("2026-11-19T00:00:00Z") / 1000, c: 83.21 }]);
+    ck(`the page's lines for CL=F: "${contractLine(fi, "2026-11-20")}"; "${lastRollLine(fi)}"`, contractLine(fi, "2026-11-20") === "Jan 2027 (CLF27) · expires 21 Dec 2026" && contractLine(fi, "2026-12-21") === "Jan 2027 (CLF27) · expires 21 Dec 2026" && contractLine(fi, "2026-12-22") === "Jan 2027 (CLF27) · expired 21 Dec 2026" && lastRollLine(fi) === "20 Nov 2026 · Dec 2026 \u2192 Jan 2027 · step -0.93%, left out" && lastRoll(fi).main === "20 Nov 2026 · Dec 2026 \u2192 Jan 2027" && lastRoll(fi).sub === "step -0.93%, left out" && lastRollLine({ ...fi, lastRoll: null, rolls: [] }) === "none recorded since 21 Oct 2026" && lastRoll({ ...fi, lastRoll: null, rolls: [] }).sub === null && lastRollLine({ ...fi, lastRoll: { ...fi.lastRoll!, fromMonth: null, step: null } }) === "20 Nov 2026 · a contract no longer listed \u2192 Jan 2027 · step not measured" && lastRoll(undefined).main === "–" && contractLine(undefined) === "–" && contractLine({ ...fi, expires: "2021-10-01", seen: "2021-08-11" }, "2026-11-20") === "Jan 2027 (CLF27) · expired 1 Oct 2021" && contractLine({ ...fi, expires: null }, "2026-11-20") === "Jan 2027 (CLF27)");
+    ck(`what the series is, and which figures leave the rolls out ("${rollsOutLine({ futures: fi, rollsOut: 2 }).slice(0, 80)}…")`, SERIES_LINE.startsWith("A front-month series") && rollsOutLine({ futures: fi, rollsOut: 2 }).startsWith("Rolls left out of realised vol and its percentile, σ vs 1M avg, the largest rise and fall and the 1D in σ: 2 since 21 Oct 2026. Changes of contract before 21 Oct 2026 are not known") && rollsOutLine({}) === "");
+    const marks = rollMarks(fi);
+    ck(`each roll a mark on the chart: "${marks[1]?.items[0].text}"; an unmeasured one says so`, marks.length === 2 && marks.every((m) => m.roll) && marks[1].items[0].text === "roll from Dec to Jan: -0.93% is a change of contract" && marks[0].items[0].text === "roll to Dec: the change of contract was not measured" && /not a move/.test(marks[1].items[0].why) && marks[1].title === "20 Nov 2026 · change of contract");
+    // the local copy's stand-in page leaves the roll out by the server's own rule
+    const D2 = 86400, bars = Array.from({ length: 300 }, (_, i) => ({ t: Date.parse("2026-01-02T00:00:00Z") / 1000 + i * D2, c: 100 + Math.sin(i / 7) * 3 + i * 0.01 }));
+    const rl = [{ d: new Date(bars[260].t * 1000).toISOString().slice(0, 10), prevClose: bars[259].c * 1.03 }, { d: new Date(bars[120].t * 1000).toISOString().slice(0, 10), prevClose: null }];
+    const a = mockSegments(bars, rl), b = rollSegments(bars, rl);
+    ck(`the local copy's stand-in rule (mockSegments) gives the server's pieces (${a.map((x) => x.length).join("+")})`, a.length === b.length && a.every((seg, i) => seg.length === b[i].length && seg.every((x, j) => x.t === b[i][j].t && Math.abs(x.c - b[i][j].c) < 1e-9)));
+  }
+
+  console.log("\n[Y] a results date as its source gives it (A-30, first step) and where a page opens (B-28)");
+  {
+    ck("a listing's market by its symbol: Tokyo, New York (no suffix, an ADR too), Hong Kong, Seoul, Shanghai, London; a stand-in symbol by its index list", listingTz("7203.T") === "Asia/Tokyo" && listingTz("NVDA") === "America/New_York" && listingTz("TM") === "America/New_York" && listingTz("0700.HK") === "Asia/Hong_Kong" && listingTz("005930.KS") === "Asia/Seoul" && listingTz("600519.SS") === "Asia/Shanghai" && listingTz("BP.L") === "Europe/London" && listingTz("XHK8", ["HSI"]) === "Asia/Hong_Kong" && listingTz("US0", ["SP500"]) === "America/New_York" && listingTz("7203.T", ["SP500"]) === "Asia/Tokyo" && listingCity("7203.T") === "Tokyo" && listingCity("NVDA") === "New York");
+    // Yahoo's stamps of 19 Nov 2026 (calendarEvents in the source probe): Toyota 1801722600, NVIDIA 1794949200
+    const toyota = new Date(1801722600 * 1000).toISOString(), nvda = new Date(1794949200 * 1000).toISOString();
+    ck(`Toyota's stamp ${toyota} (15:30 in Tokyo, the close) is 4 Feb 2027 there; NVIDIA's ${nvda} (16:00 in New York) is 17 Nov 2026 there, not the 18th it is in Singapore`, resultsDay(toyota, "7203.T") === "2027-02-04" && fmtResultsDate(toyota, "7203.T") === "4 Feb 2027" && resultsDay(nvda, "NVDA") === "2026-11-17" && fmtResultsDate(nvda, "NVDA") === "17 Nov 2026" && fmtDate(nvda) === "18 Nov 2026");
+    ck("a plain date is read as written (JPX's, later); none, empty or unreadable is a dash; never a time of day", resultsDay("2027-02-04", "NVDA") === "2027-02-04" && resultsDay(null, "NVDA") === null && resultsDay("", "NVDA") === null && resultsDay("soon", "NVDA") === null && fmtResultsDate(null, "7203.T") === "–" && [toyota, nvda, "2026-11-20T23:59:00Z"].every((t) => !/\d:\d\d/.test(fmtResultsDate(t, "NVDA") + fmtResultsDate(t, "7203.T"))));
+    ck(`a day bar: "${resultsDayLabel("2026-11-17")}", "${resultsDayLabel("2027-02-04")}"`, resultsDayLabel("2026-11-17") === "Tuesday 17 Nov" && resultsDayLabel("2027-02-04") === "Thursday 4 Feb" && resultsDayLabel("x") === "x");
+    // a US name late on the 17th in New York comes after a Tokyo name early on the 18th by the clock, but before it by its day
+    const list = byResultsDay([{ s: "7203.T", at: "2026-11-18T00:00:00Z" }, { s: "NVDA", at: "2026-11-18T04:00:00Z" }, { s: "AAPL", at: null }, { s: "6758.T", at: "2026-11-17T06:30:00Z" }], (r) => r.at, (r) => r.s);
+    ck(`a list in the order of each company's own day, then its moment; a name without a date left out (${list.map((r) => `${r.s} ${r.day}`).join(", ")})`, list.map((r) => r.s).join() === "6758.T,NVDA,7203.T" && list.map((r) => r.day).join() === "2026-11-17,2026-11-17,2026-11-18");
+    ck("the source's mark in the designer's words: est. (Yahoo Finance), confirmed (Yahoo Finance), the source alone where it says nothing; conf. / est. / a dash in a narrow column", resultsWords(true) === "est. (Yahoo Finance)" && resultsWords(false) === "confirmed (Yahoo Finance)" && resultsWords(null) === "Yahoo Finance" && resultsStatus(true) === "est." && resultsStatus(false) === "confirmed" && resultsStatus(undefined) === null && resultsStatusShort(true) === "est." && resultsStatusShort(false) === "conf." && resultsStatusShort(null) === "–");
+    const tip = resultsTip("NVDA", true);
+    ck(`its tooltip names the day's market and why there is no time: "${tip.slice(0, 92)}…"`, /the day in New York, where the company is listed; estimated by Yahoo, not confirmed by the company\. No time of day: the source gives a time with the date but does not say that it is the company's release time\.$/.test(tip) && /the day in Tokyo/.test(resultsTip("7203.T", false)) && /no time of day: the source states no release time$/.test(RESULTS_NOTE));
+    const R = (view: string, sub = "") => ({ view, sub });
+    ck("a page opened from a list starts at its top: a name's page from any tab or from another name's; an index's page on EQUITIES from another tab", opensAtTop(R("market"), R("asset", "USDJPY=X")) && opensAtTop(R("watch"), R("asset", "GC=F")) && opensAtTop(R("asset", "NVDA"), R("asset", "7203.T")) && opensAtTop(null, R("asset", "NVDA")) && opensAtTop(R("market"), R("equities", "nk225")) && opensAtTop(R("news"), R("equities", "sp500")));
+    ck("and nothing else: the same name again, another index from EQUITIES' own picker, a tab of its own, a piece of RESEARCH (it places itself)", !opensAtTop(R("asset", "NVDA"), R("asset", "NVDA")) && !opensAtTop(R("equities", "topix"), R("equities", "nk225")) && !opensAtTop(R("market"), R("equities")) && !opensAtTop(R("market"), R("news")) && !opensAtTop(R("research"), R("research", "note:2026-11-20")) && !opensAtTop(R("market"), R("asset")));
+  }
+
+  console.log("\n[Z] fixes after the check of round 3a (20 Nov 2026): σ vs 1M avg never across a change of contract (F1), a σ move's line on WATCHLIST (F3), the results calendar's flag as the source gives it (F4), a Tokyo date's mark (S5), the contract's source (S2)");
+  {
+    const D = 86400, ymd = (t: number) => new Date(t * 1000).toISOString().slice(0, 10);
+    // 120 weekday closes from 1 Jun 2026, about 1% a day; a series ending on a Thursday so the next session is a weekday
+    const raw: Bar[] = []; let v = 80;
+    for (let i = 0, t = Date.parse("2026-06-01T00:00:00Z") / 1000; raw.length < 120; t += D) { const wd = new Date(t * 1000).getUTCDay(); if (wd === 0 || wd === 6) continue; v *= 1 + (((i++ * 7919) % 97) / 97 - 0.5) * 0.02; raw.push({ t, c: v }); }
+    while (new Date(raw[raw.length - 1].t * 1000).getUTCDay() !== 4) raw.pop();
+    const lastBar = raw[raw.length - 1], next = lastBar.t + D;   // the next session: a Friday
+    // a 5% step 14 sessions back, as BZ=F's seeded roll of 2 Nov (its change of contract not known) is 14 sessions before 20 Nov
+    const k = raw.length - 14, stepped = raw.map((b, i) => (i >= k ? { ...b, c: b.c * 1.05 } : b)), rd = ymd(raw[k].t), clean = raw.map((b) => ({ ...b, c: b.c * 1.05 }));
+    const def: InstrumentDef = { symbol: "BZ=F", name: "Brent crude", cls: "Commodities", grp: "cmdty", market: "NYMEX", currency: "USD", decimals: 2, provider: "yahoo" };
+    const lastS = stepped[stepped.length - 1].c * 1.001;
+    const tableRow: RowLike = { symbol: "BZ=F", name: "Brent crude", cls: "Commodities", group: "cmdty", market: "NYMEX", currency: "USD", decimals: 2, order: 1, last: lastS, lastAt: new Date((next + 14 * 3600) * 1000).toISOString(), live: true, source: "yahoo", closes: { d1: stepped[stepped.length - 1].c }, closeDates: { d1: ymd(lastBar.t) }, pct: { d1: 0.1 }, chg: { d1: 0 }, z1m: null, pos52: 50, vs200: null };
+    const quote = (price: number): QuoteLike => ({ name: "Brent Crude Oil", quoteType: "FUTURE", currency: "USD", exchange: "NYM", price, prevClose: null, time: next + 14 * 3600, open: null, high: null, low: null });
+    const fig = (o: { row?: RowLike | null; bars: Bar[]; price: number; rolls: Array<{ d: string; prevClose: number | null }> }) => instrumentFigures({ symbol: "BZ=F", def, row: o.row ?? null, quote: quote(o.price), bars: o.bars, yieldQuote: false, now: (next + 15 * 3600) * 1000, rolls: o.rolls });
+    const rawZ = seriesStats(stepped, lastS, "price").z1m;
+    const withTable = fig({ row: tableRow, bars: stepped, price: lastS, rolls: [{ d: rd, prevClose: null }] });
+    ck(`F1: a future whose market-table row has no σ vs 1M avg (a change of contract not known among its 21 closes): its page shows none either, not the ${rawZ?.toFixed(2)} the raw closes give across the step`, withTable.z1m === null && rawZ != null && Math.abs(rawZ) > 0.3, { page: withTable.z1m, rawZ });
+    ck("a Monitor instrument's σ vs 1M avg is the table's own where it gives one", fig({ row: { ...tableRow, z1m: 1.23 }, bars: stepped, price: lastS, rolls: [] }).z1m === 1.23);
+    // no table row (the market table could not be read): the page works it out by the database's rule
+    const cleanZ = seriesStats(clean, lastS, "price").z1m;
+    const measured = fig({ bars: stepped, price: lastS, rolls: [{ d: rd, prevClose: raw[k - 1].c * 1.05 }] }), unmeasured = fig({ bars: stepped, price: lastS, rolls: [{ d: rd, prevClose: null }] });
+    ck(`without the table's row: across a measured roll σ vs 1M avg is that of the series with the step taken out (${measured.z1m?.toFixed(4)} = ${cleanZ?.toFixed(4)}); across a roll not measured, none`, measured.z1m != null && cleanZ != null && Math.abs(measured.z1m - cleanZ) < 1e-9 && Math.abs(measured.z1m - (rawZ ?? 0)) > 0.1 && unmeasured.z1m === null, { measured: measured.z1m, cleanZ, unmeasured: unmeasured.z1m });
+    // a roll on the print's own session, after the newest booked close: the print is the new contract's
+    const lastNew = lastBar.c * 1.05 * 1.002, today = ymd(next);
+    const todayM = fig({ bars: raw, price: lastNew, rolls: [{ d: today, prevClose: lastBar.c * 1.05 }] }), todayU = fig({ bars: raw, price: lastNew, rolls: [{ d: today, prevClose: null }] });
+    const wantToday = seriesStats(raw.map((b) => ({ ...b, c: b.c * 1.05 })), lastNew, "price").z1m;
+    ck(`a roll today, after the newest booked close: the booked closes on the new contract's level (${todayM.z1m?.toFixed(4)} = ${wantToday?.toFixed(4)}); not measured, none (it would read ${seriesStats(raw, lastNew, "price").z1m?.toFixed(1)} against the old contract)`, todayM.z1m != null && wantToday != null && Math.abs(todayM.z1m - wantToday) < 1e-9 && todayU.z1m === null, { m: todayM.z1m, wantToday, u: todayU.z1m });
+    ck("a roll older than the 21 closes changes nothing; a roll after the print's session is not the print's", fig({ bars: stepped, price: lastS, rolls: [{ d: ymd(raw[k - 30].t), prevClose: null }] }).z1m === seriesStats(stepped, lastS, "price").z1m && fig({ bars: raw, price: lastBar.c, rolls: [{ d: ymd(next + 3 * D), prevClose: null }] }).z1m === seriesStats(raw, lastBar.c, "price").z1m);
+    // the market table's own rule (table.ts): a roll after the newest booked close sets the closes on the new level by f; not known, none
+    const m21 = 100, s21 = 2;
+    ck("the market table's σ vs 1M avg (z1mOf): (print − mean) / σ; a roll today measured: on the new contract's level; not measured: none, as the database gives none for a booked one", z1mOf(104, m21, s21) === 2 && Math.abs((z1mOf(107.1, m21, s21, 1.05) ?? 0) - (107.1 - 105) / 2.1) < 1e-12 && z1mOf(104, m21, s21, null) === null && z1mOf(104, m21, 0) === null && z1mOf(null, m21, s21) === null && z1mOf(104, null, s21) === null);
+    // F3: a σ move on WATCHLIST says what it is, its window and source
+    ck(`F3: a σ move's second line on WATCHLIST: "${sigmaNoteLine({ note: "σ of 63 daily changes to 19 Nov 2026 · Yahoo Finance" })}"; without a note its kind alone`, sigmaNoteLine({ note: "σ of 63 daily changes to 19 Nov 2026 · Yahoo Finance" }) === "σ move · σ of 63 daily changes to 19 Nov 2026 · Yahoo Finance" && sigmaNoteLine({ note: null }) === "σ move" && sigmaNoteLine({}) === "σ move");
+    // F4: the results calendar's flag
+    ck("F4: the calendar's flag from a server that sends it as the source gives it: true est., false confirmed, null not said; from a server before (a missing flag sent as false): false is not said, never confirmed", calendarFlag(true, true) === true && calendarFlag(false, true) === false && calendarFlag(null, true) === null && calendarFlag(true, undefined) === true && calendarFlag(false, undefined) === null && calendarFlag(false, false) === null && resultsStatusShort(calendarFlag(false, undefined), "NVDA") === "–" && resultsStatusShort(calendarFlag(false, true), "NVDA") === "conf.");
+    // S5: a Tokyo company's date is est. until JPX's own calendar is read (A-30)
+    const tip7203 = resultsTip("7203.T", false), tipNk = resultsTip("JP1", null, ["NK225"]);
+    ck(`S5: a Tokyo company's Yahoo date is marked est. whatever Yahoo's flag (7203.T: "${resultsWords(false, "7203.T")}", "${resultsStatusShort(false, "7203.T")}"); a US company's keeps Yahoo's ("${resultsWords(false, "NVDA")}")`, jpxDated("7203.T") && jpxDated("JP1", ["NK225"]) && !jpxDated("NVDA") && !jpxDated("TM") && resultsMark(false, "7203.T") === true && resultsMark(null, "6758.T") === true && resultsMark(false, "NVDA") === false && resultsMark(null, "NVDA") === null && resultsMark(false) === false && resultsWords(false, "7203.T") === "est. (Yahoo Finance)" && resultsStatus(false, "JP1", ["NK225"]) === "est." && resultsStatusShort(false, "7203.T") === "est." && resultsWords(false, "NVDA") === "confirmed (Yahoo Finance)" && resultsStatusShort(null, "NVDA") === "–");
+    ck(`its tooltip says why, and what Yahoo marks: "…${tip7203.split("; ")[1]?.split(". No time")[0]}"`, /; marked est\.: a Tokyo company's date is confirmed by JPX's results calendar \(決算発表予定日\), which the Monitor does not read yet \(Yahoo marks it confirmed\)\. No time of day/.test(tip7203) && /\(Yahoo gives no mark\)\. No time of day/.test(tipNk) && /the day in New York, where the company is listed; confirmed, as Yahoo marks it\./.test(resultsTip("NVDA", false)), { tip7203, tipNk });
+    ck(`the line under a list of marks: "${MARKS_NOTE}"`, /^conf\. or est\. as Yahoo marks the date; a Tokyo company's est\. until JPX's own calendar is read$/.test(MARKS_NOTE));
+    // S4: a future's 1D in σ says from when its changes of contract are left out (a change before the record stays in)
+    const futRow = { symbol: "CL=F", name: "WTI crude", cls: "Commodities", group: "cmdty", market: "NYMEX", currency: "USD", decimals: 2, order: 36, last: 80, lastAt: "2026-11-20T14:00:00Z", live: true, source: "yahoo", closes: { d1: 79 }, closeDates: { d1: "2026-11-19" }, pct: { d1: 1.27 }, chg: { d1: 1 }, z1d: 0.9, sd1d: 1.4, zFrom: "2026-08-20", zTo: "2026-11-19", zN: 63, z1m: 0.1, pos52: 40, vs200: 1, marketTab: true, chart: true, contract: "CLF27.NYM", roll: null } as unknown as TableRow;
+    const ftip = sigmaTip(futRow), xtip = sigmaTip({ ...futRow, symbol: "USDJPY=X", name: "USD/JPY", cls: "Currency", contract: null } as TableRow);
+    ck(`S4: a future's 1D in σ says its changes of contract are left out only from when the Monitor records them ("…${ftip.split(" · ").pop()}"); a currency's says nothing of contracts`, /its changes of contract are left out from when the Monitor records them; any before stay in \(its page says from when\)$/.test(ftip) && !/contract/.test(xtip), { ftip, xtip });
+    // S2: the contract's source and when it was read, under it on both layouts
+    ck(`S2: under a future's contract: "${contractSource({ source: "Yahoo Finance (unofficial) quote: the contract it names (underlyingSymbol)", seenAt: "2026-11-20T17:38:00Z" })}"`, contractSource({ source: "Yahoo Finance (unofficial) quote: the contract it names (underlyingSymbol)", seenAt: "2026-11-20T17:38:00Z" }) === "Yahoo Finance (unofficial) · read 21 Nov 01:38 SGT" && contractSource({ source: "Yahoo Finance (unofficial) quote: x", seenAt: null }) === "Yahoo Finance (unofficial)");
+  }
+
+  console.log("\n[AA] when a closed market opens (the owner's request of 20 Nov 2026): the next open from the session table, in each market's own time zone");
+  {
+    const u = (iso: string) => new Date(iso), z = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 16) + "Z" : null);
+    // the calendar the Monitor holds: the rows its two migrations write, read here from the files themselves
+    const cal: Record<string, string[]> = {};
+    for (const f of ["20261107000002_seed.sql", "20261107000010_holidays_verified.sql"]) for (const m of readText(new URL(`../supabase/migrations/${f}`, import.meta.url), "utf8").matchAll(/\('(TSE|NYSE)',\s*'(\d{4}-\d{2}-\d{2})'/g)) (cal[m[1]] ??= []).includes(m[2]) || cal[m[1]].push(m[2]);
+    for (const k of Object.keys(cal)) cal[k].sort();
+    const H: web.HolidayMap = { TSE: new Set(cal.TSE), NYSE: new Set(cal.NYSE) }, HS = { TSE: new Set(cal.TSE), NYSE: new Set(cal.NYSE) };
+    const OK: Cal = { holidays: H, state: "ok" };
+    const next = (id: web.MarketId, iso: string, c: Cal = OK) => web.nextOpen(web.marketById(id), u(iso), c.holidays, c.state);
+    const ses = (id: string, iso: string, c: Cal = OK) => marketSession(id, u(iso), c);
+
+    // --- the two copies of the table, and the calendar ---
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+    const byId = (ms: Array<{ id: string }>) => [...ms].sort((a, b) => a.id.localeCompare(b.id));
+    ck(`the page's and the server's session tables are the same ${web.MARKETS.length} markets: zone, sessions, days and feed delay`, same(byId(web.MARKETS), byId(srv.MARKETS)));
+    ck(`their early closes are the same (${Object.entries(web.EARLY_CLOSES).map(([k, v]) => `${k}: ${Object.keys(v!).join(", ")}`).join("; ")}), all at 13:00 local`, same(web.EARLY_CLOSES, srv.EARLY_CLOSES) && Object.values(web.EARLY_CLOSES.NYSE!).every((x) => x === 13 * 60) && same(Object.keys(web.EARLY_CLOSES.NYSE!), ["2026-11-27", "2026-12-24", "2027-11-26", "2028-07-03", "2028-11-24"]), web.EARLY_CLOSES);
+    ck(`and whose holidays the Monitor holds: ${Object.entries(web.HOLIDAY_SOURCES).map(([k, v]) => `${k} from ${v!.publisher}, read ${v!.read}, to ${v!.through}`).join("; ")}`, same(web.HOLIDAY_SOURCES, srv.HOLIDAY_SOURCES) && same(Object.keys(web.HOLIDAY_SOURCES).sort(), ["NYSE", "TSE"]));
+    ck(`the calendar's rows (${cal.TSE.length} for Tokyo, ${cal.NYSE.length} for New York) are every one inside what is held, and no other market has any`, cal.TSE.length === 36 && cal.NYSE.length === 20 && [...cal.TSE, ...cal.NYSE].every((d) => d >= "2026-01-01" && d <= "2027-12-31") && Object.keys(cal).length === 2, { tse: cal.TSE.length, nyse: cal.NYSE.length });
+    ck("the two days the round asked about are in it: Tokyo shut on Mon 23 Nov 2026, New York on Thu 26 Nov 2026", cal.TSE.includes("2026-11-23") && cal.NYSE.includes("2026-11-26"));
+    // NYSE's page as the source-probe pf_rules printed it on 20 Nov 2026 (run 44737850579), its four rows word for word:
+    //   "Juneteenth National Independence Day | Friday, June 19 | Friday, June 18 (Juneteenth National Independence Day observed) | Monday, June 19 |"
+    //   "Independence Day | Friday, July 3 (Independence Day observed) | Monday, July 5 (Independence Day observed) | Tuesday, July 4** |"
+    //   "Thanksgiving Day | Thursday, November 26*** | Thursday, November 25*** | Thursday, November 23*** |"
+    //   "Christmas Day | Friday, December 25**** | Friday, December 24 (Christmas Day observed) | Monday, December 25 |"
+    const printed = ["2026-06-19", "2027-06-18", "2026-07-03", "2027-07-05", "2026-11-26", "2027-11-25", "2026-12-25", "2027-12-24"];
+    ck("the eight days of 2026 and 2027 that NYSE's page gave the probe of 20 Nov 2026 are rows of the calendar (Thanksgiving 2026 among them), and its early closes fall on none of them", printed.every((d) => cal.NYSE.includes(d)) && Object.keys(web.EARLY_CLOSES.NYSE!).every((d) => !cal.NYSE.includes(d) && [1, 2, 3, 4, 5].includes(new Date(d + "T12:00:00Z").getUTCDay())), printed.filter((d) => !cal.NYSE.includes(d)));
+    ck("the local copy passes over the same days: its calendar is those rows, from two days back on, as the server's health sends them", same(mockHolidays(Date.parse("2026-01-01T00:00:00Z")), cal) && same(mockHolidays(Date.parse("2026-11-21T00:00:00Z")), { TSE: cal.TSE.filter((d) => d >= "2026-11-19"), NYSE: cal.NYSE.filter((d) => d >= "2026-11-19") }));
+    // every market, every half hour, over the weeks that hold a change of clocks, a holiday or an early close
+    let diff = 0, seen = 0; const where: string[] = [];
+    for (const [from, to] of [["2026-03-05", "2026-03-11"], ["2026-10-22", "2026-11-04"], ["2026-11-19", "2026-12-02"], ["2026-12-23", "2027-01-05"], ["2027-03-11", "2027-03-17"], ["2027-03-25", "2027-03-31"]]) {
+      for (let t = Date.parse(from + "T00:00:00Z"); t < Date.parse(to + "T00:00:00Z"); t += 30 * 60e3) for (const m of web.MARKETS) {
+        const a = web.marketStatus(m, new Date(t), H).state, b = srv.marketState(srv.marketById(m.id)!, new Date(t), HS); seen++;
+        if (a !== b) { diff++; if (where.length < 4) where.push(`${m.id} ${new Date(t).toISOString()} ${a}/${b}`); }
+      }
+    }
+    ck(`the two copies give the same state for every market at every half hour of six such stretches (${seen} readings)`, diff === 0 && seen > 30000, where);
+    // The FX week (the reviewer's O-1): both tables against the server's own rule for when currencies trade (fxTrading,
+    // feedhealth.ts: Sunday 17:00 to Friday 17:00 New York), at every half hour of 2026 and 2027, so across both
+    // changes of New York's clocks in each year. fxTrading also knows 25 December and 1 January (New York's dates),
+    // which the session table does not hold: on those two days the tables keep the weekly timetable.
+    let fxDiff = 0, fxSeen = 0, fxShut = 0; const fxWhere: string[] = [];
+    const nyDay = (t: number) => srv.partsIn("America/New_York", new Date(t)).ymd.slice(5);
+    for (let t = Date.parse("2026-01-01T00:00:00Z"); t < Date.parse("2028-01-01T00:00:00Z"); t += 30 * 60e3) {
+      const md = nyDay(t), a = web.marketStatus(web.marketById("FX"), new Date(t), H).state, b = srv.marketState(srv.marketById("FX")!, new Date(t), HS);
+      if (md === "12-25" || md === "01-01") { fxShut++; continue; }
+      fxSeen++;
+      if ((a === "OPEN") !== fxTrading(t) || (b === "OPEN") !== fxTrading(t)) { fxDiff++; if (fxWhere.length < 4) fxWhere.push(`${new Date(t).toISOString()} page ${a} server ${b} fxTrading ${fxTrading(t)}`); }
+    }
+    ck(`both tables call FX open exactly when the server's fxTrading says currencies trade, at every half hour of 2026 and 2027 (${fxSeen} readings; ${fxShut} more on 25 Dec and 1 Jan, which the tables do not hold)`, fxDiff === 0 && fxSeen > 34000 && fxShut === 4 * 48, fxWhere);
+    // … and to the minute at the four edges of the week in each season
+    const fxAt = (iso: string) => [web.marketStatus(web.marketById("FX"), u(iso), H).state, srv.marketState(srv.marketById("FX")!, u(iso), HS), fxTrading(Date.parse(iso)) ? "OPEN" : "CLOSED"].join("/");
+    ck(`to the minute: in New York's winter the week opens at Mon 06:00 SGT and closes at Sat 06:00 SGT (${fxAt("2026-11-22T21:59:00Z")}, ${fxAt("2026-11-22T22:00:00Z")}, ${fxAt("2026-11-27T21:59:00Z")}, ${fxAt("2026-11-27T22:00:00Z")}); in its summer at Mon 05:00 and Sat 05:00 SGT (${fxAt("2026-07-19T20:59:00Z")}, ${fxAt("2026-07-19T21:00:00Z")}, ${fxAt("2026-07-17T20:59:00Z")}, ${fxAt("2026-07-17T21:00:00Z")})`,
+      fxAt("2026-11-22T21:59:00Z") === "CLOSED/CLOSED/CLOSED" && fxAt("2026-11-22T22:00:00Z") === "OPEN/OPEN/OPEN" && fxAt("2026-11-27T21:59:00Z") === "OPEN/OPEN/OPEN" && fxAt("2026-11-27T22:00:00Z") === "CLOSED/CLOSED/CLOSED"
+      && fxAt("2026-07-19T20:59:00Z") === "CLOSED/CLOSED/CLOSED" && fxAt("2026-07-19T21:00:00Z") === "OPEN/OPEN/OPEN" && fxAt("2026-07-17T20:59:00Z") === "OPEN/OPEN/OPEN" && fxAt("2026-07-17T21:00:00Z") === "CLOSED/CLOSED/CLOSED");
+    const syms = ["7203.T", "0700.HK", "005930.KS", "035720.KQ", "600519.SS", "000001.SZ", "2330.TW", "RELIANCE.NS", "D05.SI", "BHP.AX", "SAP.DE", "NESN.SW", "SHEL.L", "PETR4.SA", "WALMEX.MX", "NVDA", "BRK-B", "MC.PA", "RY.TO", "^N225", "USDJPY=X", "GC=F", "BTC-USD", ""];
+    ck("a stock's exchange is read from its symbol the same way on the page and on the server; an exchange outside the table (Paris, Toronto) gives none", syms.every((x) => web.stockMarket(x) === stockMarket(x)) && web.stockMarket("MC.PA") === null && web.stockMarket("RY.TO") === null && web.stockMarket("7203.T") === "TSE" && web.stockMarket("NVDA") === "NYSE", syms.filter((x) => web.stockMarket(x) !== stockMarket(x)));
+
+    // --- the owner's moment ---
+    const own = next("NYSE", "2026-11-20T13:16:00Z"), ownS = ses("NYSE", "2026-11-20T13:16:00Z");
+    ck(`Fri 20 Nov 2026, 21:16 SGT: New York is shut and opens at 22:30 SGT, 09:30 there since its clocks went back on 1 Nov ("${ownS.note?.text}")`, z(own?.at) === "2026-11-20T14:30Z" && own!.firm && ownS.now === "closed" && ownS.note?.text === "opens 22:30 SGT" && !ownS.note.scheduled, { at: z(own?.at), text: ownS.note?.text });
+    ck(`its tooltip says whose calendar: "${ownS.note?.tip}"`, ownS.note?.tip === "New York: regular session 09:30–16:00 ET. Next opens 20 Nov 22:30 SGT. Holidays and early closes: NYSE's calendar.", ownS.note?.tip);
+
+    // --- the changes of clocks, by each market's own zone ---
+    const dst: Array<[web.MarketId, string, string, string]> = [
+      ["NYSE", "2026-03-05T22:00:00Z", "2026-03-06T14:30Z", "the Friday before New York's clocks go forward on 8 Mar 2026: 22:30 SGT"],
+      ["NYSE", "2026-03-06T22:00:00Z", "2026-03-09T13:30Z", "the Monday after: 21:30 SGT"],
+      ["NYSE", "2026-10-29T21:00:00Z", "2026-10-30T13:30Z", "the Friday before they go back on 1 Nov 2026: 21:30 SGT"],
+      ["NYSE", "2026-10-30T21:00:00Z", "2026-11-02T14:30Z", "the Monday after: 22:30 SGT"],
+      ["NYSE", "2027-03-11T22:00:00Z", "2027-03-12T14:30Z", "the Friday before they go forward on 14 Mar 2027: 22:30 SGT"],
+      ["NYSE", "2027-03-12T22:00:00Z", "2027-03-15T13:30Z", "the Monday after: 21:30 SGT"],
+      ["XETRA", "2026-10-22T18:00:00Z", "2026-10-23T07:00Z", "Frankfurt, the Friday before Europe's clocks go back on 25 Oct 2026: 15:00 SGT"],
+      ["XETRA", "2026-10-23T18:00:00Z", "2026-10-26T08:00Z", "the Monday after: 16:00 SGT"],
+      ["LSE", "2026-10-22T18:00:00Z", "2026-10-23T07:00Z", "London, the Friday before: 15:00 SGT"],
+      ["LSE", "2026-10-23T18:00:00Z", "2026-10-26T08:00Z", "the Monday after: 16:00 SGT"],
+      ["SIX", "2026-10-23T18:00:00Z", "2026-10-26T08:00Z", "Zurich, the Monday after: 16:00 SGT"],
+      ["XETRA", "2027-03-25T18:00:00Z", "2027-03-26T08:00Z", "Frankfurt, the Friday before they go forward on 28 Mar 2027: 16:00 SGT"],
+      ["XETRA", "2027-03-26T18:00:00Z", "2027-03-29T07:00Z", "the Monday after: 15:00 SGT"],
+      ["LSE", "2027-03-25T18:00:00Z", "2027-03-26T08:00Z", "London, the Friday before: 16:00 SGT"],
+      ["LSE", "2027-03-26T18:00:00Z", "2027-03-29T07:00Z", "the Monday after: 15:00 SGT"],
+      ["ASX", "2026-10-02T08:00:00Z", "2026-10-04T23:00Z", "Sydney, across its own change on 4 Oct 2026 (10:00 there): Mon 07:00 SGT"],
+    ];
+    for (const [id, at0, want, what] of dst) { const n = next(id, at0); ck(`${what} (${id} after ${at0.slice(0, 16)}Z -> ${z(n?.at)})`, z(n?.at) === want, { got: z(n?.at), want }); }
+    ck("a market with no change of clocks keeps its hour all year: Tokyo opens at 08:00 SGT in March, July and November", ["2026-03-09T10:00:00Z", "2026-07-14T10:00:00Z", "2026-11-17T10:00:00Z"].every((t) => next("TSE", t)!.at.toISOString().slice(11, 16) === "00:00"));
+
+    // --- a Friday close ---
+    const fri = next("NYSE", "2026-11-20T21:00:00Z"), cme = next("CME", "2026-11-20T22:00:00Z"), cmeS = next("CME", "2026-07-17T21:00:00Z"), fx = next("FX", "2026-11-20T22:00:00Z");
+    ck(`New York after Friday's close opens on Monday (${z(fri?.at)} = 23 Nov 22:30 SGT)`, z(fri?.at) === "2026-11-23T14:30Z" && fri!.firm);
+    ck(`CME Globex after Friday 17:00 New York opens on Sunday evening there: Mon 07:00 SGT in winter (${z(cme?.at)}), Mon 06:00 SGT in summer (${z(cmeS?.at)}); scheduled, its holidays are not held`, z(cme?.at) === "2026-11-22T23:00Z" && z(cmeS?.at) === "2026-07-19T22:00Z" && !cme!.firm && !cmeS!.firm);
+    ck(`CME's daily break ends at 18:00 New York the same day (${z(next("CME", "2026-11-24T22:30:00Z")?.at)}), and a Sunday before 18:00 opens that evening`, z(next("CME", "2026-11-24T22:30:00Z")?.at) === "2026-11-24T23:00Z" && next("CME", "2026-11-24T22:30:00Z")!.why === "break" && z(next("CME", "2026-11-22T15:00:00Z")?.at) === "2026-11-22T23:00Z");
+    // the FX week by New York's clock (O-1): the line of this weekend, of a summer weekend, and across each change of clocks
+    const fxN = (iso: string) => z(next("FX", iso)?.at), fxLine = (iso: string) => ses("FX", iso).note?.text;
+    ck(`FX after Friday 17:00 New York opens on Sunday at 17:00 there: Mon 23 Nov 06:00 SGT in New York's winter (${z(fx?.at)}, "${fxLine("2026-11-21T02:00:00Z")}"), scheduled; on Monday at 05:30 SGT it is still shut ("${fxLine("2026-11-22T21:30:00Z")}"), from 06:00 open`, z(fx?.at) === "2026-11-22T22:00Z" && !fx!.firm && fxLine("2026-11-21T02:00:00Z") === "opens 23 Nov 06:00 SGT, scheduled" && fxN("2026-11-22T20:00:00Z") === "2026-11-22T22:00Z" && fxN("2026-11-22T21:30:00Z") === "2026-11-22T22:00Z" && fxLine("2026-11-22T21:30:00Z") === "opens 06:00 SGT, scheduled" && next("FX", "2026-11-22T22:00:00Z") === null && ses("FX", "2026-11-22T22:30:00Z").now === "open");
+    ck(`in New York's summer the week opens at Mon 05:00 SGT ("${fxLine("2026-07-18T04:00:00Z")}") and closes at Sat 05:00 SGT (at 05:10 SGT: "${fxLine("2026-07-17T21:10:00Z")}")`, fxN("2026-07-18T04:00:00Z") === "2026-07-19T21:00Z" && fxLine("2026-07-18T04:00:00Z") === "opens 20 Jul 05:00 SGT, scheduled" && ses("FX", "2026-07-17T21:10:00Z").now === "closed" && fxLine("2026-07-17T21:10:00Z") === "opens 20 Jul 05:00 SGT, scheduled" && ses("FX", "2026-07-17T20:50:00Z").now === "open");
+    ck(`across New York's changes of clocks: the weekend of 1 Nov 2026 opens at Mon 06:00 SGT (${fxN("2026-10-31T04:00:00Z")}), the one before at 05:00 (${fxN("2026-10-24T04:00:00Z")}); the weekend of 14 Mar 2027 at Mon 05:00 SGT (${fxN("2027-03-13T04:00:00Z")}), the one before at 06:00 (${fxN("2027-03-06T04:00:00Z")}); 8 Mar 2026 at 05:00 (${fxN("2026-03-07T04:00:00Z")})`, fxN("2026-10-31T04:00:00Z") === "2026-11-01T22:00Z" && fxN("2026-10-24T04:00:00Z") === "2026-10-25T21:00Z" && fxN("2027-03-13T04:00:00Z") === "2027-03-14T21:00Z" && fxN("2027-03-06T04:00:00Z") === "2027-03-07T22:00Z" && fxN("2026-03-07T04:00:00Z") === "2026-03-08T21:00Z");
+    // every opening the page can write for FX is a moment at which fxTrading turns true: every half hour of two years
+    let fxBad = 0, fxAsked = 0; const fxOff: string[] = [];
+    for (let t = Date.parse("2026-01-01T00:00:00Z"); t < Date.parse("2028-01-01T00:00:00Z"); t += 30 * 60e3) {
+      const n = web.nextOpen(web.marketById("FX"), new Date(t), H, "ok"); if (!n) continue; fxAsked++;
+      const o = n.at.getTime(), md = nyDay(o);
+      if (md === "12-25" || md === "01-01") continue;   // the two days fxTrading knows and the tables do not
+      if (!(fxTrading(o) && !fxTrading(o - 60e3) && o > t && o - t <= 49 * 3600e3)) { fxBad++; if (fxOff.length < 4) fxOff.push(`${new Date(t).toISOString()} -> ${n.at.toISOString()}`); }
+    }
+    ck(`whenever FX is shut, the opening the page gives is the minute fxTrading turns true, never more than 49 hours ahead (${fxAsked} readings over 2026 and 2027)`, fxBad === 0 && fxAsked > 9000, fxOff);
+
+    // --- a midday break ---
+    const brk: Array<[web.MarketId, string, string]> = [["TSE", "2026-11-24T02:45:00Z", "2026-11-24T03:30Z"], ["HKEX", "2026-11-24T04:30:00Z", "2026-11-24T05:00Z"], ["SSE", "2026-11-24T04:00:00Z", "2026-11-24T05:00Z"], ["SGX", "2026-11-24T04:30:00Z", "2026-11-24T05:00Z"]];
+    for (const [id, at0, want] of brk) { const n = next(id, at0), s0 = ses(id, at0); ck(`${web.marketById(id).name} in its midday break opens for the afternoon the same day ("${s0.note?.text}")`, web.marketStatus(web.marketById(id), u(at0), H).state === "BREAK" && z(n?.at) === want && n!.why === "break" && s0.now === "closed" && /^opens \d\d:\d\d SGT(, scheduled)?$/.test(s0.note?.text ?? ""), { got: z(n?.at), text: s0.note?.text }); }
+    ck(`Tokyo's is said plainly, Hong Kong's as scheduled: "${ses("TSE", "2026-11-24T02:45:00Z").note?.text}", "${ses("HKEX", "2026-11-24T04:30:00Z").note?.text}"; the tooltip says "In its midday break."`, ses("TSE", "2026-11-24T02:45:00Z").note?.text === "opens 11:30 SGT" && ses("HKEX", "2026-11-24T04:30:00Z").note?.text === "opens 13:00 SGT, scheduled" && / In its midday break\. /.test(ses("TSE", "2026-11-24T02:45:00Z").note?.tip ?? ""));
+
+    // --- a market that never closes ---
+    ck("crypto never closes: no next open and no line at any hour of a week", Array.from({ length: 7 * 24 }, (_, k) => u(new Date(Date.parse("2026-11-16T00:30:00Z") + k * 3600e3).toISOString())).every((t) => web.nextOpen(web.marketById("CRYPTO"), t, H, "ok") === null && marketSession("CRYPTO", t, OK).note === null && marketSession("CRYPTO", t, OK).now === "unknown"));
+    ck("a market that is open has no next open, only since when its session began", next("NYSE", "2026-11-20T15:00:00Z") === null && next("TSE", "2026-11-20T01:00:00Z") === null && z(web.openSince(web.marketById("TSE"), u("2026-11-24T00:05:00Z"), H, "ok")?.at) === "2026-11-24T00:00Z" && z(web.openSince(web.marketById("TSE"), u("2026-11-24T04:00:00Z"), H, "ok")?.at) === "2026-11-24T03:30Z" && z(web.openSince(web.marketById("FX"), u("2026-11-24T15:00:00Z"), H, "ok")?.at) === "2026-11-22T22:00Z" && z(web.openSince(web.marketById("FX"), u("2026-11-24T15:00:00Z"), H, "ok")?.end) === "2026-11-27T22:00Z" && z(web.openSince(web.marketById("FX"), u("2026-07-15T15:00:00Z"), H, "ok")?.at) === "2026-07-12T21:00Z" && z(web.openSince(web.marketById("CME"), u("2026-11-24T15:00:00Z"), H, "ok")?.at) === "2026-11-23T23:00Z" && web.openSince(web.marketById("NYSE"), u("2026-11-20T13:16:00Z"), H, "ok") === null);
+
+    // --- holidays: no opening is promised on a day the calendar gives as shut ---
+    const tk = next("TSE", "2026-11-20T08:00:00Z"), tkS = ses("TSE", "2026-11-23T01:00:00Z"), ny = next("NYSE", "2026-11-25T21:30:00Z"), ye = next("TSE", "2026-12-30T08:00:00Z");
+    ck(`Tokyo after Friday 20 Nov's close opens on Tue 24 Nov at 08:00 SGT, not on Monday the 23rd, a holiday in JPX's calendar (${z(tk?.at)}; passed over: ${tk?.skipped})`, z(tk?.at) === "2026-11-24T00:00Z" && tk!.firm && same(tk!.skipped, ["2026-11-23"]));
+    ck(`on that Monday at 10:00 Tokyo time it is a holiday there, and the line reads "${tkS.note?.text}"; the tooltip "${tkS.note?.tip}"`, web.marketStatus(web.marketById("TSE"), u("2026-11-23T01:00:00Z"), H).state === "HOLIDAY" && tkS.now === "closed" && tkS.note?.text === "opens 24 Nov 08:00 SGT" && tkS.note.tip === "Tokyo: regular session 09:00–11:30, 12:30–15:30 JST. Shut today: a holiday in JPX's calendar. Next opens 24 Nov 08:00 SGT. Holidays: JPX's calendar.");
+    ck(`New York after Wednesday 25 Nov's close opens on Friday the 27th, not on Thanksgiving (${z(ny?.at)}; passed over: ${ny?.skipped}); the tooltip names the day`, z(ny?.at) === "2026-11-27T14:30Z" && ny!.firm && same(ny!.skipped, ["2026-11-26"]) && /26 Nov 2026: a holiday in NYSE's calendar\. Next opens 27 Nov 22:30 SGT\./.test(ses("NYSE", "2026-11-25T21:30:00Z").note?.tip ?? ""));
+    ck(`Tokyo after 30 Dec 2026 opens on Mon 4 Jan 2027: 31 Dec and 1 Jan are holidays there, then a weekend (${z(ye?.at)}; passed over: ${ye?.skipped})`, z(ye?.at) === "2027-01-04T00:00Z" && ye!.firm && same(ye!.skipped, ["2026-12-31", "2027-01-01"]));
+    const hk = ses("HKEX", "2026-11-20T13:16:00Z"), far = ses("NYSE", "2027-12-31T22:00:00Z"), none = ses("NYSE", "2026-11-20T13:16:00Z", { holidays: {}, state: "none" }), bare = ses("NYSE", "2026-11-20T13:16:00Z", { holidays: {}, state: "ok" });
+    ck(`a market whose holidays the Monitor does not hold is given its scheduled time, and says so: "${hk.note?.text}" ("${hk.note?.tip}")`, hk.note?.text === "opens 23 Nov 09:30 SGT, scheduled" && hk.note.scheduled && hk.note.tip === "Hong Kong: regular session 09:30–12:00, 13:00–16:00 HKT. Scheduled to open 23 Nov 09:30 SGT. The Monitor does not hold this market's holidays: on one the market stays shut.");
+    ck(`so is every market but Tokyo and New York: ${web.MARKETS.filter((m) => m.id !== "CRYPTO" && ses(m.id, "2026-11-21T02:00:00Z").note?.scheduled).map((m) => m.id).join(" ")}`, same(web.MARKETS.filter((m) => m.id !== "CRYPTO" && ses(m.id, "2026-11-21T02:00:00Z").note?.scheduled).map((m) => m.id).sort(), web.MARKETS.map((m) => m.id).filter((id) => !["TSE", "NYSE", "CRYPTO"].includes(id)).sort()) && !ses("TSE", "2026-11-21T02:00:00Z").note!.scheduled && !ses("NYSE", "2026-11-21T02:00:00Z").note!.scheduled);
+    ck(`after the last day held, New York's too: "${far.note?.text}" ("…${far.note?.tip.split(". ").slice(-1)[0]}")`, far.note?.text === "opens 3 Jan 22:30 SGT, scheduled" && /The Monitor holds NYSE's calendar to 31 Dec 2027: on a holiday after it the market stays shut\.$/.test(far.note.tip));
+    ck(`and when the calendar did not come, or carries no row for the market: "${none.note?.text}" ("…${none.note?.tip.split(". ").slice(-1)[0]}")`, none.note?.text === "opens 22:30 SGT, scheduled" && /could not be loaded/.test(none.note.tip) && bare.note?.text === "opens 22:30 SGT, scheduled");
+    const wait: Cal = { holidays: {}, state: "wait" };
+    ck("while the calendar is still on its way, Tokyo and New York get no line yet (today could be a holiday there), and are not called open on their hours alone; Hong Kong has its scheduled line at once", ses("NYSE", "2026-11-20T13:16:00Z", wait).note === null && ses("NYSE", "2026-11-20T13:16:00Z", wait).now === "closed" && ses("TSE", "2026-11-23T01:00:00Z", wait).note === null && ses("TSE", "2026-11-23T01:00:00Z", wait).now === "unknown" && ses("HKEX", "2026-11-20T13:16:00Z", wait).note?.text === "opens 23 Nov 09:30 SGT, scheduled");
+
+    // --- an early close ---
+    const N = web.marketById("NYSE"), SN = srv.marketById("NYSE")!;
+    const st2 = (iso: string) => [web.marketStatus(N, u(iso), H).state, srv.marketState(SN, u(iso), HS)].join("/");
+    ck(`Fri 27 Nov 2026, the day after Thanksgiving: New York is open at 12:59 there and closed from 13:00, on the page and on the server (${st2("2026-11-27T17:59:00Z")}, ${st2("2026-11-27T18:00:00Z")}, ${st2("2026-11-27T20:00:00Z")}); on Fri 20 Nov it is open at 13:05 (${st2("2026-11-20T18:05:00Z")})`, st2("2026-11-27T17:59:00Z") === "OPEN/OPEN" && st2("2026-11-27T18:00:00Z") === "CLOSED/CLOSED" && st2("2026-11-27T20:00:00Z") === "CLOSED/CLOSED" && st2("2026-11-20T18:05:00Z") === "OPEN/OPEN");
+    const ec = next("NYSE", "2026-11-27T18:05:00Z"), ecS = ses("NYSE", "2026-11-27T18:05:00Z");
+    ck(`after it the next open is Monday's ("${ecS.note?.text}"), and the tooltip says why: "${ecS.note?.tip}"`, z(ec?.at) === "2026-11-30T14:30Z" && ec!.why === "early" && ecS.note?.text === "opens 30 Nov 22:30 SGT" && / Closed early today, at 13:00 ET \(NYSE's calendar\)\. /.test(ecS.note.tip));
+    ck("the server reads New York for 45 minutes after the early close, as after any close, and not after 16:00 that day", srv.recentlyClosed(SN, u("2026-11-27T18:30:00Z"), 45, HS) && !srv.recentlyClosed(SN, u("2026-11-27T18:50:00Z"), 45, HS) && !srv.recentlyClosed(SN, u("2026-11-27T21:10:00Z"), 45, HS) && srv.recentlyClosed(SN, u("2026-11-20T21:10:00Z"), 45, HS) && scanDue(SN, u("2026-11-27T18:10:00Z"), HS) && !scanDue(SN, u("2026-11-27T19:30:00Z"), HS));
+    ck("the other early closes the page of NYSE gave: 24 Dec 2026 and 26 Nov 2027 close at 13:00; 24 Dec 2027 is a holiday in the calendar, not a half day", st2("2026-12-24T18:10:00Z") === "CLOSED/CLOSED" && st2("2026-12-24T17:30:00Z") === "OPEN/OPEN" && st2("2027-11-26T18:10:00Z") === "CLOSED/CLOSED" && st2("2027-12-24T15:00:00Z") === "HOLIDAY/HOLIDAY");
+
+    // --- the words, in the Monitor's own time format ---
+    ck(`today in Singapore the time alone, another day with its date: "${ses("NYSE", "2026-11-20T13:16:00Z").note?.text}", "${ses("NYSE", "2026-11-20T23:20:00Z").note?.text}", "${ses("TSE", "2026-11-20T15:59:00Z").note?.text}"`, ses("NYSE", "2026-11-20T13:16:00Z").note?.text === "opens 22:30 SGT" && ses("NYSE", "2026-11-20T23:20:00Z").note?.text === "opens 23 Nov 22:30 SGT" && ses("TSE", "2026-11-20T15:59:00Z").note?.text === "opens 24 Nov 08:00 SGT");
+    ck(`"today" is Singapore's day, not the market's: on Tue 24 Nov at 06:30 SGT (Monday 17:30 in New York) CME reads "${ses("CME", "2026-11-23T22:30:00Z").note?.text}"; at 23:59 SGT Tokyo's next morning has its date ("${ses("TSE", "2026-11-24T15:59:00Z").note?.text}"), a minute later none ("${ses("TSE", "2026-11-24T16:00:00Z").note?.text}")`, ses("CME", "2026-11-23T22:30:00Z").note?.text === "opens 07:00 SGT, scheduled" && ses("TSE", "2026-11-24T15:59:00Z").note?.text === "opens 25 Nov 08:00 SGT" && ses("TSE", "2026-11-24T16:00:00Z").note?.text === "opens 08:00 SGT");
+    ck(`a market's hours in its own time: "${hoursText(web.marketById("TSE"))}", "${hoursText(web.marketById("NYSE"))}", "${hoursText(web.marketById("ASX"))}", "${hoursText(web.marketById("FX"))}"`, hoursText(web.marketById("TSE")) === "09:00–11:30, 12:30–15:30 JST" && hoursText(web.marketById("NYSE")) === "09:30–16:00 ET" && hoursText(web.marketById("ASX")) === "10:00–16:00 Sydney time" && hoursText(web.marketById("FX")) === "Sunday 17:00 to Friday 17:00 ET");
+
+    // --- what a row says ---
+    const row = (o: Partial<TableRow>) => ({ symbol: "^GSPC", market: "NYSE", live: false, source: "yahoo", lastAt: "2026-11-19T21:00:00Z", ...o }) as TableRow;
+    const at1 = u("2026-11-20T13:16:00Z"), s1 = rowSession(row({}), at1, OK), st1 = tileStamp(row({}), at1, s1.now);
+    ck(`a row that is not live while its market is shut says ${st1.label} ${st1.text} and "${s1.note?.text}"; its tooltip "${rowStateWords(row({}), at1, OK)}"`, st1.label === "CLOSED" && st1.text === "05:00 SGT" && s1.note?.text === "opens 22:30 SGT" && rowStateWords(row({}), at1, OK) === " · market closed · opens 22:30 SGT");
+    const at2 = u("2026-11-24T00:05:00Z"), jp = row({ symbol: "^N225", market: "TSE", lastAt: "2026-11-20T06:30:00Z" }), s2 = rowSession(jp, at2, OK), stp = tileStamp(jp, at2, s2.now);
+    ck(`a row that is not live in its market's regular hours (Tokyo five minutes after its open, on a feed twenty minutes behind) is not called closed: ${stp.label} ${stp.text} and "${s2.note?.text}"; tooltip "${rowStateWords(jp, at2, OK)}"; on a phone "${stateWord(s2)}"`, stp.label === "LAST PRINT" && stp.text === "20 Nov 14:30 SGT" && s2.now === "open" && s2.note?.kind === "due" && s2.note.text === "first print due ~08:20 SGT" && !s2.note.scheduled && rowStateWords(jp, at2, OK) === " · delayed ~20m · first print due ~08:20 SGT" && stateWord(s2) === "Delayed ~20m"
+      && s2.note.tip === "Tokyo: regular session 09:00–11:30, 12:30–15:30 JST; in session since 24 Nov 08:00 SGT. This feed is delayed about 20 minutes: the session's first print is due about 24 Nov 08:20 SGT. Holidays: JPX's calendar.", s2.note);
+    // --- no live price in a market's hours: what the Monitor knows, and no more (the reviewer's O-4) ---
+    const word = (id: string, iso: string, c: Cal = OK) => { const x = ses(id, iso, c); return `${stateWord(x)} · ${x.note?.text}`; };
+    ck(`the first print stays "due" until the feed's delay and ${DUE_GRACE_MIN} minutes more have passed (Tokyo at 08:34 SGT: "${word("TSE", "2026-11-24T00:34:00Z")}"); from then, for a market whose holidays the Monitor holds, the market is open and says so ("${word("TSE", "2026-11-24T00:35:00Z")}")`, word("TSE", "2026-11-24T00:34:00Z") === "Delayed ~20m · first print due ~08:20 SGT" && word("TSE", "2026-11-24T00:35:00Z") === "No new print · open since 08:00 SGT" && ses("TSE", "2026-11-24T00:35:00Z").note!.kind === "since" && rowStateWords(jp, u("2026-11-24T00:35:00Z"), OK) === " · no new print · open since 08:00 SGT" && /; in session since 24 Nov 08:00 SGT\. The last print the Monitor has is older than a live one; this feed is delayed about 20 minutes\. Holidays: JPX's calendar\.$/.test(ses("TSE", "2026-11-24T00:35:00Z").note!.tip));
+    const kr = ses("KRX", "2026-11-24T00:40:00Z"), ld = ses("LSE", "2026-11-24T16:10:00Z");
+    ck(`a market whose holidays the Monitor does not hold is never said to be open: Seoul at 08:05 SGT "${word("KRX", "2026-11-24T00:05:00Z")}", at 08:40 "${word("KRX", "2026-11-24T00:40:00Z")}" ("${kr.note?.tip}")`, word("KRX", "2026-11-24T00:05:00Z") === "Delayed ~20m · first print due ~08:20 SGT, scheduled" && word("KRX", "2026-11-24T00:40:00Z") === "No new print · session 08:00–14:30 SGT, scheduled" && kr.note!.kind === "session" && kr.note!.scheduled
+      && kr.note!.tip === "Seoul: regular session 09:00–15:30 KST. Its timetable's session: 24 Nov 08:00 SGT to 24 Nov 14:30 SGT. The last print the Monitor has is older than a live one; this feed is delayed about 20 minutes. The Monitor does not hold this market's holidays: on one there is no session.", kr.note);
+    ck(`the reviewer's case, London on Wed 25 Nov at 00:10 SGT with no print since 21:02: "${ld.note?.text}", the timetable's hours in Singapore time, not "open since" ("…${ld.note?.tip.split(". ").slice(1, 2)}")`, ld.now === "open" && ld.note?.text === "session 16:00–00:30 SGT, scheduled" && /Its timetable's session: 24 Nov 16:00 SGT to 25 Nov 00:30 SGT\./.test(ld.note.tip) && rowStateWords(row({ symbol: "^FTSE", market: "LSE", lastAt: "2026-11-24T13:02:00Z" }), u("2026-11-24T16:10:00Z"), OK) === " · no new print · session 16:00–00:30 SGT, scheduled");
+    // every market, every half hour of a week with a holiday in it: "open since" only where the calendar is held
+    let sinceBad = 0, inHours = 0; const sinceWhere: string[] = [];
+    for (let t = Date.parse("2026-11-22T00:00:00Z"); t < Date.parse("2026-11-29T00:00:00Z"); t += 30 * 60e3) for (const m of web.MARKETS) {
+      const x = marketSession(m.id, new Date(t), OK); if (x.now !== "open" || !x.note) continue; inHours++;
+      const held = m.id === "TSE" || m.id === "NYSE", ok = held ? (x.note.kind === "since" || x.note.kind === "due") && !x.note.scheduled : (x.note.kind === "session" || x.note.kind === "due") && x.note.scheduled && !/open/.test(x.note.text);
+      if (!ok || /undefined|NaN|Invalid/.test(x.note.text + x.note.tip)) { sinceBad++; if (sinceWhere.length < 4) sinceWhere.push(`${m.id} ${new Date(t).toISOString()} ${x.note.kind} "${x.note.text}"`); }
+    }
+    ck(`at every half hour of the week of 22 Nov 2026, a market in its timetable's hours says "open since" only where its holidays are held (Tokyo, New York); every other says its session or its first print, marked scheduled (${inHours} readings)`, sinceBad === 0 && inHours > 1200, sinceWhere);
+    ck(`a feed without delay has no first-print line: New York a minute after its open says "${word("NYSE", "2026-11-24T14:31:00Z")}"; Tokyo's afternoon has one after its break ("${word("TSE", "2026-11-24T03:35:00Z")}")`, word("NYSE", "2026-11-24T14:31:00Z") === "No new print · open since 22:30 SGT" && word("TSE", "2026-11-24T03:35:00Z") === "Delayed ~20m · first print due ~11:50 SGT");
+    ck(`a pair with no live price in the FX week gives the week's end ("${word("FX", "2026-11-24T16:10:00Z")}"); a future, Globex's session of the day ("${word("CME", "2026-11-24T16:10:00Z")}"), and after its daily break its first print ("${word("CME", "2026-11-24T23:05:00Z")}")`, word("FX", "2026-11-24T16:10:00Z") === "No new print · session to 28 Nov 06:00 SGT, scheduled" && word("CME", "2026-11-24T16:10:00Z") === "No new print · session 07:00–06:00 SGT, scheduled" && word("CME", "2026-11-24T23:05:00Z") === "Delayed ~10m · first print due ~07:10 SGT, scheduled" && /^FX: trades Sunday 17:00 to Friday 17:00 ET\. Its timetable's session: 23 Nov 06:00 SGT to 28 Nov 06:00 SGT\./.test(ses("FX", "2026-11-24T16:10:00Z").note!.tip));
+    ck(`when the calendar did not come, Tokyo and New York are not said to be open either: "${word("TSE", "2026-11-24T00:40:00Z", { holidays: {}, state: "none" })}", "${word("NYSE", "2026-11-24T15:00:00Z", { holidays: {}, state: "none" })}"`, word("TSE", "2026-11-24T00:40:00Z", { holidays: {}, state: "none" }) === "No new print · session 08:00–10:30 SGT, scheduled" && word("NYSE", "2026-11-24T15:00:00Z", { holidays: {}, state: "none" }) === "No new print · session 22:30–05:00 SGT, scheduled" && /could not be loaded: on a holiday there is no session\.$/.test(ses("TSE", "2026-11-24T00:40:00Z", { holidays: {}, state: "none" }).note!.tip));
+    ck("a session's end is its early close where one is known: New York's on Fri 27 Nov 2026 ends at 13:00 there, its Friday before at 16:00", z(web.openSince(web.marketById("NYSE"), u("2026-11-27T17:00:00Z"), H, "ok")?.end) === "2026-11-27T18:00Z" && z(web.openSince(web.marketById("NYSE"), u("2026-11-20T17:00:00Z"), H, "ok")?.end) === "2026-11-20T21:00Z" && z(web.openSince(web.marketById("TSE"), u("2026-11-24T00:40:00Z"), H, "ok")?.end) === "2026-11-24T02:30Z" && z(web.openSince(web.marketById("CME"), u("2026-11-24T16:10:00Z"), H, "ok")?.end) === "2026-11-24T22:00Z");
+    // --- an instrument that is only read in New York's hours (the reviewer's O-2) ---
+    const seeded: Array<{ symbol: string; cls: string; market: string; provider: string }> = [];
+    for (const f of listDir(new URL("../supabase/migrations/", import.meta.url)).filter((x) => x.endsWith(".sql")).sort()) for (const m of readText(new URL(`../supabase/migrations/${f}`, import.meta.url), "utf8").matchAll(/\(\s*\d+,\s*'([^']+)',\s*'[^']*',\s*'([^']+)',\s*'[^']*',\s*'([A-Z0-9]+)',\s*'[A-Za-z_\/]+',\s*'[A-Z]{3}',\s*\d+,\s*(?:null|'[^']*'),\s*'([a-z]+)'/g)) { const k = seeded.findIndex((x) => x.symbol === m[1]); const r = { symbol: m[1], cls: m[2], market: m[3], provider: m[4] }; if (k >= 0) seeded[k] = r; else seeded.push(r); }
+    const readOnly = seeded.filter((x) => readInNewYork(x) && !["treasury", "mof", "curve"].includes(x.provider)).map((x) => x.symbol).sort();
+    ck(`of the ${seeded.length} instruments the migrations seed, those the table gives New York's session though it is not their market are read as such: ${readOnly.join(" ")} (the dollar index, the Cboe yield and volatility indices); the US equity indices are not (${seeded.filter((x) => x.market === "NYSE" && x.cls === "Equities").map((x) => x.symbol).join(" ")})`, seeded.length >= 80 && same(readOnly, ["DX-Y.NYB", "^FVX", "^TNX", "^TYX", "^VIX", "^VXN"]) && same(seeded.filter((x) => x.market === "NYSE" && x.cls === "Equities").map((x) => x.symbol).sort(), ["^DJI", "^GSPC", "^IXIC", "^NDX", "^RUT", "^SOX"]) && !readInNewYork({ market: "NYSE", cls: "Equities" }) && !readInNewYork({ market: "NYSE" }) && !readInNewYork({ market: "CME", cls: "Futures" }) && !readInNewYork({ market: "FX", cls: "Currency" }), { n: seeded.length, readOnly });
+    const tnx = row({ symbol: "^TNX", name: "UST 10Y yield", cls: "Fixed income", group: "rates", lastAt: "2026-11-19T21:00:00Z" }), sT = rowSession(tnx, at1, OK), stT = tileStamp(tnx, at1, sT.now);
+    ck(`at the owner's moment the UST 10Y yield is not called closed by New York's hours: ${stT.label} ${stT.text} and "${sT.note?.text}"; tooltip "${rowStateWords(tnx, at1, OK)}"`, sT.now === "unknown" && stateWord(sT) === null && stT.label === "LAST PRINT" && stT.text === "05:00 SGT" && sT.note?.kind === "read" && sT.note.text === "next read 22:30 SGT" && rowStateWords(tnx, at1, OK) === " · next read 22:30 SGT"
+      && sT.note.tip === "The Monitor reads this instrument during New York's regular session (09:30–16:00 ET; to 13:00 on NYSE's early closes). New York's exchange is not its market, and the Monitor does not hold its own market's hours: it is called neither open nor closed here. Next read 20 Nov 22:30 SGT.", sT.note);
+    const eT = rowSession({ ...tnx, lastAt: "2026-11-27T18:00:00Z" }, u("2026-11-27T18:30:00Z"), OK), dx = rowSession(row({ symbol: "DX-Y.NYB", cls: "Currency", group: "fx" }), u("2026-11-21T02:00:00Z"), OK), vx = rowSession(row({ symbol: "^VIX", cls: "Volatility" }), u("2026-11-25T21:30:00Z"), OK);
+    ck(`on Fri 27 Nov 2026 after 13:00 in New York it says when it is next read ("${eT.note?.text}") and nothing of an early close of its own; the dollar index at the weekend "${dx.note?.text}"; VIX over Thanksgiving "${vx.note?.text}"`, eT.note?.text === "next read 30 Nov 22:30 SGT" && !/Closed early|closed early today/.test(eT.note.tip) && eT.now === "unknown" && dx.note?.text === "next read 23 Nov 22:30 SGT" && vx.note?.text === "next read 27 Nov 22:30 SGT");
+    ck("in New York's hours such a row has no line when it is not live (its stamp says LAST PRINT), and none when it is; without the calendar its next read is the scheduled one", rowSession(tnx, u("2026-11-20T20:30:00Z"), OK).note === null && rowSession(tnx, u("2026-11-20T20:30:00Z"), OK).now === "unknown" && rowStateWords(tnx, u("2026-11-20T20:30:00Z"), OK) === "" && rowSession({ ...tnx, live: true }, u("2026-11-20T15:00:00Z"), OK).note === null && rowStateWords({ ...tnx, live: true }, u("2026-11-20T15:00:00Z"), OK) === " · market open" && rowSession(tnx, at1, { holidays: {}, state: "none" }).note?.text === "next read 22:30 SGT, scheduled" && rowSession(tnx, at1, { holidays: {}, state: "wait" }).note === null);
+    ck("the S&P 500 beside it keeps CLOSED and its opening; an official US yield (UST 2Y, market NYSE too) keeps PUBLISHED and no line", rowSession(row({}), at1, OK).now === "closed" && rowSession(row({}), at1, OK).note?.text === "opens 22:30 SGT" && rowSession(row({ symbol: "UST2Y", cls: "Fixed income", source: "treasury", lastAt: "2026-11-19T00:00:00Z" }), at1, OK).note === null);
+    ck("the same for a booked close (LAST CLOSE with its date), and for a market the table does not keep (no line at all)", tileStamp(row({ lastAt: "2026-11-19T00:00:00Z" }), u("2026-11-20T15:00:00Z"), "open").label === "LAST CLOSE" && tileStamp(row({ lastAt: "2026-11-19T00:00:00Z" }), u("2026-11-20T15:00:00Z"), "open").text === "19 Nov 2026" && tileStamp(row({ lastAt: "2026-11-19T00:00:00Z" }), at1, "closed").label === "CLOSED" && rowSession(row({ market: "TSX" as never }), at1, OK).now === "unknown" && rowSession(row({ market: "TSX" as never }), at1, OK).note === null && tileStamp(row({}), at1, "unknown").label === "LAST PRINT" && rowStateWords(row({ market: "" }), at1, OK) === "");
+    ck("a live row, and an official yield (published once a day: no session), get no line; the yield's stamp stays PUBLISHED", rowSession(row({ live: true }), at1, OK).note === null && rowStateWords(row({ live: true }), at1, OK) === " · market open" && rowSession(row({ symbol: "JGB10Y", market: "TSE", source: "mof", lastAt: "2026-11-19T00:00:00Z" }), at1, OK).note === null && rowStateWords(row({ symbol: "JGB10Y", market: "TSE", source: "mof" }), at1, OK) === "" && tileStamp(row({ symbol: "JGB10Y", market: "TSE", source: "mof", lastAt: "2026-11-19T00:00:00Z" }), at1, "unknown").label === "PUBLISHED");
+    ck("without a session the stamp is as before (CLOSED for a row that is not live): the rule's default", tileStamp(row({}), at1).label === "CLOSED" && tileStamp(row({ live: true, lastAt: "2026-11-20T13:15:00Z" }), at1).label === "LIVE");
+    // a stock's page and an instrument outside the table: live read by the page
+    ck(`a stock's quote is live by the page's reading in its exchange's hours while it is no older than its feed's delay plus ${PAGE_FRESH_MIN} minutes; never outside them, on a holiday, after an early close, or for a booked close`, pageLive("NYSE", "2026-11-20T15:00:00Z", u("2026-11-20T15:20:00Z"), H) && !pageLive("NYSE", "2026-11-20T15:00:00Z", u("2026-11-20T15:31:00Z"), H) && pageLive("TSE", "2026-11-20T01:00:00Z", u("2026-11-20T01:45:00Z"), H) && !pageLive("NYSE", "2026-11-20T13:10:00Z", at1, H) && !pageLive("TSE", "2026-11-23T01:00:00Z", u("2026-11-23T01:05:00Z"), H) && !pageLive("NYSE", "2026-11-27T18:00:00Z", u("2026-11-27T18:05:00Z"), H) && !pageLive("NYSE", "2026-11-20T00:00:00Z", u("2026-11-20T15:00:00Z"), H) && !pageLive("", "2026-11-20T15:00:00Z", u("2026-11-20T15:01:00Z"), H) && !pageLive("NYSE", null, at1, H));
+    ck("a name outside the Monitor's table keeps only the market its symbol gives: a pair the FX week, a coin none that closes, a stock its exchange; an index or a future from the search none", symbolMarket("EURGBP=X") === "FX" && symbolMarket("BTC-USD") === "CRYPTO" && symbolMarket("7203.T") === "TSE" && symbolMarket("NVDA") === "NYSE" && symbolMarket("^AXJO") === null && symbolMarket("FGBL=F") === null && symbolMarket("MC.PA") === null);
+    // WATCHLIST's line
+    const shut = shutMarkets(["NYSE", "TSE", "NYSE", "FX", "CRYPTO", null, "HKEX"], u("2026-11-20T23:20:00Z"), OK);
+    ck(`a list of names says once for each market that is shut when it opens, the soonest first: "${shutLine(shut)}"`, shutLine(shut) === "FX opens 23 Nov 06:00 SGT, scheduled · Hong Kong opens 23 Nov 09:30 SGT, scheduled · New York opens 23 Nov 22:30 SGT · Tokyo opens 24 Nov 08:00 SGT" && shutLine(shutMarkets(["NYSE", "FX"], u("2026-11-20T15:00:00Z"), OK)) === "");
+
+    // --- a panel's rows: "Closed now: …" above the table (the designer's D-62; A-41, B-35) ---
+    { const prow = (o: Record<string, unknown>) => panelRowOf({ symbol: "^GSPC", name: "S&P 500", market: "NYSE", cls: "Equities", live: false, source: "yahoo", ...o } as never);
+      // MARKETS' own rows: Tokyo, New York, Seoul, Hong Kong, Shanghai, Globex, FX; an official yield; the three read in New York's hours
+      const mk = (live: string[] = []) => [prow({ symbol: "^N225", name: "Nikkei 225", market: "TSE" }), prow({ symbol: "1306.T", name: "TOPIX via 1306.T", market: "TSE" }), prow({}), prow({ symbol: "^IXIC", name: "Nasdaq Composite" }), prow({ symbol: "^KS11", name: "KOSPI", market: "KRX" }), prow({ symbol: "^HSI", name: "Hang Seng", market: "HKEX" }), prow({ symbol: "000001.SS", name: "Shanghai Composite", market: "SSE" }),
+        prow({ symbol: "^VIX", name: "VIX", cls: "Volatility", live: live.includes("NYSE") }), prow({ symbol: "NKD=F", name: "Nikkei 225 future (CME)", market: "CME", cls: "Futures" }), prow({ symbol: "USDJPY=X", name: "USD/JPY", market: "FX", cls: "Currency" }), prow({ symbol: "DX-Y.NYB", name: "US Dollar Index (DXY)", cls: "Currency", live: live.includes("NYSE") }),
+        prow({ symbol: "UST2Y", name: "UST 2Y yield", cls: "Fixed income", source: "treasury" }), prow({ symbol: "^TNX", name: "UST 10Y yield", cls: "Fixed income", live: live.includes("NYSE") }), prow({ symbol: "JGB10Y", name: "JGB 10Y yield", market: "TSE", cls: "Fixed income", source: "mof" })];
+      const line = (iso: string, rows = mk()) => { const c = closedLine(rows, u(iso), OK); return c ? closedLineText(c) : null; };
+      const owner = line("2026-11-20T13:16:00Z");
+      ck(`the owner's moment (Fri 20 Nov, 21:16 SGT), MARKETS' rows: "${owner}"`, owner === "Closed now: New York opens 22:30 SGT · Seoul opens 23 Nov 08:00 SGT, scheduled · Hong Kong and Shanghai open 23 Nov 09:30 SGT, scheduled · Tokyo opens 24 Nov 08:00 SGT · next read 22:30 SGT: VIX, DXY, UST 10Y");
+      const mon = line("2026-11-22T22:30:00Z");
+      ck(`B's moment (Mon 23 Nov, 06:30 SGT): a holiday is named as one, Globex and New York have their openings, FX is trading: "${mon}"`, mon === "Closed now: CME Globex opens 07:00 SGT, scheduled · Seoul opens 08:00 SGT, scheduled · Hong Kong and Shanghai open 09:30 SGT, scheduled · New York opens 22:30 SGT · Tokyo (holiday) opens 24 Nov 08:00 SGT · next read 22:30 SGT: VIX, DXY, UST 10Y");
+      const sat = closedLine(mk(), u("2026-11-21T02:00:00Z"), OK)!;
+      ck(`a weekend: every market of the rows, the soonest first, each market once ("${sat.entries.map((e) => e.label).join(" | ")}"); an entry's tooltip is its markets' own`, sat.entries.map((e) => e.label).join("|") === "FX|CME Globex|Seoul|Hong Kong and Shanghai|New York|Tokyo" && sat.entries.every((e) => e.why === null) && sat.entries[3].names.length === 2 && /^Hong Kong: regular session .*\nShanghai: regular session /.test(sat.entries[3].tip) && sat.read?.text === "next read 23 Nov 22:30 SGT: VIX, DXY, UST 10Y" && /The Monitor reads this instrument during New York's regular session/.test(sat.read.tip));
+      ck("the reason a market is shut, where the Monitor knows one: Tokyo's midday break, Globex's daily break, New York's early close and its holiday; none for hours alone or a weekend",
+        /Tokyo \(midday break\) opens 11:30 SGT/.test(line("2026-11-24T02:45:00Z") ?? "") && /CME Globex \(daily break\) opens 07:00 SGT, scheduled/.test(line("2026-11-24T22:30:00Z") ?? "") && /New York \(early close\) opens 30 Nov 22:30 SGT/.test(line("2026-11-27T18:30:00Z") ?? "") && /New York \(holiday\) opens 27 Nov 22:30 SGT/.test(line("2026-11-26T15:00:00Z") ?? "") && !/\(/.test(line("2026-11-21T02:00:00Z") ?? "(") && /Hong Kong and Shanghai \(midday break\) open 13:00 SGT, scheduled/.test(line("2026-11-24T04:30:00Z") ?? ""));
+      const fx = [prow({ symbol: "USDJPY=X", name: "USD/JPY", market: "FX", cls: "Currency" }), prow({ symbol: "EURUSD=X", name: "EUR/USD", market: "FX", cls: "Currency" }), prow({ symbol: "DX-Y.NYB", name: "US Dollar Index (DXY)", cls: "Currency" })];
+      ck(`RATES & FX's FX rows on a weekend: "${line("2026-11-21T02:00:00Z", fx)}"; while the FX week runs there is no line, whatever New York does`, line("2026-11-21T02:00:00Z", fx) === "Closed now: FX opens 23 Nov 06:00 SGT, scheduled · next read 23 Nov 22:30 SGT: DXY" && line("2026-11-24T02:00:00Z", fx) === null && line("2026-11-20T15:00:00Z", fx) === null);
+      ck("with New York open the rows read in its hours end no line; one that is being read is left out of it; an official yield and a coin give none", !/next read/.test(line("2026-11-20T15:00:00Z") ?? "") && /^Closed now: Seoul opens 23 Nov 08:00 SGT, scheduled · /.test(line("2026-11-20T15:00:00Z") ?? "") && closedLine(mk(["NYSE"]), u("2026-11-20T13:16:00Z"), OK)!.read === null && closedLine([prow({ symbol: "JGB10Y", market: "TSE", source: "mof" }), { market: "CRYPTO" }, { market: null }, {}], u("2026-11-21T02:00:00Z"), OK) === null);
+      const bare = closedLine(mk(), u("2026-11-20T13:16:00Z"), { holidays: {}, state: "none" })!;
+      ck(`without the holiday calendar New York's and Tokyo's are the scheduled times, and say so: "${bare.entries.filter((e) => /New York|Tokyo/.test(e.label)).map((e) => e.text).join(" · ")}"`, bare.entries.some((e) => e.text === "New York opens 22:30 SGT, scheduled") && bare.entries.some((e) => e.label === "Seoul and Tokyo" && e.text === "Seoul and Tokyo open 23 Nov 08:00 SGT, scheduled") && bare.read?.text === "next read 22:30 SGT, scheduled: VIX, DXY, UST 10Y"); }
+
+    // --- the local copy at a set clock (om_mock_now): its rows by the session table ---
+    web.setHolidays({ TSE: cal.TSE, NYSE: cal.NYSE } as Parameters<typeof web.setHolidays>[0]);
+    const pr = (id: string, iso: string) => printAt(id, Date.parse(iso));
+    ck(`at the owner's moment the stand-in S&P 500 is not live, its last print at Thursday's close (${pr("NYSE", "2026-11-20T13:16:00Z")?.lastAt}); the Nikkei's at Friday's (${pr("TSE", "2026-11-20T13:16:00Z")?.lastAt}); a future is live on a print ten minutes old`, same(pr("NYSE", "2026-11-20T13:16:00Z"), { live: false, lastAt: "2026-11-19T21:00:00.000Z" }) && same(pr("TSE", "2026-11-20T13:16:00Z"), { live: false, lastAt: "2026-11-20T06:30:00.000Z" }) && same(pr("CME", "2026-11-20T13:16:00Z"), { live: true, lastAt: "2026-11-20T13:06:00.000Z" }) && pr("TSX", "2026-11-20T13:16:00Z") === null);
+    ck(`five minutes after Tokyo's open on Tue 24 Nov its stand-in print is still Friday's close, the Monday being a holiday (${pr("TSE", "2026-11-24T00:05:00Z")?.lastAt}); twenty-five minutes after, it is live`, same(pr("TSE", "2026-11-24T00:05:00Z"), { live: false, lastAt: "2026-11-20T06:30:00.000Z" }) && same(pr("TSE", "2026-11-24T00:25:00Z"), { live: true, lastAt: "2026-11-24T00:05:00.000Z" }) && same(pr("TSE", "2026-11-24T02:45:00Z"), { live: false, lastAt: "2026-11-24T02:30:00.000Z" }) && same(pr("NYSE", "2026-11-27T18:30:00Z"), { live: false, lastAt: "2026-11-27T18:00:00.000Z" }));
+  }
+
+  // Last, so that a file a require loads part-way through the run is in Node's list too.
+  console.log("\n[AB] this file reaches nothing that GitHub's logic job lacks: only jobs/ is installed there (the failed check of pull request #48, 21 Nov 2026)");
+  {
+    // GitHub runs this file after `npm ci` in jobs/ and nowhere else (.github/workflows/logic-tests.yml, and the logic
+    // checks of deploy-server.yml, which stop a deploy of the server). A file of the page that imports one of the
+    // page's packages (web/node_modules: React, uPlot) cannot be loaded there, while on a machine that has
+    // web/node_modules it loads without a word. web/src/lib/nav.ts imports "react"; this file read one rule from it,
+    // passed on the engineer's machine and on the reviewer's, and stopped on GitHub with "Cannot find module 'react'".
+    // So this file looks twice at what it reaches, and fails on any machine before GitHub is asked:
+    //   1. The imports as they are written, followed from this file through every file they lead to: `import … from`,
+    //      `export … from`, and import("…") or require("…") of a plain string, read with TypeScript's own parser (a
+    //      package of jobs/). `import type` loads nothing and is not followed. A name that is not a file is a package.
+    //      Node looks for a package in node_modules beside the importing file and in the folders above it, so on
+    //      GitHub only a file of jobs/ finds one, and only one that jobs/package-lock.json installs. Node's own
+    //      modules (node:fs) are on every machine. An address with a scheme (npm:, jsr:, https:) is the server's way
+    //      under Deno and loads in no machine's Node: a run that reached one would stop here as well, so it is not
+    //      this check's business.
+    //   2. What this run really loaded. Node keeps, for every file loaded through require, the files it loaded in
+    //      turn, and tsx runs this file and its imports through require. Walked from this file down: every file of
+    //      the repository's own must be one the first look followed, so that the first look is known to miss nothing
+    //      that loads; and none may have loaded a file from web/node_modules or from anywhere else on this machine
+    //      (it has a folder of packages installed for every project). A file loaded by import() is not in Node's
+    //      list; the first look follows it.
+    // A rule of the page that this file checks belongs in a module that imports no package (lib/pagetop.ts holds
+    // lib/nav.ts's rule), and a type from a module that does is imported with `import type`.
+    const slash = (f: string) => f.replace(/\\/g, "/");
+    const root = slash(fileURLToPath(new URL("../", import.meta.url))), me = slash(fileURLToPath(import.meta.url));
+    const rel = (f: string) => (slash(f).startsWith(root) ? slash(f).slice(root.length) : slash(f));
+    const locked = new Set(Object.keys((JSON.parse(readText(new URL("../jobs/package-lock.json", import.meta.url), "utf8")) as { packages?: Record<string, unknown> }).packages ?? {}));
+    const where = (f: string): "own" | "jobs" | "elsewhere" => {
+      const r = rel(f);
+      if (r === slash(f)) return "elsewhere";                                           // not in the repository at all
+      if (!/(^|\/)node_modules\//.test(r)) return "own";
+      const pkg = /^jobs\/((?:node_modules\/(?:@[^/]+\/)?[^/]+\/)+)/.exec(r)?.[1].slice(0, -1);   // jobs/node_modules/zod/lib/x.js -> node_modules/zod, as the lock names it
+      return pkg !== undefined && locked.has(pkg) ? "jobs" : "elsewhere";
+    };
+
+    // 1. the imports as they are written
+    type TsNode = import("typescript").Node;
+    const ts = createRequire(new URL("../jobs/package.json", import.meta.url))("typescript") as typeof import("typescript");
+    const importsOf = (file: string): Array<{ spec: string; line: number }> => {
+      const sf = ts.createSourceFile(file, readText(file, "utf8"), ts.ScriptTarget.Latest), out: Array<{ spec: string; line: number }> = [];
+      const add = (lit: TsNode | undefined) => { if (lit && ts.isStringLiteralLike(lit)) out.push({ spec: lit.text, line: sf.getLineAndCharacterOfPosition(lit.end).line + 1 }); };
+      const visit = (n: TsNode): void => {
+        if (ts.isImportDeclaration(n)) { if (!n.importClause?.isTypeOnly) add(n.moduleSpecifier); }
+        else if (ts.isExportDeclaration(n)) { if (!n.isTypeOnly) add(n.moduleSpecifier); }
+        else if (ts.isCallExpression(n) && (n.expression.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(n.expression) && n.expression.text === "require"))) add(n.arguments[0]);
+        ts.forEachChild(n, visit);
+      };
+      visit(sf);
+      return out;
+    };
+    const isFile = (f: string) => fileStat(f, { throwIfNoEntry: false })?.isFile() === true;
+    const fileOf = (from: string, spec: string) => { const p = slash(resolvePath(dirname(from), spec)); return [p, `${p}.ts`, `${p}.tsx`, `${p}/index.ts`, `${p}/index.tsx`].find(isFile) ?? null; };
+    const written = new Map<string, string | null>(), named: string[] = [];              // each file followed, and the file that led to it first
+    const way = (f: string): string => { const from = written.get(f); return from ? `${way(from)} > ${rel(f)}` : rel(f); };
+    const follow = (file: string, from: string | null) => {
+      if (written.has(file)) return;
+      written.set(file, from);
+      if (!/\.[cm]?[jt]sx?$/.test(file)) return;                                         // a .json imports nothing
+      for (const { spec, line } of importsOf(file)) {
+        const at = `${rel(file)}:${line} imports "${spec}" (the way there: ${way(file)})`;
+        if (/^\.{0,2}\//.test(spec)) {                                                   // a file: followed
+          const to = fileOf(file, spec);
+          if (to !== null && where(to) === "own") follow(to, file); else named.push(`${at}, ${to === null ? "which leads to no file" : "which is not a file of the repository's own"}`);
+        } else if (spec.startsWith("node:") || builtinModules.includes(spec) || /^[a-z][a-z\d+.-]*:/i.test(spec)) continue;   // Node's own, or Deno's
+        else if (!(rel(file).startsWith("jobs/") && locked.has(`node_modules/${spec.split("/").slice(0, spec.startsWith("@") ? 2 : 1).join("/")}`))) named.push(at);
+      }
+    };
+    follow(me, null);
+    ck(`the imports written in this file and in each file they lead to (${written.size} files) name no package that GitHub's logic job lacks: none of the page's, and one that jobs/package-lock.json installs only from a file of jobs/`, written.has(`${root}web/src/lib/sessions.ts`) && written.has(`${root}supabase/functions/_shared/sessions.ts`) && named.length === 0, named);
+
+    // 2. what this run really loaded
+    const self = typeof module === "object" && module !== null && Array.isArray(module.children) ? module : null;
+    const loaded: string[] = [], lacking: string[] = [], seen = new Set<NodeJS.Module>();
+    let fromJobs = 0;
+    const walk = (m: NodeJS.Module) => {
+      if (seen.has(m)) return;
+      seen.add(m); loaded.push(slash(m.filename));
+      for (const c of m.children) {
+        const w = where(c.filename);
+        if (w === "own") walk(c); else if (w === "jobs") fromJobs++; else lacking.push(`${rel(m.filename)} loads ${rel(c.filename)}`);
+      }
+    };
+    if (self) walk(self);
+    const missed = loaded.filter((f) => !written.has(f)).map(rel);
+    const noList = "this file was not loaded through require, so Node kept no list of what it loaded: the second look has to be written anew for the way the file is run now";
+    ck(`what this run really loaded can be listed (${loaded.length} files of the repository's own, this one first), and following the imports as written missed none of them`, loaded[0] === me && loaded.includes(`${root}web/src/lib/sessions.ts`) && missed.length === 0, self ? missed : noList);
+    ck(`none of those files loaded one from web/node_modules or from anywhere else on this machine (${fromJobs} from jobs/node_modules, of packages that jobs/package-lock.json installs)`, self !== null && lacking.length === 0, self ? lacking : noList);
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

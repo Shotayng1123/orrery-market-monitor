@@ -3,8 +3,11 @@ name: source-probe
 # Tries an outside data source from GitHub's machines before a job is built on it (19 Nov 2026). The machine the
 # Monitor is developed on reaches almost no outside hosts, and a source that answers one machine may refuse
 # another (FRED refuses GitHub's runners and the edge runtime: README.md), so a source is tried from where its job
-# will run. A probe is a read-only script in jobs/probes/ that fetches and prints what it finds. It is given no
-# secrets and writes nothing anywhere.
+# will run. A probe is a read-only script in jobs/probes/ that fetches and prints what it finds. It writes nothing
+# anywhere and is given no secrets, with one exception asked for by name: sec_user_agent = true gives the Probe step,
+# and no other step, the repository secret SEC_USER_AGENT (the contact the SEC asks automated readers to declare, the
+# owner's OD-4 of 20 Nov 2026) and no other secret. A probe that reads sec.gov (pf_sec) sends it only as its
+# User-Agent and never prints it; GitHub also shows a registered secret as *** in the log.
 #   Run on the branch that holds the probe: Actions > source-probe > Run workflow, probe = the file's name.
 on:
   workflow_dispatch:
@@ -16,6 +19,11 @@ on:
         description: "node (tsx, as the jobs on GitHub run) or deno (as relay_deno.ts and the server's code run)"
         required: false
         default: "node"
+      sec_user_agent:
+        description: "true = give the Probe step the secret SEC_USER_AGENT, the contact the SEC asks for (for pf_sec). No other secret is ever given"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -34,11 +42,13 @@ jobs:
         env:
           PROBE: ${{ github.event.inputs.probe }}
           RUNTIME: ${{ github.event.inputs.runtime || 'node' }}
+          SEC_CONTACT: ${{ github.event.inputs.sec_user_agent || 'false' }}
         run: |
           case "$PROBE" in ""|*[!A-Za-z0-9_-]*) echo "::error::not a probe name (letters, digits, - and _ only)"; exit 2;; esac
           case "$RUNTIME" in node|deno) ;; *) echo "::error::runtime must be node or deno"; exit 2;; esac
+          case "$SEC_CONTACT" in true|false) ;; *) echo "::error::sec_user_agent must be true or false"; exit 2;; esac
           test -f "probes/$PROBE.ts" || { echo "::error::there is no jobs/probes/$PROBE.ts on $GITHUB_REF_NAME"; exit 2; }
-          echo "probe $PROBE on $GITHUB_REF_NAME ($(git rev-parse --short HEAD)), runtime $RUNTIME"
+          echo "probe $PROBE on $GITHUB_REF_NAME ($(git rev-parse --short HEAD)), runtime $RUNTIME, the SEC contact given to the Probe step: $SEC_CONTACT"
       - if: (github.event.inputs.runtime || 'node') == 'node'
         uses: actions/setup-node@v4
         with:
@@ -55,6 +65,8 @@ jobs:
         env:
           PROBE: ${{ github.event.inputs.probe }}
           RUNTIME: ${{ github.event.inputs.runtime || 'node' }}
+          # only when the run asks for it, and only here: empty otherwise
+          SEC_USER_AGENT: ${{ github.event.inputs.sec_user_agent == 'true' && secrets.SEC_USER_AGENT || '' }}
         run: |
           if [ "$RUNTIME" = "deno" ]; then deno run --allow-net --allow-env --allow-read --node-modules-dir=none "probes/$PROBE.ts"
           else npx tsx "probes/$PROBE.ts"; fi

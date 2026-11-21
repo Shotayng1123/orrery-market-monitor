@@ -21,10 +21,14 @@
 //     with its date at midnight UTC, shows that date and never a made-up time of day, on its chart tile, in its tooltip
 //     and in MARKETS' row and phone line (R2B-01); every other tile gives its time with its zone (R2B-06); KEY DATA marks
 //     what the Monitor works out itself with † after the label, with a line under the panel (R2B-05). Both layouts.
+//   - A phone's chart keeps its room whatever the lines after its stamp (21 Nov 2026): a pair at the weekend, a yield
+//     read in New York's hours, in this machine's fonts and in a wide one, at set moments of the local copy's clock
+//     (e2e/hero.cjs), so that part does not depend on the day or the hour either.
 // Run from web/:  node e2e/run.cjs instrument-pages   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
 const { S } = require("./standin.cjs");
 const { routes } = require("./harness.cjs");
+const { heroRoom, roomOk, roomWords, SAT, FRI, WIDE, EACH_TAG_A_LINE, FLOOR } = require("./hero.cjs");
 const MOCK = "http://localhost:5179/orrery-market-monitor/", STANDIN = "http://localhost:5181/orrery-market-monitor/";
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d).slice(0, 1500)}`); };
 const CYAN = "rgb(31, 209, 193)";
@@ -41,6 +45,8 @@ const PAGES = [
 const NKD_JP = ["JP CPI y/y", "JP PMI Manufacturing (flash)", "JP GDP q/q (preliminary)"];
 // the designer's † after a label the Monitor works out itself (R2B-05); σ vs 1M avg and vs 200D are MARKETS' own here
 const KEY_ROWS = ["Day's range", "Previous close", "52W range †", "From 52W high / low †", "σ vs 1M avg", "vs 200D", "Realised vol, 1M / 3M / 12M †", "Largest rise, 12M †", "Largest fall, 12M †", "Source · as of"];
+// a future also names its contract and its last change of contract, after the previous close (B-27, I-6)
+const keyRows = (hash) => (/%3DF$/.test(hash) ? [...KEY_ROWS.slice(0, 2), "Contract", "Last change of contract", ...KEY_ROWS.slice(2)] : KEY_ROWS);
 const DATE = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
 const STOCK_ONLY = /Mkt cap|Shares outstanding|Diluted shares|P\/E|P\/B|Dividend yield|Next results|Short interest|Beta vs|Avg daily|Volume today|FINANCIALS|BIG MOVES|SHORT INTEREST|Statements/;
 async function page(b, opts, prefs) {
@@ -78,7 +84,7 @@ const desk = (p) => p.evaluate(() => {
     evAux: document.querySelector('.panel[data-k="in-events"] .phead .aux')?.textContent ?? "",
     meet: document.querySelector("#in-meet")?.textContent.replace(/\s+/g, " ").trim() ?? null,
     newsAux: document.querySelector('.panel[data-k="in-news"] .phead .aux')?.textContent ?? "",
-    news: [...document.querySelectorAll("#st-news .snrow")].map((r) => ({ kind: r.dataset.kind, title: r.querySelector(".snt").textContent })),
+    news: [...document.querySelectorAll("#st-news .snrow")].map((r) => ({ kind: r.dataset.kind, title: r.querySelector(".snt").textContent, src: r.querySelector(".snm .src")?.textContent ?? null })),
     newsEmpty: document.querySelector('.panel[data-k="in-news"] .empty')?.textContent ?? null,
     ox: document.documentElement.scrollWidth - innerWidth,
   };
@@ -93,7 +99,7 @@ const pc = (t) => /^[+-]?\d[\d,]*\.\d+%$/.test(t) || t === "–";
       await go(p, MOCK, pg.hash, "#in-key"); await p.waitForSelector(".bigwrap canvas, .bigwrap .chartbox");
       const d = await desk(p);
       ck(`${pg.name}: an instrument's page, panels in reading order (${d.panels.join(" · ")}), and no stock-only line: no market cap, shares, valuation, results, short interest, big moves or statements`, d.panels.join("|") === `01 ${pg.name.toUpperCase()}|02 KEY DATA|03 PERFORMANCE|04 EVENTS|05 NEWS` && !d.fin && !STOCK_ONLY.test(d.text), { panels: d.panels, stockOnly: (STOCK_ONLY.exec(d.text) || [])[0] });
-      ck(`${pg.name}: KEY DATA in the designer's order (Last and Day, then the day's range … the source and as-of)`, d.krow.join() === "Last,Day" && Object.keys(d.rows).join("|") === KEY_ROWS.join("|"), { krow: d.krow, rows: Object.keys(d.rows) });
+      ck(`${pg.name}: KEY DATA in the designer's order (Last and Day, then the day's range … the source and as-of)`, d.krow.join() === "Last,Day" && Object.keys(d.rows).join("|") === keyRows(pg.hash).join("|"), { krow: d.krow, rows: Object.keys(d.rows) });
       if (pg.yield) {
         const [hi, lo] = d.rows["From 52W high / low †"].split(" / "), [rise] = d.rows["Largest rise, 12M †"].split(" · "), [fall] = d.rows["Largest fall, 12M †"].split(" · ");
         ck(`${pg.name}: every change in bp (B's defect 1): the day ${d.day}, 1D … 36M ${d.chg.join(" ")}, from the 52W high and low ${hi} / ${lo}, vs 200D ${d.rows["vs 200D"]}, largest rise ${rise} and fall ${fall}; the tile "${d.tile.trim()}"`, bp(d.day) && d.chg.length === 6 && d.chg.every(bp) && bp(hi) && bp(lo) && bp(d.rows["vs 200D"]) && bp(rise) && bp(fall) && /^[+-]?\d+(\.\d)?bp\s/.test(d.tile.trim()), d);
@@ -106,7 +112,7 @@ const pc = (t) => /^[+-]?\d[\d,]*\.\d+%$/.test(t) || t === "–";
         // R2B-01: the chart tile above KEY DATA gives the same date, and no time of day
         const day = d.src.replace(`${pg.official} · published for `, "");
         ck(`${pg.name}: its chart tile says "${d.stamp}" ("${d.stampTip}"): the date KEY DATA gives, never a time of day (it read "CLOSED 19 Nov 08:00", midnight UTC in SGT)`, d.stamp === `PUBLISHED ${day}` && d.stampTip === `${pg.official} · published for ${day}` && !/\d\d:\d\d/.test(d.stamp + d.stampTip), { stamp: d.stamp, tip: d.stampTip, day });
-      } else ck(`${pg.name}: Yahoo Finance and the time of its print; a day's range; every period from 1D to 10Y; the tile's time with its zone ("${d.stamp}")`, /^Yahoo Finance · /.test(d.src) && /\d%? – \d/.test(d.rows["Day's range"]) && d.periods.join() === "1D,1W,1M,3M,12M,36M,5Y,10Y" && /^(LIVE|CLOSED) (\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d SGT$/.test(d.stamp) && /^Yahoo Finance · last print /.test(d.stampTip), { src: d.src, range: d.rows["Day's range"], periods: d.periods, stamp: d.stamp });
+      } else ck(`${pg.name}: Yahoo Finance and the time of its print; a day's range; every period from 1D to 10Y; the tile's time with its zone ("${d.stamp}")`, /^Yahoo Finance · /.test(d.src) && /\d%? – \d/.test(d.rows["Day's range"]) && d.periods.join() === "1D,1W,1M,3M,12M,36M,5Y,10Y" && /^(LIVE|CLOSED|LAST PRINT) (\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d SGT$/.test(d.stamp) && /^Yahoo Finance · last print /.test(d.stampTip), { src: d.src, range: d.rows["Day's range"], periods: d.periods, stamp: d.stamp });
       // R2B-05: what the Monitor works out itself is marked, and the line under KEY DATA says from what and over which dates
       const from = pg.official ? `${pg.official}'s published daily yields` : "the daily closes the Monitor stores from Yahoo Finance";
       ck(`${pg.name}: KEY DATA's worked-out lines carry † and its source row says so; under it "${d.worked}"`, new RegExp(`^† worked out here from ${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}, ${DATE} – ${DATE}; the other figures as on MARKETS\\.$`).test(d.worked) && /† worked out by the Monitor$/.test(d.rows["Source · as of"]), { worked: d.worked, src: d.rows["Source · as of"] });
@@ -121,8 +127,13 @@ const pc = (t) => /^[+-]?\d[\d,]*\.\d+%$/.test(t) || t === "–";
     }
     // USD/JPY's headlines: those that say yen, JPY, BoJ or Bank of Japan, and the page says how they were matched
     await go(p, MOCK, "#asset/USDJPY%3DX", "#in-key");
-    const d = await desk(p), want = headlinesOf(["yen", "JPY", "BoJ", "Bank of Japan"]);
-    ck(`USD/JPY: NEWS says how it matched ("${d.newsAux}") and lists the yen headlines, newest first (${want.length} in the stand-in rows, fifteen shown)`, d.newsAux === "matched by: yen, JPY, BoJ, Bank of Japan · 30 days · times in SGT" && want.length > 15 && d.news.length === 15 && d.news.every((n, i) => n.kind === "headline" && n.title === decode(want[i].title)), { aux: d.newsAux, got: d.news.slice(0, 3), want: want.slice(0, 3).map((n) => n.title) });
+    const d = await desk(p), heads = headlinesOf(["yen", "JPY", "BoJ", "Bank of Japan"]);
+    // with its own alerts on it, in one list newest first (the stand-in 2.7σ move of I-6 among them)
+    const since = Date.now() - 30 * 864e5, own = [...S.watch.feed.alerts.map((a) => ({ ...a, id: a.id + 1000 })), ...S.alerts].filter((a) => a.symbol === "USDJPY=X" && Date.parse(a.at) >= since);
+    const want = [...heads.map((n) => ({ kind: "headline", title: decode(n.title), t: Date.parse(n.publishedAt), key: `h${n.id}` })), ...own.map((a) => ({ kind: "alert", title: a.msg, t: Date.parse(a.at), key: `a${a.id}`, a }))].sort((x, y) => y.t - x.t || x.key.localeCompare(y.key));
+    ck(`USD/JPY: NEWS says how it matched ("${d.newsAux}") and lists the yen headlines and its own alerts, newest first (${heads.length} headlines and ${own.length} alert in the stand-in rows, fifteen shown)`, d.newsAux === "matched by: yen, JPY, BoJ, Bank of Japan · 30 days · times in SGT" && heads.length > 15 && own.length >= 1 && d.news.length === 15 && d.news.every((n, i) => n.kind === want[i].kind && n.title === want[i].title), { aux: d.newsAux, got: d.news.slice(0, 3), want: want.slice(0, 3).map((n) => n.title) });
+    const sg = d.news.find((n) => n.kind === "alert"), sa = own.find((a) => a.kind === "sigma");
+    ck(`USD/JPY: its σ move names its window and source where a move names its exchange ("${sg?.title}", "${sg?.src}")`, !!sg && !!sa && sg.title === sa.msg && sg.src === `σ move, ${sa.note}`, sg);
     await go(p, MOCK, "#asset/GC%3DF", "#in-key");
     const g = await desk(p);
     ck(`Gold: no stand-in headline says gold or bullion, and the list says which words it looked for ("${g.newsEmpty}")`, g.newsEmpty === "In the last 30 days no headline matched gold or bullion, and there was no alert on Gold." && g.newsAux.startsWith("matched by: gold, bullion · 30 days"), g);
@@ -169,7 +180,7 @@ const pc = (t) => /^[+-]?\d[\d,]*\.\d+%$/.test(t) || t === "–";
     }));
     const pub = t.tiles.filter((x) => /^(UST 2Y|JGB 10Y) yield$/.test(x.name)), rest = t.tiles.filter((x) => !pub.includes(x));
     ck(`MARKETS: the yields an official curve publishes once a day show the date they were published for, never a time (${pub.map((x) => `${x.name}: "${x.stamp}", "${x.tip}"`).join("; ")})`, pub.length === 2 && pub.every((x) => new RegExp(`^PUBLISHED ${DATE}$`).test(x.stamp) && x.tip === `${x.name.startsWith("JGB") ? "Japan MOF" : "US Treasury"} · published for ${x.stamp.slice(10)}`), pub);
-    ck(`MARKETS: every other tile gives its time with its zone and names its source (${rest.length}: "${rest[0]?.stamp}", "${rest[0]?.tip}")`, rest.length >= 15 && rest.every((x) => /^(LIVE|CLOSED) (\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d SGT$/.test(x.stamp) && /^Yahoo Finance · last print \d{1,2} [A-Z][a-z]{2} \d{4} \d\d:\d\d SGT$/.test(x.tip)), rest.filter((x) => !/ SGT$/.test(x.stamp)).slice(0, 4));
+    ck(`MARKETS: every other tile gives its time with its zone and names its source (${rest.length}: "${rest[0]?.stamp}", "${rest[0]?.tip}")`, rest.length >= 15 && rest.every((x) => /^(LIVE|CLOSED|LAST PRINT) (\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d SGT$/.test(x.stamp) && /^Yahoo Finance · last print \d{1,2} [A-Z][a-z]{2} \d{4} \d\d:\d\d SGT$/.test(x.tip)), rest.filter((x) => !/ SGT$/.test(x.stamp)).slice(0, 4));
     const jr = t.rows["JGB 10Y"] ?? t.rows["JGB 10Y yield"] ?? Object.entries(t.rows).find(([k]) => /JGB/.test(k))?.[1];
     ck(`MARKETS: JGB 10Y's row says when it was published, with no time of day ("${jr}")`, new RegExp(`^JGB10Y · Japan MOF · published for ${DATE} · open its page$`).test(jr ?? ""), t.rows);
     await go(p, MOCK, "#rates", '.panel[data-k="yields"] .mtile.cp');
@@ -183,7 +194,8 @@ const pc = (t) => /^[+-]?\d[\d,]*\.\d+%$/.test(t) || t === "–";
     ck(`phone MARKETS: JGB 10Y's opened line says when it was published, with no time of day ("${line}")`, new RegExp(`^JGB 10Y yield · JGB10Y · Japan MOF · published for ${DATE}$`).test(line), line);
     await p.locator(".mp-row", { hasText: "USD/JPY" }).first().tap(); await p.waitForTimeout(400);
     const l2 = await p.locator(".mp-item.open .mp-full").textContent();
-    ck(`phone MARKETS: a print's line keeps its time and zone ("${l2}")`, /^USD\/JPY · USDJPY=X · Yahoo Finance · last print \d{1,2} [A-Z][a-z]{2} \d{4} \d\d:\d\d SGT$/.test(l2), l2);
+    // since 21 Nov 2026 the line ends with its market's state (lib/opens.ts): the stand-in USD/JPY is live
+    ck(`phone MARKETS: a print's line keeps its time and zone, then says its market is open ("${l2}")`, /^USD\/JPY · USDJPY=X · Yahoo Finance · last print \d{1,2} [A-Z][a-z]{2} \d{4} \d\d:\d\d SGT · market open$/.test(l2), l2);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
 
   console.log("\n[NEWS: the calendar's Currency picker (B-12), on a computer and on a phone]");
@@ -217,7 +229,7 @@ const pc = (t) => /^[+-]?\d[\d,]*\.\d+%$/.test(t) || t === "–";
       ck(`${pg.name}: the stock page's frame, "${ph.meta.join(" · ")}" over "${ph.h1}"; the first block (${firstK}); then Key data, Performance, Events and News, and no stock-only section`, ph.meta[0] === decodeURIComponent(pg.hash.replace("#asset/", "")) && ph.h1 === pg.name && firstK === "Day|52W range|σ vs 1M avg|Realised vol 3M †|vs 200D|Next meeting" && ph.first[5][1] === "–" && ph.secs.join() === "Key data,Performance,Events,News" && !STOCK_ONLY.test(ph.text) && ph.ox <= 0, ph);
       if (pg.yield) ck(`${pg.name}: in bp on the phone too: the day ${ph.first[0][1]}, vs 200D ${ph.first[4][1]}, the volatility ${ph.first[3][1]} a day, 1D … 36M ${ph.perf.join(" ")}`, bp(ph.first[0][1]) && bp(ph.first[4][1]) && /^\d+\.\dbp$/.test(ph.first[3][1]) && ph.perf.length === 6 && ph.perf.every(bp), ph.first);
       if (pg.official) ck(`${pg.name}: daily charts only on the phone (${ph.periods.join(" ")}); the chart says "${ph.stamp}", a date and no time of day`, ph.periods.join() === "3M,12M,36M,5Y,10Y" && new RegExp(`^PUBLISHED ${DATE}$`).test(ph.stamp), { periods: ph.periods, stamp: ph.stamp });
-      else ck(`${pg.name}: the chart's time with its zone on the phone too ("${ph.stamp}")`, /^(LIVE|CLOSED) (\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d SGT$/.test(ph.stamp), ph.stamp);
+      else ck(`${pg.name}: the chart's time with its zone on the phone too ("${ph.stamp}")`, /^(LIVE|CLOSED|LAST PRINT) (\d{1,2} [A-Z][a-z]{2} )?\d\d:\d\d SGT$/.test(ph.stamp), ph.stamp);
       ck(`${pg.name}: Key data marks the same lines with † (${ph.keys.filter((k) => k.endsWith("†")).length}) and its note names the closes and their dates`, ph.keys.filter((k) => k.endsWith("†")).length === 5 && ["52W range", "From 52W high / low", "Realised vol, 1M / 3M / 12M", "Largest rise, 12M", "Largest fall, 12M"].every((k) => ph.keys.some((x) => x.startsWith(k) && x.endsWith("†"))) && new RegExp(`^† worked out here from .+, ${DATE} – ${DATE}; the other figures as on MARKETS\\. `).test(ph.worked), { keys: ph.keys, worked: ph.worked });
     }
     // B-04 (b) on the phone: the Nikkei 225 future's Events are Japan's and the dollar's
@@ -229,6 +241,19 @@ const pc = (t) => /^[+-]?\d[\d,]*\.\d+%$/.test(t) || t === "–";
     await p.evaluate(() => { location.hash = "asset/%5EN225"; }); await p.waitForTimeout(800);
     ck("^N225 on the phone: the Nikkei 225 on EQUITIES", (await p.evaluate(() => location.hash)) === "#equities/nk225");
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+
+  // The instrument's page has the stock page's chart tile, and its lines after the stamp are the longest there are:
+  // "opens 23 Nov 06:00 SGT, scheduled" for a pair at the weekend, "next read 22:30 SGT" for a yield the Monitor reads
+  // in New York's hours (one line in this machine's fonts, two in a wide one). At set moments of the local copy's
+  // clock, never the machine's (e2e/hero.cjs).
+  console.log("\n[a phone: the chart keeps its room whatever the lines above it (21 Nov 2026)]");
+  { const usd = (now, css) => heroRoom(b, MOCK + "#asset/USDJPY%3DX", { now, css }), tnx = (css) => heroRoom(b, MOCK + "#asset/%5ETNX", { now: FRI, css });
+    const sat = await usd(SAT), live = await usd(FRI), tall = await usd(SAT, EACH_TAG_A_LINE), read = await tnx(), wide = await tnx(WIDE);
+    ck(`USD/JPY at the weekend, the FX week's opening after the stamp: ${roomWords(sat)} on a ${sat.vh}px screen`, roomOk(sat) && /CLOSED 06:00 SGT opens 23 Nov 06:00 SGT, scheduled$/.test(sat.text), sat);
+    ck(`USD/JPY while the FX week runs, no opening to say: ${roomWords(live)}`, roomOk(live) && /LIVE 21:16 SGT$/.test(live.text) && !/opens/.test(live.text), live);
+    ck(`and with every badge, the stamp and the opening on a line of its own, the tallest head there can be: ${roomWords(tall)}; the tile has grown by what its head gained, the chart at its ${FLOOR}px`, roomOk(tall) && tall.lines >= 3 && tall.head > live.head && tall.chart <= FLOOR + 1 &&Math.abs(tall.tile - (live.tile - live.chart - live.head + tall.head + FLOOR)) <= 1.5, { tall, live });
+    ck(`the UST 10Y yield on a Friday evening, when it is next read after its stamp: ${roomWords(read)}`, roomOk(read) && /LAST PRINT 05:00 SGT next read 22:30 SGT$/.test(read.text), read);
+    ck(`the same in a wide font (monospace, forced on every element): ${roomWords(wide)}`, roomOk(wide) && wide.text === read.text, wide); }
 
   console.log("\n[the one-screen layout (1440x900, compact): the designer's two screens, switched by GO TO; text XL (1440x900: one column in reading order)]");
   { const { ctx, p, errs } = await page(b, { viewport: { width: 1440, height: 900 } }, { size: "AUTO", compact: true, v: 2 });
