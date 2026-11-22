@@ -213,6 +213,23 @@ async function main(): Promise<void> {
     console.log(`  7203.T (a stock's NEWS only; its statements are not asked for here): headlines ${f.news.length}, alerts ${f.alerts.length}, feed rows ${f.news.length + f.alerts.length}${f.error ? `, error: ${f.error}` : ""}`);
   });
 
+  // The week's first hours (supabase/functions/_shared/feedhealth.ts, weekFirstPrint): what the minute job's own pull
+  // got on the last Sunday evenings, from its log rows (job_runs, kept 30 days). Each row says how many of the
+  // instruments due answered with a priced bar, and how many one-minute bars of the last 36 hours the answers held
+  // (Friday's bars are older than that by Sunday evening, so a count that grows faster than crypto's shows another
+  // market printing). Numbers and symbols only. Asked for by name: "sundays".
+  if (ONLY.includes("sundays")) await part("sundays", "the minute job on the last Sunday evenings, 20:50 to 00:40 UTC: what its own pull got (numbers only)", async () => {
+    const day = 86400e3, today0 = Math.floor(now / day) * day;
+    for (let s = today0 - 35 * day; s <= today0; s += day) {
+      if (new Date(s).getUTCDay() !== 0) continue;
+      const from = s + 20 * 3600e3 + 50 * 60e3, to = s + day + 40 * 60e3;
+      if (from > now || now - from > 30 * day) continue;
+      const rows = must(await sb.from("job_runs").select("at,ok,detail").eq("job", "tick").gte("at", new Date(from).toISOString()).lt("at", new Date(to).toISOString()).order("at", { ascending: true }).limit(400)) as Array<{ at: string; ok: boolean; detail: string | null }>;
+      console.log(`  Sunday ${new Date(s).toISOString().slice(0, 10)}: ${rows.length} runs of the minute job`);
+      for (const r of rows) console.log(`    ${r.at.slice(11, 16)} ${r.ok ? "" : "FAILED "}${(r.detail ?? "").replace(/, table \d+ rows/, "").slice(0, 140)}`);
+    }
+  });
+
   await part("counts", "counts (numbers only)", async () => {
     for (const [t, what] of [["accounts", "rows in accounts"], ["users", "rows in users"], ["watchlists", "watchlist entries"], ["push_subs", "devices subscribed to notifications"], ["notes", "morning notes"], ["reports", "reports"]] as const) {
       const r = await sb.from(t).select("*", { count: "exact", head: true });
