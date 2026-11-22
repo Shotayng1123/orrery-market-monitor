@@ -2033,13 +2033,13 @@ body.term #grid[data-view="portfolio"]{display:block;overflow:auto;overscroll-be
 .psrc:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 .psrc-p{margin:4px 0 12px;font-size:15px;line-height:1.5}
 
-/* ===== the one-screen header: one row, by rule (the designer's notes of 22 Nov 2026, Part A, revision 1; the block is
+/* ===== the one-screen header: one row, by rule (the designer's notes of 22 Nov 2026, Part A, revision 2; the block is
    D/r3b-fix/header-proto.css as it is, with the ten edits of the older lines that its A.6.2 lists). Every rule of the
    one-screen layout starts with "body.term #topbar": it outranks every older rule of that header, so the block gives
    the same page wherever it stands in the file. The lines marked "every layout" keep the phone's header and the
-   scrolling layout's header as they were. The layout itself is offered where its own width is at least 1,300 CSS px
-   (lib/prefs.ts); body.tight: under 1,420, where the Monitor's name shows its mark only. Only the alert line's holder
-   takes what is left: at least 102 px more than the line's longest promise in both letter placements. */
+   scrolling layout's header as they were. The layout itself is offered where its own size is at least 1,310 x 560 CSS
+   px (lib/prefs.ts); body.tight: under 1,420, where the Monitor's name shows its mark only. Only the alert line's
+   holder takes what is left: at least 103 px more than the line's longest promise in both letter placements. */
 /* 1 · one row, always. Nothing wraps; every item has its width by rule; only the alert line's holder takes what is left */
 body.term #topbar{flex-wrap:nowrap}
 body.term #topbar .brand,body.term #topbar #nav,body.term #topbar #search,body.term #topbar .bmq{flex:0 0 auto}
@@ -2049,9 +2049,9 @@ body.term #topbar #alerts{flex:1 1 0;min-width:0}
 /* 2 · the tabs: 5 px of side padding, six tabs or seven */
 body.term #topbar #nav a{padding:2px 5px}
 
-/* 3 · the search box: 96 px, focused or not, empty or typed in. Nothing grows; nothing is laid over anything */
+/* 3 · the search box: 88 px, focused or not, empty or typed in. Nothing grows; nothing is laid over anything */
 body.term #topbar #search{width:auto}
-body.term #topbar #search input{width:96px;position:static}
+body.term #topbar #search input{width:88px;position:static}
 
 /* 4 · the clock: Singapore's hour and minute. Its seconds, Tokyo's and New York's time: its tooltip and the menu's first line */
 body.term #topbar #clock .ss,body.term #topbar #clock .zz{display:none}

@@ -1,34 +1,46 @@
-// The one-screen header, one row by rule (the designer's notes of 22 Nov 2026, Part A, revision 1: its check A.7). It
+// The one-screen header, one row by rule (the designer's notes of 22 Nov 2026, Part A, revision 2: its check A.7). It
 // replaces the paper portfolio suite's loop of the one-screen header (e2e/portfolio.cjs, 21 Nov: two checks failed on
 // GitHub's machines, where the row was full and took a second line, and a FULL step pressed in the row).
 // On the local copy (5179). Nothing here reads the machine's clock: every page sets `om_mock_now` (Tue 24 Nov 2026,
 // 07:10 SGT) and "DATA OK", "↻ 10:00" and a 14-letter account are written into the chips (the live page's longest
 // states). Lengths are CSS px of the page's layout (a screen px over the zoom). Both tab counts: seven (the paper
-// portfolio's switch on, as in the local copy) and six (`om_paper` "0", as on the published page).
+// portfolio's switch on, as in the local copy) and six (`om_paper` "0", as on the published page). At 16 windows and
+// text sizes from a layout of 1,310 x 560 (the floor's heights among them):
 //   (a) one row: the header at most 25 px tall, and no item of it ends right of the window
-//   (b) the margin: the alert line's holder at least 102 px wider than the line's promise (its own width with the holder
-//       unconstrained and the name replaced by its first 8 characters and "…"), in its longest states written in
-//   (c) what shows: the stand-in alert whole; in each longest state everything whole but the name, which keeps at
-//       least 8 characters and "…"; no fit class
+//   (b) the margin: the alert line's holder at least 103 px wider than the line's promise (its own width with the holder
+//       unconstrained and the name replaced by its first 8 characters and "…"), in its longest states written in: a
+//       lit stock move of 10 characters ("+12,345.6%") intraday and at close, a σ move of 10, a news alert, each with a
+//       36-character name or a 70-character headline, the time "23 Nov 23:55"
+//   (c) what shows: the stand-in alert whole; in each longest state the label, kind, figure, word and time whole and the
+//       name's box at least its promise (its first 8 characters and "…", or the whole name where that is narrower),
+//       measured as the fit measures it; the names "USD/JPY", "S&P 500", "TOPIX" and "Nintendo" whole; no fit class
 //   (d) no sideways scroll with the focus in the search box, with a letter typed and the list open, and with a
-//       33-character query; the box 96 px; no item moved; still one row
+//       33-character query; the box 88 px; no item moved; still one row
 //   (e) the menu (≡): inside the window, no sideways scroll, nothing in it cut; the three clocks, TEXT SIZE, COMPACT,
 //       FULL, the account; Escape closes it with the focus on ≡; a second press and a press outside close it
 //   (f) FULL from the menu: the header gone, key 7 opens PORTFOLIO (seven tabs), Escape: one row again, the layout kept
-//   (g) the floor: no one-screen layout in a layout under 1,300 px, and COMPACT's tooltip says why
+//   (g) the floor: no one-screen layout in a layout under 1,310 x 560, and COMPACT's tooltip says why
 //   (h) outside the one-screen layout nothing changed: the clocks in the row, no ≡, the account in the row
-//   (i) a wider drawing: DejaVu Sans forced, (a), (c) and (d) at 1280x720 and 1495x900 L, seven tabs; and with 0.9 px
-//       added to every letter as well, the stock move at text M in 1448x900 and 1458x900 windows: the name keeps 8
-//       characters, or the label has left (the fit's first step)
+//   (i) a wider drawing: DejaVu Sans forced, (a), (c) and (d) at 1280x720 and 1507x900 L, seven tabs; DejaVu Sans with
+//       0.9 px added to every letter at text M in 1420, 1440 and 1460 px windows, and 2 px added in the Monitor's own
+//       faces at 1179x800, 1310x800 M and 1507x900 L: every part the line shows is whole and, wherever the name is shown,
+//       its box is at least its promise (the fit may have taken a step; the name is hidden only by its second)
+//   (j) a desktop scrollbar: a browser that draws classic scrollbars, at the floor's five windows, on each tab and with
+//       the menu, the search list, the alert list and Help open: the page never scrolls up and down, no bar takes width
 // It must pass as installed and GitHub's way (letters on whole px): the margin is twice the largest difference the
-// designer measured between the two (50.7 px).
+// designer measured between the two (51.5 px).
 // Run from web/:  node e2e/run.cjs header   (the runner starts the server this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
 const MOCK = "http://localhost:5179/orrery-market-monitor/";
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d).slice(0, 2400)}`); };
 const MORNING = "2026-11-23T23:10:00Z";
-const MARGIN = 102;
-const WINDOWS = [[1170, 800, "AUTO"], [1280, 720, "AUTO"], [1366, 768, "AUTO"], [1440, 900, "AUTO"], [1536, 864, "AUTO"], [1610, 1000, "AUTO"], [1920, 1080, "AUTO"], [1105, 800, "S"], [1300, 800, "M"], [1495, 900, "L"], [1755, 1000, "XL"]];
+const MARGIN = 103;
+const ALL_WINDOWS = [[1179, 800, "AUTO"], [1280, 720, "AUTO"], [1366, 768, "AUTO"], [1440, 900, "AUTO"], [1536, 864, "AUTO"], [1610, 1000, "AUTO"], [1920, 1080, "AUTO"], [1114, 800, "S"], [1310, 800, "M"], [1420, 900, "M"], [1507, 900, "L"], [1633, 1000, "L"], [1769, 1000, "XL"],
+  [1310, 560, "M"], [1507, 644, "L"], [1769, 756, "XL"]];   // the floor's heights last
+// HEADER_WINDOWS: "auto" (this file run alone: the AUTO windows, then (g) and (h)) or "sizes" (e2e/header-sizes.cjs: the
+// text sizes S to XL and the floor's heights), so that each run stays well inside the runner's six minutes
+const SET = process.env.HEADER_WINDOWS === "sizes" ? "sizes" : "auto";
+const WINDOWS = ALL_WINDOWS.filter(([, , size]) => (SET === "sizes") === (size !== "AUTO"));
 const DEJAVU = "*{font-family:'DejaVu Sans'!important}";
 
 async function open(b, { vw, vh, size = "AUTO", six = false, compact = true }) {
@@ -72,9 +84,13 @@ const STATE = (name) => {
   if (!kd) { kd = document.createElement("span"); kd.className = "kd"; core.insertBefore(kd, core.firstChild); }
   let src = al.querySelector(".one > .src"); if (!src) { src = document.createElement("span"); src.className = "src"; al.querySelector(".one").appendChild(src); }
   if (!window.__std) window.__std = { nm: nm.textContent, fig: fig.textContent, q: q.textContent, t: t.textContent, k: k.textContent, lit: al.classList.contains("new") };
-  const S = { sigma: { kd: "σ move", nm: "Mitsubishi UFJ Financial Group, Inc.", fig: "+12.3σ", q: null, src: null },
-    stock: { kd: null, nm: "Mitsubishi UFJ Financial Group, Inc.", fig: "+102.4%", q: "intraday", src: null },
-    news: { kd: "guidance", nm: "Two lenders agree to merge their Japanese trust banking units by April", fig: null, q: null, src: "via Reuters" } }[name];
+  const S = { sigma: { kd: "σ move", nm: "Mitsubishi UFJ Financial Group, Inc.", fig: "-12,345.6σ", q: null, src: null },
+    stock: { kd: null, nm: "Mitsubishi UFJ Financial Group, Inc.", fig: "+12,345.6%", q: "intraday", src: null },
+    close: { kd: null, nm: "Mitsubishi UFJ Financial Group, Inc.", fig: "+12,345.6%", q: "at close", src: null },
+    news: { kd: "guidance", nm: "Two lenders agree to merge their Japanese trust banking units by April", fig: null, q: null, src: "via Reuters" },
+    // the names of 8 characters or fewer, which are never cut (A.2.4)
+    usdjpy: { kd: "σ move", nm: "USD/JPY", fig: "+2.7σ", q: null, src: null }, sp500: { kd: null, nm: "S&P 500", fig: "-3.4%", q: "intraday", src: null },
+    topix: { kd: null, nm: "TOPIX", fig: "-3.2%", q: "1D", src: null }, nintendo: { kd: null, nm: "Nintendo", fig: "-11.2%", q: "intraday", src: null } }[name];
   const show = (e, v) => { e.style.display = v == null ? "none" : ""; if (v != null) e.textContent = v; };
   if (!S) { show(kd, null); show(src, null); nm.textContent = window.__std.nm; show(fig, window.__std.fig); show(q, window.__std.q); t.textContent = window.__std.t; k.textContent = window.__std.k; al.classList.toggle("new", window.__std.lit); }
   else { al.classList.add("new"); k.textContent = "NEW ALERT"; t.textContent = "23 Nov 23:55"; show(kd, S.kd); nm.textContent = S.nm; show(fig, S.fig); show(q, S.q); show(src, S.src); }
@@ -97,6 +113,14 @@ const shownChars = (p) => p.evaluate(() => { const nm = document.querySelector("
   if (nm.scrollWidth <= nm.clientWidth) return ch.length;
   const w = (k) => { const s = document.createElement("span"); s.textContent = ch.slice(0, k).join("") + "…"; s.style.cssText = "position:absolute;visibility:hidden;white-space:pre;left:0;top:0"; nm.appendChild(s); const x = s.getBoundingClientRect().width; s.remove(); return x; };
   let k = 0; while (k < ch.length && w(k + 1) <= box + 0.01) k++; return k; });
+// the name's box against its promise, measured as the fit measures it (Alerts.tsx promiseWidth: two hidden spans in
+// the name, its first 8 characters and "…" and the whole name, the smaller of the two), with the fit's own trace
+const NAMEOK = () => { const nm = document.querySelector("#alerts .nm"), a = document.querySelector("#alerts"), z = Number(document.body.style.zoom) || 1;
+  const trace = { fit: a.dataset.fit ?? null, name: a.dataset.fitName ?? null, cut: a.dataset.fitCut ?? null };
+  if (!nm || !nm.getClientRects().length || getComputedStyle(nm).display === "none") return { shown: false, ok: true, trace };
+  const w = (t) => { const s = document.createElement("span"); s.textContent = t; s.style.cssText = "position:absolute;visibility:hidden;white-space:pre;left:0;top:0"; nm.appendChild(s); const x = s.getBoundingClientRect().width; s.remove(); return x; };
+  const ch = [...nm.textContent], whole = w(nm.textContent), promise = ch.length > 8 ? Math.min(whole, w(ch.slice(0, 8).join("") + "…")) : whole, box = nm.getBoundingClientRect().width;
+  return { shown: true, ok: box + 0.01 >= promise, box: Math.round(box / z * 100) / 100, promise: Math.round(promise / z * 100) / 100, whole: nm.scrollWidth <= nm.clientWidth, trace }; };
 const fitClass = (p) => p.evaluate(() => (document.querySelector("#alerts").className.match(/a-(nolabel|min|refuse)/) || [""])[0]);
 const lefts = (p) => p.evaluate(() => [...document.querySelectorAll("#topbar > *, #topbar .bmq > *")].filter((e) => e.id !== "search" && e.getClientRects().length && getComputedStyle(e).position !== "absolute").map((e) => Math.round(e.getBoundingClientRect().left * 10) / 10).join());
 const sideways = (p) => p.evaluate(() => ({ scrollX: Math.round(scrollX), over: document.documentElement.scrollWidth - innerWidth, box: Math.round(document.querySelector("#search input").getBoundingClientRect().width / (Number(document.body.style.zoom) || 1) * 10) / 10, list: !!document.querySelector("#search .sres"), h: Math.round(document.querySelector("#topbar").getBoundingClientRect().height / (Number(document.body.style.zoom) || 1) * 10) / 10 }));
@@ -110,7 +134,7 @@ async function typing(p) {
   await p.keyboard.type("oyota motor corporation and more"); await p.waitForTimeout(400);
   const long = { ...(await sideways(p)), moved: before !== (await lefts(p)), q: await p.evaluate(() => document.querySelector("#search input").value.length) };
   await p.fill("#search input", ""); await p.keyboard.press("Escape"); await p.evaluate(() => document.activeElement && document.activeElement.blur()); await p.waitForTimeout(80);
-  const ok = [focus, typed, long].every((s) => s.scrollX === 0 && s.over <= 0 && Math.abs(s.box - 96) <= 0.6 && !s.moved && s.h <= 25) && typed.list && long.q === 33;
+  const ok = [focus, typed, long].every((s) => s.scrollX === 0 && s.over <= 0 && Math.abs(s.box - 88) <= 0.6 && !s.moved && s.h <= 25) && typed.list && long.q === 33;
   return { ok, focus, typed, long };
 }
 // every element's own letter-spacing wider by `px` (the checker's case of A.5: DejaVu Sans and 0.9 px)
@@ -125,27 +149,37 @@ const spaced = (p, px) => p.evaluate((x) => { const all = [...document.body.quer
     await go(p); await longChips(p); await p.waitForTimeout(120);
     const m = await measure(p);
     ck(`${where}: (a) the one-screen layout (zoom ${m.z}, a layout of ${m.W} px) in one row, ${m.h} px tall, nothing past the window; the name's words ${m.brandWords ? "shown" : "left to the mark's tooltip"} (from 1,420 px), the clock "${m.clock}", the search box ${m.search} px ("${m.placeholder}")`,
-      m.term && m.tabs === (six ? 6 : 7) && m.rows === 1 && m.h <= 25 && m.pastWindow.length === 0 && m.brandWords === (m.W >= 1420) && /^\d\d:\d\d SGT$/.test(m.clock) && Math.abs(m.search - 96) <= 0.6 && m.placeholder === "Search" && m.sideways <= 0, m);
+      m.term && m.tabs === (six ? 6 : 7) && m.rows === 1 && m.h <= 25 && m.pastWindow.length === 0 && m.brandWords === (m.W >= 1420) && /^\d\d:\d\d SGT$/.test(m.clock) && Math.abs(m.search - 88) <= 0.6 && m.placeholder === "Search" && m.sideways <= 0, m);
     // (c) the stand-in alert, whole, and no fit class
     const a = m.alert, f0 = await fitClass(p);
     ck(`${where}: (c) the stand-in alert whole: "${[a.label, a.name, a.figure, a.word, a.time].map((v) => v && v.text).join(" · ")}" (the line's holder ${a.holder} px), no fit class`,
       ["label", "name", "figure", "word", "time"].every((k) => a.wholeParts.includes(k)) && a.name.text === "KIOXIA HOLDINGS CORP." && a.figure.text === "-11.2%" && a.word.text === "intraday" && a.time.text === "07:07" && /^(NEW )?ALERT$/.test(a.label.text) && f0 === "", { a, f0 });
     // (b) and (c) in the longest states
     let least = null; const shows = [];
-    for (const s of ["sigma", "stock", "news"]) {
+    for (const s of ["sigma", "stock", "close", "news"]) {
       await p.evaluate(`(${STATE})(${JSON.stringify(s)})`); await p.waitForTimeout(80);
       const ms = await measure(p), pr = await p.evaluate(`(${PROMISE})()`); await p.waitForTimeout(40);
-      const free = Math.round((ms.alert.holder - pr) * 10) / 10, al = ms.alert, k = await shownChars(p), fc = await fitClass(p);
+      const free = Math.round((ms.alert.holder - pr) * 10) / 10, al = ms.alert, k = await shownChars(p), fc = await fitClass(p), np = await p.evaluate(`(${NAMEOK})()`);
       const want = s === "news" ? ["label", "kind", "time"] : s === "sigma" ? ["label", "kind", "figure", "time"] : ["label", "figure", "word", "time"];
-      const okState = want.every((x) => al.wholeParts.includes(x)) && k >= 8 && fc === "" && ms.rows === 1 && ms.h <= 25 && ms.sideways <= 0;
+      const okState = want.every((x) => al.wholeParts.includes(x)) && np.shown && np.ok && fc === "" && ms.rows === 1 && ms.h <= 25 && ms.sideways <= 0;
       shows.push({ s, free, okState, k, fit: fc, src: al.src && !al.src.hidden && al.src.shown > 0 });
       if (!least || free < least.free) least = { s, free, holder: al.holder, promise: pr };
-      if (!okState) ck(`${where}: (c) ${s}: what shows`, false, { al, k, fc });
+      if (!okState) ck(`${where}: (c) ${s}: what shows`, false, { al, k, fc, np });
+    }
+    // the names of 8 characters or fewer: whole, every part whole, no step taken
+    const short = [];
+    for (const s of ["usdjpy", "sp500", "topix", "nintendo"]) {
+      await p.evaluate(`(${STATE})(${JSON.stringify(s)})`); await p.waitForTimeout(60);
+      const ms = await measure(p), al = ms.alert, fc = await fitClass(p), np = await p.evaluate(`(${NAMEOK})()`);
+      const want = s === "usdjpy" ? ["label", "kind", "name", "figure", "time"] : ["label", "name", "figure", "word", "time"];
+      short.push({ s, ok: want.every((x) => al.wholeParts.includes(x)) && np.shown && np.whole && np.ok && fc === "", name: al.name?.text, fc, np: np.ok ? undefined : np });
     }
     await p.evaluate(`(${STATE})("standin")`); await p.waitForTimeout(60);
+    ck(`${where}: (c) the names of 8 characters or fewer whole, every part whole, no fit class: ${short.map((x) => `${x.name}${x.ok ? "" : " ✗"}`).join(", ")}`, short.every((x) => x.ok), short);
     ck(`${where}: (b) the alert line's holder is ${least.free} px wider than its longest promise (${least.s}: ${least.holder} - ${least.promise}; at least ${MARGIN}), and (c) in each longest state the label, kind, figure, word and time are whole, the name keeps 8 characters and "…" or more (${shows.map((x) => `${x.s} ${x.k}`).join(", ")}), no fit class; "via Reuters" ${shows[2].src ? "beside the whole headline" : "not beside a cut headline"}`,
       least.free >= MARGIN && shows.every((x) => x.okState) && !shows[2].src, shows);
-    // (d) focus and typing
+    // (d) focus and typing, and (e) the menu: with seven tabs (with six the box and the menu are the same, the row shorter)
+    if (!six) {
     const d = await typing(p);
     ck(`${where}: (d) with the focus in the box, with "t" typed and the list open, and with a 33-character query: no sideways scroll (${d.focus.over}, ${d.typed.over}, ${d.long.over}), the box ${d.focus.box}, ${d.typed.box} and ${d.long.box} px, nothing in the row moved, one row (${d.long.h} px)`, d.ok, d);
     // (e) the menu
@@ -164,13 +198,14 @@ const spaced = (p, px) => p.evaluate((x) => { const all = [...document.body.quer
       const outside = await p.evaluate(() => ({ open: document.querySelector("#topbar").classList.contains("more"), focus: document.activeElement && (document.activeElement.id || document.activeElement.tagName) }));
       ck(`${where}: the menu closes on a second press and on a press outside it, the focus where that press put it ("${outside.focus}")`, !second && !outside.open && outside.focus !== "more-btn", { second, outside });
     }
-    if ([1300, 1440, 1536].includes(vw)) {   // the menu open, then "/" and a letter (the second checker's case, 22 Nov 2026)
+    if ([1310, 1440, 1536].includes(vw) && !six) {   // the menu open, then "/" and a letter (the second checker's case, 22 Nov 2026)
       await p.click("#more-btn"); await p.waitForTimeout(60); await p.keyboard.press("/"); await p.keyboard.type("t");
       await p.waitForSelector("#search .sres .sitem", { timeout: 5000 }).catch(() => null); await p.waitForTimeout(120);
       const ws = await p.evaluate(() => { const box = (e) => (e && e.getClientRects().length ? e.getBoundingClientRect() : null), m = box(document.querySelector("#more")), l = box(document.querySelector("#search .sres"));
         return { open: document.querySelector("#topbar").classList.contains("more"), list: !!l, focus: document.activeElement && document.activeElement.tagName, over: !!(m && l && m.left < l.right && l.left < m.right && m.top < l.bottom && l.top < m.bottom) }; });
       await p.fill("#search input", ""); await p.keyboard.press("Escape"); await p.evaluate(() => document.activeElement && document.activeElement.blur()); await p.waitForTimeout(80);
       ck(`${where}: the menu open, then "/" and "t": the menu closes as the focus goes to the search box, and nothing lies over the results list`, !ws.open && ws.list && ws.focus === "INPUT" && !ws.over, ws);
+    }
     }
     // (f) FULL from the menu
     await p.click("#more-btn"); await p.waitForTimeout(60); await p.click("#fs-ctl"); await p.waitForFunction(() => document.body.classList.contains("full"));
@@ -185,12 +220,13 @@ const spaced = (p, px) => p.evaluate((x) => { const all = [...document.body.quer
     await ctx.close();
   }
 
-  console.log("\n[(g) the floor: COMPACT on in a layout under 1,300 px gives the scrolling layout, and its chip says why]");
-  for (const [vw, vh, size] of [[1100, 800, "AUTO"], [1104, 800, "S"], [1280, 720, "M"], [1440, 900, "L"], [1440, 900, "XL"]]) {
+  if (SET === "auto") {
+  console.log("\n[(g) the floor: COMPACT on in a layout under 1,310 x 560 gives the scrolling layout, and its chip says why]");
+  for (const [vw, vh, size] of [[1100, 800, "AUTO"], [1178, 800, "AUTO"], [1113, 800, "S"], [1309, 800, "M"], [1506, 900, "L"], [1768, 1000, "XL"], [1310, 559, "M"], [1507, 643, "L"], [1769, 755, "XL"], [1280, 720, "M"], [1440, 900, "L"], [1440, 900, "XL"]]) {
     const { ctx, p, errs } = await open(b, { vw, vh, size });
     await go(p);
     const f = await p.evaluate(() => { const c = document.querySelector("#cmp-ctl"), mb = document.querySelector("#more-btn"); return { term: document.body.classList.contains("term"), cmp: document.body.classList.contains("cmp"), W: Math.round(innerWidth / (Number(document.body.style.zoom) || 1)), shown: !!c && c.getClientRects().length > 0, opacity: c ? getComputedStyle(c).opacity : null, title: c ? c.title : null, btn: !!mb && mb.getClientRects().length > 0 }; });
-    ck(`${vw}x${vh}, text ${size}, COMPACT on (a layout of ${f.W} px): no one-screen layout; COMPACT stays lit in the row at ${f.opacity} opacity and says why; no ≡`, !f.term && f.cmp && f.shown && Math.abs(Number(f.opacity) - 0.55) < 0.01 && /^COMPACT is on\. One screen per tab needs a layout 1,300 px wide: a window of 1,170 px at AUTO, 1,105 at S, 1,300 at M, 1,495 at L, 1,755 at XL\. This window scrolls\. Click to turn COMPACT off\.$/.test(f.title) && !f.btn && errs.length === 0, { f, errs });
+    ck(`${vw}x${vh}, text ${size}, COMPACT on (a layout of ${f.W} px): no one-screen layout; COMPACT stays lit in the row at ${f.opacity} opacity and says why; no ≡`, !f.term && f.cmp && f.shown && Math.abs(Number(f.opacity) - 0.55) < 0.01 && /^COMPACT is on\. One screen per tab needs a layout 1,310 × 560 px: a window of at least 1,179 × 540 at AUTO, 1,114 × 540 at S, 1,310 × 560 at M, 1,507 × 644 at L, 1,769 × 756 at XL\. This window scrolls\. Click to turn COMPACT off\.$/.test(f.title) && !f.btn && errs.length === 0, { f, errs });
     await ctx.close();
   }
 
@@ -211,49 +247,7 @@ const spaced = (p, px) => p.evaluate((x) => { const all = [...document.body.quer
     ck(`iPhone 13 with the menu open: the clocks "${s.clock}" and the account in it, no ≡`, s.open && !s.btn && /^\d\d:\d\d:\d\d SGT · \d\d:\d\d JST · \d\d:\d\d ET$/.test(s.clock) && s.user && errs.length === 0, { s, errs });
     await ctx.close(); }
 
-  console.log("\n[(i) a wider drawing: DejaVu Sans forced on every element, seven tabs]");
-  for (const [vw, vh, size] of [[1280, 720, "AUTO"], [1495, 900, "L"]]) {
-    const where = `${vw}x${vh}${size === "AUTO" ? "" : `, text ${size}`}, DejaVu Sans`;
-    const { ctx, p, errs } = await open(b, { vw, vh, size });
-    await go(p); await p.addStyleTag({ content: DEJAVU }); await settle(p, 400); await longChips(p); await p.waitForTimeout(150);
-    const m = await measure(p), a = m.alert, f0 = await fitClass(p);
-    ck(`${where}: (a) one row, ${m.h} px, nothing past the window; (c) the stand-in alert whole (${a.wholeParts.join(", ")}), no fit class`, m.term && m.rows === 1 && m.h <= 25 && m.pastWindow.length === 0 && ["label", "name", "figure", "word", "time"].every((k) => a.wholeParts.includes(k)) && f0 === "", { m, f0 });
-    const shows = [];
-    for (const s of ["sigma", "stock", "news"]) {
-      await p.evaluate(`(${STATE})(${JSON.stringify(s)})`); await p.waitForTimeout(100);
-      const ms = await measure(p), al = ms.alert, want = s === "news" ? ["label", "kind", "time"] : s === "sigma" ? ["label", "kind", "figure", "time"] : ["label", "figure", "word", "time"], k = await shownChars(p), fc = await fitClass(p);
-      shows.push({ s, ok: want.every((x) => al.wholeParts.includes(x)) && ms.rows === 1 && ms.h <= 25 && ms.sideways <= 0 && k >= 8 && fc === "", k, fit: fc });
-    }
-    await p.evaluate(`(${STATE})("standin")`); await p.waitForTimeout(60);
-    ck(`${where}: (c) in each longest state the label, kind, figure, word and time whole, the name 8 characters and "…" or more (${shows.map((x) => `${x.s} ${x.k}`).join(", ")}), no fit class`, shows.every((x) => x.ok), shows);
-    const d = await typing(p);
-    ck(`${where}: (d) no sideways scroll with the focus, with the list open and with a 33-character query, the box 96 px, nothing moved, one row`, d.ok, d);
-    ck(`${where}: no page errors`, errs.length === 0, errs);
-    await ctx.close();
   }
-  for (const vw of [1448, 1458]) {   // the checker's case (A.5): DejaVu Sans and 0.9 px added to every letter, text M, the stock move
-    const { ctx, p, errs } = await open(b, { vw, vh: 900, size: "M" });
-    await go(p); await p.addStyleTag({ content: DEJAVU }); await settle(p, 300); await longChips(p); await spaced(p, 0.9); await p.waitForTimeout(150);
-    await p.evaluate(`(${STATE})("stock")`); await p.waitForTimeout(150);
-    const k = await shownChars(p), fc = await fitClass(p), m = await measure(p);
-    ck(`${vw}x900, text M, DejaVu Sans and 0.9 px more to every letter, the stock move: the name keeps ${k} characters and "…"${fc ? `, the fit has acted (${fc})` : ""}: at least 8, or the label has left; the figure, the word and the time whole; one row`, (k >= 8 || fc === "a-nolabel") && ["figure", "word", "time"].every((x) => m.alert.wholeParts.includes(x)) && m.rows === 1 && m.term && errs.length === 0, { k, fc, alert: m.alert, rows: m.rows, errs });
-    await ctx.close();
-  }
-  { // the fit's last step (A.2.5 step 3): 7 px more to every letter, where the row's fixed items alone pass the row (A.5)
-    const { ctx, p, errs } = await open(b, { vw: 1440, vh: 900 });
-    await go(p); await longChips(p); await spaced(p, 7); await p.waitForTimeout(400);
-    const st = () => p.evaluate(() => { const c = document.querySelector("#cmp-ctl"); return { term: document.body.classList.contains("term"), cmp: document.body.classList.contains("cmp"), shown: !!c && c.getClientRects().length > 0 && !c.closest("#more")?.getClientRects().length, opacity: c ? getComputedStyle(c).opacity : null, title: c ? c.title : null }; });
-    const r = await st();
-    await p.evaluate(() => document.body.querySelectorAll("*").forEach((e) => e.style && e.style.removeProperty("letter-spacing")));
-    await p.setViewportSize({ width: 1500, height: 900 }); await p.waitForTimeout(400);
-    const other = await p.evaluate(() => document.body.classList.contains("term"));
-    await p.setViewportSize({ width: 1440, height: 900 }); await p.waitForTimeout(400);
-    const again = await st();
-    ck(`1440x900, 7 px more to every letter: the one-screen layout is refused for this window and text size, COMPACT stays lit in the row at ${r.opacity} opacity and says why; another window size tries again (${other ? "one-screen" : "refused"}); back at 1440x900 it stays refused for the page's life`,
-      !r.term && r.cmp && r.shown && Math.abs(Number(r.opacity) - 0.55) < 0.01 && /^COMPACT is on\. This browser draws the one-screen header wider than this window holds, so the window scrolls\. Another window size or text size tries again\. Click to turn COMPACT off\.$/.test(r.title) && other && !again.term && again.title === r.title && errs.length === 0, { r, other, again, errs });
-    await ctx.close();
-  }
-
   console.log(`\n${Math.round((Date.now() - t0) / 1000)} s`);
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

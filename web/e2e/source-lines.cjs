@@ -3,14 +3,14 @@
 // UI-2 and LV-1 to LV-5 of the second review of P-1, by the designer's B.0.3 and B.1).
 // On the local copy (5179), six tabs (`om_paper` "0", the page as published). Every page sets its clock
 // (`om_mock_now`), so nothing here depends on the hour or the day. Lengths are CSS px of the page's own layout.
-//   [1] the one-screen layout at 1170x800, 1280x720, 1440x900, 1920x1080 (AUTO), 1105x800 (S) and 1495x900 (L), on
+//   [1] the one-screen layout at 1179x800, 1280x720, 1440x900, 1920x1080 (AUTO), 1114x800 (S) and 1507x900 (L), on
 //       EQUITIES with the Nikkei 225 and TOPIX, RATES & FX, WATCHLIST and a Tokyo stock's News screen: no panel head's
 //       source line has its drawn text (a range over it) wider than its own box, none scrolls; a "personal use" that is
 //       drawn lies wholly inside its head; a line in its short form has the whole line as its tooltip; EQUITIES'
 //       SHORT INTEREST reads "JPX · personal use" with at least 145 px to spare (twice the largest difference the
 //       designer measured between the two letter placements)
-//   [2] the same with DejaVu Sans forced (a wider face) at 1170x800 and 1440x900
-//   [3] 1440x900 resized to 1170x800 and back, with no reload: never cut at any step; FLOW BY SECTOR's line takes the
+//   [2] the same with DejaVu Sans forced (a wider face) at 1179x800 and 1440x900
+//   [3] 1440x900 resized to 1179x800 and back, with no reload: never cut at any step; FLOW BY SECTOR's line takes the
 //       head's second line and comes back beside its title
 //   [4] the short form's "personal use" opens Help at its paragraph, as the whole line's does
 //   [5] a phone at 360, 375 and 390 px: the dot keeps a space on each side ("JPX · personal use", the distance from the
@@ -25,7 +25,7 @@ const MOCK = "http://localhost:5179/orrery-market-monitor/";
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d).slice(0, 2400)}`); };
 const MORNING = "2026-11-23T23:10:00Z", HOLIDAY = "2026-11-23T02:00:00Z";
 const DEJAVU = "*{font-family:'DejaVu Sans'!important}";
-const WINDOWS = [[1170, 800, "AUTO"], [1280, 720, "AUTO"], [1440, 900, "AUTO"], [1920, 1080, "AUTO"], [1105, 800, "S"], [1495, 900, "L"]];
+const WINDOWS = [[1179, 800, "AUTO"], [1280, 720, "AUTO"], [1440, 900, "AUTO"], [1920, 1080, "AUTO"], [1114, 800, "S"], [1507, 900, "L"]];
 const PAGES = [["equities", ".panel[data-k='eq-short'] .phead .aux"], ["equities/topix", ".panel[data-k='eq-short'] .phead .aux"], ["rates", ".panel[data-k='curve'] .phead .aux"], ["watch", ".panel[data-k='wl-earn'] .phead .aux"], ["asset/7203.T", "#st-short-src", "SHORT INTEREST"]];
 const SPARE = 145;
 
@@ -76,7 +76,7 @@ const label = (w, h, size) => `${w}x${h}${size !== "AUTO" ? ` ${size}` : ""}`;
     }
 
     console.log("\n[2] a wider face: DejaVu Sans forced");
-    for (const [w, h] of [[1170, 800], [1440, 900]]) {
+    for (const [w, h] of [[1179, 800], [1440, 900]]) {
       const { ctx, p, errs } = await open(b, { vw: w, vh: h });
       const all = [];
       for (const [hash, sel, chip] of PAGES) { await go(p, hash, sel, chip, DEJAVU); all.push(...(await audit(p)).map((r) => ({ ...r, page: hash }))); }
@@ -90,8 +90,8 @@ const label = (w, h, size) => `${w}x${h}${size !== "AUTO" ? ` ${size}` : ""}`;
       const { ctx, p, errs } = await open(b, { vw: 1440, vh: 900 });
       await go(p, "equities", ".panel[data-k='eq-flow'] .phead .aux");
       const step = async (w, h) => { await p.setViewportSize({ width: w, height: h }); await p.waitForTimeout(450); const rows = await audit(p); return { rows, flow: rows.find((r) => r.k === "eq-flow") }; };
-      const a = await step(1440, 900), c = await step(1170, 800), d = await step(1440, 900);
-      ck(`1440x900 → 1170x800 → 1440x900: never cut (${[a, c, d].map((s) => bad(s.rows).length).join(", ")} cut); FLOW BY SECTOR "${c.flow?.text}" ${c.flow?.wrap ? "on the head's second line" : "beside its title"} at 1170x800, then ${d.flow?.wrap ? "still on the second line" : d.flow?.short ? "short beside its title" : "whole beside its title"} at 1440x900`,
+      const a = await step(1440, 900), c = await step(1179, 800), d = await step(1440, 900);
+      ck(`1440x900 → 1179x800 → 1440x900: never cut (${[a, c, d].map((s) => bad(s.rows).length).join(", ")} cut); FLOW BY SECTOR "${c.flow?.text}" ${c.flow?.wrap ? "on the head's second line" : "beside its title"} at 1179x800, then ${d.flow?.wrap ? "still on the second line" : d.flow?.short ? "short beside its title" : "whole beside its title"} at 1440x900`,
         [a, c, d].every((s) => bad(s.rows).length === 0) && !!c.flow && c.flow.wrap && !!d.flow && !d.flow.wrap && !!a.flow && !a.flow.wrap && errs.length === 0, { a: a.flow, c: c.flow, d: d.flow, cut: [a, c, d].map((s) => bad(s.rows)), errs });
       await ctx.close();
     }

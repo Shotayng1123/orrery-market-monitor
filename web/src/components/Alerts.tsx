@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { refuseTerm, termMode, zoomNow } from "../lib/prefs";
+import { refuseTerm, retryTerm, termMode, zoomNow } from "../lib/prefs";
 import { useApi } from "../lib/useApi";
 import type { Alert } from "../lib/types";
 import { fmtStamp, fmtWhen } from "../lib/time";
@@ -20,9 +20,11 @@ const isNews = (r: Alert) => r.kind === "buyback" || r.kind === "revision" || r.
 const isSigma = (r: Alert) => r.kind === "sigma";
 const hasPage = (r: Alert) => !!r.symbol && !r.symbol.startsWith("news:");
 
-// ---- the line's fit (the designer's notes of 22 Nov 2026, A.2 point 5 and A.6.4, revision 1; SF-2 of the checks) ----
-// The line promises whole parts: the label, the kind, the figure with its word, the time, and at least the first
-// characters of the name with "…" (8 in the one-screen header, 1 on a phone). It measures what this browser draws, in
+// ---- the line's fit (the designer's notes of 22 Nov 2026, A.2 point 5 and A.6.4, revision 2; SF-2 of the checks) ----
+// The line promises whole parts: the label, the kind, the figure with its word, the time, and the name at its promise:
+// in the one-screen header its first 8 characters and "…", or the whole name where that is narrower (so a name of 8
+// characters or fewer is never cut: revision 1 promised nothing for one, and "Nintendo" could lose a letter unseen);
+// on a phone its first character and "…". It measures what this browser draws, in
 // its own letters, with no allowance in the wrong direction. Where a drawing wider than the one the layout was measured
 // for cannot hold the promise, whole parts leave in a fixed order, never a cut figure:
 //   the one-screen header: (1) the label (a lit line still says "new" by its colour and pulse); (2) all but the label
@@ -33,24 +35,32 @@ const hasPage = (r: Alert) => !!r.symbol && !r.symbol.startsWith("news:");
 // The whole message is the line's tooltip and the list a click or a tap opens. Classes on #alerts (tokens.css).
 let fontsReady = false;
 const drawn = (e: Element | null | undefined): e is Element => !!e && e.getClientRects().length > 0 && getComputedStyle(e).display !== "none";
-/** The width of the name's first `n` characters and "…", drawn by a hidden span inside the name (its own font, size and
- *  spacing); null when the name has `n` characters or fewer (it is then promised whole). */
-function keepWidth(nm: HTMLElement, n: number): number | null {
-  const ch = [...(nm.textContent ?? "")];
-  if (ch.length <= n) return null;
+/** The width of a text drawn by a hidden span inside the name (so in its own font, size and spacing). */
+function drawnWidth(nm: HTMLElement, text: string): number {
   const s = document.createElement("span");
-  s.textContent = `${ch.slice(0, n).join("")}…`;
+  s.textContent = text;
   s.style.cssText = "position:absolute;visibility:hidden;white-space:pre;left:0;top:0";
   nm.appendChild(s);
   const w = s.getBoundingClientRect().width;
   s.remove();
   return w;
 }
+/** The width of the name's first `n` characters and "…"; null when the name has `n` characters or fewer. */
+function keepWidth(nm: HTMLElement, n: number): number | null {
+  const ch = [...(nm.textContent ?? "")];
+  return ch.length <= n ? null : drawnWidth(nm, `${ch.slice(0, n).join("")}…`);
+}
+/** The name's promise in the one-screen header: its first 8 characters and "…", or the whole name where that is
+ *  narrower; a name of 8 characters or fewer: the whole name. */
+function promiseWidth(nm: HTMLElement): number {
+  const t = nm.textContent ?? "", whole = drawnWidth(nm, t), eight = keepWidth(nm, 8);
+  return eight == null ? whole : Math.min(whole, eight);
+}
 function fitDesk(holder: HTMLElement): void {
   const tb = document.querySelector("#topbar"), al = holder.querySelector<HTMLElement>(".alrt");
   if (!al || !drawn(tb)) return;   // FULL: the header is not drawn; nothing is measured or changed
   holder.classList.remove("a-nolabel", "a-min", "a-refuse");
-  if (!termMode()) return;
+  if (!termMode()) { holder.dataset.fit = ""; holder.dataset.fitName = ""; holder.dataset.fitCut = ""; return; }
   const z = zoomNow(), R = (e: Element) => e.getBoundingClientRect();
   // a part is whole only when its box lies inside the line's box (less its border), `.one` and `.core`, on their line
   const inside = (e: Element | null): boolean => {
@@ -64,19 +74,29 @@ function fitDesk(holder: HTMLElement): void {
     return true;
   };
   const nm = al.querySelector<HTMLElement>(".nm");
-  const nameShort = () => { if (!nm) return false; const n = keepWidth(nm, 8); return n != null && R(nm).width + 0.01 < n; };
+  // the name is short when its box is narrower than its promise, whatever its length: the steps are then taken as for
+  // any other part
+  const nameShort = () => !!nm && drawn(nm) && R(nm).width + 0.01 < promiseWidth(nm);
   const cut = (sels: string[]) => sels.some((q) => !inside(al.querySelector(q)));
   const bmq = tb!.querySelector(".bmq");
   const row = () => { const t = R(tb!), pr = parseFloat(getComputedStyle(tb!).paddingRight) * z; return drawn(bmq) && R(bmq).right > t.right - pr + 0.5; };
-  const refuse = () => { if (fontsReady) refuseTerm(); holder.classList.add("a-refuse"); };
-  if (row()) return refuse();
-  if (al.classList.contains("none")) { if (cut([":scope > .k", ":scope > .mut"])) refuse(); return; }
-  if (!cut([":scope > .k", ".kd", ".fig", ".q", ":scope > .t"]) && !nameShort()) return;
+  // step 3 refuses only once the page's faces have loaded (document.fonts.status "loaded" at this run): a drawing in a
+  // fallback face is no reason to give up the layout (break-3 §5.1)
+  const refuse = (): string => { if (fontsReady && document.fonts?.status === "loaded") refuseTerm(); holder.classList.add("a-refuse"); return "refuse"; };
+  // its trace, for a check that fails to print: what was decided, and at the run's FIRST measure, before any step hides
+  // a part, the parts found cut ("fig,q,nm": the name when its box is under its promise) and the name's box over its
+  // promise in CSS px (the orchestrator's settlement of break-3 §5.2)
+  const first = { name: nm && drawn(nm) ? `${(R(nm).width / z).toFixed(2)}/${(promiseWidth(nm) / z).toFixed(2)}` : "",
+    cut: [...[":scope > .k", ".kd", ".fig", ".q", ":scope > .t"].filter((q) => al.querySelector(q) && !inside(al.querySelector(q))).map((q) => q.replace(":scope > ", "").replace(/^\./, "")), ...(nameShort() ? ["nm"] : [])].join(",") };
+  const trace = (step: string): void => { holder.dataset.fit = step; holder.dataset.fitName = first.name; holder.dataset.fitCut = first.cut; };
+  if (row()) return trace(refuse());
+  if (al.classList.contains("none")) return trace(cut([":scope > .k", ":scope > .mut"]) ? refuse() : "");
+  if (!cut([":scope > .k", ".kd", ".fig", ".q", ":scope > .t"]) && !nameShort()) return trace("");
   holder.classList.add("a-nolabel");
-  if (!cut([".kd", ".fig", ".q", ":scope > .t"]) && !nameShort()) return;
+  if (!cut([".kd", ".fig", ".q", ":scope > .t"]) && !nameShort()) return trace("nolabel");
   holder.classList.remove("a-nolabel"); holder.classList.add("a-min");
-  if (!cut([":scope > .k", ":scope > .t"])) return;
-  refuse();
+  if (!cut([":scope > .k", ":scope > .t"])) return trace("min");
+  trace(refuse());
 }
 /** Whether a part stands past the right edge of the box that hides it (its content box: the line's padding included). */
 function past(box: Element, parts: Array<Element | null>): boolean {
@@ -87,12 +107,24 @@ function past(box: Element, parts: Array<Element | null>): boolean {
 function fitPhone(holder: HTMLElement): void {
   holder.classList.remove("a-nonew", "a-noday");
   const al = holder.querySelector<HTMLElement>(".alrt"), one = al?.querySelector(".one");
-  if (!al || !one || al.classList.contains("none")) return;
-  const nm = one.querySelector<HTMLElement>(".nm"), k = al.querySelector(":scope > .k"), t = al.querySelector(":scope > .t");
-  const cut = () => { const need = nm ? keepWidth(nm, 1) : null; return past(one, [...one.querySelectorAll(".kd,.nm,.fig")]) || past(al, [k, t]) || (!!nm && need != null && nm.getBoundingClientRect().width + 0.01 < need); };
-  if (!cut()) return;
-  if (al.querySelector(".k .kn")) { holder.classList.add("a-nonew"); if (!cut()) return; }
-  if (al.querySelector(".t .td")) holder.classList.add("a-noday");
+  if (!al || !one || al.classList.contains("none")) { holder.dataset.fit = ""; holder.dataset.fitName = ""; holder.dataset.fitCut = ""; return; }
+  const nm = one.querySelector<HTMLElement>(".nm"), k = al.querySelector(":scope > .k"), t = al.querySelector(":scope > .t"), z = zoomNow();
+  // the name's floor: its first letter and "…", a hidden span inside the name (its own face, size and spacing); the
+  // phone's check measures it the same way (e2e/phone-first.cjs)
+  const floor = () => (nm ? keepWidth(nm, 1) : null);
+  const nameShort = () => { const need = floor(); return !!nm && need != null && nm.getBoundingClientRect().width + 0.01 < need; };
+  const cut = () => past(one, [...one.querySelectorAll(".kd,.nm,.fig")]) || past(al, [k, t]) || nameShort();
+  // its trace, as the one-screen header's (PR #50's run on GitHub, 22 Nov 2026: a line left unfitted said nothing of
+  // why): at the first measure the name's box over its floor (CSS px) and the parts found cut; then the steps taken
+  const need = floor();
+  holder.dataset.fitName = nm ? `${(nm.getBoundingClientRect().width / z).toFixed(2)}/${need == null ? "whole" : (need / z).toFixed(2)}` : "";
+  holder.dataset.fitCut = [past(one, [one.querySelector(".kd")]) ? "kd" : "", past(one, [one.querySelector(".fig")]) ? "fig" : "", past(al, [k]) ? "k" : "", past(al, [t]) ? "t" : "", nameShort() ? "nm" : ""].filter(Boolean).join(",");
+  const steps: string[] = [];
+  const done = () => { holder.dataset.fit = steps.join(" "); };
+  if (!cut()) return done();
+  if (al.querySelector(".k .kn")) { holder.classList.add("a-nonew"); steps.push("nonew"); if (!cut()) return done(); }
+  if (al.querySelector(".t .td")) { holder.classList.add("a-noday"); steps.push("noday"); }
+  done();
 }
 /** Runs the fit after every render of the line, when its width changes (a ResizeObserver on #alerts), when its words or
  *  their drawing change between renders (a MutationObserver: a style, a class), and once the page's faces are in. The
@@ -113,16 +145,24 @@ function useFit(box: RefObject<HTMLDivElement | null>, phone: boolean): void {
           if (onPhone.current) { el.classList.remove("a-nolabel", "a-min", "a-refuse"); fitPhone(el); } else { el.classList.remove("a-nonew", "a-noday"); fitDesk(el); }
           mo?.takeRecords(); mo?.observe(el, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["class", "style"] });
         };
-        const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => run());
+        // and once more on the next animation frame after each of these (one frame, not a loop: the run in that frame
+        // schedules none): a layout that settles a frame late is measured as drawn (A.6.4, revision 2)
+        let inFrame = false, live = true;
+        const again = () => { if (!live) return; run(); if (!inFrame) { inFrame = true; requestAnimationFrame(() => { try { if (live) run(); } finally { inFrame = false; } }); } };
+        const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => again());
         ro?.observe(el);
-        let live = true;
-        void document.fonts?.ready.then(() => { fontsReady = true; if (live) run(); });
-        st.current = { el, run, off: () => { live = false; ro?.disconnect(); mo?.disconnect(); } };
+        void document.fonts?.ready.then(() => { fontsReady = true; again(); });
+        // every font load that ends later; and a refusal made while a face was loading is taken back once (prefs)
+        const loaded = () => { if (!onPhone.current) retryTerm(); again(); };
+        document.fonts?.addEventListener?.("loadingdone", loaded);
+        st.current = { el, run: again, off: () => { live = false; ro?.disconnect(); mo?.disconnect(); document.fonts?.removeEventListener?.("loadingdone", loaded); } };
       }
     }
     st.current.run();
   });
-  useEffect(() => () => st.current.off(), []);
+  // on unmount the watchers stop, and the next mount sets them up again (React's StrictMode, in development, unmounts
+  // and mounts once more at once: a watcher left stopped would leave the line unfitted)
+  useEffect(() => () => { st.current.off(); st.current = { el: null, run: () => undefined, off: () => undefined }; }, []);
 }
 
 /** Alerts: the latest one as a single line next to the tabs, refreshed with every load; click for the last

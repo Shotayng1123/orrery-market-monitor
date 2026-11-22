@@ -15,7 +15,7 @@
 //     fonts and drawn wider (GitHub's machines draw the same faces wider; e2e/room.cjs says how both are measured);
 //   - a name cell that carries a day has room for the name, its PROXY mark and the day in every layout the table is
 //     drawn in: the scrolling layout down to its least width, the one-screen layout down to its smallest window at
-//     AUTO, 1170 x 540, and at text L and XL in theirs, 1495 x 900 and 1755 x 1000 (GitHub's run of 21 Nov 2026 found
+//     AUTO, 1179 x 540, and at text L and XL in theirs, 1507 x 900 and 1769 x 1000 (GitHub's run of 21 Nov 2026 found
 //     TOPIX's cell a pixel short at 1280 x 720; the review of 22 Nov, SF-1, its day cut at L and XL in layouts under
 //     1,150 px, which the one-screen layout no longer offers), and the classic phone layout, where the day stands
 //     under its name;
@@ -38,10 +38,10 @@ const ROOM_OWN = 3, ROOM_WIDER = 0.5, NAME_OWN = 6, NAME_WIDER = 2;
 const SIZES = {   // the designer's sizes (plan review §3.7), and each layout's smallest window
   C1: { vp: [1440, 900], prefs: { size: "AUTO", compact: false } }, C2: { vp: [1280, 720], prefs: { size: "AUTO", compact: false } }, C3: { vp: [1440, 900], prefs: { size: "XL", compact: false } },
   C4: { vp: [1440, 900], prefs: { size: "AUTO", compact: true } }, C4b: { vp: [1280, 720], prefs: { size: "AUTO", compact: true } }, CL: { vp: [1440, 900], prefs: { size: "L", compact: false } },
-  // the one-screen layout is offered where its layout is at least 1,300 CSS px wide (lib/prefs.ts): from a window of
-  // 1170 x 540 at AUTO, 1495 at L and 1755 at XL; the scrolling layout's table keeps a least width under which its
+  // the one-screen layout is offered where its layout is at least 1,310 x 560 CSS px (lib/prefs.ts; the designer's
+  // revision 2): from a window of 1179 x 540 at AUTO, 1507 x 644 at L and 1769 x 756 at XL; the scrolling layout's table keeps a least width under which its
   // panel scrolls sideways, so a window of 760 px draws its name column at its narrowest
-  C4c: { vp: [1170, 540], prefs: { size: "AUTO", compact: true } }, C4L: { vp: [1495, 900], prefs: { size: "L", compact: true } }, C4X: { vp: [1755, 1000], prefs: { size: "XL", compact: true } },
+  C4c: { vp: [1179, 540], prefs: { size: "AUTO", compact: true } }, C4L: { vp: [1507, 900], prefs: { size: "L", compact: true } }, C4X: { vp: [1769, 1000], prefs: { size: "XL", compact: true } },
   C0: { vp: [760, 800], prefs: { size: "AUTO", compact: false } },
   P1: { dev: "iPhone SE (3rd gen)" }, P2: { dev: "iPhone 13" },
   // the classic phone layout (CLASSIC LAYOUT in the menu): the computer's table in a 104-px name column

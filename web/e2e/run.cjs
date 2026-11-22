@@ -63,6 +63,8 @@ const SUITES = [
   { name: "shut-reasons", needs: ["mock", "standin"] },
   { name: "nav-hold", needs: ["mock", "standin"] },
   { name: "header", needs: ["mock"] },
+  { name: "header-sizes", needs: ["mock"] },
+  { name: "header-wide", needs: ["mock"] },
   { name: "portfolio", needs: ["mock", "standin"] },
   { name: "phone-portfolio", needs: ["mock"] },
   { name: "layout-guard-portfolio", needs: ["mock"] },

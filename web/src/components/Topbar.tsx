@@ -46,7 +46,7 @@ export interface TopbarProps {
 
 const MENU_LABEL = "Menu: Tokyo and New York time, text size, compact, full screen, account";
 const COMPACT_OFF = {
-  narrow: "COMPACT is on. One screen per tab needs a layout 1,300 px wide: a window of 1,170 px at AUTO, 1,105 at S, 1,300 at M, 1,495 at L, 1,755 at XL. This window scrolls. Click to turn COMPACT off.",
+  small: "COMPACT is on. One screen per tab needs a layout 1,310 × 560 px: a window of at least 1,179 × 540 at AUTO, 1,114 × 540 at S, 1,310 × 560 at M, 1,507 × 644 at L, 1,769 × 756 at XL. This window scrolls. Click to turn COMPACT off.",
   refused: "COMPACT is on. This browser draws the one-screen header wider than this window holds, so the window scrolls. Another window size or text size tries again. Click to turn COMPACT off.",
 } as const;
 

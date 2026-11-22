@@ -214,20 +214,29 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   pending value and HISTORY, the targets' window on 21 Nov and 15 Dec, notes, renaming, delete after typing the name,
   a second account seeing nothing; the page's own calls answered by the suite (a server with its switch off, the
   statement first, a refusal); and the change form's date after 17:00 New York passes with the page open.
-  `header` (a computer; the designer's rule of 22 Nov 2026 for the one-screen header, its check A.7): the one-screen
-  header's rule (one row with a 102-px margin in both letter placements, six tabs and seven; the search box 96 px with
-  the focus; ≡ holds text size, COMPACT, FULL and the account) and key 7 in FULL. At eleven windows and text sizes from
-  a layout of 1,300 px the header is one row; the alert line's holder is at least 102 px wider than the line's longest
-  promise (a lit stock move, a σ move and a news alert, each with a long name, the chips at their longest), twice the
-  largest difference the designer measured between the two letter placements; in each state everything but the name
-  stands whole, the name keeps 8 characters and "…", and no part has had to leave; the focus, a typed letter with the
-  results list and a 33-character query move nothing and scroll nothing sideways; the menu is inside the window with
-  nothing cut and closes on Escape (the focus on ≡), a second press, a press outside and the focus leaving it ("/"
-  puts it in the search box, whose list it never covers); FULL from it hides the header
-  and Escape brings back one row; under 1,300 px COMPACT gives the scrolling layout and its chip says why; outside the
-  one-screen layout the row is as before; DejaVu Sans forced changes none of it, and with 0.9 px more to every letter
-  the stock move's line keeps 8 characters of its name or lets its label go first; with 7 px more the layout is refused
-  for that window and text size (COMPACT's chip says why), and another window size tries again.
+  `header` (a computer; the designer's rule of 22 Nov 2026 for the one-screen header, revision 2, its check A.7): the
+  one-screen header's rule (one row from a layout 1,310 × 560 with a 103-px margin in both letter placements, six tabs
+  and seven; the search box 88 px with the focus; ≡ holds text size, COMPACT, FULL and the account) and key 7 in FULL.
+  At 16 windows and text sizes from a layout of 1,310 × 560 (the floor's heights among them) the header is one row; the
+  alert line's holder is at least 103 px wider than the line's longest promise (a lit stock move of "+12,345.6%"
+  intraday and at close, a σ move of "-12,345.6σ" and a news alert, each with a long name, the chips at their longest),
+  twice the largest difference the designer measured between the two letter placements; in each state everything but
+  the name stands whole, the name's box is at least its promise (its first 8 characters and "…", or the whole name
+  where that is narrower), "USD/JPY", "S&P 500", "TOPIX" and "Nintendo" stand whole, and no part has had to leave; the
+  focus, a typed letter with the results list and a 33-character query move nothing and scroll nothing sideways; the
+  menu is inside the window with nothing cut and closes on Escape (the focus on ≡), a second press, a press outside
+  and the focus leaving it ("/" puts it in the search box, whose list it never covers); FULL from it hides the header
+  and Escape brings back one row; under 1,310 × 560 COMPACT gives the scrolling layout and its chip says why; outside
+  the one-screen layout the row is as before; DejaVu Sans forced changes none of it; with DejaVu Sans and 0.9 px more to
+  every letter, or 2 px more in the Monitor's own faces, every part the line shows stays whole and the name keeps its
+  promise, the fit letting the label go first; with 7 px more the layout is refused for that window and text size
+  (COMPACT's chip says why), and another window size tries again, while with the page's faces 2.5 s late and every
+  letter 3.8 px wider it is not refused (the fit refuses only once every face has loaded, and takes back once a
+  refusal a later font load proves wrong); the fit's trace on `#alerts` names what it found cut before its steps; and
+  in a browser that draws classic scrollbars, at the floor's five windows, no tab, menu, list or Help makes the page
+  scroll up and down, so no bar takes the row's width. `header` runs the AUTO windows, the floor and the layouts outside it, `header-sizes` the same checks at
+  the text sizes and the floor's heights, `header-wide` the wider drawings, the last step and the scrollbars (in one
+  suite they passed the runner's six minutes).
   `phone-portfolio` (an iPhone SE, an iPhone 13, a Pixel 7): the seventh bar item with
   every label inside its item in the machine's fonts and in a wide one, the current label alone at 320 px; the
   statement's sheet; the form's start, Review and sections with 16-px inputs and Review and Create above the bar at
