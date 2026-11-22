@@ -21,14 +21,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # The browser checks (web/e2e: 2,687 of them in 41 suites on 21 Nov 2026) and the logic checks (sim/logic.test.ts,
-  # 793 of them). Since 18 Nov 2026 the site is published only when they pass: until then a publish checked only that
+  # The browser checks (web/e2e: 2,706 of them in 42 suites on 22 Nov 2026) and the logic checks (sim/logic.test.ts,
+  # 816 of them). Since 18 Nov 2026 the site is published only when they pass: until then a publish checked only that
   # the site builds. The limit was 20 minutes when the checks took three. On 21 Nov 2026 the browser run of 2,052
   # checks in 34 suites took 14.5 minutes on the engineer's machine and 13 here, before the installs; with the three
   # suites added that day it took 17.2 minutes on the engineer's machine (1,029 s) and 16.3 here (977 s, pull request
   # #49); with the paper portfolio's three after them (40 suites) 18.9 minutes there (1,136 s), and with the suite
-  # and the wider drawings of the fixes after that day's checks (41 suites) 19.5 (1,169 s), which by the ratio of
-  # pull request #49 is about 18.5 here. The limit stays 30: a run cut off by the clock would stop a publish. One
+  # and the wider drawings of the fixes after that day's checks (41 suites) 19.5 (1,169 s), and with the suite of
+  # the fixes after the second review of P-1 (42 suites, 22 Nov) 20.1 (1,204 s), which by the ratio of pull request
+  # #49 is about 19 here. The limit stays 30: a run cut off by the clock would stop a publish. One
   # suite is stopped at six minutes (web/e2e/run.cjs) and tried again; the longest, opens, takes about 3.1 on the
   # engineer's machine.
   test:

@@ -343,6 +343,13 @@ const rpcOf = (db) => async (fn, args) => {
       tried.push({ grant, ok: t.ok, svc: t.serviceRoleGrants, open: t.openGrants, fns: t.openFunctions, back: back.ok });
     }
     ck(`a privilege handed back to the server's own role, or a TRUNCATE, REFERENCES or EXECUTE to an API role, makes pf_selftest say not ok; taken away again, ok (${tried.map((x) => `${x.grant.split(" on ")[0]}: ${x.ok}`).join("; ")})`, tried.every((x) => x.ok === false && x.back === true) && tried[0].svc === 1 && tried[1].svc === 7, tried);
+    // the second wall half in force is not ok either: one function handed back to its maker, or one policy dropped
+    const me = (await q1("select current_user as u")).u;
+    await d.exec(`alter function pf_note_add(text, uuid, text) owner to ${me}`); const halfOwned = (await q1("select pf_selftest() as r")).r; await d.exec("alter function pf_note_add(text, uuid, text) owner to monitor_account");
+    await d.exec("drop policy pf_own on pf_notes"); const noPolicy = (await q1("select pf_selftest() as r")).r;
+    await d.exec("create policy pf_own on pf_notes for all to monitor_account using (account = current_setting('monitor.account', true)) with check (account = current_setting('monitor.account', true))");
+    const whole = (await q1("select pf_selftest() as r")).r;
+    ck(`and the second wall half in force is not ok: one function handed back to its maker (${halfOwned.definerOwner} of ${halfOwned.functions}: ok ${halfOwned.ok}), one policy dropped (${noPolicy.policies} of ${noPolicy.tables}: ok ${noPolicy.ok}); put back, ok`, halfOwned.ok === false && halfOwned.definerOwner === halfOwned.functions - 1 && noPolicy.ok === false && noPolicy.policies === noPolicy.tables - 1 && whole.ok === true, { halfOwned, noPolicy, whole });
 
     console.log("\n[what a book may hold: every row kept, the next one refused in words (SQ-4, RT-7)]");
     await d.exec("begin");

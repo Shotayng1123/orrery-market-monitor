@@ -107,7 +107,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 2,687 checks in 41 suites on 21 Nov 2026): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 2,706 checks in 42 suites on 22 Nov 2026): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -227,8 +227,9 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   page, and `local-copy` opens the built site on both layouts to check the state the page's switch says: with it off,
   six tabs, no "PORTFOLIO" or "Portfolio" anywhere, `#portfolio/new` showing MARKETS, no portfolio route asked, and
   no file of the portfolio's screens or of its stand-in books among the published files.
-  `cd web && npm run e2e` starts the test servers it needs and runs them all, three suites at a time: about 19.5
-  minutes on the engineer's machine (1,169 s late on 21 Nov 2026 for the 41 suites, with `nav-hold` and the wider
+  `cd web && npm run e2e` starts the test servers it needs and runs them all, three suites at a time: about 20
+  minutes on the engineer's machine (1,204 s on 22 Nov 2026 for the 42 suites, with `portfolio-accounts`; 1,169 s
+  late on 21 Nov 2026 for the 41 suites, with `nav-hold` and the wider
   drawings of the fixes after that day's checks; 1,136 s for the 40 suites with the paper portfolio's three; 1,029 s
   for the 37 suites and 2,337 checks before them, which took 977 s on GitHub; the 34 suites and 2,052 checks before
   that day's first three new suites took 14.5 minutes there and 13 on GitHub). `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
