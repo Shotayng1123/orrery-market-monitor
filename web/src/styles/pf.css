@@ -85,6 +85,14 @@ body.pv2 .pf-flash{bottom:calc(70px + env(safe-area-inset-bottom,0px));width:cal
 .pf-num.ph .pf-in input.name{flex:1 1 100%;width:100%}
 .pf-num.ph .pf-in .pre,.pf-num.ph .pf-in .unit{font-size:13.5px;white-space:normal}
 .pf-num.ph .pf-no{font-size:13px}
+/* a unit's second half on the line under the field ("warning at 80% of it": the designer's B.2), so the unit stands beside the box */
+.pf-unitnote{display:block;margin-top:2px;color:var(--mut);font-size:11px;line-height:1.4}
+.pf-num.ph .pf-unitnote{font-size:12.5px}
+/* a book just created (B.2 lead 6): the BOOK card's created line lit for six seconds, and a status only a screen reader hears */
+.pf-created.lit{color:var(--cyan);box-shadow:inset 2px 0 0 var(--cyan);padding-left:6px}
+.pf-vh{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
+/* the change form's line for a change taken back (RT-3) */
+.pf-back{display:block;margin-top:3px;color:var(--mut)}
 .pf-chips{display:inline-flex;flex-wrap:wrap;gap:4px}
 .pf-chip{padding:3px 10px;border:1px solid var(--bord2);border-radius:3px;background:transparent;color:var(--txt2);font-family:var(--mono);font-size:11px;line-height:1.4;cursor:pointer}
 .pf-chip:hover{border-color:var(--amber)}
@@ -174,7 +182,21 @@ table.pf-list td{font-size:11.5px}
 .pf-sum{position:sticky;top:var(--pf-top,0px);min-width:0;border:1px solid var(--bord);border-radius:4px;background:var(--panel);overflow:hidden}
 .pf-sumbody{padding:8px 10px;font-size:11.5px;line-height:1.6}
 .pf-sumbody>div{overflow-wrap:anywhere}
-.pf-sumbody .chg{margin-top:4px;color:var(--txt2);cursor:help}
+.pf-sumbody .chg{margin-top:4px;color:var(--txt2)}
+/* UI-17: the count is a button that lists what was changed under it (a computer), or a 44-px row that opens a sheet (a phone) */
+.pf-sumbody .pf-chgbtn{display:block;padding:0;text-align:left;font-size:inherit;line-height:inherit}
+.pf-changedlist{margin:2px 0 0;padding:0 0 0 12px;list-style:none;border-left:2px solid var(--bord2)}
+.pf-changedlist li{margin:2px 0}
+.pf-changedlist .pf-link{padding:0;text-align:left;font-size:inherit;line-height:1.5;color:var(--txt);white-space:normal;overflow-wrap:anywhere}
+.pfp-chgrow{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-height:44px;margin:4px 0 0;padding:0;border:0;background:transparent;color:var(--cyan);font-family:var(--sans);font-size:14px;text-align:left;cursor:pointer}
+.pfp-chgrow::after{content:"\203A";color:var(--mut);font-size:20px;line-height:1}
+.pfp-chgline{margin:0 0 6px}
+.pf-sumbody .pfp-chgrow{color:var(--cyan)}
+.pfp-chglist{display:flex;flex-direction:column}
+.pfp-chg{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;min-height:52px;padding:8px 0;border:0;border-top:1px solid var(--bord);background:transparent;color:var(--txt);font-family:var(--sans);font-size:14.5px;line-height:1.4;text-align:left;cursor:pointer}
+.pfp-chg:first-child{border-top:0}
+.pfp-chg .tx{min-width:0;overflow-wrap:anywhere}
+.pfp-chg .e{color:var(--cyan);font-size:14px;white-space:nowrap}
 .pf-sumbody .fixedline{margin-top:6px}
 .pf-create{display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:8px 10px;border-top:1px solid var(--bord)}
 .pf-count{margin:0;padding:0;border:0;background:none;color:var(--mut);font-family:var(--mono);font-size:11px;text-align:left}
@@ -207,9 +229,11 @@ button.pf-count.bad{color:var(--dn);text-decoration:underline;cursor:pointer}
 .pf-col{display:flex;flex-direction:column;gap:var(--gap,10px);min-width:0}
 .pf-notbuilt{margin:0}
 table.pf-limits td.vl,table.pf-set td.vl{font-variant-numeric:tabular-nums}
-.pf-goto{margin:0}
+/* GO TO stays under the header while Settings scrolls (UI-15, plan review §3.4's bar), opaque, its lit chip the section
+   in view; a section brought into view stands under the header and the bar */
+.pf-goto{position:sticky;top:var(--pf-top,0px);z-index:6;justify-content:flex-end;margin:0 0 6px;padding:6px 0;background:var(--bg);border-bottom:1px solid var(--bord)}
 /* a section named by the address is brought under what stays at the top: the header on a computer, the two views on a phone */
-#pf-settings [data-sec]{scroll-margin-top:var(--pf-top,0px)}
+#pf-settings [data-sec]{scroll-margin-top:calc(var(--pf-top,0px) + var(--pf-goto-h,0px) + 6px)}
 #pf-settings.pfp-settings [data-sec]{scroll-margin-top:56px}
 .pf-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--gap,10px);align-items:start}
 .pf-grid>.w6{grid-column:span 6;min-width:0}

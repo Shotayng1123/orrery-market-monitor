@@ -1,9 +1,13 @@
 // A paper portfolio's Settings (P-1): what is fixed, what changes, the reason and the history.
 // A fixed row has no control at all: its value is text and "fixed" follows it. A limit or an assumption changes with a
-// reason of 10 to 500 characters and is in force from the next session, the date the server gives; every row ever
-// written stays in HISTORY. The targets may be re-set only from 1 Dec to a January reset, under a yearly base. A
-// portfolio is deleted only after its name is typed exactly.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+// reason of 10 to 500 characters and is in force from the session that opens next, the date the server gives (on an
+// equity book the day running while none of its stock exchanges has opened: EN-9); a change waiting for its session is
+// said under the value in force and can be taken back (RT-3); every row ever written stays in HISTORY. The targets may
+// be re-set only from 1 Dec, 06:00 SGT, to a January reset, under a yearly base. A portfolio is deleted only after its
+// name is typed exactly. GO TO stays under the header and lights the section in view (UI-15); on a phone a form's two
+// buttons stand in its sheet's foot (UI-13).
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react";
+import { zoomNow } from "../../lib/prefs";
 import { Panel } from "../Panel";
 import { JumpPick, Section } from "../PhoneKit";
 import { Sheet } from "../Sheet";
@@ -16,7 +20,7 @@ import { fmtFull, fromMinor } from "../../lib/pf/money.ts";
 import { fieldOf, STARTS } from "../../lib/pf/presets.ts";
 import { NOTE_GIST } from "../../lib/pf/statement.ts";
 import { BASE_LINE, BASE_NAME, cumulative, drawdownLine, restoreLine } from "../../lib/pf/targets.ts";
-import { bookDayFrom, DAY_ENDS, stampSgt, timeSgt, wdmy, windowWords } from "../../lib/pf/calendar.ts";
+import { bookDayFrom, DAY_ENDS, inForceWords, stampSgt, timeSgt, wdmy, windowWords } from "../../lib/pf/calendar.ts";
 import { changeBasis, historyOf, rowsOf, settingsNow, shortValue, targetsNow, targetsWords, valuesAhead, type HistoryRow, type NowRow } from "../../lib/pf/view.ts";
 import type { After } from "../../lib/pf/types.ts";
 import { ONLY_YOU, TARGET_RETURN, TARGET_VOLATILITY } from "../../lib/labels";
@@ -30,32 +34,40 @@ function ChangeForm({ a, row, phone, onDone, onCancel, reread }: { a: BookAnswer
   // checked as the server checks it: against what will be in force with it (the changes already saved, the targets
   // after a January re-set: RT-2, RT-3, EN-6), and the book read again as the form opens, so that the date it prints
   // is the one the server will store (RT-9)
-  const f = row.field, values = useMemo(() => changeBasis(a.book, a.valuationDay, a.nyDate), [a]);
+  const f = row.field, values = useMemo(() => changeBasis(a.book, a.valuationDay), [a]);
   useEffect(() => { reread?.(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [val, setVal] = useState(f.num && typeof row.value === "number" ? "" : String(row.value)), [reason, setReason] = useState(""), [seen, setSeen] = useState({ v: false, r: false }), [busy, setBusy] = useState(false), [msg, setMsg] = useState<string | null>(null);
   const p = val === "" && f.num ? null : checkChange(a.book, f.key, val, values), vNo = p && !p.ok ? p.text : null, rNo = reasonRefusal(reason), over = [...reason.trim()].length > REASON_MAX;
   const can = !!p && p.ok && !rNo && !busy;
+  // a change waiting for its session (RT-3, the designer's B.1): said under "In force now"; the value in force typed
+  // again takes it back, and the form says so (a reason is still asked)
+  const pend = row.pending, back = !!pend && !!p && p.ok && p.v === row.value;
   const save = () => {
     if (!can) return;
     setBusy(true); setMsg(null);
     pfSettingSet(a.book.id, f.key, val, reason).then(() => { onDone(); })
       .catch((e: unknown) => { setBusy(false); setMsg(failureWords(e, { offline: "Offline: a change needs the server.", signedOut: "Signed out: sign in again. Nothing was changed.", refused: (w) => `Not saved: ${w}. Nothing changed.` })); });
   };
+  // on a phone the two buttons stand in the sheet's foot, which does not scroll (UI-13); on a computer under the form
+  const buttons = phone
+    ? <><button type="button" className="pf-btn" id="pf-change-cancel" onClick={onCancel}>Cancel</button><button type="button" className="pf-go" id="pf-change-save" disabled={!can} onClick={save}>{busy ? "Saving…" : "Save change"}</button></>
+    : <div className="pf-btns"><button type="button" className="pf-btn" id="pf-change-cancel" onClick={onCancel}>CANCEL</button><button type="button" className="pf-go" id="pf-change-save" disabled={!can} onClick={save}>{busy ? "Saving…" : "SAVE CHANGE"}</button></div>;
   const body = (
     <div className={`pf-change${phone ? " ph" : ""}`} id="pf-change" data-key={f.key}>
       <div className="ln"><span className="k">In force now</span><span>{showValue(f, row.value)} · {row.by} · since {wdmy(row.since)}</span></div>
+      {pend && <div className="ln" id="pf-change-pending"><span className="k">Pending</span><span>{showValue(f, pend.value)} from {bookDayFrom(pend.from)}</span></div>}
       <div className="ln"><label className="k" htmlFor="pf-change-value">New value</label>
-        <span className="v">{f.choices ? <Chips field={f} value={val} onChange={(v) => { setVal(v); setSeen((s) => ({ ...s, v: true })); }} phone={phone} /> : <NumInput id="pf-change-value" field={f} value={val} onChange={(v) => { setVal(v); setSeen((s) => ({ ...s, v: true })); }} refusal={seen.v ? vNo : null} phone={phone} autoFocus={!phone} />}<span className="pf-unit2">{f.range}</span>{f.choices && seen.v && vNo && <span className="pf-no" role="alert">{vNo}</span>}</span></div>
+        <span className="v">{f.choices ? <Chips field={f} value={val} onChange={(v) => { setVal(v); setSeen((s) => ({ ...s, v: true })); }} phone={phone} /> : <NumInput id="pf-change-value" field={f} value={val} onChange={(v) => { setVal(v); setSeen((s) => ({ ...s, v: true })); }} refusal={seen.v ? vNo : null} phone={phone} autoFocus={!phone} />}<span className="pf-unit2">{f.range}</span>{f.choices && seen.v && vNo && <span className="pf-no" role="alert">{vNo}</span>}{back && <span className="pf-mut pf-back" id="pf-change-back">back to the value in force: the pending {shortValue(f, pend!.value)} is withdrawn</span>}</span></div>
       <div className="ln"><label className="k" htmlFor="pf-change-reason">Reason</label>
         <span className="v"><textarea id="pf-change-reason" rows={phone ? 3 : 2} value={reason} placeholder="why this change" aria-invalid={seen.r && rNo ? true : undefined} aria-describedby="pf-change-gist" onChange={(e) => setReason(e.target.value)} onBlur={() => setSeen((s) => ({ ...s, r: true }))} />
           {(seen.r || over) && rNo && <span className="pf-no" id="pf-change-reason-no" role="alert">{rNo}</span>}
           <span className="pf-mut" id="pf-change-gist">kept in the history · {ONLY_YOU} see it · {NOTE_GIST.replace("Notes are for your own reasoning. ", "")}</span></span></div>
-      <div className="ln when" id="pf-change-when">In force from {bookDayFrom(a.nextSession)}</div>
+      {!back && <div className="ln when" id="pf-change-when">{inForceWords(a.nextSession, a.nextSession === a.valuationDay ? a.nextOpens : null)}</div>}
       {msg && <p className="pf-msg" role="status">{msg}</p>}
-      <div className="pf-btns"><button type="button" className={`pf-btn${phone ? " big" : ""}`} id="pf-change-cancel" onClick={onCancel}>{phone ? "Cancel" : "CANCEL"}</button><button type="button" className={`pf-go${phone ? " big" : ""}`} id="pf-change-save" disabled={!can} onClick={save}>{busy ? "Saving…" : phone ? "Save change" : "SAVE CHANGE"}</button></div>
+      {!phone && buttons}
     </div>
   );
-  return phone ? <Sheet title={`Change · ${f.label}`} onClose={onCancel} id="pf-change-sheet">{body}</Sheet> : <div className="pf-changebox" role="group" aria-label={`Change ${f.label}`}><div className="t">CHANGE · {f.label.toUpperCase()}<button type="button" className="x" aria-label="Close" onClick={onCancel}>&times;</button></div>{body}</div>;
+  return phone ? <Sheet title={`Change · ${f.label}`} onClose={onCancel} id="pf-change-sheet" foot={buttons}>{body}</Sheet> : <div className="pf-changebox" role="group" aria-label={`Change ${f.label}`}><div className="t">CHANGE · {f.label.toUpperCase()}<button type="button" className="x" aria-label="Close" onClick={onCancel}>&times;</button></div>{body}</div>;
 }
 
 /** The settings' own log: every row ever written, newest first. Thirty rows, then SHOW 30 MORE. */
@@ -64,14 +76,14 @@ function History({ rows, phone }: { rows: HistoryRow[]; phone: boolean }) {
   const more = rows.length > shown && <button type="button" className={phone ? "mp-more" : "pf-link more"} data-act="more" onClick={() => setShown((s) => s + 30)}>{phone ? "Show 30 more" : "SHOW 30 MORE"}</button>;
   if (phone) return (
     <div className="pfp-hist" data-view="history">
-      {rows.slice(0, shown).map((h) => <div className="h" key={h.id} data-key={h.key} data-origin={h.origin}><span className="a">{h.label} · {h.from} → {h.to}</span><span className="b">in force from {h.inForceFrom ? wdmy(h.inForceFrom) : "–"} · set {timeSgt(h.at)} SGT{h.state ? ` · ${h.state}` : ""}</span><span className="c">{h.reason ?? h.by}</span></div>)}
+      {rows.slice(0, shown).map((h) => <div className="h" key={h.id} data-key={h.key} data-origin={h.origin} data-state={h.state || undefined}><span className="a">{h.label} · {h.from} → {h.to}</span><span className="b">{h.note ? h.note : `in force from ${h.inForceFrom ? wdmy(h.inForceFrom) : "–"}`} · set {timeSgt(h.at)} SGT{h.state && !h.note ? ` · ${h.state}` : ""}</span><span className="c">{h.reason ?? h.by}</span></div>)}
       {more}
     </div>
   );
   return (
     <div data-view="history">
       <table className="secT pf-hist"><thead><tr><th className="l">When (SGT)</th><th className="l">Setting</th><th>From</th><th>To</th><th className="l">In force from</th><th className="l">Reason</th><th className="l">By</th></tr></thead>
-        <tbody>{rows.slice(0, shown).map((h) => <tr key={h.id} data-key={h.key} data-origin={h.origin}><td className="l mut nb">{stampSgt(h.at).replace(/ SGT$/, "")}</td><td className="l wrap">{h.label}</td><td className="num">{h.from}</td><td className="num">{h.to}</td><td className="l nb">{h.inForceFrom ? wdmy(h.inForceFrom) : "–"}{h.state && <span className="st"> · {h.state}</span>}</td><td className="l wrap rs">{h.reason ?? "–"}</td><td className="l wrap mut">{h.by}</td></tr>)}</tbody></table>
+        <tbody>{rows.slice(0, shown).map((h) => <tr key={h.id} data-key={h.key} data-origin={h.origin} data-state={h.state || undefined}><td className="l mut nb">{stampSgt(h.at).replace(/ SGT$/, "")}</td><td className="l wrap">{h.label}</td><td className="num">{h.from}</td><td className="num">{h.to}</td>{h.note ? <td className="l wrap st">{h.note}</td> : <td className="l nb">{h.inForceFrom ? wdmy(h.inForceFrom) : "–"}{h.state && <span className="st"> · {h.state}</span>}</td>}<td className="l wrap rs">{h.reason ?? "–"}</td><td className="l wrap mut">{h.by}</td></tr>)}</tbody></table>
       {more}
     </div>
   );
@@ -129,7 +141,7 @@ function SettingList({ a, after, phone, onChanged }: { a: BookAnswer; after: Aft
 
 /** 02 TARGETS: the two targets with their window, and the band and the amber line, which change as limits do. */
 function Targets({ a, phone, onChanged }: { a: BookAnswer; phone: boolean; onChanged: () => void }) {
-  const b = a.book, t = targetsNow(b, a.nyDate), now = useMemo(() => settingsNow(b, a.valuationDay), [b, a.valuationDay]), values = valuesAhead(now);   // the VaR limit the pair will stand beside, a pending one included (RT-2)
+  const b = a.book, t = targetsNow(b, a.valuationDay), now = useMemo(() => settingsNow(b, a.valuationDay), [b, a.valuationDay]), values = valuesAhead(now);   // the VaR limit the pair will stand beside, a pending one included (RT-2)
   const [form, setForm] = useState(false), [x, setX] = useState(""), [vol, setVol] = useState(""), [busy, setBusy] = useState(false), [msg, setMsg] = useState<string | null>(null), [open, setOpen] = useState<string | null>(null);
   const fx = fieldOf(b.start, "target_x")!, fv = fieldOf(b.start, "target_vol")!, lim = typeof values.var === "number" ? values.var : null;
   const c = form ? checkTargets(b.start, x, vol, lim) : null, no = (k: string): string | null => (c && !c.ok ? c.refusals.find((r) => r.key === k && !/implies a 99%/.test(r.text))?.text ?? null : null);
@@ -138,6 +150,17 @@ function Targets({ a, phone, onChanged }: { a: BookAnswer; phone: boolean; onCha
   const save = () => { if (!c?.ok || busy) return; setBusy(true); setMsg(null);
     pfTargetsSet(b.id, x, vol).then(() => { setBusy(false); setForm(false); onChanged(); }).catch((e: unknown) => { setBusy(false); setMsg(failureWords(e, { offline: "Offline: a change needs the server.", signedOut: "Signed out: sign in again. Nothing was changed.", refused: (w) => `Not saved: ${w}. Nothing changed.` })); }); };
   const state = t.window.fixed ? "fixed" : windowWords(t.window);
+  // RE-SET FOR NEXT YEAR: inline on a computer; on a phone a sheet whose two buttons stand in its foot (UI-13)
+  const resetFields = (
+    <div className="pf-resetform" id="pf-resetform">
+      <div className="ln"><label className="k" htmlFor="pf-reset-x">{TARGET_RETURN}</label><span className="v"><NumInput id="pf-reset-x" field={fx} value={x} onChange={setX} refusal={no("target_x")} phone={phone} /><span className="pf-unit2">{fx.range}</span><EquivalentLine x={xv} rate={a.rates[b.base]} base={b.base} /></span></div>
+      <div className="ln"><label className="k" htmlFor="pf-reset-vol">{TARGET_VOLATILITY}</label><span className="v"><NumInput id="pf-reset-vol" field={fv} value={vol} onChange={setVol} refusal={no("target_vol")} phone={phone} /><span className="pf-unit2">{fv.range}</span><VolLines x={xv} vol={vv} cut1={b.ladder.cut1} varLimit={lim} start={b.start} /></span></div>
+      {msg && <p className="pf-msg" role="status">{msg}</p>}
+    </div>
+  );
+  const resetButtons = phone
+    ? <><button type="button" className="pf-btn" id="pf-reset-cancel" onClick={() => setForm(false)}>Cancel</button><button type="button" className="pf-go" id="pf-reset-save" disabled={!c?.ok || busy} onClick={save}>{busy ? "Saving…" : "Save"}</button></>
+    : <div className="pf-btns"><button type="button" className="pf-btn" id="pf-reset-cancel" onClick={() => setForm(false)}>CANCEL</button><button type="button" className="pf-go" id="pf-reset-save" disabled={!c?.ok || busy} onClick={save}>{busy ? "Saving…" : "SAVE"}</button></div>;
   const band = now.filter((r) => r.field.section === "targets" && r.field.after === "limit"), fixedRows = STARTS[b.start].fields.filter((f) => f.section === "targets" && !f.num && !f.choices && f.key !== "reference");
   const line = (label: string, value: ReactNode, tail: ReactNode, key: string) => <div className="pf-kv" key={key} data-row={key}><span className="k">{label}</span><span className="v">{value}</span><span className="t">{tail}</span></div>;
   return (
@@ -150,14 +173,9 @@ function Targets({ a, phone, onChanged }: { a: BookAnswer; phone: boolean; onCha
         {t.pending && <Muted id="pf-pending-targets">pending for {t.pending.forYear}: {targetsWords(t.pending.x, t.pending.vol)}</Muted>}
         {!t.window.fixed && !t.window.open && t.window.next && <Muted id="pf-nextwindow">{t.window.next}</Muted>}
         {t.window.open && !form && <button type="button" className={`pf-btn${phone ? " big" : ""}`} id="pf-reset" onClick={start}>{phone ? `Re-set for ${t.window.forYear}` : "RE-SET FOR NEXT YEAR"}</button>}
-        {form && (
-          <div className="pf-resetform" id="pf-resetform">
-            <div className="ln"><label className="k" htmlFor="pf-reset-x">{TARGET_RETURN}</label><span className="v"><NumInput id="pf-reset-x" field={fx} value={x} onChange={setX} refusal={no("target_x")} phone={phone} /><span className="pf-unit2">{fx.range}</span><EquivalentLine x={xv} rate={a.rates[b.base]} base={b.base} /></span></div>
-            <div className="ln"><label className="k" htmlFor="pf-reset-vol">{TARGET_VOLATILITY}</label><span className="v"><NumInput id="pf-reset-vol" field={fv} value={vol} onChange={setVol} refusal={no("target_vol")} phone={phone} /><span className="pf-unit2">{fv.range}</span><VolLines x={xv} vol={vv} cut1={b.ladder.cut1} varLimit={lim} start={b.start} /></span></div>
-            {msg && <p className="pf-msg" role="status">{msg}</p>}
-            <div className="pf-btns"><button type="button" className={`pf-btn${phone ? " big" : ""}`} onClick={() => setForm(false)}>{phone ? "Cancel" : "CANCEL"}</button><button type="button" className={`pf-go${phone ? " big" : ""}`} id="pf-reset-save" disabled={!c?.ok || busy} onClick={save}>{busy ? "Saving…" : phone ? "Save" : "SAVE"}</button></div>
-          </div>
-        )}
+        {form && (phone
+          ? <Sheet title={`Re-set for ${t.window.forYear ?? ""}`} onClose={() => setForm(false)} id="pf-reset-sheet" foot={resetButtons}>{resetFields}</Sheet>
+          : <div className="pf-resetwrap">{resetFields}{resetButtons}</div>)}
       </div>
       {band.map((r) => (
         <div key={r.key}>
@@ -177,7 +195,7 @@ function Rename({ a, others, phone, onChanged }: { a: BookAnswer; others: string
   if (!edit) return <><span className="pf-name">{a.book.name}</span> <button type="button" className="pf-link" id="pf-rename" onClick={() => { setName(a.book.name); setEdit(true); }}>RENAME</button></>;
   return (
     <span className={`pf-num${no ? " bad" : ""}${phone ? " ph" : ""}`}>
-      <span className="pf-in"><input id="pf-rename-in" className="name" type="text" value={name} autoComplete="off" aria-label="The portfolio's name" aria-invalid={no ? true : undefined} onChange={(e) => setName(e.target.value)} autoFocus />
+      <span className="pf-in"><input id="pf-rename-in" className="name" type="text" value={name} autoComplete="off" aria-label="The portfolio's name" aria-invalid={no ? true : undefined} onChange={(e) => setName(e.target.value)} onBlur={() => setName((n) => cleanName(n))} autoFocus />
         <button type="button" className="pf-btn" id="pf-rename-save" disabled={!!no || same || busy} onClick={save}>SAVE</button><button type="button" className="pf-btn" onClick={() => setEdit(false)}>CANCEL</button></span>
       {no && <span className="pf-no" role="alert">{no}</span>}{msg && <span className="pf-msg">{msg}</span>}
     </span>
@@ -197,7 +215,7 @@ function Delete({ a, phone, last }: { a: BookAnswer; phone: boolean; last: boole
       {!open ? <button type="button" className={`pf-btn danger${phone ? " big" : ""}`} id="pf-delete-open" onClick={() => setOpen(true)}>{phone ? "Delete this portfolio…" : "DELETE THIS PORTFOLIO…"}</button> : (
         <>
           <p className="ask">Type the portfolio's name to delete it: <b id="pf-delete-name">{a.book.name}</b></p>
-          <span className={`pf-num${phone ? " ph" : ""}`}><span className="pf-in"><input id="pf-delete-in" className="name" type="text" value={typed} autoComplete="off" spellCheck={false} aria-label="The portfolio's name, to delete it" onChange={(e) => setTyped(e.target.value)} autoFocus /></span></span>
+          <span className={`pf-num${phone ? " ph" : ""}`}><span className="pf-in"><input id="pf-delete-in" className="name" type="text" value={typed} autoComplete="off" spellCheck={false} aria-label="The portfolio's name, to delete it" onChange={(e) => setTyped(e.target.value)} onBlur={() => setTyped((n) => cleanName(n))} autoFocus /></span></span>
           {wrong && <p className="pf-mut" id="pf-delete-wrong">that is not this portfolio's name</p>}
           {msg && <p className="pf-msg" role="status">{msg}</p>}
           <div className="pf-btns"><button type="button" className={`pf-btn${phone ? " big" : ""}`} onClick={() => { setOpen(false); setTyped(""); }}>{phone ? "Cancel" : "CANCEL"}</button><button type="button" className={`pf-btn danger${phone ? " big" : ""}`} id="pf-delete-go" disabled={!exact || busy} onClick={del}>{busy ? "Deleting…" : phone ? "Delete" : "DELETE"}</button></div>
@@ -207,16 +225,62 @@ function Delete({ a, phone, last }: { a: BookAnswer; phone: boolean; last: boole
   );
 }
 
+/** What scrolls the page: the page's own box in the one-screen layout, else the window's. */
+function scrollerOf(el: HTMLElement): Element {
+  for (let x = el.parentElement; x; x = x.parentElement) { const o = getComputedStyle(x).overflowY; if ((o === "auto" || o === "scroll") && x.scrollHeight > x.clientHeight) return x; }
+  return document.scrollingElement ?? document.documentElement;
+}
+/** The section in view, for GO TO's lit chip (UI-15, plan review §3.4's bar): the section that crosses the line just
+ *  under the bar, the one the address names where two stand side by side; above every section, the first. Watched on
+ *  every scroll of the window or of the page's own box (the one-screen layout) and on a resize. The bar's own height
+ *  is written to `--pf-goto-h`, so that a section brought into view stands under it. */
+function useInView(root: RefObject<HTMLDivElement | null>, bar: RefObject<HTMLDivElement | null>, section: string, on: boolean): string {
+  const [seen, setSeen] = useState<string>(section || SETTINGS_SECTIONS[0][0]);
+  const want = useRef(section);
+  want.current = section;
+  useEffect(() => {
+    if (!on) return;
+    let frame = 0;
+    const look = () => {
+      frame = 0;
+      const box = root.current, b = bar.current;
+      if (!box || !b) return;
+      const r = b.getBoundingClientRect(), line = r.bottom + 8;
+      box.style.setProperty("--pf-goto-h", `${Math.ceil(r.height / zoomNow())}px`);
+      const secs = [...box.querySelectorAll<HTMLElement>("[data-sec]")].map((el) => ({ k: el.dataset.sec ?? "", r: el.getBoundingClientRect() }));
+      const cross = secs.filter((x) => x.r.top <= line && x.r.bottom > line);
+      // at the end of the page the last sections cannot reach the line: the last row in view is the one in view
+      const sc = scrollerOf(box), end = sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 2 && sc.scrollTop > 0;
+      const lastRow = end ? secs.filter((x) => x.r.top >= line && x.r.top < window.innerHeight) : [];
+      const last = lastRow.length ? lastRow.filter((x) => Math.abs(x.r.top - lastRow[lastRow.length - 1].r.top) < 2) : [];
+      // the section the address names, wherever it stands in view, before the rule (a chip pressed is the chip lit)
+      const named = secs.find((x) => x.k === want.current && x.r.bottom > line && x.r.top < window.innerHeight);
+      const pick = (end ? named ?? last[0] : null) ?? cross.find((x) => x.k === want.current) ?? cross[0] ?? secs.find((x) => x.r.bottom > line) ?? secs[secs.length - 1];
+      if (pick) setSeen(pick.k);
+    };
+    const ask = () => { if (!frame) frame = requestAnimationFrame(look); };
+    look();
+    document.addEventListener("scroll", ask, true);
+    window.addEventListener("resize", ask);
+    return () => { document.removeEventListener("scroll", ask, true); window.removeEventListener("resize", ask); if (frame) cancelAnimationFrame(frame); };
+  }, [root, bar, on]);
+  useEffect(() => { if (section) setSeen(section); }, [section]);
+  return seen;
+}
+
 export function Settings({ a, section, others, phone, onChanged, csvBook = "book" }: { a: BookAnswer; section: string; others: string[]; phone: boolean; onChanged: () => void; csvBook?: string }) {
-  const tSince = !!targetsNow(a.book, a.nyDate).since;
+  const tSince = !!targetsNow(a.book, a.valuationDay).since;
   const b = a.book, def = STARTS[b.start], L = b.ladder, cum = cumulative(L), usd = b.fx ? usdLine(fromMinor(b.base, b.startingNav), b.fx).line : null;
   const fixed = (label: string, value: ReactNode, key: string) => <div className="pf-kv" key={key} data-row={key}><span className="k">{label}</span><span className="v">{value}</span><span className="t"><span className="pf-fixed">fixed</span></span></div>;
   // an address that names a section opens there (#portfolio/<id>/settings/limits); a chip goes to its panel's head.
   // The section is brought to the top of whatever scrolls (the window; the page's own box in the one-screen layout),
   // under what stays there: the header on a computer (--pf-top, kept by useHeaderTop), the two views on a phone
   // (styles/pf.css gives each section that margin).
-  const root = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement>(null), bar = useRef<HTMLDivElement>(null);
   useHeaderTop(root);
+  const inView = useInView(root, bar, section, !phone);
+  // a chip of the section the address already names brings it back into view (the address does not change then)
+  const toSection = (k: string) => (e: ReactMouseEvent) => { if (location.hash === href(`${b.id}/settings/${k}`)) { e.preventDefault(); root.current?.querySelector<HTMLElement>(`[data-sec="${k}"]`)?.scrollIntoView({ block: "start" }); } };
   useEffect(() => {
     if (!section) return;
     const t = setTimeout(() => { root.current?.querySelector<HTMLElement>(`[data-sec="${section}"]`)?.scrollIntoView({ block: "start" }); }, 60);
@@ -261,7 +325,7 @@ export function Settings({ a, section, others, phone, onChanged, csvBook = "book
   );
   return (
     <div id="pf-settings" ref={root}>
-      <div className="chips pf-goto" id="pf-goto"><span className="lbl">GO TO</span>{SETTINGS_SECTIONS.map(([k, title]) => <a key={k} className={`chip-sm${section === k ? " on" : ""}`} href={href(`${b.id}/settings/${k}`)}>{title.toUpperCase()}</a>)}</div>
+      <div className="chips pf-goto" id="pf-goto" ref={bar}><span className="lbl">GO TO</span>{SETTINGS_SECTIONS.map(([k, title]) => <a key={k} className={`chip-sm${inView === k ? " on" : ""}`} aria-current={inView === k ? "location" : undefined} href={href(`${b.id}/settings/${k}`)} onClick={toSection(k)}>{title.toUpperCase()}</a>)}</div>
       <div className="pf-grid">
         {SETTINGS_SECTIONS.map(([k, title]) => <div key={k} className={k === "ladder" || k === "limits" || k === "assumptions" ? "w12" : "w6"} data-sec={k}><Panel no={numbered(k)} title={title.toUpperCase()} k={`pfs-${k}`} aux={parts[k].aux} csv={k === "limits" || k === "assumptions"} csvName={() => `paper-${csvBook}-${k}${root.current?.querySelector(`[data-sec="${k}"] [data-view="history"]`) ? "-history" : ""}`}>{parts[k].body}</Panel></div>)}
       </div>

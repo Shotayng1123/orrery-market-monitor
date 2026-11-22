@@ -551,7 +551,8 @@ name. There are no orders, no NAV and no limits at work yet: the book's page say
   (`supabase/README.md`, "The paper portfolio"). No workflow, job or log names a private table or a function of the
   store, or prints a row: the live check's part `pf` calls one function that returns counts and prints
   `pf_selftest ok`, and fails the run when a wall is down (deploy-server runs it after each deploy). On the device:
-  a form's unsent draft belongs to the account that typed it (dropped for another account, removed at SIGN OUT); a
+  a form's unsent drafts, one per start with the name typed (UI-4), belong to the account that typed them (dropped for
+  another account, removed at SIGN OUT); a
   book's last answers are kept on the device for a week only where the sign-in is remembered, and in memory for the
   tab otherwise; an answer that arrives after its sign-in ended is not kept; a deleted book's answers go with it; a
   start that finds no sign-in empties what an ended session left.
@@ -560,9 +561,28 @@ name. There are no orders, no NAV and no limits at work yet: the book's page say
   ACTIVITY) and in HISTORY's WHEN (SGT) column. A book day, the day whose NAV is struck at 17:00 New York, is written
   with its weekday, "Mon 23 Nov 2026", in every panel whose head says "a day ends 17:00 New York"; where one is promised
   the moment it begins follows: "In force from Mon 23 Nov 2026, 06:00 SGT". A book's own start on its strip, the
-  phone's head and the lists is the SGT day it was made, "created 22 Nov 2026". The targets' window is named by the
-  moment it opens, "re-set only from 1 Dec, 13:00 SGT, to a January reset" (00:00 New York; built from one constant of
-  `calendar.ts`); the database's own second refusal keeps its words of 21 Nov until a migration replaces its function.
+  phone's head and the lists is the SGT day it was made, "created 22 Nov 2026". The targets' window opens with the book
+  day of 1 Dec (PM A's answer of 22 Nov 2026), "re-set only from 1 Dec, 06:00 SGT, to a January reset": 17:00 New York
+  on 30 Nov, the kind of moment every "in force from" uses (built from one constant of `calendar.ts`; until 22 Nov it
+  opened at 00:00 New York on 1 Dec). The database's own second refusal keeps its words of 21 Nov until a migration
+  replaces its function.
+- **When a change is in force** (EN-9, the PMs' answers of 22 Nov 2026; `calendar.ts` `changeDays`). From the session
+  that opens next: the book day running counts until the first regular session in it has opened on an exchange where
+  the book's stocks trade (Tokyo for the Japan start, and New York where it may hold names listed outside Tokyo; Tokyo or
+  New York for the Global start; a CME future's or a currency's hours do not count for an equity book). So at 07:30 SGT
+  on a Tokyo trading day an equity book's change is "In force for Tue 24 Nov 2026's sessions (Tokyo opens 08:00 SGT)",
+  in force at once, and on Tokyo's holiday at 10:00 SGT it counts for that day's New York session. The macro book's day
+  has begun at its first moment (FX from 17:00 New York), so its changes wait for the next book day, as before. The
+  database's own guard is told the last book day the book's markets have traded in: a change is never in force in one
+  of those.
+- **A pending change taken back** (RT-3, EG-3; the PMs' answers on R-53). The value in force typed again while a change
+  waits takes that change back: the form says "back to the value in force: the pending 15% is withdrawn", HISTORY's
+  row reads FROM the pending value TO the value in force with "back to the value in force: the pending 15% taken back
+  before it was in force", ACTIVITY the same, and the value in force keeps its own BY and SINCE before and after the
+  day the pending one would have come into force.
+- **Notes held.** A book holds at most 500 notes (a removed one counts); from 450 a line under the box says how many
+  are left ("50 notes left: every note is kept"). Raising the bound waits for the notes to be read in pages (PM A asks
+  for 5,000, PM B for 2,500).
   A table's CSV is named by the day in Singapore, `orrery-markets-2026-11-22.csv`; a paper book's
   `orrery-paper-<book>-<panel>[-history]-<day>.csv`, `<book>` its name in letters and figures of any script, "-2" for a
   later book with the same file name.

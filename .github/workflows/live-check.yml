@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: "Parts to print, comma-separated (jobs, relay, sources, market, source, equities, alerts, reasons, edinet, stock, counts, pf); empty for all. sundays = the minute job on the last Sunday evenings (by name only). token = try the stored GitHub token; keys = try the owner's source keys (SEC, EDINET, BLS)"
+        description: "Parts to print, comma-separated (jobs, relay, sources, market, source, equities, alerts, reasons, edinet, stock, marks, counts, pf); empty for all. sundays = the minute job on the last Sunday evenings (by name only). token = try the stored GitHub token; keys = try the owner's source keys (SEC, EDINET, BLS)"
         required: false
         default: ""
 

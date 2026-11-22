@@ -25,7 +25,7 @@ export function sqlStore(rpc: Rpc): PfStore {
     get: (account, id) => call<BookFull | null>("pf_get", { p_account: account, p_id: id }),
     rename: async (account, id, name, today) => { await call<null>("pf_rename", { p_account: account, p_id: id, p_name: name, p_today: today }); },
     settingSet: async (account, id, s) => { await call<null>("pf_setting_set", { p_account: account, p_id: id, p_key: s.key, p_value: s.value, p_reason: s.reason, p_effective: s.effective, p_today: s.today }); },
-    targetsSet: (account, id, t) => call<{ forYear: number }>("pf_targets_set", { p_account: account, p_id: id, p_x: t.x, p_vol: t.vol, p_today: t.nyDate }),
+    targetsSet: (account, id, t) => call<{ forYear: number }>("pf_targets_set", { p_account: account, p_id: id, p_x: t.x, p_vol: t.vol, p_today: t.day }),
     noteAdd: async (account, id, body) => { await call<null>("pf_note_add", { p_account: account, p_id: id, p_body: body }); },
     noteRemove: async (account, id, note) => { await call<null>("pf_note_remove", { p_account: account, p_id: id, p_note: note }); },
     remove: async (account, id, name) => { await call<null>("pf_delete", { p_account: account, p_id: id, p_name: name }); },

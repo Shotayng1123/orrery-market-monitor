@@ -10,8 +10,8 @@
 //   [3] B.0.1 (UI-5, DC-8): a book made at 04:30 SGT on a Sunday: "since" and CREATED the SGT day, the heads that hold
 //       a book day say "a day ends 17:00 New York", CHANGE prints the moment the day begins in SGT, and every moment on
 //       the book's screens carries its zone or stands under "times in SGT" or a "(SGT)" column (C1 and P2)
-//   [4] B.0.2: the targets' window prints its opening moment with its zone, and no "from 1 Dec" without a time is left
-//       on the tab or in Help
+//   [4] B.0.2: the targets' window prints its opening moment with its zone (the book day of 1 Dec, 06:00 SGT: PM A's answer
+//       of 22 Nov 2026), and no "from 1 Dec" without a time is left on the tab or in Help
 //   [5] UI-8: what is typed while a note is on its way stays; UI-14: SHOW ALL exactly where the text is drawn on more
 //       than eight lines; UI-16: a failure's sentence goes once the connection is back, a refused removal is said in its
 //       own note's row, and none stays once a removal has worked
@@ -164,17 +164,19 @@ const moments = (p) => p.evaluate(() => {
 
     console.log("\n[4] B.0.2 (UI-5, DC-8): the targets' window, its opening moment with its zone");
     {
-      const { ctx, p, errs } = await open(b, { clock: "2026-12-01T02:00:00Z" });   // Tue 1 Dec, 10:00 SGT: the window opens at 13:00 SGT
+      // Tue 1 Dec, 05:00 SGT: the window opens with the book day of 1 Dec, at 06:00 SGT (17:00 New York on 30 Nov: PM A's
+      // answer of 22 Nov 2026; it opened at 13:00 SGT, New York's midnight, before)
+      const { ctx, p, errs } = await open(b, { clock: "2026-11-30T21:00:00Z" });
       await go(p, `portfolio/${ID(1)}/settings/targets`, "#pf-targets");
       const t = await p.evaluate(() => ({ text: document.querySelector("#pf-targets").innerText.replace(/\s+/g, " "), page: document.querySelector("[data-book]").innerText }));
       const lines = t.text.match(/re-set only from .*? to a January reset|next window: from .*? to the first NAV of 2027/g) ?? [];
       await p.click("#help-ctl"); await p.waitForTimeout(300);
-      const help = await p.evaluate(() => document.querySelector(".helpbox")?.innerText ?? ""), loose = (s) => s.match(/\b1 Dec(?!(?: \d{4})?, 13:00 SGT).{0,30}/g) ?? [];
+      const help = await p.evaluate(() => document.querySelector(".helpbox")?.innerText ?? ""), loose = (s) => s.match(/\b1 Dec(?!(?: \d{4})?, 06:00 SGT).{0,30}/g) ?? [];
       await go(p, "portfolio/new/ar-ls-jp", "#pf-create"); const form = await p.evaluate(() => document.querySelector(".fixedline")?.textContent ?? "");
-      const reset = await open2(b, "2026-12-01T05:00:00Z", `portfolio/${ID(1)}/settings/targets`);
-      ck(`a yearly book at 10:00 SGT on 1 Dec, before its window opens: "${lines.join('", "')}"; no "1 Dec" without its moment on the tab (${loose(t.page).length}), in Help (${loose(help).length}) or on NEW PORTFOLIO ("${form.slice(-70)}"); at 13:00 SGT RE-SET FOR NEXT YEAR is there (${reset})`,
-        lines.length === 3 && lines.filter((l) => l === "re-set only from 1 Dec, 13:00 SGT, to a January reset").length === 2 && lines[2] === "next window: from 1 Dec 2026, 13:00 SGT, to the first NAV of 2027"
-        && loose(t.page).length === 0 && loose(help).length === 0 && loose(form).length === 0 && /re-set only from 1 Dec, 13:00 SGT \(midnight in New York\), to a January reset/.test(help) && form.endsWith("The targets: re-set only from 1 Dec, 13:00 SGT, to a January reset, under a yearly base.") && reset && errs.length === 0, { lines, page: loose(t.page), help: loose(help), form, reset, errs });
+      const reset = await open2(b, "2026-11-30T22:00:30Z", `portfolio/${ID(1)}/settings/targets`);
+      ck(`a yearly book at 05:00 SGT on 1 Dec, before its window opens: "${lines.join('", "')}"; no "1 Dec" without its moment on the tab (${loose(t.page).length}), in Help (${loose(help).length}) or on NEW PORTFOLIO ("${form.slice(-70)}"); at 06:00 SGT (17:00 New York on 30 Nov) RE-SET FOR NEXT YEAR is there (${reset})`,
+        lines.length === 3 && lines.filter((l) => l === "re-set only from 1 Dec, 06:00 SGT, to a January reset").length === 2 && lines[2] === "next window: from Tue 1 Dec 2026, 06:00 SGT, to the first NAV of 2027"
+        && loose(t.page).length === 0 && loose(help).length === 0 && loose(form).length === 0 && /re-set only from 1 Dec, 06:00 SGT \(17:00 New York on 30 Nov\), to a January reset/.test(help) && form.endsWith("The targets: re-set only from 1 Dec, 06:00 SGT, to a January reset, under a yearly base.") && reset && errs.length === 0, { lines, page: loose(t.page), help: loose(help), form, reset, errs });
       await ctx.close();
     }
 

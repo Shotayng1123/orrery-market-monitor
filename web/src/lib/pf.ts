@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, getToken, onSignInEnd, remembered, tokenId } from "./api";
 import { keepDel, keepGet, keepKey, keepSet, type Kept } from "./keep";
 import type { BookFull, BookRow, CashRate, ConsentState, FormFacts, Refusal, Base } from "./pf/types.ts";
+import type { Venue } from "./pf/calendar.ts";
 import { NOT_YET } from "./pf/words.ts";
 
 /** A refusal or a failure, with what the page needs to say it: 0 no connection, 401 signed out, 404 no such
@@ -66,7 +67,9 @@ async function call<T>(action: string, query?: Query, body?: Record<string, unkn
 }
 
 export interface ListAnswer { rows: BookRow[]; cap: number; open: number }
-export interface BookAnswer { book: BookFull; today: string; valuationDay: string; nextSession: string; nyDate: string; rates: Record<Base, CashRate | null>; consent: ConsentState }
+/** `nextOpens`: when a change made now is in force for the book day running (EN-9), the session that opens it; a server
+ *  of before 22 Nov 2026 sends none. */
+export interface BookAnswer { book: BookFull; today: string; valuationDay: string; nextSession: string; nextOpens?: { venue: Venue; at: string } | null; nyDate: string; rates: Record<Base, CashRate | null>; consent: ConsentState }
 export const pfList = (): Promise<ListAnswer> => call("pf_list");
 export const pfForm = (): Promise<FormFacts> => call("pf_form");
 export const pfGet = (id: string): Promise<BookAnswer> => call("pf_get", { id });

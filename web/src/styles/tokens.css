@@ -1923,6 +1923,10 @@ a.mp-line:active,.mp-line .open:active,.mp-line .x:active{background:var(--panel
 .sheet-head .x{flex:none;width:44px;height:44px;margin:0;padding:0;border:0;border-radius:10px;background:transparent;color:var(--txt2);font-size:24px;line-height:1;cursor:pointer}
 .sheet-head .x:active{background:var(--panel)}
 .sheet-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:4px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+/* a form's foot (UI-13): it never scrolls; CANCEL and the action side by side, each (the foot's inner width − 12) ÷ 2 */
+.sheet-body.hasfoot{padding-bottom:12px}
+.sheet-foot{flex:none;display:flex;gap:12px;padding:12px 12px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--bord2);background:var(--panel2)}
+.sheet .sheet-foot>button{flex:1 1 0;min-width:0;width:auto;height:52px;min-height:52px;margin:0;padding:0 12px;border-width:1px;box-sizing:border-box;border-radius:12px;font-family:var(--sans);font-size:16px;letter-spacing:0;overflow:hidden;text-overflow:ellipsis}
 .sheet-link{display:flex;align-items:center;min-height:44px;margin:6px 0 0;padding:0;border:0;background:transparent;color:var(--cyan);font-family:var(--sans);font-size:14.5px;cursor:pointer}
 /* the install sheet's words and steps (they were the card's) */
 .a2hs-tx{display:flex;flex-direction:column;gap:8px}

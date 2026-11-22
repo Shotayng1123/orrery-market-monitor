@@ -15,7 +15,7 @@
 import { pfRoute, type PfAnswer } from "./pf/route.ts";
 import { emptyState, memStore, type MemState } from "./pf/memstore.ts";
 import { buildCreate, checkForm, defaultRaw, type Raw } from "./pf/form.ts";
-import { nextSessionDay, valuationDay } from "./pf/calendar.ts";
+import { changeDays, valuationDay, venuesOf } from "./pf/calendar.ts";
 import { STATEMENT_VERSION } from "./pf/statement.ts";
 import type { PfStore, StartId } from "./pf/types.ts";
 import { bookedDays, mockHolidays } from "./mock";
@@ -71,7 +71,9 @@ async function seed(cap: boolean): Promise<void> {
   await st.settingSet(FIRST, tokyo, { key: "one_short", value: 4, reason: REASON_140, effective: "2026-11-13", today: "2026-11-12" });
   const now = Date.now();
   t = now - 2 * 3600e3;
-  await st.settingSet(FIRST, tokyo, { key: "sector_net", value: 15, reason: "Narrower sector bets while the results season runs.", effective: nextSessionDay(new Date(t), mockHolidays(t)), today: valuationDay(new Date(t)) });
+  // by the route's own rule for a Japan book (EN-9): a change made before Tokyo opens is in force for that day's sessions
+  const cd = changeDays(new Date(t), mockHolidays(t), venuesOf("ar-ls-jp"));
+  await st.settingSet(FIRST, tokyo, { key: "sector_net", value: 15, reason: "Narrower sector bets while the results season runs.", effective: cd.effective, today: cd.traded });
   // four notes: a long one, one with line breaks, one in Japanese, one removed
   const note = async (at: string, body: string): Promise<void> => { t = Date.parse(at); await st.noteAdd(FIRST, tokyo, body); };
   await note("2026-10-06T02:40:00Z", "A first note, written by mistake.");

@@ -166,6 +166,11 @@ is kept).
   so the page says what a dash is: the source gives none, or the Monitor has not read it again since 22 Nov 2026
   (Help, MY NAMES' header, the date's tooltip: `NO_MARK_HELD` in `web/src/lib/results.ts`; the checks of 22 Nov, RK-1).
   For a US member that lasts until Monday's run at 14:00 UTC.
+  Whether the flag comes back to the server's own request (its `fields=` list names it) is counted by the live check's
+  part `marks` (`jobs/lib/marks.ts`; A-37's done-when, line 2): for each list, the stored dates since the migration in
+  four shapes (a date with the flag true, with the flag false, with no flag, no date ahead), the rows pulled before it
+  apart, then the watchlists' names (every account's together) and up to 100 members a list asked now by the same
+  request; counts only. A list where no date carries a flag of either kind says so in capitals.
 - **σ alerts** (`alerts.kind` 'sigma', with `sigma` and `note`): the tick scans the table every minute
   (`scanSigmaAlerts`) for every currency, yield, commodity, volatility index, future and coin at 2σ or beyond; one row
   per instrument and session (a currency pair's FX day; a future's CME trade date, so an evening's move from 18:00 New
@@ -509,6 +514,13 @@ shows no entry while `PAPER_ON_LIVE_SITE` (`web/src/lib/paper.ts`) is `false`. B
   `consent` and `consent_agree` run the engine (`_shared/pf/route.ts`) over the database's functions
   (`_shared/pfstore.ts`). The ranges, steps and refusals are the engine's (`_shared/pf/form.ts`), the same file the
   page's form runs. Nothing in these routes writes a log line: a refusal goes back to the page that asked.
+- **The days the routes hand the database** (22 Nov 2026, the PMs' answers on EN-9 and the targets' window).
+  `pf_setting_set`'s `p_effective` is the session a change is in force from by the book's start (`calendar.ts`
+  `changeDays`: on an equity book the book day running while none of its stock exchanges has opened in it, else the
+  next session day), and its `p_today` the last book day the book's markets have traded in; the function's own guard
+  refuses an effective day not after it ("never backwards"). `pf_targets_set`'s `p_today` is the book day now
+  (`valuationDay`), so the window opens with the book day of 1 Dec, at 17:00 New York on 30 Nov (06:00 SGT). Neither
+  needs a change to the functions.
 - **The statement** is the owner's wording (b) of 20 Nov 2026, kept as version 1. The owner's record reads:
 
 > "Private notes, levels and paper portfolios are kept for your account only. Do not enter non-public or confidential information, in notes or in positions: nothing material and non-public about a company or a market, and nothing confidential of your firm or its clients. ☐ I agree"

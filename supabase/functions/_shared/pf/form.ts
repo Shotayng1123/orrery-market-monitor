@@ -85,12 +85,14 @@ export const cleanName = (name: string): string => name.normalize("NFC").replace
  *  default-ignorable, the variation selectors among them (EG-1 of the review of part 2a: a name of one U+3164, or
  *  "Tokyo L/S" with U+206F or U+FE0F, passed). */
 const UNSEEN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u115f\u1160\u3164\uffa0\u2800\u034f\u17b4\u17b5]/u;
-export const NAME_UNSEEN = "a name holds only characters that show: no control, zero-width or direction characters";
+/** The refusal names the first such character by its code point (the designer's B.1 RT-5): "a name cannot hold
+ *  invisible characters (here U+200B)". */
+export const nameUnseen = (ch: string): string => `a name cannot hold invisible characters (here U+${(ch.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0")})`;
 /** A portfolio's name: 1 to 60 characters, every one of them seen, and not the name of another open book of the
  *  account (both compared as stored: cleanName). */
 export function nameRefusal(name: string, others: string[]): string | null {
-  const n = cleanName(name);
-  if (UNSEEN.test(n)) return NAME_UNSEEN;
+  const n = cleanName(name), unseen = UNSEEN.exec(n);
+  if (unseen) return nameUnseen(unseen[0]);
   if (!n) return "give the portfolio a name";
   if (chars(n) > NAME_MAX) return `${NAME_MAX} characters at most · ${chars(n) - NAME_MAX} over`;
   return others.some((o) => cleanName(o) === n) ? "you already have an open portfolio with this name" : null;

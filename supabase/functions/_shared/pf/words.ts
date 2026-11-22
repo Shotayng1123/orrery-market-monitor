@@ -25,6 +25,9 @@ export const NO_NOTE = "no such note";
 // one answer too. The numbers are the engineer's, for the PMs to accept (C/portfolio-plan.md §0.7).
 export const NOTES_MAX = 500, CHANGES_MAX = 500, RENAMES_MAX = 50, RESETS_MAX = 20;
 export const NOTES_FULL = "this portfolio holds 500 notes, the most one may hold: every note is kept (a removed one keeps its line), so no further note can be saved";
+/** From 450 notes, under the box (PM B's answer on R-50, 22 Nov 2026: "50 notes left: every note is kept"), until the
+ *  notes are read in pages and the cap is raised (PM A asks 5,000, PM B 2,500: the plan's §0.13). Null before. */
+export const notesLeftLine = (held: number): string | null => { const left = Math.max(0, NOTES_MAX - held); return left > 50 ? null : `${left} note${left === 1 ? "" : "s"} left: every note is kept`; };
 export const CHANGES_FULL = "this portfolio's history holds 500 changes of its limits and assumptions, the most one may hold: every change is kept, so no further change can be saved";
 export const RENAMES_FULL = "this portfolio has been renamed 50 times, the most one may be: every name is kept in its history, so it keeps the name it has";
 export const resetsFull = (year: number): string => `the targets for ${year} have been entered 20 times, the most a year may hold: every entry is kept, and the last one stands`;

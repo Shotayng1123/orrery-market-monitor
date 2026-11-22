@@ -244,11 +244,11 @@ const book = (keys) => keys.filter((k) => /\|pf_/.test(k));
     await p.evaluate(() => window.dispatchEvent(new Event("online"))); await p.waitForSelector("#pf-create:not([disabled])", { timeout: 15000 });
     await p.fill("#pf-name", "Second"); await p.locator("#pf-name").blur();
     await p.click("#pf-create"); await p.waitForTimeout(700);
-    const told = await p.evaluate(() => ({ msg: document.querySelector("#pf-create-msg")?.textContent ?? null, flash: document.querySelector(".pf-flash")?.textContent ?? null, hash: location.hash }));
+    const told = await p.evaluate(() => ({ msg: document.querySelector("#pf-create-msg")?.textContent ?? null, flash: document.querySelector(".pf-flash")?.textContent ?? document.querySelector("#pf-made")?.textContent ?? null, hash: location.hash }));
     ck(`the answer to CREATE is lost ("${lost.msg}"); the name is changed to "Second" and CREATE pressed again: no book is announced, the page stays on the form and says what the first press did: "${told.msg}"`, /^Offline: a portfolio needs the server/.test(lost.msg ?? "") && told.flash === null && told.hash === "#portfolio/new/ar-ls-jp" && /"First"/.test(told.msg ?? "") && !/created · Second/.test(JSON.stringify(told)), { lost, told });
     await p.click("#pf-create"); await p.waitForSelector("#pf-overview", { timeout: 15000 });
-    const made = await p.evaluate(() => ({ flash: document.querySelector(".pf-flash")?.textContent ?? null, hash: location.hash })), rids = srv.of("pf_create").map((c) => c.body.requestId);
-    ck(`pressed once more, the changed form is a request of its own and creates "Second" ("${made.flash}"): three presses, the first two under one request id and the third under a new one`, made.flash === "Paper portfolio created · Second" && rids.length === 3 && rids[0] === rids[1] && rids[2] !== rids[0] && srv.books[B].map((x) => x.row.name).join() === "First,Second" && errs.length === 0, { made, rids, errs });
+    const made = await p.evaluate(() => ({ said: document.querySelector('#pf-made[role="status"]')?.textContent ?? null, flash: document.querySelector(".pf-flash")?.textContent ?? null, hash: location.hash })), rids = srv.of("pf_create").map((c) => c.body.requestId);
+    ck(`pressed once more, the changed form is a request of its own and creates "Second" ("${made.said}"): three presses, the first two under one request id and the third under a new one`, made.said === "Paper portfolio created · Second" && made.flash === null && rids.length === 3 && rids[0] === rids[1] && rids[2] !== rids[0] && srv.books[B].map((x) => x.row.name).join() === "First,Second" && errs.length === 0, { made, rids, errs });
     await ctx.close();
   }
 

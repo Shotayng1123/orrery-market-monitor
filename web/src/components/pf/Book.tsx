@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEven
 import { Panel } from "../Panel";
 import { Section } from "../PhoneKit";
 import { Sheet } from "../Sheet";
-import { ByTag, href, Muted, PaperMark, setLastBook, lastBook } from "./shared";
+import { ByTag, href, justCreated, Muted, PaperMark, setLastBook, lastBook } from "./shared";
 import { TradeLists } from "./Blocks";
 import { Activity, Notes } from "./Notes";
 import { Settings } from "./Settings";
@@ -66,7 +66,7 @@ const limitValue = (r: NowRow): ReactNode => <>{showValue(r.field, r.value)}{r.p
 export const byCard = (r: NowRow): string => (r.own ? `you · ${r.basis}, ${stampSgt(r.at)}` : r.field.who.card);   // the account's own value, also one set back to a default (EN-4)
 
 function Overview({ a, phone, onChanged, csvBook }: { a: BookAnswer; phone: boolean; onChanged: () => void; csvBook: string }) {
-  const b = a.book, t = targetsNow(b, a.nyDate), nav = fromMinor(b.base, b.startingNav);
+  const b = a.book, t = targetsNow(b, a.valuationDay), nav = fromMinor(b.base, b.startingNav);
   const now = useMemo(() => settingsNow(b, a.valuationDay), [b, a.valuationDay]);
   // every limit as set, the changed ones first, then those with a change pending, then the rest in the form's order
   const limits = useMemo(() => { const all = now.filter((r) => r.field.after === "limit"); return [...all.filter((r) => r.changed), ...all.filter((r) => !r.changed && r.pending), ...all.filter((r) => !r.changed && !r.pending)]; }, [now]);
@@ -74,7 +74,18 @@ function Overview({ a, phone, onChanged, csvBook }: { a: BookAnswer; phone: bool
   const eq = equivalentShort(t.x, a.rates[b.base], b.base), ref = referenceLabel(b.start, b.base, b.blend);
   const activity = useMemo(() => activityOf(b), [b]);
   const [allLimits, setAllLimits] = useState(false);
-  const created = `created ${stampSgt(b.createdAt)}`;
+  // a book created a moment ago (B.2 lead 6): its "created" line lit for six seconds, said in a status the eye does not
+  // see (the status is drawn empty first, so that a screen reader hears the words arrive)
+  const [lit, setLit] = useState<boolean>(() => !!justCreated(b.id)), [said, setSaid] = useState("");
+  useEffect(() => {
+    const j = justCreated(b.id);
+    if (!j) return;
+    setLit(true);
+    const f = requestAnimationFrame(() => setSaid(`Paper portfolio created · ${j.name}`)), t = setTimeout(() => { setLit(false); setSaid(""); }, j.left);
+    return () => { cancelAnimationFrame(f); clearTimeout(t); };
+  }, [b.id]);
+  const created = `created ${stampSgt(b.createdAt)}`, createdLine = (cls: string) => <span className={`${cls} pf-created${lit ? " lit" : ""}`.trim()} id="pf-created">{created}</span>;
+  const status = <span className="pf-vh" role="status" id="pf-made">{said}</span>;
   const notes = <Notes id={b.id} notes={b.notes} consent={a.consent} phone={phone} onChanged={onChanged} />;
   // what the book can trade, with its own limits in the lines that name one (DC-10: "up to 20%" whatever the limit)
   const values = useMemo(() => Object.fromEntries(now.map((r) => [r.key, r.value])) as Record<string, number | string>, [now]);
@@ -85,9 +96,10 @@ function Overview({ a, phone, onChanged, csvBook }: { a: BookAnswer; phone: bool
         <div className="pfp-lines" id="pf-book">
           <div><b>{fmtFull(nav)} {b.base}</b> · all cash</div>
           <div>capital {fmtMoney2(nav)} · full capital</div>
-          <div className="m">{created}</div>
+          <div className="m">{createdLine("")}</div>
           <div className="m">no NAV yet: the daily NAV is not built</div>
         </div>
+        {status}
       </Section>
       <Section title="Targets" pad>
         <div className="pfp-kv" id="pf-targets-now">
@@ -116,7 +128,8 @@ function Overview({ a, phone, onChanged, csvBook }: { a: BookAnswer; phone: bool
   const cell = (k: string, label: string, v: ReactNode, s: ReactNode) => <div className="cell" key={k} data-cell={k}><span className="k">{label}</span><span className="v">{v}</span><span className="s">{s}</span></div>;
   return (
     <div className="pf-overview" id="pf-overview">
-      <Panel no="01" title="BOOK" k="pfo-book" csv={false} aux={<span id="pf-book-aux">{created} · no NAV yet: the daily NAV is not built</span>}>
+      <Panel no="01" title="BOOK" k="pfo-book" csv={false} aux={<span id="pf-book-aux">{createdLine("")} · no NAV yet: the daily NAV is not built</span>}>
+        {status}
         <div className="pf-cells" id="pf-book">
           {cell("nav", "Starting NAV", fmtFull(nav), `${b.base} · all cash`)}
           {cell("capital", "Capital", fmtMoney2(nav), "full capital")}

@@ -70,7 +70,7 @@ export function FundingLine({ field }: { field: Field }) {
 }
 
 /** The ladder's base: three radio rows, the first preselected and marked "default", each with one line on what it does
- *  to capital and limits; "more" opens the whole rule under the rows. */
+ *  to capital and limits; "the whole rule" opens it under the rows (the designer's B.2: the link says what it opens). */
 export function LadderBases({ value, onChange, phone = false }: { value: LadderBase; onChange: (v: LadderBase) => void; phone?: boolean }) {
   const [more, setMore] = useState(false);
   return (
@@ -82,7 +82,7 @@ export function LadderBases({ value, onChange, phone = false }: { value: LadderB
           <span className="tx"><span className="n">{BASE_NAME[b]}{b === "guarded" && <span className="def"> · default · Owner</span>}</span><span className="pf-line">{BASE_LINE[b]}</span></span>
         </label>
       ))}
-      <button type="button" className="pf-link" id="pf-base-more" aria-expanded={more} onClick={() => setMore((m) => !m)}>{more ? "less" : "more"}</button>
+      <button type="button" className="pf-link" id="pf-base-more" aria-expanded={more} onClick={() => setMore((m) => !m)}>{more ? "hide the whole rule" : "the whole rule"}</button>
       {more && <p className="pf-mut" id="pf-base-rule">{BASE_RULE}</p>}
     </div>
   );

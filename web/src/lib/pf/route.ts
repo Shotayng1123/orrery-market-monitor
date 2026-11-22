@@ -7,11 +7,11 @@
 // never reaches a log line; a refusal goes back to the page that asked, in words it shows.
 import type { Base, BookFull, CashRate, FormFacts, NewBook, NewSetting, PfStore } from "./types.ts";
 import { StoreRefusal } from "./types.ts";
-import { calendarGap, nextSessionDay, nyDate, sgDate, targetWindow, valuationDay, type Holidays } from "./calendar.ts";
+import { calendarGap, changeDays, nextSessionDay, nyDate, sgDate, targetWindow, valuationDay, venuesOf, type Holidays } from "./calendar.ts";
 import { CALENDAR_UNREAD, calendarPast, FIXED_TARGETS, madeBefore, NEEDS_STATEMENT, NO_NOTE, NO_SUCH, NOT_YET, OLD_VERSION, WINDOW_CLOSED } from "./words.ts";
 import { buildCreate, checkChange, checkForm, checkTargets, cleanName, nameRefusal, noteRefusal, outOfRange, reasonRefusal, type Raw } from "./form.ts";
 import { CAP_LINE, isStart, OPEN_CAP, STARTS } from "./presets.ts";
-import { changeBasis, settingsNow, valuesAhead } from "./view.ts";
+import { changeBasis, settingsNow, valuesAhead, valuesNow } from "./view.ts";
 
 export const PF_ACTIONS = ["pf_form", "pf_list", "pf_get", "pf_create", "pf_rename", "pf_setting_set", "pf_targets_set", "pf_note_add", "pf_note_remove", "pf_delete", "consent", "consent_agree"] as const;
 export const isPfAction = (a: string): boolean => (PF_ACTIONS as readonly string[]).includes(a);
@@ -32,6 +32,9 @@ export interface PfAnswer { status: number; body: unknown }
 const ok = (body: unknown): PfAnswer => ({ status: 200, body });
 const no = (status: number, error: string, more: Record<string, unknown> = {}): PfAnswer => ({ status, body: { error, ...more } });
 const str = (v: unknown): string => (typeof v === "string" ? v : typeof v === "number" ? String(v) : "");
+/** The session a change of a book is in force from (EN-9): by its start's rule, with the Japan start's limit on names
+ *  listed outside Tokyo as it stands today. */
+const changeDaysOf = (book: BookFull, now: Date, hol: Holidays) => changeDays(now, hol, venuesOf(book.start, valuesNow(settingsNow(book, valuationDay(now))).foreign));
 /** A portfolio's own id, as the store makes them; anything else names no portfolio. */
 const isId = (v: string): boolean => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v);
 /** Whether a stored book is what this create asks for (RT-4): the same name and every value fixed or set at creation.
@@ -75,7 +78,11 @@ export async function pfRoute(deps: PfDeps, action: string, account: string, met
         if (!isId(id)) return no(404, NO_SUCH);
         const [book, f, consent] = await Promise.all([store.get(account, id), deps.facts(), store.consent(account)]);
         if (!book) return no(404, NO_SUCH);
-        return ok({ book, today: sgDate(now), valuationDay: valuationDay(now), nextSession: nextSessionDay(now, f.holidays), nyDate: nyDate(now), rates: f.rates, consent });
+        // the day a change made now is in force from, by the book's own start (EN-9); `nextOpens`, when it is the day
+        // running: the session that opens it, for the form's "In force for Tue 24 Nov 2026's sessions (Tokyo opens 08:00
+        // SGT)". A page of before 22 Nov 2026 reads `nextSession` alone.
+        const cd = changeDaysOf(book, now, f.holidays);
+        return ok({ book, today: sgDate(now), valuationDay: valuationDay(now), nextSession: cd.effective, nextOpens: cd.opens, nyDate: nyDate(now), rates: f.rates, consent });
       }
       case "pf_create": {
         const start = str(body.start), name = str(body.name), requestId = str(body.requestId);
@@ -115,25 +122,28 @@ export async function pfRoute(deps: PfDeps, action: string, account: string, met
         const id = str(body.id), key = str(body.key), [book, f] = await Promise.all([store.get(account, id), deps.facts()]);
         if (!book) return no(404, NO_SUCH);
         // against what will be in force with it: the changes already saved, and the targets after a January re-set
-        const day = valuationDay(now), p = checkChange(book, key, str(body.value), changeBasis(book, day, nyDate(now)));
+        const day = valuationDay(now), p = checkChange(book, key, str(body.value), changeBasis(book, day, day));
         if (!p.ok) return no(400, p.text);
         const r = reasonRefusal(str(body.reason));
         if (r) return no(400, r);
-        const effective = nextSessionDay(now, f.holidays), gap = calendarGap(effective, f.holidays);
+        // in force from the session that opens next (EN-9); the store's own guard is told the last book day the book's
+        // markets have traded in: a change is never in force in one of those, never backwards
+        const { effective, traded } = changeDaysOf(book, now, f.holidays), gap = calendarGap(effective, f.holidays);
         if (gap) return no(400, "unread" in gap ? CALENDAR_UNREAD : calendarPast(gap.past));
-        await store.settingSet(account, id, { key, value: p.v, reason: str(body.reason).trim(), effective, today: day });
+        await store.settingSet(account, id, { key, value: p.v, reason: str(body.reason).trim(), effective, today: traded });
         return ok({ ok: true, effective });
       }
       case "pf_targets_set": {
         const id = str(body.id), book = await store.get(account, id);
         if (!book) return no(404, NO_SUCH);
-        const ny = nyDate(now), w = targetWindow(ny, book.ladderBase, book.resets, book.startedOn);
+        // the window opens with the book day of 1 Dec (PM A's answer of 22 Nov 2026): it is judged by the book day now
+        const day = valuationDay(now), w = targetWindow(day, book.ladderBase, book.resets, book.startedOn);
         if (w.fixed) return no(400, FIXED_TARGETS);
         if (!w.open) return no(400, WINDOW_CLOSED);
         // the VaR limit the pair will stand beside: a lowering that waits for its session included (RT-2)
-        const lim = valuesAhead(settingsNow(book, valuationDay(now))).var, c = checkTargets(book.start, str(body.x), str(body.vol), typeof lim === "number" ? lim : null);
+        const lim = valuesAhead(settingsNow(book, day)).var, c = checkTargets(book.start, str(body.x), str(body.vol), typeof lim === "number" ? lim : null);
         if (!c.ok) return no(400, c.refusals[0].text, { refusals: c.refusals });
-        return ok({ ok: true, ...(await store.targetsSet(account, id, { x: c.x, vol: c.vol, nyDate: ny })) });
+        return ok({ ok: true, ...(await store.targetsSet(account, id, { x: c.x, vol: c.vol, day })) });
       }
       case "pf_note_add": {
         const text = str(body.body), t = noteRefusal(text);

@@ -5,7 +5,7 @@ import type { After, BookFull, BookRow, Field, SettingRow } from "./types.ts";
 import type { Values } from "./form.ts";
 import { numText, showValue } from "./form.ts";
 import { BY_ACCOUNT, STARTS } from "./presets.ts";
-import { bookDayFrom, dmy, targetWindow, valuationDay, type TargetWindow } from "./calendar.ts";
+import { bookDayFrom, dmy, targetWindow, valuationDay, wdmy, type TargetWindow } from "./calendar.ts";
 import { fmtFull, fromMinor } from "./money.ts";
 
 export interface NowRow {
@@ -25,15 +25,24 @@ function replaced(r: SettingRow, later: SettingRow[]): boolean {
   if (r.origin !== "change" || !r.effectiveFrom) return false;
   return later.some((x) => x.id > r.id && valuationDay(new Date(x.at)) < r.effectiveFrom!);
 }
+/** What stood on a valuation day among a setting's rows (sorted, oldest first): the row whose value is in force, and the
+ *  change that waits for its session. The creation row, then each change that has not been replaced, on its day; a
+ *  change that only sets the value back to the one in force (a pending change taken back: RT-3) changes nothing, so
+ *  the row before it keeps its BY and its SINCE (EG-3 of the review of part 2a; PM B's answer on R-53, 22 Nov 2026). */
+function standing(rows: SettingRow[], day: string): { inForce: SettingRow; ahead: SettingRow | null } {
+  const live = rows.filter((r) => !replaced(r, rows));
+  let inForce = rows[0];
+  for (const r of live) if (r.origin === "creation" || (r.effectiveFrom != null && r.effectiveFrom <= day)) { if (r.origin === "creation" || r.value !== inForce.value) inForce = r; }
+  const ahead = [...live].reverse().find((r) => r.origin === "change" && r.effectiveFrom != null && r.effectiveFrom > day) ?? null;
+  return { inForce, ahead };
+}
 /** Every stored setting of a book but its name and its targets' re-sets: the value in force on a valuation day. */
 export function settingsNow(book: BookFull, day: string): NowRow[] {
   const out: NowRow[] = [];
   for (const f of STARTS[book.start].fields) {
     const rows = book.settings.filter((r) => r.key === f.key && r.forYear == null).sort(byId);
     if (!rows.length) continue;
-    const live = rows.filter((r) => !replaced(r, rows));
-    const inForce = [...live].reverse().find((r) => r.origin === "creation" || (r.effectiveFrom != null && r.effectiveFrom <= day)) ?? rows[0];
-    const ahead = [...live].reverse().find((r) => r.origin === "change" && r.effectiveFrom != null && r.effectiveFrom > day) ?? null;
+    const { inForce, ahead } = standing(rows, day);
     const own = inForce.basis === BY_ACCOUNT.basis, def = f.num ? f.num.def : f.choices ? f.choices.def : undefined;
     out.push({ key: f.key, field: f, value: inForce.value, by: own ? BY_ACCOUNT.tag : f.who.tag, basis: inForce.basis, since: inForce.effectiveFrom ?? book.startedOn, at: inForce.at, changed: def !== undefined ? inForce.value !== def : own, own,
       // a change back to the value in force, saved while another waited (RT-3), leaves nothing pending to show
@@ -45,11 +54,12 @@ export const valuesNow = (rows: NowRow[]): Values => Object.fromEntries(rows.map
 /** The values that will be in force once the changes already saved are: each setting's pending value where one
  *  waits, else its value in force. A new change is checked against these (RT-2, RT-3). */
 export const valuesAhead = (rows: NowRow[]): Values => Object.fromEntries(rows.map((r) => [r.key, r.pending ? r.pending.value : r.value]));
-/** What a change of one of a book's settings is checked against on a valuation day and a date in New York (route.ts
- *  and the page's CHANGE form alike): the values in force, those that will be, and the target volatilities the VaR
- *  limit has to cover (the pair in force after a January re-set, and a pair entered for next year). */
-export function changeBasis(book: BookFull, day: string, nyYmd: string): { now: Values; ahead: Values; vols: number[] } {
-  const rows = settingsNow(book, day), t = targetsNow(book, nyYmd);
+/** What a change of one of a book's settings is checked against on a valuation day (route.ts and the page's CHANGE form
+ *  alike): the values in force, those that will be, and the target volatilities the VaR limit has to cover (the pair in
+ *  force after a January re-set, and a pair entered for next year). `targetsDay`: the day the targets are read on, the
+ *  same book day (a page of before 22 Nov 2026 handed New York's date). */
+export function changeBasis(book: BookFull, day: string, targetsDay: string = day): { now: Values; ahead: Values; vols: number[] } {
+  const rows = settingsNow(book, day), t = targetsNow(book, targetsDay);
   return { now: valuesNow(rows), ahead: valuesAhead(rows), vols: t.pending ? [t.vol, t.pending.vol] : [t.vol] };
 }
 export const rowsOf = (rows: NowRow[], after: After, skipTargets = true): NowRow[] => rows.filter((r) => r.field.after === after && (!skipTargets || r.field.section !== "targets"));
@@ -63,19 +73,32 @@ export function shortValue(f: Field, v: number | string): string {
   return `${pre}${v < 0 ? "−" : ""}${t}${unit}`;
 }
 
-export interface HistoryRow { id: number; at: string; key: string; label: string; from: string; to: string; inForceFrom: string | null; reason: string | null; by: string; origin: "creation" | "change"; state: "" | "pending" | "replaced before it was in force" }
+/** `state` "taken back": a change that set the value back to the one in force while another waited (RT-3): it puts
+ *  nothing in force (`inForceFrom` null), its FROM is the value that was pending, and `note` says so. */
+export interface HistoryRow { id: number; at: string; key: string; label: string; from: string; to: string; inForceFrom: string | null; reason: string | null; by: string; origin: "creation" | "change"; state: "" | "pending" | "replaced before it was in force" | "taken back"; note: string | null }
+/** The words of a take-back, in HISTORY and ACTIVITY (the designer's B.1 RT-3; PM A's and PM B's answers on R-53, 22
+ *  Nov 2026): "back to the value in force: the pending ±15% taken back before it was in force". */
+export const takenBackWords = (pending: string): string => `back to the value in force: the pending ${pending} taken back before it was in force`;
 /** The settings' own log, newest first: every row of the limits, or of the assumptions. A creation default reads its
- *  adviser in BY and has no reason; a change reads "set by the account" with its reason whole. */
+ *  adviser in BY and has no reason; a change reads "set by the account" with its reason whole, FROM the value in force
+ *  when it was made; a take-back reads FROM the value that was pending. */
 export function historyOf(book: BookFull, after: After | null, day: string): HistoryRow[] {
   const out: HistoryRow[] = [];
   for (const f of STARTS[book.start].fields) {
     if (after ? f.after !== after : f.after !== "limit" && f.after !== "assumption") continue;
     const rows = book.settings.filter((r) => r.key === f.key && r.forYear == null).sort(byId);
     rows.forEach((r, i) => {
-      const before = rows.slice(0, i).reverse().find((x) => !replaced(x, rows) || x.origin === "creation");
-      const gone = replaced(r, rows);
-      out.push({ id: r.id, at: r.at, key: f.key, label: f.label, from: before ? shortValue(f, before.value) : "–", to: shortValue(f, r.value), inForceFrom: r.effectiveFrom, reason: r.reason, by: r.basis, origin: r.origin,
-        state: gone ? "replaced before it was in force" : r.origin === "change" && r.effectiveFrom != null && r.effectiveFrom > day ? "pending" : "" });
+      const base = { id: r.id, at: r.at, key: f.key, label: f.label, to: shortValue(f, r.value), reason: r.reason, by: r.basis, origin: r.origin };
+      if (r.origin === "creation" || i === 0) { out.push({ ...base, from: "–", inForceFrom: r.effectiveFrom, state: "", note: null }); return; }
+      // what stood when it was made: the value in force on that valuation day, and the change then waiting
+      const was = standing(rows.slice(0, i), valuationDay(new Date(r.at))), waiting = was.ahead && was.ahead.value !== was.inForce.value ? was.ahead : null;
+      if (waiting && r.value === was.inForce.value) {
+        const p = shortValue(f, waiting.value);
+        out.push({ ...base, from: p, inForceFrom: null, state: "taken back", note: takenBackWords(p) });
+        return;
+      }
+      out.push({ ...base, from: shortValue(f, was.inForce.value), inForceFrom: r.effectiveFrom,
+        state: replaced(r, rows) ? "replaced before it was in force" : r.effectiveFrom != null && r.effectiveFrom > day ? "pending" : "", note: null });
     });
   }
   return out.sort((a, b) => b.id - a.id);
@@ -88,7 +111,7 @@ export interface TargetsNow {
   lapsed: number | null;                        // the year whose re-set was not made: "targets not re-set: no year reset"
   window: TargetWindow;
 }
-/** The targets of a book on a day in New York: those in force, a pair pending for next year, a pair that lapsed. */
+/** The targets of a book on a book day (valuationDay): those in force, a pair pending for next year, a pair that lapsed. */
 export function targetsNow(book: BookFull, nyYmd: string): TargetsNow {
   const sets = new Map<number, { x?: number; vol?: number }>();
   for (const r of [...book.settings].sort(byId)) {
@@ -135,7 +158,10 @@ export function activityOf(book: BookFull): ActivityRow[] {
   for (const h of historyOf(book, null, valuationDay(new Date(book.createdAt)))) {
     // the day promised, with the moment it begins in SGT (B.0.1; the orchestrator's settlement of 22 Nov, 10:20 UTC):
     // "in force from Fri 13 Nov 2026, 06:00 SGT", a moment under ACTIVITY's "times in SGT"
-    if (h.origin === "change") out.push({ at: h.at, kind: "SETTING", text: `${h.label} ${h.from} → ${h.to}${h.inForceFrom ? ` · in force from ${bookDayFrom(h.inForceFrom)}` : ""}${h.reason ? ` · "${h.reason}"` : ""}` });
+    // a change in force for the day it was made in (EN-9: none of the book's markets had traded in it yet) says so: the
+    // day had begun at 06:00 SGT, before the change, and nothing had traded under the old value
+    const when = h.note ? ` · ${h.note}` : !h.inForceFrom ? "" : h.inForceFrom === valuationDay(new Date(h.at)) ? ` · in force for ${wdmy(h.inForceFrom)}'s sessions` : ` · in force from ${bookDayFrom(h.inForceFrom)}`;
+    if (h.origin === "change") out.push({ at: h.at, kind: "SETTING", text: `${h.label} ${h.from} → ${h.to}${when}${h.reason ? ` · "${h.reason}"` : ""}` });
   }
   for (const p of re.values()) if (p.x != null && p.vol != null) out.push({ at: p.at, kind: "SETTING", text: `Targets for ${p.year}: ${targetsWords(p.x, p.vol)} · pending until the January reset` });
   for (const n of book.notes) { out.push({ at: n.at, kind: "NOTE", text: "added" }); if (n.removedAt) out.push({ at: n.removedAt, kind: "NOTE", text: "removed" }); }

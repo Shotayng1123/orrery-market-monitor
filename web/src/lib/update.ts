@@ -50,12 +50,15 @@ export function useUpdate(): { id: string | null; apply: () => void } {
     window.addEventListener("pageshow", seen);
     return () => { live = false; clearInterval(t); document.removeEventListener("visibilitychange", seen); window.removeEventListener("pageshow", seen); };
   }, []);
-  const apply = useCallback(() => {
-    if (!id) return;
-    try { sessionStorage.setItem(TRIED_KEY, JSON.stringify({ id, at: Date.now() })); sessionStorage.setItem(OPENING_SKIP_KEY, "1"); } catch { /* not kept */ }   // and no opening on the page this loads
-    const u = new URL(location.href);
-    u.searchParams.set("v", id);
-    location.replace(u.toString());
-  }, [id]);
+  const apply = useCallback(() => { if (id) loadBuild(id); }, [id]);
   return { id, apply };
+}
+
+/** Loads a published build in place of this page (the update bar's action; also PORTFOLIO's when its file could not be
+ *  loaded in this page: DC-4): "?v=<id>", a new address no cache can answer with the old page. */
+export function loadBuild(id: string): void {
+  try { sessionStorage.setItem(TRIED_KEY, JSON.stringify({ id, at: Date.now() })); sessionStorage.setItem(OPENING_SKIP_KEY, "1"); } catch { /* not kept */ }   // and no opening on the page this loads
+  const u = new URL(location.href);
+  u.searchParams.set("v", id);
+  location.replace(u.toString());
 }

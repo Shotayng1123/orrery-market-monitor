@@ -38,8 +38,9 @@ export interface Field {
   /** A typed number: its default, its bounds, the decimals a value may carry (or the step it must sit on), the words
    *  of its refusal, what stands before and after the input, and how a stored value is written out. */
   num?: { def: number; lo: number; hi: number; step?: number; dp: number; refuse: string; pre?: string; unit: string; show: string;
-    /** the decimals a value is always written with ("5.0", "1.00"); `signed`: a spread, written with its sign */
-    fix?: number; signed?: boolean };
+    /** the decimals a value is always written with ("5.0", "1.00"); `signed`: a spread, written with its sign;
+     *  `note`: a line under the input, after the unit ("warning at 80% of it": the designer's B.2) */
+    fix?: number; signed?: boolean; note?: string };
   /** A choice: the values and their words; `def` is preselected. */
   choices?: { def: string; options: Array<{ value: string; label: string; line?: string; off?: string }> };
   /** A fixed line: its words (a function of the base currency where they differ). */
@@ -74,9 +75,9 @@ export interface CashRate { name: string; rate: number; d: string; source: strin
 /** What the form needs from the server besides the presets. */
 export interface FormFacts {
   today: string;            // the date in Singapore, for a default name
-  nextSession: string;      // the day a change made now is in force from
-  valuationDay: string;     // the valuation day now (it ends at 17:00 New York)
-  nyDate: string;           // the date in New York, for the targets' window
+  nextSession: string;      // the day a change made now is in force from (the macro start's rule: calendar.ts changeDays)
+  valuationDay: string;     // the valuation day now (it ends at 17:00 New York): the targets' window follows it
+  nyDate: string;           // the date in New York (kept for a page of before 22 Nov 2026, which took the window from it)
   rates: Record<Base, CashRate | null>;
   usdjpy: { rate: number; d: string; source: string } | null;
   cap: number;
@@ -137,7 +138,8 @@ export interface PfStore {
   get(account: string, id: string): Promise<BookFull | null>;
   rename(account: string, id: string, name: string, today: string): Promise<void>;
   settingSet(account: string, id: string, s: { key: string; value: number | string; reason: string; effective: string; today: string }): Promise<void>;
-  targetsSet(account: string, id: string, t: { x: number; vol: number; nyDate: string }): Promise<{ forYear: number }>;
+  /** `day`: the book day now (calendar.ts valuationDay): the targets' window opens with the book day of 1 Dec */
+  targetsSet(account: string, id: string, t: { x: number; vol: number; day: string }): Promise<{ forYear: number }>;
   noteAdd(account: string, id: string, body: string): Promise<void>;
   noteRemove(account: string, id: string, note: number): Promise<void>;
   remove(account: string, id: string, name: string): Promise<void>;

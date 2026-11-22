@@ -16,7 +16,7 @@ import { serverWords, useRead, type ListAnswer, type Read } from "../lib/pf";
 import { fmtFull, fromMinor } from "../lib/pf/money.ts";
 import { AR_STARTS, CAP_LINE, RR_STARTS, STARTS } from "../lib/pf/presets.ts";
 import { BASE_NAME } from "../lib/pf/targets.ts";
-import { dmy, nyDate, sgDate } from "../lib/pf/calendar.ts";
+import { dmy, sgDate, valuationDay } from "../lib/pf/calendar.ts";
 import { rowTargets, targetsWords } from "../lib/pf/view.ts";
 import type { BookRow } from "../lib/pf/types.ts";
 import { ONLY_YOU, PORTFOLIO } from "../lib/labels";
@@ -24,7 +24,8 @@ import { setPhoneV2 } from "../lib/phone";
 import { fmtStamp } from "../lib/time";
 
 /** The targets in force, after a January re-set (EN-6): the list's row carries the re-sets; an older answer does not. */
-const targetsOf = (r: BookRow): string => { const t = rowTargets(r, nyDate(new Date())); return targetsWords(t.x, t.vol); };
+// the targets' window and a January re-set follow the book day (valuationDay: PM A's answer of 22 Nov 2026)
+const targetsOf = (r: BookRow): string => { const t = rowTargets(r, valuationDay(new Date())); return targetsWords(t.x, t.vol); };
 
 const INTRO = "Run a paper portfolio from today. Orders fill only on the market's own prints after they are placed, with spreads, fees and a 20% cap on volume. No real orders, no broker, no money. Only your account sees it.";
 const lower = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1);

@@ -58,9 +58,12 @@ export function varTie(volPct: number, limitPct: number, step = 0.01): { state: 
   return { state: "clear", v, line: `normal 99% one-day VaR ${two(v)}% of capital, under 80% of your ${lim}% VaR limit` };
 }
 
-/** The ladder's first step in target volatilities (C-31): words only, it refuses nothing. Under 0.8 the scale line. */
-export const SCALE_LINE = "For scale (E, the PMs' simulations, independent returns at a constant volatility): at 0.5 σ* a book on target meets the first cut in about four years out of five.";
-export const SCALE_TIP = "A: 83–86% of years at 8%; B: 81% at a Sharpe ratio of 1";
+/** The ladder's first step in target volatilities (C-31): words only, it refuses nothing. Under 0.8 the scale line,
+ *  which gives the scale the ratio sits in (PM B's answer on R-52, 22 Nov 2026: the line gave the 0.5 σ* figure
+ *  whatever the ratio typed). The figures are B's simulation (B/scripts/ladder_vol_sim.py): a book exactly on target, a
+ *  Sharpe ratio of 1, normal returns, the default ladder: 10%, 27%, 48% and 81% of years. */
+export const SCALE_LINE = "For scale (E, B's simulation): a book on target meets the first cut within a year in about 1 year in 10 at 1.0 σ*, 1 in 4 at 0.8 σ*, 1 in 2 at 0.67 σ*, 4 in 5 at 0.5 σ*.";
+export const SCALE_TIP = "B's simulation: a Sharpe ratio of 1, normal returns, the default ladder: 10%, 27%, 48% and 81% of years at 1.0, 0.8, 0.67 and 0.5 σ*. A's: 83–86% of years at 0.5 σ*";
 /** The ratio is written to one decimal where it is a whole tenth and to two where it is not, and the scale line is
  *  decided on the ratio itself (EN-12): 6% at 8% is 0.75 σ*, below 0.8, and has the line. */
 export function ladderInVols(cut1: number, volPct: number): { ratio: number; line: string; scale: boolean } {
@@ -91,7 +94,7 @@ export const BASE_LINE: Record<LadderBase, string> = {
   yearly: "Each January at full capital, also after a losing year: capital and every limit are re-sized to that NAV.",
   start: "Never: capital and every limit stay sized to the starting NAV for life.",
 };
-/** The whole rule, behind "more". */
+/** The whole rule, behind "the whole rule". */
 export const BASE_RULE = "At the first NAV of each calendar year, if the stage is Full capital (and, under the first base, that NAV is at or above the year's reference capital), the high and the reference capital reset to that NAV. If a cut is in force the reset is held until a later January at full capital. A restore in March resets nothing before the next January. Under every base the drawdown is (the high − NAV) ÷ the reference capital, and Out is final: the only restart is a new portfolio.";
 export const drawdownLine = (b: LadderBase): string => `(the high − NAV) ÷ the reference capital: ${b === "start" ? "the starting NAV" : "this year's starting NAV under a yearly reset"}`;
 const steps = (l: Pick<Ladder, "cut1" | "cut2" | "out">): string => [l.cut1, l.cut2, l.out].map((x) => String(x)).join("/");

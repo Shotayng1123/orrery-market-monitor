@@ -59,8 +59,10 @@ export const sheetsSettled = (): Promise<void> => settling ?? Promise.resolve();
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /** `title`: the sheet's head. `onClose`: asked for by ✕, Esc, Back and a tap outside. `modal`: a tap outside does not
- *  close it (a statement that must be answered). `id`: the panel's, for the checks. */
-export function Sheet({ title, onClose, children, id, modal = false }: { title: ReactNode; onClose: () => void; children: ReactNode; id?: string; modal?: boolean }) {
+ *  close it (a statement that must be answered). `id`: the panel's, for the checks. `foot`: a form's two buttons, in a
+ *  foot that does not scroll (the designer's B.1 UI-13: CANCEL and the action side by side, 52 px, equal widths, 12 px
+ *  above the window's foot and the phone's safe area); the body scrolls between the head and the foot. */
+export function Sheet({ title, onClose, children, id, modal = false, foot }: { title: ReactNode; onClose: () => void; children: ReactNode; id?: string; modal?: boolean; foot?: ReactNode }) {
   const panel = useRef<HTMLDivElement>(null), label = useId();
   const close = useRef(onClose);
   close.current = onClose;
@@ -97,7 +99,8 @@ export function Sheet({ title, onClose, children, id, modal = false }: { title: 
     <div className="sheet-bg" onClick={(e) => { if (!modal && e.target === e.currentTarget) onClose(); }}>
       <div className="sheet" id={id} ref={panel} role="dialog" aria-modal="true" aria-labelledby={label} tabIndex={-1}>
         <div className="sheet-head"><span className="t" id={label}>{title}</span><button type="button" className="x" aria-label="Close" onClick={onClose}>&times;</button></div>
-        <div className="sheet-body">{children}</div>
+        <div className={`sheet-body${foot ? " hasfoot" : ""}`}>{children}</div>
+        {foot && <div className="sheet-foot">{foot}</div>}
       </div>
     </div>
   );

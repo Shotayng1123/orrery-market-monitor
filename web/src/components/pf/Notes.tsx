@@ -7,6 +7,7 @@ import { Consent } from "./Consent";
 import { failureWords, pfNoteAdd, pfNoteRemove, PfError } from "../../lib/pf";
 import { noteLeft, noteRefusal, NOTE_MAX } from "../../lib/pf/form.ts";
 import { NOTE_GIST } from "../../lib/pf/statement.ts";
+import { notesLeftLine } from "../../lib/pf/words.ts";
 import { stampSgt, timeSgt } from "../../lib/pf/calendar.ts";
 import type { ActivityRow } from "../../lib/pf/view.ts";
 import type { ConsentState, NoteRow } from "../../lib/pf/types.ts";
@@ -43,6 +44,7 @@ export function Notes({ id, notes, consent, phone, onChanged }: { id: string; no
         {refusal ? <span className="pf-no" id="pf-note-count" role="alert">{refusal}</span> : left <= NOTE_MAX - 1500 ? <span className="pf-mut" id="pf-note-count">{fmtFull(left)} left</span> : null}
       </div>
       {msg && <p className="pf-msg" id="pf-note-msg" role="status">{msg}</p>}
+      {notesLeftLine(notes.length) && <p className="pf-mut" id="pf-notes-left">{notesLeftLine(notes.length)}</p>}
       {notes.length === 0 ? <p className="pf-mut" id="pf-nonotes">No notes yet.</p> : (
         <ul className="pf-notelist">
           {notes.slice(0, shown).map((n) => {
