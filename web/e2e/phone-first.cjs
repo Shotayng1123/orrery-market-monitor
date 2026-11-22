@@ -229,4 +229,19 @@ const near = (v, want, tol = 0.5) => v != null && Math.abs(v - want) <= tol;
     ck(`while the table does not come the line is under the title as before ("${v.sub.slice(0, 60)}"), the row ${v.h} px, and there is no σ head`, !v.one && v.sub.length > 0 && v.h > 44 && !v.sigma && v.ox <= 0, v);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
 
+  // PP-3 of the final review of pull request #50: the line's fit ran after every render of the header, whose clock
+  // renders it every second: twice a second on a page left alone, 12 forced layouts a second. It runs on its triggers
+  // only (a render that changes what the line draws, a change of its width, the fonts).
+  console.log("\n[a page left alone: the line's fit does not run]");
+  { const { ctx, p, errs } = await page(b, "P1", MORNING, { om_alert_seen: "999999999" });
+    await go(p, MOCK, "#market", "#alerts .alrt .nm"); await p.waitForTimeout(1200);
+    const fit = await p.evaluate(() => document.querySelector("#alerts").dataset.fit ?? null);
+    await p.evaluate(() => { window.__fitW = 0; window.__spans = 0; new MutationObserver((ms) => { for (const m of ms) { if (m.type === "attributes") window.__fitW++; else for (const n of m.addedNodes) if (n.nodeType === 1 && n.style && n.style.visibility === "hidden") window.__spans++; } }).observe(document.querySelector("#alerts"), { attributes: true, attributeFilter: ["data-fit", "data-fit-name", "data-fit-cut"], childList: true, subtree: true }); });
+    const cdp = await ctx.newCDPSession(p); await cdp.send("Performance.enable");
+    const layouts = async () => (await cdp.send("Performance.getMetrics")).metrics.find((m) => m.name === "LayoutCount").value;
+    const l0 = await layouts(); await p.waitForTimeout(5000); const l1 = await layouts();
+    const idle = await p.evaluate(() => ({ writes: window.__fitW, spans: window.__spans }));
+    ck(`375 px, MARKETS left alone for 5 s: the fit wrote its trace ${idle.writes} times and put ${idle.spans} hidden spans into the name (it ran at load: data-fit "${fit}"), and the page took ${l1 - l0} layouts (at most 5; 60 when the fit ran twice a second)`, fit !== null && idle.writes === 0 && idle.spans === 0 && l1 - l0 <= 5 && errs.length === 0, { fit, idle, layouts: l1 - l0, errs });
+    await ctx.close(); }
+
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0); })();

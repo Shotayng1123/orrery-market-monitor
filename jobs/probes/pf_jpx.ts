@@ -23,17 +23,22 @@
 // figures, under its heading or the short label before it (a table of notices or of text is left out whole, and a
 // cell of prose in a table of figures is counted, not printed); a page's values (a clock time, a date, a percentage, a
 // number of units) in order, joined only by the one short word between two of them ("9:00 am to 11:30 am"), never the
-// words around them; a market holiday as its date; addresses. Every piece of a page goes through one guard (`piece`):
-// nothing of more than nine words or ninety characters, nothing that reads as a sentence however short (a verb of
-// being or a modal, a full stop after a word), and in Japanese nothing that ends as a sentence or runs past 28
-// characters. (Until 22 Nov 2026 a value came with two words on each side, and the pieces of one paragraph of the
+// words around them; a market holiday as its date; addresses. Every piece of a page but its title goes through one
+// guard (`piece`): nothing of more than nine words or ninety characters, nothing with the signs of a sentence (a verb of
+// being or a modal, a full stop after a word; in Japanese an ending of one, or more than 28 characters), and nothing
+// but figures, dates, clock times and the words of a closed list of the labels and units JPX's tables carry, which
+// holds no verb, so that no sentence of a page, however short, is printed (jpx_read.ts labelOnly: PL-1 of the final
+// review of pull request #50). (Until 22 Nov 2026 a value came with two words on each side, and the pieces of one paragraph of the
 // hours page touched and overlapped, so consecutive lines gave its sentences back: PX-1.) (The run of 21 Nov, before this rule, printed every line that held a match, cut at 220
 // characters: four sentences of JPX's pages, two navigation labels, seventeen link labels and three notice titles
 // went into a public job log: the checks of round 3b, PR-5.)
 // WHAT IT ASKS. Only addresses on jpx.co.jp, and only these: its robots.txt; the four pages on domestic stock trading
 // whose addresses the log of 20 Nov gave (pf_rules.log l.109-162: the index, tick sizes, daily price limits, trading
 // hours); a page one of those links by name, if it is on jpx.co.jp (the document on tick classes, the closing
-// auction, the short-selling price restriction); the ETF list; the two calendar pages. NO ADDRESS IS TRIED FROM MEMORY:
+// auction, the short-selling price restriction), of which nothing but its address, status and title is printed when
+// its own title or first heading names a list, figures or a report (jpx_read.ts notRulePage; PL-3 of the final review
+// of pull request #50: the title is known only once the page is asked); the ETF list; the two calendar pages. NO
+// ADDRESS IS TRIED FROM MEMORY:
 // where no JPX page read links the short-selling rule by name (a name that says short selling and a rule, and not
 // figures, a list or a report: jpx_read.ts shortRuleLink), the probe says "not found" and stops for that rule
 // (the run of 21 Nov tried an address from the engineer's memory, which was JPX's daily list of triggered stocks, not a
@@ -121,12 +126,16 @@ const printTables = (html: string, want: RegExp | null = null, maxRows = 60): vo
     if (t.rows.length > maxRows) console.log(`    … ${t.rows.length - maxRows} more rows not printed`);
   });
 };
-/** The values a page's text gives: each match of `want` with at most two words on each side (jpx_read.ts valueBits). */
+/** The values a page's text gives: the matches of `want`, values only, joined by the one short word between two of
+ *  them (jpx_read.ts valueBits). */
 const printValues = (lines: string[], want: RegExp, max = 30): void => {
   const bits = valueBits(lines, want, max).map(piece).filter((b): b is string => b !== null);
   for (const b of bits) console.log(`  | ${b}`);
-  console.log(bits.length ? `  ${bits.length} value(s), each with the words beside it` : "  no such value on the page");
+  console.log(bits.length ? `  ${bits.length} value(s), values only` : "  no such value on the page");
 };
+/** A page taken by its link's name whose own title or first heading names a list, figures or a report (jpx_read.ts
+ *  notRulePage): its address, status and title are printed, and nothing else of it. */
+const NOT_PRINTED = "  that page's own title or first heading names a list, figures or a report, not a rule: nothing of it is printed";
 const CLOCK = /\b\d{1,2}[:：]\d{2}\s*(?:a\.?m\.?|p\.?m\.?)?|\d{1,2}時\d{0,2}分?/i;
 /** A date with its year: "March 1, 2027", "Aug. 06, 2026", "2026/04/22", "1 Mar 2027", 2027年3月1日. */
 const DATED = /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+20\d\d\b|\b\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+20\d\d\b|\b20\d\d[\/.\-]\d{1,2}[\/.\-]\d{1,2}\b|20\d\d年\s*\d{1,2}月\s*\d{1,2}日/i;
@@ -168,7 +177,7 @@ if (OWNER_HAS_RELEASED.rules) {
           // a class or a threshold with its figure: the key word, at most two words, the figure
           printValues(pages, /(?:STR|Spread-to-Tick(?: Ratio)?|class(?:es)?|groups?|categor(?:y|ies))\s+(?:\S+\s+){0,2}?\d[\d.,%]*/i, 12);
         }
-      } else { const d = await get(doc.href); if (d) printTables(d.html); }
+      } else { const d = await get(doc.href); if (d && notRulePage(d.html)) console.log(NOT_PRINTED); else if (d) printTables(d.html); }
     } else console.log("  no document on the classes is linked by that name on jpx.co.jp");
     short = short ?? shortRuleLink(tkLinks);
     shortSeen.push(...shortOtherLinks(tkLinks));
@@ -178,10 +187,10 @@ if (OWNER_HAS_RELEASED.rules) {
   const lm = await get(ADDR.limits);
   if (lm) printTables(lm.html);
 
-  head("rules 4. Trading hours, and the closing auction's order period (X-5): the clock times, each with the words beside it");
+  head("rules 4. Trading hours, and the closing auction's order period (X-5): the clock times");
   const hr = await get(ADDR.hours);
   if (hr) { printTables(hr.html); printValues(textLines(hr.html), CLOCK, 30); const hl = linksOf(hr.html, hr.final); closing = closing ?? linkedOnJpx(hl, CLOSING); short = short ?? shortRuleLink(hl); shortSeen.push(...shortOtherLinks(hl)); }
-  if (closing) { console.log(`  a page on the closing auction is linked: ${masked(closing.href)}`); const c = await get(closing.href); if (c) { printTables(c.html); printValues(textLines(c.html), CLOCK, 30); } }
+  if (closing) { console.log(`  a page on the closing auction is linked: ${masked(closing.href)}`); const c = await get(closing.href); if (c && notRulePage(c.html)) console.log(NOT_PRINTED); else if (c) { printTables(c.html); printValues(textLines(c.html), CLOCK, 30); } }
   else console.log("  no page on the closing auction is linked from the index or the hours page");
 
   head("rules 5. The short-selling price restriction: a percentage, a number of units");
@@ -191,7 +200,7 @@ if (OWNER_HAS_RELEASED.rules) {
     const p = await get(short.href);
     // the page taken by its link's name is read only if its own title and first heading say it is not a list of
     // figures or names (PX-6: JPX's section name for the list of triggered stocks passes the link's test)
-    if (p && notRulePage(p.html)) console.log("  that page's own title or first heading names a list, figures or a report, not the rule: nothing of it is printed; a person gives the address of the rule page");
+    if (p && notRulePage(p.html)) console.log(`${NOT_PRINTED}; a person gives the address of the rule page`);
     else if (p) { printValues(textLines(p.html), SS, 20); printTables(p.html, /short|空売り|%|％/i, 20); }
   }
   else console.log("  NOT FOUND: no page read (the index, tick sizes, trading hours) links a page on jpx.co.jp whose name says short selling and a rule (regulation, restriction, rule, price). No address is tried from memory: a person gives the address of JPX's rule page, and it is read in a later run");

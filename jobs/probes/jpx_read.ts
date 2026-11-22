@@ -39,11 +39,42 @@ export const sentenceLike = (s: string): boolean => {
   if (/[a-z]{2,}[.!?]\s+[A-Z]/.test(t)) return true;
   return VERB.test(t) || VERB_FIRST.test(t);
 };
-/** Whether a piece of a page may be printed: no more than MAX_WORDS words and 90 characters, and nothing that reads as
- *  a sentence (sentenceLike), however short (PX-1: a table cell, a heading or a title piece of up to nine words could
- *  carry a whole sentence); and, where it is written without spaces between words (Japanese), no more than 28
- *  characters and no full stop (。): "2026年9月22日（火）は、…休日です。" is 21 characters, and went into the log. */
-export const sayable = (s: string): boolean => { const t = s.trim(); return words(t).length <= MAX_WORDS && t.length <= 90 && !sentenceLike(t) && !(CJK.test(t) && (t.includes("。") || jaLength(t) > 28)); };
+// ---- the closed list (PL-1 of the final review of pull request #50) ----
+// sentenceLike knows a sentence only by its signs, and a short statement with any other verb passed it: "Trading
+// resumes at 12:30 pm" as a cell, "The afternoon session ends at 3:30 pm" as the label before a table, 取引は9時に始まる.
+// So a piece is printed only when it is made of figures, dates, clock times and the words of a closed list: the labels,
+// units and joining words JPX's tables of figures carry (the logs of 20 and 21 Nov 2026 and the checks' pages), with no
+// verb among them. A piece without a figure must be one of the labels whole; one with figures may hold, beside them,
+// only words of the list. Anything else is counted, not printed. A new label JPX adds is held until it is put here.
+const LABELS = new Set(["price per share (yen)", "tick size (yen)", "tick size", "tick sizes", "up to", "over", "less than", "more than", "or more", "or less", "previous day's closing price/special quote (yen)", "previous day's closing price", "special quote", "daily price limits (yen)", "daily price limits", "daily price limit (yen)", "daily price limit", "base price (yen)", "base price", "morning session", "afternoon session", "auction trading", "order acceptance", "note", "notes", "other issues", "topix500 constituents", "trading rules of domestic stocks", "trading hours", "trading unit", "date", "code", "name"]);
+const LABEL_WORDS = new Set(("yen million billion thousand units unit shares share am pm a.m p.m % to and or up over under less than more from until till through per of no " +
+  "price prices tick size sizes previous day's day days closing special quote daily limits limit base morning afternoon session sessions auction trading order acceptance note other issues issue " +
+  "constituents constituent topix changes effective rules domestic stocks short selling market holiday holidays str spread-to-tick spread ratio class classes group groups category categories " +
+  "jan feb mar apr may jun jul aug sep sept oct nov dec january february march april june july august september october november december mon tue wed thu fri sat sun").split(" "));
+// Japanese: the labels and units its tables and holiday rows carry; the particles の, から and まで between them
+const JA_LABELS = ["勤労感謝の日", "建国記念の日", "スポーツの日", "みどりの日", "こどもの日", "成人の日", "春分の日", "秋分の日", "昭和の日", "文化の日", "敬老の日", "海の日", "山の日", "国民の休日", "振替休日", "天皇誕生日", "憲法記念日", "休業日", "元日", "祝日", "休日",
+  "構成銘柄", "銘柄", "以外", "以上", "以下", "未満", "値段", "呼値", "値幅", "制限", "単元", "前場", "後場", "立会", "円", "超", "株", "年", "月", "日", "時", "分"];
+const isFig = (w: string): boolean => /\d/.test(w) || /^[-–—~〜～&±/|%％:：]+$/.test(w) || w === "&plusmn;";
+/** Whether a piece holds nothing but figures, dates, clock times and the closed list's labels and words (above). */
+export const labelOnly = (s: string): boolean => {
+  const t = s.replace(/\s+/g, " ").trim();
+  if (!t) return true;
+  const latin = t.replace(/[぀-ヿ㐀-鿿（）]/g, " ").split(/[\s/|]+/).map((w) => w.toLowerCase().replace(/^[(\["“'‘]+|[)\]"”'’,.:;\-–]+$/g, "")).filter(Boolean);
+  const latinOk = latin.every((w) => isFig(w) || LABEL_WORDS.has(w) || LABEL_WORDS.has(w.replace(/\.$/, "")));
+  if (CJK.test(t)) {
+    let r = t.replace(/[（(][日月火水木金土][）)]/g, " ").replace(/[A-Za-z0-9.,:：/%％()（）\-–~〜～・、|\s]+/g, " ");
+    for (const tok of JA_LABELS) r = r.split(tok).join(" ");
+    return latinOk && r.replace(/から|まで|の/g, " ").trim() === "";
+  }
+  if (!/\d/.test(t)) return LABELS.has(t.toLowerCase().replace(/[.:]$/, ""));
+  return latinOk;
+};
+/** Whether a piece of a page may be printed: no more than MAX_WORDS words and 90 characters, nothing that reads as a
+ *  sentence (sentenceLike), however short (PX-1: a table cell, a heading or a title piece of up to nine words could
+ *  carry a whole sentence); where it is written without spaces between words (Japanese), no more than 28 characters
+ *  and no full stop (。): "2026年9月22日（火）は、…休日です。" is 21 characters, and went into the log; and nothing
+ *  but figures, dates, clock times and the closed list's labels and words (labelOnly, PL-1). */
+export const sayable = (s: string): boolean => { const t = s.trim(); return words(t).length <= MAX_WORDS && t.length <= 90 && !sentenceLike(t) && !(CJK.test(t) && (t.includes("。") || jaLength(t) > 28)) && labelOnly(t); };
 
 /** Whether an address is on jpx.co.jp: the host itself or one under it, as a request reads the address (lib.ts). */
 export const onJpx = (url: string): boolean => { const a = addressOf(url); return !!a && (a.host === "jpx.co.jp" || a.host.endsWith(".jpx.co.jp")); };
@@ -104,7 +135,7 @@ const digitsOf = (c: string): number => (c.match(/[\d.,:%]/g) ?? []).length;
  *  between words, twelve characters beside its figures) or at least three of its ten characters are digits and their
  *  marks ("More than 3,000 yen up to 5,000 yen" is; a notice's title with a year in it is not). A sentence (it ends
  *  with 。, or reads as one: sentenceLike) is none, whatever figures it holds. */
-export const figureCell = (c: string): boolean => /\d/.test(c) && !(CJK.test(c) && c.includes("。")) && !sentenceLike(c) && ((words(c).length <= 3 && (!CJK.test(c) || jaLength(c) <= 12)) || digitsOf(c) / Math.max(1, c.replace(/\s/g, "").length) >= 0.3);
+export const figureCell = (c: string): boolean => /\d/.test(c) && !(CJK.test(c) && c.includes("。")) && !sentenceLike(c) && labelOnly(c) && ((words(c).length <= 3 && (!CJK.test(c) || jaLength(c) <= 12)) || digitsOf(c) / Math.max(1, c.replace(/\s/g, "").length) >= 0.3);
 /** A cell as it may be printed: a figure or a label (cut at 40 characters); a cell of prose is not printed, only said
  *  to be there. */
 export const cellOut = (c: string): string => (c === "" ? "" : figureCell(c) || sayable(c) ? (c.length > 40 ? `${c.slice(0, 40)}…` : c) : CJK.test(c) && words(c).length <= 3 ? `(text of ${c.length} characters: not printed)` : `(text of ${words(c).length} words: not printed)`);

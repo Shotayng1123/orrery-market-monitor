@@ -247,6 +247,28 @@ const spaced = (p, px) => p.evaluate((x) => { const all = [...document.body.quer
     ck(`iPhone 13 with the menu open: the clocks "${s.clock}" and the account in it, no ≡`, s.open && !s.btn && /^\d\d:\d\d:\d\d SGT · \d\d:\d\d JST · \d\d:\d\d ET$/.test(s.clock) && s.user && errs.length === 0, { s, errs });
     await ctx.close(); }
 
+  // DP-2 of the final review of pull request #50: the header renders every second for its clock, and the line's fit ran
+  // after every render, twice a second, on a page left alone: 18 forced layouts a second, and on EQUITIES' index pages
+  // a long task twice a second. It runs on its triggers only: a render that changes what the line draws, a resize, the
+  // fonts (the designer's A.6.4).
+  console.log("\n[(k) a page left alone: the line's fit does not run; a resize runs it]");
+  for (const hash of ["market", "equities/spx"]) {
+    const { ctx, p, errs } = await open(b, { vw: 1440, vh: 900, six: true });
+    await ctx.addInitScript(() => { try { localStorage.setItem("om_alert_seen", "999999999"); } catch {} });   // not lit: its pulse restyles the line
+    await p.goto(MOCK + "#" + hash, { waitUntil: "networkidle" }); await p.waitForSelector("#alerts .alrt .nm", { timeout: 20000 }); await settle(p, 1500);
+    const loaded = await p.evaluate(() => ({ term: document.body.classList.contains("term"), fit: document.querySelector("#alerts").dataset.fit ?? null }));
+    await p.evaluate(() => { window.__fitW = 0; window.__spans = 0; new MutationObserver((ms) => { for (const m of ms) { if (m.type === "attributes") window.__fitW++; else for (const n of m.addedNodes) if (n.nodeType === 1 && n.style && n.style.visibility === "hidden") window.__spans++; } }).observe(document.querySelector("#alerts"), { attributes: true, attributeFilter: ["data-fit", "data-fit-name", "data-fit-cut"], childList: true, subtree: true }); });
+    const cdp = await ctx.newCDPSession(p); await cdp.send("Performance.enable");
+    const layouts = async () => (await cdp.send("Performance.getMetrics")).metrics.find((m) => m.name === "LayoutCount").value;
+    const l0 = await layouts(); await p.waitForTimeout(5000); const l1 = await layouts();
+    const idle = await p.evaluate(() => ({ writes: window.__fitW, spans: window.__spans }));
+    await p.setViewportSize({ width: 1380, height: 900 }); await p.waitForTimeout(900);
+    const resized = await p.evaluate(() => window.__fitW);
+    ck(`one-screen #${hash} left alone for 5 s: the fit wrote its trace ${idle.writes} times and put ${idle.spans} hidden spans into the name (it ran at load: data-fit "${loaded.fit}"), and the page took ${l1 - l0} layouts (at most 5; 90 when the fit ran twice a second); a resize runs it again (${resized - idle.writes} trace writes)`,
+      loaded.term && loaded.fit !== null && idle.writes === 0 && idle.spans === 0 && l1 - l0 <= 5 && resized > idle.writes && errs.length === 0, { loaded, idle, layouts: l1 - l0, resized, errs });
+    await ctx.close();
+  }
+
   }
   console.log(`\n${Math.round((Date.now() - t0) / 1000)} s`);
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0);

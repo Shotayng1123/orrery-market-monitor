@@ -80,7 +80,7 @@ export const LIVE_PRINT_MIN = 15, LIVE_SLACK_MIN = 3;
  *  beside it were dated (the checks of round 3b, 21 Nov 2026: H-3). So the page keeps the server's word only while the
  *  row's own print is recent; past that the print's date decides, as for any other row. A row without a print time
  *  keeps the server's word. */
-export function stillLive(r: Pick<TableRow, "lastAt" | "live" | "market">, now: Date = new Date()): boolean {
+export function stillLive(r: { lastAt?: string | null; live: boolean; market?: string | null }, now: Date = new Date()): boolean {
   if (!r.live) return false;
   const t = r.lastAt ? Date.parse(r.lastAt) : NaN;
   if (!Number.isFinite(t)) return true;

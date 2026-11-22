@@ -75,5 +75,28 @@ const arriving = () => ({ expected: true, ok: true, newest: new Date(Date.now() 
       days ? head.includes("Figures of (blank: today in SGT)") : head.includes("Figures of (not known: this answer carries no days)") && !/today/.test(head), { head, name: file.suggestedFilename() });
     await ctx.close();
   }
+  // PP-1 of the final review of pull request #50: on a phone, in the layout made for phones, the same held answer drew
+  // a row it called live "No new print", muted, with no time and no opening, whatever its market's state. A row that
+  // is not live now reads its market's session: on a Saturday "Closed" with its opening; in Tokyo's session the time
+  // of its price in amber, with since when the market is open. The page's clock is set (Playwright's), so the hour of
+  // the run does not matter.
+  console.log("\n[a held answer on a phone (390 px): each row by its market's session]");
+  for (const [what, nowIso, lastIso, shut] of [["Sat 21 Nov 09:00 SGT, the rows' prints of Fri 14:00 SGT", "2026-11-21T01:00:00Z", "2026-11-20T06:00:00Z", true], ["Tue 24 Nov 10:00 SGT, the rows' prints of 08:40 SGT", "2026-11-24T02:00:00Z", "2026-11-24T00:40:00Z", false]]) {
+    const ctx = await b.newContext({ ...devices["iPhone 13"], viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+    await ctx.addInitScript(() => { try { localStorage.setItem("om_a2hs_hide", "1"); localStorage.setItem("om_phone_v2", "1"); } catch {} });
+    await p.clock.setFixedTime(new Date(nowIso));
+    const jp = { symbol: "^N225", name: "Nikkei 225", cls: "Equities", group: "equity", market: "TSE", currency: "JPY", decimals: 2, order: 1, marketTab: true, last: 38000, lastAt: lastIso, live: true, source: "yahoo", closes: { d1: 37800 }, closeDates: {}, pct: { d1: 0.53, w1: 1, m1: 2, m3: 3, m12: 12, m36: 30 }, z1m: 0.4, pos52: 61, vs200: 3.2 };
+    const fx = { ...jp, symbol: "USDJPY=X", name: "USD/JPY", cls: "Currency", group: "fx", market: "FX", decimals: 3, order: 2, last: 155.2, closes: { d1: 155 } };
+    await routes(p);
+    await p.route("**/fakeapi?*", (r) => { const a = new URL(r.request().url()).searchParams.get("action"); if (a !== "table") return r.fallback();
+      r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ asOf: lastIso, rows: [jp, fx] }) }); });
+    await p.goto(STANDIN + "#market", { waitUntil: "networkidle" }); await p.waitForSelector(".mp-row.inst", { timeout: 8000 }); await p.waitForTimeout(400);
+    const lines = await p.evaluate(() => [...document.querySelectorAll(".mp-row.inst")].map((row) => { const st = row.querySelector(".mp-st"), first = st?.firstElementChild, op = st?.querySelector(".opens"); return { name: row.querySelector(".n")?.textContent ?? "", state: first?.textContent ?? "", cls: first?.className ?? "", opens: op?.textContent ?? "", color: first ? getComputedStyle(first).color : "" }; }));
+    const n = lines.find((l) => l.name === "Nikkei 225"), u = lines.find((l) => l.name === "USD/JPY");
+    const said = lines.map((l) => `${l.name}: "${l.state}${l.opens ? ` · ${l.opens}` : ""}"`).join(", ");
+    if (shut) ck(`${what}: ${said}: "Closed" with when each market opens ("scheduled" where the Monitor does not hold its holidays), no row "Live", "Delayed" or "No new print"`, !!n && !!u && n.state === "Closed" && /^opens \d{1,2} Nov 08:00 SGT(?:, scheduled)?$/.test(n.opens) && u.state === "Closed" && /^opens 23 Nov 06:00 SGT, scheduled$/.test(u.opens) && !lines.some((l) => /Live|Delayed|No new print/.test(l.state)) && errs.length === 0, { lines, errs });
+    else ck(`${what}: ${said}: the time of the price in amber, with the session it trades in (where the Monitor does not hold the market's holidays, the timetable's, "scheduled"), no row "Live", "Delayed" or "No new print"`, !!n && !!u && n.state === "Last print 08:40" && /\bstale\b/.test(n.cls) && /^(?:open since 08:00 SGT|session 08:00–10:30 SGT, scheduled)$/.test(n.opens) && /^session to 28 Nov 06:00 SGT, scheduled$/.test(u.opens) && u.state === "Last print 08:40" && /\bstale\b/.test(u.cls) && n.color === u.color && !lines.some((l) => /Live|Delayed|No new print/.test(l.state)) && errs.length === 0, { lines, errs });
+    await ctx.close();
+  }
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

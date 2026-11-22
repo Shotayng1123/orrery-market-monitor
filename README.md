@@ -41,6 +41,8 @@ web/        Vite + React + TypeScript. src/styles/tokens.css is the design syste
             can read it where React is not installed.
             src/components/Sheet.tsx: a phone's sheet from the bottom edge (a dialog: focus stays inside it, the
             page behind does not scroll, and ✕, Esc, a tap on the dimmed page or the browser's Back closes it).
+            Help, drawn at the page's root, takes the same one history entry in the phone layout, so Back closes it
+            there and the tab under it stays (since the final review of pull request #50).
             "Add Orrery to your Home Screen" opens in it, from its line on MARKETS or from the menu.
             src/views/Portfolio.tsx, src/components/pf/, src/styles/pf.css: the paper portfolio's screens (P-1), a
             file of their own that only a build carrying the paper book makes (src/lib/paper.ts: the page's switch).
@@ -108,7 +110,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 2,873 checks in 43 suites on 22 Nov 2026): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,179 checks in 49 suites on 22 Nov 2026): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -138,8 +140,8 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   SESSION on the strip and on a phone's cards, the date beside every figure that is not of today in Singapore, "last
   session -2.2σ" under a currency's figure in its day's first three hours and under a pair's and a future's on a
   Monday morning, the day after a name in the table and in a phone line's pill, the room a name cell that carries a
-  day keeps for its name, its badge and the day (the one-screen layout at its smallest window at AUTO, 1170×540, at
-  1280×720 and 1440×900, and at text L and XL in their smallest, 1495×900 and 1755×1000; the scrolling layout at five
+  day keeps for its name, its badge and the day (the one-screen layout at its smallest window at AUTO, 1179×540, at
+  1280×720 and 1440×900, and at text L and XL at their least widths, 1507×900 and 1769×1000; the scrolling layout at five
   windows down to 760 px wide; the classic phone layout on two phones), the table's CSV with the marks and
   the day in columns of their own, the heights the strip may take, and a server from before, which shows neither the
   choice nor a day), the phone's first MARKETS screen (`phone-first`: every block above the list at its set height
@@ -202,8 +204,10 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   wider, 3.3% more width in the monospaced figures, about three times what GitHub's machines add; on a phone also
   with every face swapped for the generic monospace). A forced monospace alone widens next to nothing on a
   computer: IBM Plex Mono's letters are 0.600 of their size wide, DejaVu Sans Mono's 0.602, Liberation Mono's 0.600.
-  The **paper portfolio** (P-1, on the development servers, where its switch is always on) has three suites, and the
-  header's with its seventh tab one.
+  The **paper portfolio** (P-1, on the development servers, where its switch is always on) has seven suites
+  (`portfolio`, `phone-portfolio`, `layout-guard-portfolio`, `portfolio-accounts`, `portfolio-fixes`,
+  `pf-verdicts-forms` and `pf-verdicts-settings`), and the one-screen header's three (`header`, `header-sizes`,
+  `header-wide`) count six tabs and seven.
   `portfolio` (a computer): the seventh tab at six sizes with the header as tall as with six tabs, in the machine's
   fonts and in a wide one; key 7; with no book,
   three cards and two muted lines, nothing drawn as a disabled button;
@@ -258,12 +262,24 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   the first one's form; an expired sign-in keeps the form for the same account; nothing of a book is written to the
   device for a sign-in that is not to be remembered, nor from an answer that arrives after sign-out, nor of a deleted
   book; a create whose answer was lost announces no book that was not made.
-  `portfolio`, `phone-portfolio` and `local-copy` also check the "personal use" lines, which are live on the published
+  `pf-verdicts-forms` (after the verdicts of round 3b): one draft per start and account, the settings changed from the
+  defaults listed, a name shown as it will be stored, and no line over the page after CREATE. `pf-verdicts-settings`:
+  a book's change form with what is pending under what is in force and a take-back recorded as one, a form sheet's foot
+  that does not scroll, GO TO under the header lighting the section in view, and RE-SET FOR NEXT YEAR.
+  `source-lines` (round 3b, the designer's B.0.3 and B.1): every panel head's source line drawn whole or in its short
+  form, never cut, at six windows and in a wider face, also as the window is resized; "personal use" whole, opening
+  Help at its paragraph (in FULL too), and on a phone a space on each side of its dot; JPX's calendar named with
+  "(personal use)" on Tokyo's holiday; TOPIX's PROXY badges and Help's rows saying what is read; and since the final
+  review of pull request #50, on EQUITIES in the one-screen layout, a source line under its title taking no whole
+  table row (the market open and closed, TOPIX and KOSPI, at 1280×720, 1179×800 and 1769×1000 XL, and in DejaVu Sans).
+  `portfolio`, `phone-portfolio` and `source-lines` also check the "personal use" lines, which are live on the published
   page, and `local-copy` opens the built site on both layouts to check the state the page's switch says: with it off,
   six tabs, no "PORTFOLIO" or "Portfolio" anywhere, `#portfolio/new` showing MARKETS, no portfolio route asked, and
   no file of the portfolio's screens or of its stand-in books among the published files.
-  `cd web && npm run e2e` starts the test servers it needs and runs them all, three suites at a time: about 20
-  minutes on the engineer's machine (1,206 s on 22 Nov 2026 for the 43 suites, with `header`; 1,204 s earlier that day
+  `cd web && npm run e2e` starts the test servers it needs and runs them all, three suites at a time: about
+  30 minutes on the engineer's machine (1,781 s as installed and 1,721 s with GitHub's letter placement on 22 Nov
+  2026 for the 49 suites and 3,179 checks, after the final review of pull request #50; 1,687 s and 1,601 s for the
+  49 suites and 3,156 checks before it, which took 1,247 s on GitHub; 1,206 s for the 43 suites, with `header`; 1,204 s
   for 42, with `portfolio-accounts`; 1,169 s
   late on 21 Nov 2026 for the 41 suites, with `nav-hold` and the wider
   drawings of the fixes after that day's checks; 1,136 s for the 40 suites with the paper portfolio's three; 1,029 s
@@ -303,8 +319,13 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   the holds on an address as its request will go, and on every redirect; a `robots.txt` typed as HTML, and its
   Crawl-delay kept; a "legal" page that is not the terms; what `pf_jpx` may print of a page, which links it follows,
   and its calendar test by year, month and day; a distribution dated on a day without a session), and since 22 Nov
-  2026 `pf_jpx` itself, run offline in seven ways with its `fetch` replaced (section [AI]: every address it asks, every
-  line it prints; the terms gate's floor and the misses the review of fix part 1 named).
+  2026 `pf_jpx` itself, run offline in nine ways with its `fetch` replaced (section [AI]: every address it asks, every
+  line it prints, short sentences with any verb where a table is printed from, a page taken by its link's name whose
+  title names a list; the terms gate's floor and the misses the review of fix part 1 and the final review of pull
+  request #50 named), and the market table itself against a stand-in database that cuts every answer at 1,000 rows and
+  gives rows with equal keys in a fresh order each time (section [AJ]: the paged read and its order, a yield in points,
+  a future's roll today with and without the new contract's close and one between its last two closes, which σ window
+  a print and a booked close are set against).
   `cd jobs && npx tsx ../sim/logic.test.ts`.
   The same command checks the file itself, in its last section. GitHub installs `jobs/` alone before it runs the
   logic checks (`logic-tests`, and `deploy-server` before a deploy), so nothing the file imports, directly or through
@@ -359,8 +380,12 @@ sentence that names JPX's holiday calendar in passing carries "(personal use)" r
 tooltip, a phone's opened Tokyo row on a holiday, Help's "Holidays · scheduled"). In the one-screen layout a source
 line too long for its head is drawn in a short form that keeps the publisher, every as-of, a state (INTRADAY,
 STAND-IN) and "personal use": "JPX · personal use" on SHORT INTEREST, with the whole line as the head's tooltip; it is
-never cut. On a computer the two words open Help at "Data sources · personal use" (in FULL too); on a phone the source
-line opens a card with the publisher, the file and the same paragraph. The words are in `web/src/lib/labels.ts`; the logic checks compare this
+never cut. Where even the short form takes the lines under the title, the panel takes that height from the chart beside
+it, never from its table: on EQUITIES, MARKET BREADTH and FLOW BY SECTOR from the heat map under them, SECTOR
+PERFORMANCE and SHORT INTEREST from the index and its drivers above them (since the final review of pull request #50:
+two of SECTOR PERFORMANCE's whole rows had gone behind its own scroll with the market open). On a computer the two words open Help at "Data sources · personal use" (in FULL too); on a phone, in the
+layout made for phones, the source line opens a card with the publisher, the file and the same paragraph (in the
+classic layout the words open Help, as on a computer). The words are in `web/src/lib/labels.ts`; the logic checks compare this
 paragraph with them, and `phone-portfolio` and `portfolio` check the lines on both layouts.
 
 ### When a closed market opens (since 2026-11-21)
@@ -455,7 +480,8 @@ once more; a Crawl-delay longer than the probe's own pace is kept, up to thirty 
 still reads such a site's pages and says so, and sends it no form (`pf_rates` holds its one POST there). The probes of
 publishers' files (`pf_bench`, `pf_borrow`) also read the site's terms, by its own link, before any data file of it
 (`readTerms()`, `termsBar()`): a line that forbids automated reading, or that forbids copying, reproducing, storing or
-redistributing and names no purpose the ban is limited to, holds that site's files and is printed for a person to read,
+redistributing and names no purpose the ban is limited to (commercial use named among the banned acts is none: "any
+copying, redistribution or commercial use … is prohibited"), holds that site's files and is printed for a person to read,
 and that finding goes to the owner; a page reached by a "legal" link counts as the terms only when its title or first
 heading names them and its lines cover two of the subjects the gate reads or carry a ban (since 22 Nov 2026: by its
 name alone, or by two stray lines, a page counted as the terms read), and where no terms are found the files that need
@@ -474,12 +500,16 @@ volume pages, the 決算発表予定日 workbook), as without Cboe's and Nomura'
 JPX's site, "(c) all": its rule pages, its market-holiday calendar and two statistics may be read. Its list of ETFs was
 not asked about and stays held. Only `pf_jpx` lifts the helper's hold on `jpx.co.jp`, for its own run, behind three
 switches: rules and calendar on, etfList off. It asks only addresses on `jpx.co.jp` that the log of 20 Nov gave or that
-a JPX page links by name (and whose own title or first heading does not name a list, figures or a report), never one
-from memory, and prints only values: a table's cells under its heading or the short label before it, a page's clock
-times, dates and percentages in order with at most the one joining word between two of them and none around them
-("9:00 am to 11:30 am"), each page's own title, a holiday as its date, and nothing that reads as a sentence however
-short (`jobs/probes/jpx_read.ts`; until 22 Nov 2026 a value came with two words on each side, and the pieces of one
-paragraph overlapped so that consecutive lines gave its sentences back;
+a JPX page links by name, never one from memory; of a page taken by its link's name whose own title or first heading
+names a list, figures or a report it prints the address, the status and the title and nothing else (a title is known
+only once the page is asked). It prints only values: a table's cells under its heading or the short label before it,
+a page's clock times, dates and percentages in order with at most the one joining word between two of them and none
+around them ("9:00 am to 11:30 am"), each page's own title, a holiday as its date; and any piece of a page it prints
+other than a title holds nothing but figures, dates, clock times and the words of a closed list of the labels and units
+JPX's tables carry, which holds no verb, so that no sentence of a page is printed however short (`jobs/probes/jpx_read.ts`,
+`labelOnly`; until 22 Nov 2026 a value came with two words on each side, and the pieces of one
+paragraph overlapped so that consecutive lines gave its sentences back; until the final review of pull request #50 a
+short sentence with a verb the guard did not list, "Trading resumes at 12:30 pm", passed it;
 its first run, on 21 Nov, printed whole lines of JPX's pages into the public job log and asked one address from memory,
 JPX's daily list of triggered stocks, which is not a rule page). The Monitor's own jobs, which read the JPX and Nikkei
 files it has always read, do not use that helper and run as before. A feed the Monitor already reads is not stopped by

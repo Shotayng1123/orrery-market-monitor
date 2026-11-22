@@ -20,6 +20,7 @@ import { calendarState, EARLY_CLOSES, HOLIDAY_SOURCES, holidaysNow, marketOf, ma
 import { fmtClock, fmtDate, fmtDayMon, fmtDayTime, fmtStamp, fmtWhen, isOfficialRow, TZ_ABBR } from "./time";
 import { delayed, PERSONAL_USE_PUBLISHERS } from "./labels";
 import { shortName } from "./short";
+import { stillLive } from "./movers";
 
 /** What the session table says of a market now: shut, in its timetable's hours, or not known to it (no such market in
  *  the table, one that never closes, one whose calendar has not arrived yet, or an instrument that is only read in
@@ -69,10 +70,13 @@ export function hoursText(m: Market): string {
 const calName = (publisher: string): string => `${publisher}'s calendar${PERSONAL_USE_PUBLISHERS.has(publisher) ? " (personal use)" : ""}`;
 /** The calendar a holiday is from, by its publisher's name. */
 const calendarOf = (m: Market): string => (HOLIDAY_SOURCES[m.id] ? calName(HOLIDAY_SOURCES[m.id]!.publisher) : "the Monitor's calendar");
-/** Whose calendar stands behind a time, or why it is only the scheduled one (`then`: what a holiday would mean). */
-function calendarWords(m: Market, firm: boolean, then: string, cal: Cal): string {
+/** Whose calendar stands behind a time, or why it is only the scheduled one (`then`: what a holiday would mean).
+ *  `named`: the tooltip has named that calendar already; one the owner's P4 covers carried its "(personal use)" there,
+ *  so here it is its publisher's name alone, "JPX's" (DP-5 of the final review of pull request #50: Tokyo's chip said
+ *  "(personal use)" twice on its holiday). */
+function calendarWords(m: Market, firm: boolean, then: string, cal: Cal, named = false): string {
   const src = HOLIDAY_SOURCES[m.id];
-  if (firm && src) return `Holidays${EARLY_CLOSES[m.id] ? " and early closes" : ""}: ${calName(src.publisher)}.`;
+  if (firm && src) return `Holidays${EARLY_CLOSES[m.id] ? " and early closes" : ""}: ${named && PERSONAL_USE_PUBLISHERS.has(src.publisher) ? `${src.publisher}'s` : calName(src.publisher)}.`;
   if (!src) return `The Monitor does not hold this market's holidays: on one ${then}.`;
   if (cal.state !== "ok") return `${calName(src.publisher)} could not be loaded: on a holiday ${then}.`.replace(/^./, (c) => c.toUpperCase());
   return `The Monitor holds ${calName(src.publisher)} to ${fmtDate(src.through)}: on a holiday after it ${then}.`;
@@ -91,7 +95,7 @@ function opensNote(m: Market, n: NextOpen, now: Date, cal: Cal): SessionNote {
   return {
     kind: "opens", at: n.at, market: m, scheduled: !n.firm, ...(n.why === "hours" || (n.why === "early" && early == null) ? {} : { why: n.why }), ...(later.length ? { skipped: later } : {}),
     text: `opens ${when(n.at, now)}${n.firm ? "" : ", scheduled"}`,
-    tip: `${trades(m)}. ${why}${skipped}${n.firm ? "Next opens" : "Scheduled to open"} ${fmtStamp(n.at)}. ${calendarWords(m, n.firm, "the market stays shut", cal)}`,
+    tip: `${trades(m)}. ${why}${skipped}${n.firm ? "Next opens" : "Scheduled to open"} ${fmtStamp(n.at)}. ${calendarWords(m, n.firm, "the market stays shut", cal, n.why === "holiday" || (n.why === "early" && early != null) || later.length > 0)}`,
   };
 }
 /** How long after a session's first print is due (its start plus the feed's delay) the line still says when it was
@@ -156,14 +160,19 @@ export function marketSession(id: string | null | undefined, now: Date = new Dat
   const n = waiting ? null : nextOpen(m, now, cal.holidays, cal.state);
   return { now: "closed", note: n ? opensNote(m, n, now, cal) : null };
 }
-/** What a row needs for its session: its market, whether it is live, its provider, and (for an instrument that is
- *  only read in New York's hours) its class. */
-export interface SessionRow { market?: string | null; live: boolean; source?: string | null; cls?: string | null }
-/** A row of the market table: nothing for a live row or an official yield; for an instrument that is only read in New
- *  York's hours, when it is next read and nothing of its market ("unknown"); otherwise its market's session. */
+/** What a row needs for its session: its market, whether it is live and the time of its print, its provider, and
+ *  (for an instrument that is only read in New York's hours) its class. */
+export interface SessionRow { market?: string | null; live: boolean; lastAt?: string | null; source?: string | null; cls?: string | null }
+/** A row of the market table: nothing for a row that is live now or an official yield; for an instrument that is only
+ *  read in New York's hours, when it is next read and nothing of its market ("unknown"); otherwise its market's
+ *  session. A row the answer called live whose print is past the feed's delay and 18 minutes (a copy kept on the
+ *  device, refreshes that fail: lib/movers.ts stillLive) is not live now: its market's session says what it is, as for
+ *  any other row ("Closed · opens 23 Nov 06:00 SGT", "Last print 08:40 · open since 08:00 SGT"). It read "No new
+ *  print" on a phone, with no time and no opening, whatever its market's state (PP-1 of the final review of pull
+ *  request #50). */
 export function rowSession(r: SessionRow, now: Date = new Date(), cal: Cal = calNow()): RowSession {
   if (isOfficialRow(r)) return { now: "unknown", note: null };
-  if (r.live) return { now: "open", note: null };
+  if (stillLive(r, now)) return { now: "open", note: null };
   if (readInNewYork(r)) { const ny = marketSession("NYSE", now, cal); return { now: "unknown", note: ny.now === "closed" && ny.note ? readNote(ny.note, now) : null }; }
   return marketSession(r.market, now, cal);
 }
@@ -212,7 +221,7 @@ export function pageLine(n: SessionNote): string {
  *  since 08:00 SGT", " · next read 22:30 SGT"; nothing for an official yield or a market the table does not keep. */
 export function rowStateWords(r: SessionRow, now: Date = new Date(), cal: Cal = calNow()): string {
   if (isOfficialRow(r)) return "";
-  if (r.live) return " · market open";
+  if (stillLive(r, now)) return " · market open";
   const s = rowSession(r, now, cal), w = stateWord(s), note = s.note ? ` · ${s.note.text}` : "";
   if (s.now !== "closed") return w ? ` · ${w.toLowerCase()}${note}` : note;
   const why = s.note ? whyFull(s.note, now, cal) : null, skip = s.note ? skippedFull(s.note) : null;

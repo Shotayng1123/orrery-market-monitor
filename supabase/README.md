@@ -64,7 +64,8 @@ workflow says "Not set up yet" and does nothing.
 What a deploy does, in order: the logic checks (`sim/logic.test.ts`; a failure stops it); a list of what is waiting;
 a guard; the database checks (`sim/sql`, on PGlite, with none of the job's secrets in their environment and no
 package's install script run; a failure stops it, since 22 Nov 2026); `supabase db push`; the notification key, made on the runner and stored on the server if the server has
-none (never shown, never in git); `supabase functions deploy tick daily api`; if `NOTE_DISPATCH_TOKEN` is set,
+none (never shown, never in git); `supabase functions deploy` for api, then tick, then daily, each with `--use-api` and
+up to three tries; if `NOTE_DISPATCH_TOKEN` is set,
 storing it in the database with `monitor_set_github_token`; the page's reads against the live tables (a warning only);
 and last the paper portfolio's walls as the database sees them (`pf_selftest`, the live check's part `pf`: a wall down
 fails the run, "The paper portfolio" below; last, so that a red step there skips nothing of the rest).
@@ -168,7 +169,7 @@ is kept).
   For a US member that lasts until Monday's run at 14:00 UTC.
   Whether the flag comes back to the server's own request (its `fields=` list names it) is counted by the live check's
   part `marks` (`jobs/lib/marks.ts`; A-37's done-when, line 2): for each list, the stored dates since the migration in
-  four shapes (a date with the flag true, with the flag false, with no flag, no date ahead), the rows pulled before it
+  four shapes (a date with the flag true, with the flag false, with no flag, no date), the rows pulled before it
   apart, then the watchlists' names (every account's together) and up to 100 members a list asked now by the same
   request; counts only. A list where no date carries a flag of either kind says so in capitals.
 - **σ alerts** (`alerts.kind` 'sigma', with `sigma` and `note`): the tick scans the table every minute

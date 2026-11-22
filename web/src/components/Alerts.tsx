@@ -126,10 +126,15 @@ function fitPhone(holder: HTMLElement): void {
   if (al.querySelector(".t .td")) { holder.classList.add("a-noday"); steps.push("noday"); }
   done();
 }
-/** Runs the fit after every render of the line, when its width changes (a ResizeObserver on #alerts), when its words or
- *  their drawing change between renders (a MutationObserver: a style, a class), and once the page's faces are in. The
- *  watchers follow the line's box: a phone draws none while there is no alert, and one once there is. */
-function useFit(box: RefObject<HTMLDivElement | null>, phone: boolean): void {
+/** Runs the fit after a render that changes what the line draws (`lineKey`: its alert, lit or not, its time's words, the
+ *  layout), when its width changes (a ResizeObserver on #alerts), when its words or their drawing change between
+ *  renders (a MutationObserver: a style, a class), and once the page's faces are in: on these triggers only, never on a
+ *  timer. The header renders every second for its clock, and a fit after every render (a layout effect with no list,
+ *  as revision 2 of the designer's A.6.4 read "every render of the line") measured the line twice a second on a page
+ *  left alone: 18 forced layouts a second in the one-screen layout, and a long task twice a second on EQUITIES' index
+ *  pages (DP-2 and PP-3 of the final review of pull request #50). The watchers follow the line's box: a phone draws
+ *  none while there is no alert, and one once there is. */
+function useFit(box: RefObject<HTMLDivElement | null>, phone: boolean, lineKey: string): void {
   const onPhone = useRef(phone);
   onPhone.current = phone;
   const st = useRef<{ el: HTMLDivElement | null; run: () => void; off: () => void }>({ el: null, run: () => undefined, off: () => undefined });
@@ -159,7 +164,7 @@ function useFit(box: RefObject<HTMLDivElement | null>, phone: boolean): void {
       }
     }
     st.current.run();
-  });
+  }, [lineKey]);
   // on unmount the watchers stop, and the next mount sets them up again (React's StrictMode, in development, unmounts
   // and mounts once more at once: a watcher left stopped would leave the line unfitted)
   useEffect(() => () => { st.current.off(); st.current = { el: null, run: () => undefined, off: () => undefined }; }, []);
@@ -217,7 +222,9 @@ export function Alerts({ tick, phone = false }: { tick: number; phone?: boolean 
   // when there is no alert (a new server, or none raised yet): "no excessive moves" took the height of a list row.
   // While the answer is on its way the line says so, and "unavailable" when it does not come.
   const when = latest ? fmtWhen(latest.at) : "", cut = when.lastIndexOf(" "), day = cut > 0 ? when.slice(0, cut + 1) : "";
-  useFit(box, phone);
+  // what the line draws: the fit runs after a render only when this changes (above)
+  const drawnKey = [phone ? 1 : 0, termMode() ? 1 : 0, latest?.id ?? "", lit ? 1 : 0, fresh ? 1 : 0, latest?.kind ?? "", latest?.msg ?? "", latest?.name ?? "", latest?.pct ?? "", latest?.sigma ?? "", latest?.market ?? "", when, word ?? "", orphan ? 1 : 0, a.error ? 1 : 0, a.data ? 1 : 0, rows.length].join("|");
+  useFit(box, phone, drawnKey);
   if (phone && a.data && !rows.length) return null;
   return (
     <div id="alerts" ref={box}>

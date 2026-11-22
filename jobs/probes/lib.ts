@@ -357,8 +357,13 @@ const TOPICS: Array<[string, RegExp]> = [
 // be", "only with our written permission", 禁ず, 禁無断転載, できないものとします, してはならない, しないでください,
 // 一切認めません). A ban "for any commercial or non-commercial purpose" is universal, not limited, and the uses a ban
 // may leave free are read only where the sentence ties them to a use ("other than for your own personal use").
-const BAN_EN = /\b(?:may not|must not|shall not|should not|will not|cannot|can not|do not|does not|agree(?:s|d)? not to|undertake(?:s)? not to|not (?:be )?(?:permitted|allowed|authori[sz]ed)|(?:is|are) not to be|prohibit(?:ed|s|ion)?|forbidden|forbids?|refrain(?:s|ing)? from|you (?:will|shall|do) not)\b|\bno\b[^.]{0,400}\b(?:may|can|shall) be\b|\bno\b[^.]{0,400}\b(?:is|are) (?:allowed|permitted|authori[sz]ed)\b|\bneither\b[^.]{0,400}\b(?:may|can|shall) be\b|\bonly with (?:the |our |its |their |prior |express |written |explicit )*(?:permission|consent|authori[sz]ation|approval)|without (?:the |our |its |any )?(?:prior |express |written |explicit |specific )+(?:permission|consent|authori[sz]ation|approval|agreement)/i;
-const BAN_JA = /禁止|禁じ|禁ず|禁無断|できません|できない|出来ません|出来ない|お断り|ご遠慮|認められません|認めておりません|一切認め|してはなりません|してはならない|行ってはなりません|行わないで|しないでください|しないで下さい|固くお断り/;
+// Since the final review of pull request #50 (PL-2): commercial use named as one of the banned acts ("any copying,
+// redistribution or commercial use … is prohibited", "commercially exploit") is no limit: only a purpose the ban is
+// limited to is ("for commercial purposes"); a sentence of two bans is read clause by clause too (CLAUSE); and these are
+// bans as well: "Nothing/None … may be", "must/may never", "requires/subject to … consent", "may only be … with …
+// permission", "without our permission", 許可が必要.
+const BAN_EN = /\b(?:may not|must not|shall not|should not|will not|cannot|can not|do not|does not|agree(?:s|d)? not to|undertake(?:s)? not to|not (?:be )?(?:permitted|allowed|authori[sz]ed)|(?:is|are) not to be|prohibit(?:ed|s|ion)?|forbidden|forbids?|refrain(?:s|ing)? from|you (?:will|shall|do) not)\b|\bno\b[^.]{0,400}\b(?:may|can|shall) be\b|\bno\b[^.]{0,400}\b(?:is|are) (?:allowed|permitted|authori[sz]ed)\b|\bneither\b[^.]{0,400}\b(?:may|can|shall) be\b|\bonly with (?:the |our |its |their |prior |express |written |explicit )*(?:permission|consent|authori[sz]ation|approval)|without (?:the |our |its |any )?(?:prior |express |written |explicit |specific )+(?:permission|consent|authori[sz]ation|approval|agreement)|\b(?:nothing|none)\b[^.]{0,400}\b(?:may|can|shall|must) be\b|\b(?:must|may|shall|should|can|will) never\b|\b(?:requires?|required|subject to|conditional (?:up)?on)\s+(?:the |our |its |their |a |an )?(?:prior |express |written |explicit |specific |formal )*(?:permission|consent|authori[sz]ation|approval|licen[cs]e)\b|\bonly\b[^.]{0,60}\bwith (?:the |our |its |their |prior |express |written |explicit )*(?:permission|consent|authori[sz]ation|approval)|\bwithout (?:the |our |its |their |any )?(?:permission|consent|authori[sz]ation|approval)\b/i;
+const BAN_JA = /禁止|禁じ|禁ず|禁無断|できません|できない|出来ません|出来ない|お断り|ご遠慮|認められません|認めておりません|一切認め|してはなりません|してはならない|行ってはなりません|行わないで|しないでください|しないで下さい|固くお断り|(?:許可|許諾|承諾|同意|承認)(?:を得る)?(?:こと)?が必要/;
 /** A clause that declines liability or a warranty: its "shall not" forbids the reader nothing. It is set aside only up
  *  to the next conjunction or the sentence's end, so "… shall not be liable for errors, and you may not copy …" keeps
  *  its ban (PX-3: the clause took the rest of the sentence with it). */
@@ -375,18 +380,23 @@ const UNIVERSAL = /\bany purpose|whatever (?:the )?purpose|regardless of (?:the 
  *  "permitted for personal use only". A use named elsewhere in the sentence ("This site is for your personal use
  *  only and you may not copy …") leaves the ban whole (PX-3: "save … own", "the publisher's own" and "personal use
  *  only and you may not" were read as limits). */
-const LIMITED = /\b(?:for|of|to) (?:any |a |all )?(?<!non-)(?:commercial|business|profit[- ]making) (?:purposes?|use|uses|gain|ends|exploitation|advantage)|(?<!non-)\bcommercial(?:ly)? (?:use|uses|purposes?|exploit\w*|gain)|\bfor (?:a )?profit\b|\b(?:other than|except(?: for| as)?|save for|save as|apart from|unless (?:it is |they are )?(?:for|used for)|outside(?: of)?)\b[^.]{0,60}?\b(?:personal|private|non-?commercial|internal|own)\b[^.]{0,24}?\b(?:use|uses|purposes?|reference|research|study)\b|\b(?:permitted|allowed|authori[sz]ed|may (?:be )?(?:use|used|copy|copied|download|downloaded|print|printed|reproduce|reproduced|store|stored))\b[^.]{0,40}?\b(?:solely |only )?for (?:your |their |its )?(?:own )?(?:personal|private|non-?commercial|internal)\b|商用目的|営利目的|商業目的|営利を目的|私的使用(?:の場合)?を除|個人的な(?:利用|使用)を除|非営利(?:目的)?(?:の場合)?を除/i;
+const LIMITED = /\b(?:for|to) (?:any |a |all |the )?(?<!non-)(?:commercial|business|profit[- ]making) (?:purposes?|use|uses|gain|ends|exploitation|advantage)|\bfor (?:a )?profit\b|\b(?:other than|except(?: for| as)?|save for|save as|apart from|unless (?:it is |they are )?(?:for|used for)|outside(?: of)?)\b[^.]{0,60}?\b(?:personal|private|non-?commercial|internal|own)\b[^.]{0,24}?\b(?:use|uses|purposes?|reference|research|study)\b|\b(?:permitted|allowed|authori[sz]ed|may (?:be )?(?:use|used|copy|copied|download|downloaded|print|printed|reproduce|reproduced|store|stored))\b[^.]{0,40}?\b(?:solely |only )?for (?:your |their |its )?(?:own )?(?:personal|private|non-?commercial|internal)\b|商用目的|営利目的|商業目的|営利を目的|私的使用(?:の場合)?を除|個人的な(?:利用|使用)を除|非営利(?:目的)?(?:の場合)?を除/i;
 const sentencesOf = (line: string): string[] => line.split(/(?<=[.!?。！？])\s+|(?<=[。！？])/).map((x) => x.trim()).filter(Boolean);
 /** Whether a line of a site's terms holds its data files, and why: "automated" (it forbids automated reading) or
  *  "re-use" (it forbids copying, reproducing, storing or redistributing and names no purpose the ban is limited to).
  *  Null for a line that does neither. Read sentence by sentence. */
+/** Where a sentence joins two bans ("…, and you may not use it for commercial purposes"), each clause is read on its
+ *  own as well, so that the limit one of them names does not free the other (PL-2). */
+const CLAUSE = /,?\s+(?:and|but|while|nor)\s+(?=(?:you|users?|the user|no|neither|nothing|none|it|we|they|visitors?)\b)/i;
 export function termsBar(line: string): { kind: "automated" | "re-use"; sentence: string } | null {
   for (const raw of sentencesOf(line)) {
-    const s = raw.replace(LIABILITY, " ");   // what is left once a clause that only declines liability is taken out
-    const ban = BAN_EN.test(s) || BAN_JA.test(s);
-    if (!ban) continue;
-    if (AUTO_EN.test(s) || AUTO_JA.test(s)) return { kind: "automated", sentence: raw };
-    if ((REUSE_EN.test(s) || REUSE_JA.test(s)) && (UNIVERSAL.test(s) || !LIMITED.test(s))) return { kind: "re-use", sentence: raw };
+    const whole = raw.replace(LIABILITY, " ");   // what is left once a clause that only declines liability is taken out
+    for (const s of [whole, ...whole.split(CLAUSE).filter((c) => c.trim() && c !== whole)]) {
+      const ban = BAN_EN.test(s) || BAN_JA.test(s);
+      if (!ban) continue;
+      if (AUTO_EN.test(s) || AUTO_JA.test(s)) return { kind: "automated", sentence: raw };
+      if ((REUSE_EN.test(s) || REUSE_JA.test(s)) && (UNIVERSAL.test(s) || !LIMITED.test(s))) return { kind: "re-use", sentence: raw };
+    }
   }
   return null;
 }

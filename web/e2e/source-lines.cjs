@@ -17,7 +17,13 @@
 //       dot to "personal" a space ±0.5 px); no heading's title on two lines; every source line inside its heading
 //   [6] FULL: "personal use" opens Help over the page, scrolled to its paragraph
 //   [7] Tokyo's holiday (Mon 23 Nov 2026): every text that names JPX's calendar says "(personal use)" right after it
-//   [8] TOPIX's PROXY badges name what the prices are (Yahoo Finance's), not an official close nobody reads
+//   [8] TOPIX's PROXY badges, and Help's PROXY row, name what the prices are (Yahoo Finance's), not an official close
+//       nobody reads, nor "during the session"; Help's "opens 22:30 SGT" row names the header's chips for the scrolling
+//       layout only, where they are drawn (WD-1 and WD-3 of the final review of pull request #50)
+//   [9] EQUITIES in the one-screen layout, the market open and closed, TOPIX and KOSPI (STAND-IN), at 1280x720, 1179x800
+//       and 1769x1000 XL, and in DejaVu Sans: a source line under its title takes no whole table row (whole rows as
+//       drawn against the same page with the lines held on the titles' line, which are the live site's), no panel
+//       stands over another, no line is cut (DP-1 of the same review)
 // It must pass as installed and GitHub's way (letters on whole px).
 // Run from web/:  node e2e/run.cjs source-lines   (the runner starts the server this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
@@ -172,7 +178,61 @@ const label = (w, h, size) => `${w}x${h}${size !== "AUTO" ? ` ${size}` : ""}`;
       await p.goto(`${MOCK}#market`, { waitUntil: "networkidle" }); await p.waitForSelector("table.mkt"); await settle(p);
       const mk = await p.evaluate(() => [...document.querySelectorAll("table.mkt .badge.proxy, table.mkt [title]")].map((e) => e.getAttribute("title")).filter((t) => t && /stands in for/.test(t)));
       ck(`EQUITIES: "${eq}"; MARKETS: "${mk[0]}": Yahoo Finance's prices, and no "official" close`, /Yahoo Finance's/.test(eq ?? "") && !/official/i.test(eq ?? "") && mk.length > 0 && mk.every((t) => /Yahoo Finance's/.test(t) && !/official/i.test(t)) && errs.length === 0, { eq, mk, errs });
+      // WD-1 and WD-3 of the final review of pull request #50: Help's PROXY row said 1306.T stood for TOPIX "during the
+      // session" (every TOPIX figure is its Yahoo price at all hours); its "opens 22:30 SGT" row said the header's market
+      // chips give the opening, and the one-screen layout draws no chips
+      const helpRow = async (pg, k) => pg.evaluate((k) => [...document.querySelectorAll(".helpbox dt")].find((d) => d.textContent === k)?.nextElementSibling?.textContent ?? null, k);
+      await p.locator("#help-ctl").click(); await p.waitForSelector(".helpbox");
+      const proxy = await helpRow(p, "PROXY"), opens = await helpRow(p, "opens 22:30 SGT");
+      const chips = await p.evaluate(() => [...document.querySelectorAll("#mktstat [title]")].filter((e) => e.getClientRects().length && /opens/.test(e.title)).length);
       await ctx.close();
+      const t = await open(b, { vw: 1440, vh: 900 });
+      await t.p.goto(`${MOCK}#market`, { waitUntil: "networkidle" }); await t.p.waitForSelector("table.mkt"); await settle(t.p);
+      const term = await t.p.evaluate(() => ({ term: document.body.classList.contains("term"), chips: [...document.querySelectorAll("#mktstat")].filter((e) => e.getClientRects().length).length }));
+      await t.ctx.close();
+      ck(`Help: PROXY "${proxy}"; "opens 22:30 SGT" says the chips give it in the scrolling layout (${chips} chip(s) with an opening drawn there) and not in the one-screen layout, which draws ${term.chips} (term ${term.term})`, /1306\.T ETF for TOPIX: its prices, intraday and daily, are Yahoo Finance's/.test(proxy ?? "") && !/during the session/.test(proxy ?? "") && /in the scrolling layout so do the exchange chips in the header/.test(opens ?? "") && !/the market chips in the header say it too/.test(opens ?? "") && chips > 0 && term.term && term.chips === 0 && t.errs.length === 0, { proxy, opens: opens?.slice(-260), chips, term });
+    }
+
+    // DP-1 of the final review of pull request #50: a short form on its head's second line grew the head into the
+    // panel's body, and whole rows of SECTOR PERFORMANCE, FLOW BY SECTOR and MARKET BREADTH went behind the panel's own
+    // scroll (8 of 11 sector rows became 6 at 1280x720 with the market open). The line takes its height from the chart
+    // beside it now (Equities.tsx useHeadRoom). Each case is counted twice on one page: as drawn, and with every wrapped
+    // line held on its title's line as before 22 Nov (cut), whose rows are the live site's; none may be fewer as drawn.
+    console.log("\n[9] EQUITIES in the one-screen layout: a source line under its title takes no whole table row");
+    {
+      const ONE_LINE = "body.term .phead:has(>.aux.src-fit.wrap){flex-wrap:nowrap!important}body.term .phead .aux.src-fit.wrap{flex:1 1 0!important;order:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}body.term .phead .aux.src-fit.wrap>.src-short{white-space:nowrap!important}body.term .phead:has(>.aux.src-fit.wrap)>.csvbtn{order:0!important;margin-left:0!important}";
+      const TABLES = ["eq-sectors", "eq-flow", "eq-breadth", "eq-movers", "eq-screener"];
+      const rows = (p) => p.evaluate((ks) => {
+        const out = {};
+        for (const k of ks) {
+          const pn = document.querySelector(`#grid > .panel[data-k="${k}"]`), body = pn?.querySelector(":scope > .pbody"), a = pn?.querySelector(":scope > .phead > .aux");
+          if (!body) continue;
+          const br = body.getBoundingClientRect(), sc = body.offsetHeight ? br.height / body.offsetHeight : 1, top = br.top + body.clientTop * sc, bot = top + body.clientHeight * sc;
+          let whole = 0, all = 0;
+          for (const tr of body.querySelectorAll("table tr")) { if (tr.closest("thead") || !tr.getClientRects().length) continue; all++; const r = tr.getBoundingClientRect(); if (r.top >= top - 0.5 && r.bottom <= bot + 0.5) whole++; }
+          out[k] = { whole, all, wrap: !!a && a.classList.contains("wrap") };
+        }
+        const ps = [...document.querySelectorAll("#grid > .panel")].map((e) => [e.dataset.k, e.getBoundingClientRect()]), overlap = [];
+        for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) { const [ka, x] = ps[i], [kb, y] = ps[j]; if (x.left < y.right - 0.5 && y.left < x.right - 0.5 && x.top < y.bottom - 0.5 && y.top < x.bottom - 0.5) overlap.push(`${ka}/${kb}`); }
+        return { out, overlap, term: document.body.classList.contains("term") };
+      }, TABLES);
+      const frames = (p) => p.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
+      const cases = [[1280, 720, "AUTO", ""], [1179, 800, "AUTO", ""], [1769, 1000, "XL", ""], [1280, 720, "AUTO", DEJAVU]];
+      for (const [w, h, size, face] of cases) for (const open of face ? [true] : [true, false]) {
+        const ctx = await b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
+        await ctx.addInitScript(([at, prefs, live]) => { try { localStorage.setItem("om_mock_now", at); localStorage.setItem("om_prefs", JSON.stringify(prefs)); localStorage.setItem("om_a2hs_hide", "1"); localStorage.setItem("om_paper", "0"); if (live) localStorage.setItem("om_mock_live", "1"); else localStorage.removeItem("om_mock_live"); } catch {} }, [MORNING, { size, compact: true, v: 2 }, open]);
+        const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+        for (const idx of face ? ["kospi"] : ["topix", "kospi"]) {
+          await go(p, `equities/${idx}`, ".panel[data-k='eq-flow'] .pbody table", null, face); await frames(p); await p.waitForTimeout(150);
+          const drawn = await rows(p), cut = bad(await audit(p));
+          const held = await p.addStyleTag({ content: ONE_LINE }); await frames(p); await p.waitForTimeout(250); await frames(p);
+          const before = await rows(p); await held.evaluate((e) => e.remove());
+          const lost = TABLES.filter((k) => drawn.out[k] && before.out[k] && drawn.out[k].whole < before.out[k].whole), wraps = TABLES.filter((k) => drawn.out[k]?.wrap);
+          ck(`${label(w, h, size)}${face ? " in DejaVu Sans" : ""}, ${idx === "kospi" ? "KOSPI (STAND-IN)" : "TOPIX"}, market ${open ? "open" : "closed"}: ${wraps.length} line(s) under their titles (${wraps.map((k) => k.slice(3)).join(", ") || "none"}); whole rows as drawn / with the lines held on the titles' line: ${TABLES.map((k) => `${k.slice(3)} ${drawn.out[k]?.whole}/${before.out[k]?.whole} of ${drawn.out[k]?.all}`).join(", ")}; none fewer, no panel over another, no source line cut`,
+            drawn.term && (!open || wraps.length > 0) && lost.length === 0 && drawn.overlap.length === 0 && cut.length === 0 && errs.length === 0, { lost: lost.map((k) => [k, drawn.out[k], before.out[k]]), overlap: drawn.overlap, cut, errs });
+        }
+        await ctx.close();
+      }
     }
   } finally { await b.close(); }
   console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed");

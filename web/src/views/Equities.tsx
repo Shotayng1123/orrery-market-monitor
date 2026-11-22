@@ -1,6 +1,6 @@
 import { INDICES } from "../lib/indices";
 import { zoomNow } from "../lib/prefs";
-import { useMemo, useState, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { Empty, Panel, SrcParts } from "../components/Panel";
 import { ChartPanel, type ChartPeriod } from "../components/ChartPanel";
 import { PeriodBar } from "../components/PeriodBar";
@@ -279,7 +279,43 @@ function Screener({ s }: { s: IndexStats }) {
   );
 }
 
+/** The one-screen layout: a source line on its head's second line (the designer's B.0.3: the whole line, else its short
+ *  form beside the title, else that form under it) takes its height from the chart beside it, never from a table. The
+ *  head grew into the panel's body, and whole table rows of SECTOR PERFORMANCE, FLOW BY SECTOR and MARKET BREADTH went
+ *  behind the panel's own scroll (DP-1 of the final review of pull request #50: two lines while the market is open).
+ *  Each head's height beyond its first line is set on the grid, and the stylesheet moves the panels' edges by it:
+ *  BREADTH and FLOW down into the heat map under them, SECTORS and SHORT INTEREST up into the index and its drivers above
+ *  them (tokens.css). Measured when a head's size changes (a ResizeObserver: the fit, a resize, the fonts), never on a
+ *  timer. */
+function useHeadRoom(): void {
+  useLayoutEffect(() => {
+    const grid = document.getElementById("grid");
+    if (!grid || typeof ResizeObserver === "undefined") return;
+    const head = (k: string) => grid.querySelector<HTMLElement>(`:scope > .panel[data-k="${k}"] > .phead`);
+    const heads = { b: head("eq-breadth"), f: head("eq-flow"), s: head("eq-sectors"), h: head("eq-short") };
+    // a head's height below its first line (the title's), in CSS px: what its source line takes under the title
+    const extra = (h: HTMLElement | null): number => {
+      const t = h?.querySelector<HTMLElement>(":scope > .t");
+      if (!h || !t || !document.body.classList.contains("term")) return 0;
+      const z = zoomNow(), tr = t.getBoundingClientRect(), cs = getComputedStyle(h);
+      let first = tr.bottom;
+      for (const c of h.children) { const r = c.getBoundingClientRect(); if (r.height > 0 && r.top < tr.bottom && r.bottom > tr.top) first = Math.max(first, r.bottom); }
+      const x = (h.getBoundingClientRect().bottom - (parseFloat(cs.paddingBottom) + parseFloat(cs.borderBottomWidth)) * z - first) / z;
+      return x > 0.5 ? Math.round(x * 100) / 100 : 0;
+    };
+    const set = () => {
+      const v = { "--eq-xb": extra(heads.b), "--eq-xf": extra(heads.f), "--eq-xs": Math.max(extra(heads.s), extra(heads.h)) };
+      for (const [k, x] of Object.entries(v)) if (grid.style.getPropertyValue(k) !== `${x}px`) grid.style.setProperty(k, `${x}px`);
+    };
+    const ro = new ResizeObserver(set);
+    for (const h of Object.values(heads)) if (h) ro.observe(h);
+    set();
+    return () => { ro.disconnect(); for (const k of ["--eq-xb", "--eq-xf", "--eq-xs"]) grid.style.removeProperty(k); };
+  }, []);
+}
+
 export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: string) => void; tick: number }) {
+  useHeadRoom();
   const ix = INDICES.find((i) => i.id === sub) ?? INDICES[1];
   const [period, setPeriod] = useState<ChartPeriod>("12M");
   const [sigmaWindow, setSigmaWindow] = useState<SigmaWindow>("m12");

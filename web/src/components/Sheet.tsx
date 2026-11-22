@@ -55,6 +55,15 @@ function sheetGone(): void {
 }
 /** Resolves once no sheet's history entry is being stepped out of: at once when none is. */
 export const sheetsSettled = (): Promise<void> => settling ?? Promise.resolve();
+/** The same entry for an overlay that is not a sheet but closes on Back as a sheet does: Help in the phone layout (PP-2
+ *  of the final review of pull request #50: drawn at the page's root since LV-3, it no longer left the screen with the
+ *  phone's menu, and Back moved the page under it unseen). One entry for every sheet and such overlay together.
+ *  `shown` when it opens, `gone` when it closes, `left` on popstate: whether Back has left the entry (it then closes). */
+export const backEntry = {
+  shown: sheetShown,
+  gone: sheetGone,
+  left: (): boolean => { if (marked()) return false; entry = false; return true; },
+};
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -84,7 +93,7 @@ export function Sheet({ title, onClose, children, id, modal = false, foot }: { t
       if (e.shiftKey && (at === first || at === el || !el.contains(at))) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && (at === last || !el.contains(at))) { e.preventDefault(); first.focus(); }
     };
-    const pop = () => { if (!marked()) { entry = false; close.current(); } };   // Back: the sheet's entry was left
+    const pop = () => { if (backEntry.left()) close.current(); };   // Back: the sheet's entry was left
     document.addEventListener("keydown", key, true);
     window.addEventListener("popstate", pop);
     return () => {

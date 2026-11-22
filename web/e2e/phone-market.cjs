@@ -62,6 +62,24 @@ const norm = (s) => (s || "").replace(/\s+/g, " ").trim();
     await p.locator("#pv2-on").tap(); await p.waitForSelector(".mp-row"); await p.waitForTimeout(400); const s4 = await state(p);
     ck("NEW LAYOUT button in the classic header: the phone layout again", s4.pv2 && s4.zoom === "1" && s4.nav === 7, s4);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+  // PP-2 of the final review of pull request #50: in the phone layout Help is drawn at the page's root (LV-3), and Back
+  // moved the tab under it to the one before, unseen, while Help stayed over it; a second Back left the Monitor. Back
+  // now closes Help as it closes a sheet, the tab Help was opened on stays, and CLOSE leaves no entry behind.
+  for (const [w, h] of [[375, 667], [360, 800]]) { console.log(`\n[Help and Back in the phone layout, ${w} x ${h}]`);
+    const ctx = await b.newContext({ ...devices["iPhone 13"], viewport: { width: w, height: h }, deviceScaleFactor: 1 }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+    await ctx.addInitScript(() => { try { localStorage.setItem("om_a2hs_hide", "1"); localStorage.setItem("om_mock_now", "2026-11-23T23:10:00Z"); } catch {} });
+    const st = () => p.evaluate(() => ({ hash: location.hash, help: !!document.querySelector(".helpwrap"), tab: document.querySelector("#pnav a.on")?.getAttribute("href") ?? null }));
+    const back = async () => { await p.evaluate(() => history.back()); await p.waitForTimeout(450); return st(); };
+    const help = async () => { await p.locator("#pv2-btns button[aria-expanded]").tap(); await p.waitForTimeout(250); await p.locator("#help-ctl").tap(); await p.waitForSelector(".helpwrap", { timeout: 5000 }); await p.waitForTimeout(250); return st(); };
+    await p.goto(MOCK + "#market", { waitUntil: "networkidle" }); await p.waitForSelector(".mp-row");
+    await p.locator('#pnav a[href="#rates"]').tap(); await p.waitForTimeout(600);
+    const opened = await help(), b1 = await back(), b2 = await back();
+    ck(`Help opened on RATES & FX (${opened.hash}, Help ${opened.help ? "drawn" : "not drawn"}): Back closes it and the page stays on ${b1.hash} (tab ${b1.tab}, Help ${b1.help ? "still drawn" : "gone"}); a second Back goes to the tab before, ${b2.hash}, still in the Monitor`, opened.help && opened.hash === "#rates" && !b1.help && b1.hash === "#rates" && b1.tab === "#rates" && !b2.help && b2.hash === "#market" && errs.length === 0, { opened, b1, b2, errs });
+    await p.locator('#pnav a[href="#rates"]').tap(); await p.waitForTimeout(600);
+    await help(); await p.locator(".helphead .chip-sm").tap(); await p.waitForTimeout(450);
+    const closed = await st(), b3 = await back();
+    ck(`CLOSE takes Help away on ${closed.hash} and leaves no entry behind: one Back goes to the tab before (${b3.hash})`, !closed.help && closed.hash === "#rates" && b3.hash === "#market" && !b3.help && errs.length === 0, { closed, b3, errs });
+    await ctx.close(); }
   { console.log("\n[iPhone 13 landscape]"); const ctx = await b.newContext({ ...devices["iPhone 13 landscape"] }); const p = await ctx.newPage();
     await p.goto(MOCK + "?phone=new#market", { waitUntil: "networkidle" }); await p.waitForSelector(".mp-row"); await p.waitForTimeout(500); const s = await state(p);
     ck("the preview also applies with the phone on its side", s.pv2 && s.nav === 7 && s.list > 0, s); await ctx.close(); }

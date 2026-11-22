@@ -480,6 +480,15 @@ body.term #grid[data-view="equities"]>.panel[data-k="eq-short"]{grid-column:5 / 
 body.term #grid[data-view="equities"]>.panel[data-k="eq-heat"]{grid-column:9 / span 4;grid-row:4 / span 2}
 body.term #grid[data-view="equities"]>.panel[data-k="eq-movers"]{grid-column:1 / span 8;grid-row:5}
 body.term #grid[data-view="equities"]>.panel[data-k="eq-screener"]{grid-column:1 / -1;grid-row:6}
+/* a source line on its head's second line (B.0.3) takes its height from the chart beside it, never from a table (DP-1 of
+   the final review of pull request #50): BREADTH and FLOW reach down into the heat map under them, SECTORS and SHORT
+   INTEREST up into the index and its drivers above them, each by its head's height below its first line, which
+   Equities.tsx (useHeadRoom) sets on the grid as drawn; the gap between two panels stays as it is */
+body.term #grid[data-view="equities"]>.panel[data-k="eq-breadth"]{margin-bottom:calc(-1 * var(--eq-xb, 0px))}
+body.term #grid[data-view="equities"]>.panel[data-k="eq-flow"]{margin-top:var(--eq-xb, 0px);margin-bottom:calc(-1 * (var(--eq-xb, 0px) + var(--eq-xf, 0px)))}
+body.term #grid[data-view="equities"]>.panel[data-k="eq-heat"]{margin-top:calc(var(--eq-xb, 0px) + var(--eq-xf, 0px))}
+body.term #grid[data-view="equities"]>.panel[data-k="eq-index"],body.term #grid[data-view="equities"]>.panel[data-k="eq-drivers"]{margin-bottom:var(--eq-xs, 0px)}
+body.term #grid[data-view="equities"]>.panel[data-k="eq-sectors"],body.term #grid[data-view="equities"]>.panel[data-k="eq-short"]{margin-top:calc(-1 * var(--eq-xs, 0px))}
 body.term #grid[data-view="market"] .cgrid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
 body.term #grid[data-view="news"] .panel[data-no="01"]{grid-column:span 7;grid-row:span 2}
 body.term #grid[data-view="news"] .panel[data-no="02"],body.term #grid[data-view="news"] .panel[data-no="03"]{grid-column:span 5;grid-row:span 1}
@@ -577,7 +586,7 @@ body.term table.mkt tr.cls td{height:1%}
    the column is 120 px whatever the window, and the figures share the rest evenly. From 1,500 it is what the
    figures' shares leave, 19.6% (143 px and more: a wide window keeps its wider name column). Under 1,150 CSS px,
    which only a fixed text size in a small window reached, the table did not fit at all (its figures were cut): since
-   22 Nov 2026 the one-screen layout is offered only from a layout of 1,300 CSS px (lib/prefs.ts; the review's SF-1
+   22 Nov 2026 the one-screen layout is offered only from a layout of 1,310 x 560 CSS px (lib/prefs.ts; the review's SF-1
    found TOPIX's day cut at text M, L and XL there), so the column is 120 px at every size it is drawn at under 1,500.
    The layout's width is the page's own, read on #wrap (the text size works by zoom, so a window media query would
    not see it). */
