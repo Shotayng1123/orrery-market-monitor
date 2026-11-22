@@ -4,8 +4,8 @@
 //     1D IN σ column right after 1D, sorted by |σ| within each class bar and back; the official yield's day "measured on
 //     its close (published a day late)"; gold's stand-in roll day: its 1D within the new contract, marked ROLL, no jump in σ;
 //   - the one-screen layout (the strip is the first row, names and σ on one line) and text size XL (two rows of five);
-//   - MARKETS on a phone: Movers in σ first, a row of 132 x 76 cards that moves sideways, the third cut at the edge, the
-//     as-of in its head, the install hint under it; an opened row's 1D in σ;
+//   - MARKETS on a phone: Movers in σ first, a row of 144 x 76 cards that moves sideways, the third cut at the edge, the
+//     as-of in its head, the morning note and the install line under it; an opened row's 1D in σ;
 //   - the header's alert list: the stand-in 2.7σ USD/JPY move with its σ, its window and its source; WATCHLIST's alerts on
 //     my names, both layouts: a σ move with its kind, window and source under its line and its σ as its figure (a yield's
 //     too), and one under 2.5σ not listed (the server's rule; the reviewer's F3, 20 Nov 2026);
@@ -16,6 +16,8 @@
 //     left out, the roll marked on its chart; its realised vol and largest fall those of the series with the step taken out;
 //   - a server from before 20 Nov 2026 (rows without σ, contract or roll): MARKETS says so in the strip's place, the
 //     column holds dashes, the phone has no σ section and keeps its as-of in the screen's head.
+// Since 21 Nov 2026 the strip has two readings and names the day of a move that is not today's (B-32): e2e/morning.cjs
+// checks those at a set clock; here the stand-in rows keep their fixed states, and the strip is read under TODAY.
 // Run from web/:  node e2e/run.cjs sigma-moves   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
 const { S } = require("./standin.cjs");
@@ -44,7 +46,7 @@ const stripView = (p) => p.evaluate(() => {
   const pn = document.querySelector('.panel[data-k="sigma"]'); if (!pn) return null;
   const r = pn.getBoundingClientRect();
   return { no: pn.dataset.no, title: pn.querySelector(".phead .t").textContent, aux: pn.querySelector(".phead .aux").textContent, top: Math.round(r.top), h: Math.round(r.height),
-    cells: [...pn.querySelectorAll(".sgcell")].map((c) => { const b = c.getBoundingClientRect(); return { nm: c.querySelector(".nm").textContent, z: c.querySelector(".z").textContent, mv: c.querySelector(".mv").textContent, href: c.getAttribute("href"), hot: c.classList.contains("hot"), quiet: c.classList.contains("quiet"), border: getComputedStyle(c).borderTopColor, zCls: c.querySelector(".z").className, top: Math.round(b.top), left: Math.round(b.left), w: Math.round(b.width), h: Math.round(b.height), whole: [...c.querySelectorAll(".z,.mv")].every((x) => x.scrollWidth <= x.clientWidth + 1 || getComputedStyle(x).display === "none"), mvShown: getComputedStyle(c.querySelector(".mv")).display !== "none" }; }),
+    cells: [...pn.querySelectorAll(".sgcell")].map((c) => { const b = c.getBoundingClientRect(); return { nm: c.querySelector(".nm").textContent, z: c.querySelector(".z").textContent, mv: c.querySelector(".mv").innerText.replace(/\s+/g, " ").trim(), href: c.getAttribute("href"), hot: c.classList.contains("hot"), quiet: c.classList.contains("quiet"), border: getComputedStyle(c).borderTopColor, zCls: c.querySelector(".z").className, top: Math.round(b.top), left: Math.round(b.left), w: Math.round(b.width), h: Math.round(b.height), whole: [...c.querySelectorAll(".z,.mv")].every((x) => x.scrollWidth <= x.clientWidth + 1 || getComputedStyle(x).display === "none"), mvShown: getComputedStyle(c.querySelector(".mv")).display !== "none" }; }),
     note: pn.querySelector("#mk-sigma-note")?.textContent ?? null };
 });
 const AMBER = "rgb(255, 111, 97)", D = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
@@ -55,7 +57,7 @@ const AMBER = "rgb(255, 111, 97)", D = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
     await go(p, "#market", "table.mkt tbody tr:not(.cls)");
     const rows = (await table(p)).filter((r) => r.marketTab !== false), s = await stripView(p), t = await tableView(p);
     const want = rows.filter((r) => r.z1d != null).sort((a, b2) => Math.abs(b2.z1d) - Math.abs(a.z1d) || a.order - b2.order).slice(0, 10);
-    ck(`panel 01 is "${s?.title}" (the σ lower case), above MARKETS: "${s?.aux}", its as-of named as on the phone (S1)`, !!s && s.no === "01" && s.title === "MOVERS IN σ" && /today's change ÷ σ of daily changes, 63 sessions · official-curve yields once their day is booked · as of \d{1,2} [A-Z][a-z]{2} \d\d:\d\d SGT/.test(s.aux) && (await p.locator('.panel[data-k="mkt"]').getAttribute("data-no")) === "02", s);
+    ck(`panel 01 is "${s?.title}" (the σ lower case), above MARKETS: "${s?.aux}", its as-of named as on the phone (S1)`, !!s && s.no === "01" && s.title === "MOVERS IN σ" && /^the day's change ÷ σ of its daily changes, 63 sessions · as of \d{1,2} [A-Z][a-z]{2} \d\d:\d\d SGT/.test(s.aux) && (await p.locator('.panel[data-k="mkt"]').getAttribute("data-no")) === "02", s);
     ck(`ten cells in one row, the largest |σ| first (${s?.cells.map((c) => `${c.nm} ${c.z}`).join(", ")})`, s.cells.length === 10 && new Set(s.cells.map((c) => c.top)).size === 1 && s.cells.every((c, i) => c.z === fmtS(want[i].z1d)) && s.cells.every((c) => /^[+-]?\d+\.\dσ$/.test(c.z)), { got: s.cells.map((c) => c.z), want: want.map((r) => fmtS(r.z1d)) });
     ck("each cell: a name, its σ in its sign's colour, the day's change and the level under it, whole; a link to the instrument's page", s.cells.every((c, i) => /^#(asset|equities)\//.test(c.href) && c.whole && /^[+-]?\d[\d,.]*(%|bp) · [\d,.]+%?$/.test(c.mv) && (want[i].z1d > 0.05 ? /\bup\b/.test(c.zCls) : want[i].z1d < -0.05 ? /\bdn\b/.test(c.zCls) : true)), s.cells);
     const usd = s.cells.find((c) => c.nm === "USD/JPY");
@@ -68,12 +70,12 @@ const AMBER = "rgb(255, 111, 97)", D = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
     const bad = t.rows.filter((x, i) => x.z !== fmtS(inTable[i]?.z1d));
     ck(`every row's 1D IN σ is the table's own figure (${t.rows.length} rows; "${t.rows[0].z}" for ${t.rows[0].name})`, t.rows.length === rows.length && bad.length === 0, bad.slice(0, 3));
     const usdRow = t.rows.find((x) => x.name === "USD/JPY");
-    ck(`its tooltip says what it is worked out from ("${usdRow.ztip.slice(0, 90)}…")`, new RegExp(`^The day's change over the σ of the 63 daily changes before it \\([\\d.]+% a day\\), worked out † from the daily closes of ${D} – ${D} \\(Yahoo Finance\\)$`).test(usdRow.ztip), usdRow.ztip);
+    ck(`its tooltip says what it is worked out from ("${usdRow.ztip.slice(0, 90)}…")`, new RegExp(`^The day's change over the σ of the 63 daily changes before it \\([\\d.]+% a day\\), worked out † from the daily closes of ${D} – ${D} \\(Yahoo Finance\\) · last session \\(${D}\\): [+-]\\d\\.\\dσ, between the closes of ${D} and ${D}$`).test(usdRow.ztip), usdRow.ztip);
     const jgb = t.rows.find((x) => /^JGB/.test(x.name));
-    ck(`an official-curve yield's day is measured on its booked close ("…${jgb?.ztip.split(" · ")[1]}")`, !!jgb && new RegExp(`\\(Japan MOF\\) · measured on ${D}'s close \\(published a day late\\)$`).test(jgb.ztip) && /^[+-]?\d+\.\dσ$/.test(jgb.z), jgb);
+    ck(`an official-curve yield's day is measured on its booked close ("…${jgb?.ztip.split(" · ")[1]}")`, !!jgb && new RegExp(`\\(Japan MOF\\) · measured on ${D}'s close \\(published a day late\\) · last session `).test(jgb.ztip) && /^[+-]?\d+\.\dσ$/.test(jgb.z), jgb);
     // D-67: the US Treasury publishes its curve on the day itself; only the others are a day late (Help, "Curves")
     const ust = t.rows.find((x) => x.name === "UST 2Y");
-    ck(`a US Treasury yield's tooltip does not say "a day late" ("…${ust?.ztip.split(" · ")[1]}")`, !!ust && new RegExp(`\\(US Treasury\\) · measured on ${D}'s close, its newest published day$`).test(ust.ztip) && !/a day late/.test(ust.ztip), ust);
+    ck(`a US Treasury yield's tooltip does not say "a day late" ("…${ust?.ztip.split(" · ")[1]}")`, !!ust && new RegExp(`\\(US Treasury\\) · measured on ${D}'s close, its newest published day · last session `).test(ust.ztip) && !/a day late/.test(ust.ztip), ust);
     // B-27: gold's stand-in roll day
     const gold = t.rows.find((x) => x.name === "Gold"), gr = rows.find((r) => r.symbol === "GC=F");
     const naive = (gr.last / (gr.closes.d1 / (1 + gr.roll.step / 100)) - 1) * 100, within = gr.pct.d1, naiveZ = naive / gr.sd1d;
@@ -108,7 +110,8 @@ const AMBER = "rgb(255, 111, 97)", D = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
       const name = tr.children[0], z = tr.querySelector("td.z"), roll = name.querySelector(".badge.roll");
       return { badges: [...name.querySelectorAll(".badge")].filter((x) => getComputedStyle(x).display !== "none").map((x) => x.textContent), rollShown: !!roll && getComputedStyle(roll).display !== "none", nameWhole: name.scrollWidth <= name.clientWidth + 1, mark: getComputedStyle(z, "::after").content, zText: z.innerText, zWhole: z.scrollWidth <= z.clientWidth + 1, zTip: z.title }; });
     ck(`compact: gold's roll day is an R after its 1D in σ ("${gc?.zText}" ${gc?.mark}), whole, with the change of contract on its tooltip; its name cell keeps ${JSON.stringify(gc?.badges)}, whole (S3)`, !!gc && !gc.rollShown && gc.mark === '"R"' && gc.zWhole && gc.nameWhole && !gc.badges.includes("ROLL") && /^[+-]?\d+\.\dσ$/.test(gc.zText) && /a change of contract today/.test(gc.zTip), gc);
-    ck(`compact: the strip is the first row under the picks (${g.strip.top}–${g.strip.bottom} px, ${s.h} px tall), the ten names and σ on one line each, the table and the charts under it`, g.strip.top >= g.sel.bottom - 1 && s.h <= 64 && s.cells.length === 10 && s.cells.every((c) => !c.mvShown && c.h <= 24) && g.mkt.top >= g.strip.bottom - 1 && g.eq.top >= g.strip.bottom - 1 && g.mkt.left < g.eq.left, { g, h: s.h, cells: s.cells.map((c) => c.h) });
+    // two lines a cell since 21 Nov 2026 (B-32: the name and the σ, then the day and the change; e2e/morning.cjs holds the panel to 54 CSS px)
+    ck(`compact: the strip is the first row under the picks (${g.strip.top}–${g.strip.bottom} px, ${s.h} px tall), the ten names and σ on one line each with the change under them, the table and the charts under it`, g.strip.top >= g.sel.bottom - 1 && s.h <= 64 && s.cells.length === 10 && s.cells.every((c) => c.mvShown && c.h <= 32 && /^(\d{1,2} [A-Z][a-z]{2} · )?[+-]?\d[\d,.]*(%|bp)$/.test(c.mv)) && g.mkt.top >= g.strip.bottom - 1 && g.eq.top >= g.strip.bottom - 1 && g.mkt.left < g.eq.left, { g, h: s.h, cells: s.cells.map((c) => [c.h, c.mv]) });
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
   { const { ctx, p, errs } = await page(b, { viewport: { width: 1440, height: 900 } }, XL);
     await go(p, "#market", ".sgcell");
@@ -126,13 +129,14 @@ const AMBER = "rgb(255, 111, 97)", D = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
       return { first: sec?.id ?? null, h2: sec?.querySelector("h2 > span").textContent, sgNote: document.querySelector("#mk-sigma-note")?.textContent ?? null, sgNoteIn: !!sec?.querySelector("#mk-sigma-note"), sgNoteUnder: (() => { const n = document.querySelector("#mk-sigma-note"), items = [...document.querySelectorAll(".mp-item")]; return !!n && items.length > 0 && n.getBoundingClientRect().top >= items[items.length - 1].getBoundingClientRect().bottom - 0.5; })(), sigCase: sec ? getComputedStyle(sec.querySelector("h2 .sig")).textTransform : null, aux: sec?.querySelector("h2 .aux")?.textContent ?? null, screenSub: document.querySelector(".mp-head .mp-asof")?.textContent ?? "",
         cards: cards.map((c) => ({ ...r(c), nm: c.querySelector(".nm").textContent, z: c.querySelector(".z").textContent, mv: c.querySelector(".mv").textContent, cut: [...c.querySelectorAll(".z,.mv")].some((x) => x.scrollWidth > x.clientWidth + 1), href: c.getAttribute("href"), snap: getComputedStyle(c).scrollSnapAlign })),
         row: { ...r(row), scrollW: row.scrollWidth, clientW: row.clientWidth, snap: getComputedStyle(row).scrollSnapType, bar: getComputedStyle(row).scrollbarWidth },
-        strip: r(sec), note: r(document.querySelector(".mp-today")), hint: r(document.querySelector(".mp-a2hs")), rows: [...document.querySelectorAll(".mp-row")].filter((e) => e.getBoundingClientRect().bottom <= navTop).length, vw: innerWidth, ox: document.documentElement.scrollWidth - innerWidth }; });
+        strip: r(sec), note: r(document.querySelector("#mk-note")), hint: r(document.querySelector("#mk-install")), rows: [...document.querySelectorAll(".mp-row")].filter((e) => e.getBoundingClientRect().bottom <= navTop).length, vw: innerWidth, ox: document.documentElement.scrollWidth - innerWidth }; });
     ck(`the first section is "${m.h2}" (σ lower case), with the screen's as-of in its head ("${m.aux}")`, m.first === "mk-sigma" && m.h2 === "Movers in σ" && m.sigCase === "none" && /^as of \d{1,2} [A-Z][a-z]{2} \d\d:\d\d SGT$/.test(m.aux ?? "") && !/as of/.test(m.screenSub), m);
-    ck(`ten cards of ${m.cards[0]?.w} x ${m.cards[0]?.h} px in one row that moves sideways and stops on a card, no scrollbar; the third is cut at the screen's edge (${m.cards[2]?.left}–${m.cards[2]?.right} of ${m.vw})`, m.cards.length === 10 && m.cards.every((c) => c.w === 132 && c.h === 76 && c.snap === "start" && !c.cut && /^#(asset|equities)\//.test(c.href)) && new Set(m.cards.map((c) => c.top)).size === 1 && m.row.scrollW > m.row.clientW && /x mandatory/.test(m.row.snap) && m.row.bar === "none" && m.cards[2].left < m.vw && m.cards[2].right > m.vw, { cards: m.cards.slice(0, 3), row: m.row });
+    ck(`ten cards of ${m.cards[0]?.w} x ${m.cards[0]?.h} px in one row that moves sideways and stops on a card, no scrollbar; the third is cut at the screen's edge (${m.cards[2]?.left}–${m.cards[2]?.right} of ${m.vw})`, m.cards.length === 10 && m.cards.every((c) => c.w === 144 && c.h === 76 && c.snap === "start" && !c.cut && /^#(asset|equities)\//.test(c.href)) && new Set(m.cards.map((c) => c.top)).size === 1 && m.row.scrollW > m.row.clientW && /x mandatory/.test(m.row.snap) && m.row.bar === "none" && m.cards[2].left < m.vw && m.cards[2].right > m.vw, { cards: m.cards.slice(0, 3), row: m.row });
     // under the lists since 21 Nov 2026 (the designer's verdict on D-14: above them it kept every list row off the first screen)
-    ck(`what the cards measure is a note under the lists, not between the cards and them: "${m.sgNote}"`, new RegExp(`^Movers in σ: the day's change ÷ σ of its daily changes, 63 sessions\. † Worked out by the Monitor from the daily closes, mostly ${D} – ${D}\.$`).test(m.sgNote ?? "") && !m.sgNoteIn && m.sgNoteUnder, { note: m.sgNote, in: m.sgNoteIn, under: m.sgNoteUnder });
+    ck(`what the cards measure is a note under the lists, not between the cards and them: "${m.sgNote}"`, new RegExp(`^Movers in σ: the day's change ÷ σ of its daily changes, 63 sessions\. Last session: each instrument's newest completed day, between its last two booked closes\. † Worked out by the Monitor from the daily closes, mostly ${D} – ${D}\.$`).test(m.sgNote ?? "") && !m.sgNoteIn && m.sgNoteUnder, { note: m.sgNote, in: m.sgNoteIn, under: m.sgNoteUnder });
     ck(`each card: the name, "${m.cards[0].z}" and the day's change ("${m.cards[0].mv}")`, m.cards[0].nm === "USD/JPY" && m.cards[0].z === "+2.7σ" && m.cards.every((c) => /^[+-]?\d+\.\dσ$/.test(c.z) && /^[+-]?\d[\d,.]*(%|bp)$/.test(c.mv)), m.cards.slice(0, 3));
-    ck(`no card or hint above the data: the strip comes first (${m.strip.top} px), the morning note (${m.note?.top}) and the install hint (${m.hint?.top}) under it; ${m.rows} list rows on the first screen (more come with I-22's one-line alert and install line)`, (!m.note || m.note.top >= m.strip.bottom) && (!m.hint || (m.hint.top >= m.strip.bottom && (!m.note || m.hint.top >= m.note.bottom))) && m.strip.top < 300, m);
+    // since 21 Nov 2026 the note and the install line are two 44-px rows of one block, and the list follows on the first screen (e2e/phone-first.cjs)
+    ck(`no card or hint above the data: the strip comes first (${m.strip.top} px), the morning note (${m.note?.top}) and the install line (${m.hint?.top}) under it, one row each; ${m.rows} list rows on the first screen`, !!m.note && !!m.hint && m.note.top >= m.strip.bottom && m.hint.top >= m.note.bottom - 1 && m.note.h === 44 && m.hint.h === 45 && m.strip.top < 300 && m.rows >= 3, m);
     ck("nothing runs off the page sideways", m.ox <= 0, m.ox);
     await p.locator(".mp-row").nth(1).tap(); await p.waitForSelector(".mp-det"); await p.waitForTimeout(500);
     const det = await p.evaluate(() => [...document.querySelectorAll(".mp-det .mp-grid")].map((g) => ({ two: g.classList.contains("two"), cells: [...g.children].map((c) => c.querySelector(".k").textContent) })));
@@ -210,7 +214,7 @@ const AMBER = "rgb(255, 111, 97)", D = "\\d{1,2} [A-Z][a-z]{2} \\d{4}";
     await go(p0, "#market", "table.mkt tbody tr:not(.cls)");
     const ans = await p0.evaluate(async () => { const { mockAction } = await import("/orrery-market-monitor/src/lib/mock.ts"); return mockAction("table"); });
     await c0.close();
-    const old = { ...ans, rows: ans.rows.map(({ z1d, sd1d, zFrom, zTo, zN, contract, roll, ...r }) => r) }, shown = old.rows.filter((r) => r.marketTab !== false).length;
+    const old = { ...ans, rows: ans.rows.map(({ z1d, sd1d, zFrom, zTo, zN, contract, roll, ls, ...r }) => r) }, shown = old.rows.filter((r) => r.marketTab !== false).length;
     for (const [name, opts] of [["computer 1440x900", { viewport: { width: 1440, height: 900 } }], ["iPhone 13", devices["iPhone 13"]]]) {
       const desk = name.startsWith("computer"), { ctx, p, errs } = await page(b, opts, desk ? AUTO : null);
       await routes(p);

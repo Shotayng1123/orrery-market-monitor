@@ -1,0 +1,20 @@
+-- A results date's mark, as the source gives it (A's A-37, 21 Nov 2026; the checks of round 3b: RM-1 and H-2).
+--
+-- constituent_stats.earnings_est holds Yahoo's flag for an index member's next results date: true (an estimate),
+-- false (confirmed), null (Yahoo gives no flag). Until the server of 21 Nov 2026 the quote reader also wrote false by a
+-- rule of its own, whatever the flag said, in three shapes of Yahoo's answer (a date ahead with no window start, or
+-- with one more than a day past). It wrote true only from Yahoo's own flag. A row is rewritten by its list's next
+-- weekday quote run and by nothing else, and nothing in a row tells a false of the old rule from one of Yahoo's: after
+-- a deploy at a weekend, a US index member's date could read "conf." on WATCHLIST and in the results calendar through
+-- Monday in Singapore with no flag of Yahoo's behind it.
+--
+-- So every stored false becomes "not said". The page writes a dash for that, and each list's next quote run (flow,
+-- mflow, stats) writes Yahoo's own flag again: false where Yahoo marks the date confirmed. Until that run, a date
+-- Yahoo did mark confirmed reads a dash as well: less than Yahoo said, and never a mark Yahoo did not give; but such a
+-- dash is not one the source withholds, so the page says what a dash is there (the source gives none, or the Monitor
+-- has not read it again since 22 Nov 2026), and a Tokyo company's date, which reads est. whatever is stored, changes
+-- only its tooltip's words (the checks of 22 Nov 2026, RK-1).
+-- (This runs in the deploy's database step, minutes before the new functions are in place. A quote run in those
+-- minutes still writes by the old rule; that list's next run, ten to twenty minutes later in its session, puts it
+-- right.)
+update constituent_stats set earnings_est = null where earnings_est is false;

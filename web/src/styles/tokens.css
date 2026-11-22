@@ -200,7 +200,7 @@ body.term #topbar .chip{padding:1px 6px;font-size:9.5px}
 body.term #topbar .chip-sm{padding:0 5px;margin-left:2px}
 body.term #topbar #nxt{min-width:40px}
 body.term #nav{gap:1px;margin-left:2px}
-body.term #nav a{padding:2px 6px;font-size:9.5px;letter-spacing:.04em}
+body.term #nav a{padding:2px 5px;font-size:9.5px;letter-spacing:.04em}   /* 5 px a side with six tabs and with seven (the header's rule, below) */
 body.term #upd{font-size:9.5px!important}
 body.term #fs-ctl{display:inline-block}
 body.full #topbar{display:none}
@@ -550,9 +550,25 @@ body.term .cgrid.fit>.mtile.cp{flex:1 1 calc(100% / var(--c) - 3px);min-width:0;
 /* MARKET: table on the left over three rows, chart groups on the right */
 body.term #grid[data-view="market"]{grid-template-rows:auto minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr)}
 body.term table.mkt{min-width:0;height:100%}
-body.term table.mkt td{padding:0 3px}
-body.term table.mkt th{padding:1px 3px}
+body.term table.mkt td{padding:0 2px}
+body.term table.mkt th{padding:1px 2px}
 body.term table.mkt tr.cls td{height:1%}
+/* The name column holds a name, its PROXY mark and the day of a figure that is not today's on one line, with room to
+   spare ("TOPIX PROXY 20 Nov" is 106 CSS px; a ten-letter name and its day 96). It had 16.5% of the table: 116 px in a
+   1440-px window, where the day ended about a pixel from the cell's edge, and 98 px in a 1100-px one, where it was cut (the
+   checks of round 3b, 21 Nov 2026). The room comes from the cells' padding (2 px a side where it was 3) and from the
+   marks' own (1 px a side less in this cell), so no figure has less room than it had. In a layout from 1,150 to
+   1,500 CSS px wide, which is every window from 1100 px up at the AUTO text size unless it is wider than about 15:8,
+   the column is 120 px whatever the window, and the figures share the rest evenly. From 1,500 it is what the
+   figures' shares leave, 19.6% (143 px and more: a wide window keeps its wider name column). Under 1,150 CSS px,
+   which only a fixed text size in a small window reached, the table did not fit at all (its figures were cut): since
+   22 Nov 2026 the one-screen layout is offered only from a layout of 1,300 CSS px (lib/prefs.ts; the review's SF-1
+   found TOPIX's day cut at text M, L and XL there), so the column is 120 px at every size it is drawn at under 1,500.
+   The layout's width is the page's own, read on #wrap (the text size works by zoom, so a window media query would
+   not see it). */
+body.term table.mkt col.lv{width:9.2%} body.term table.mkt col.n{width:7.12%}
+@container wrap (min-width:1150px) and (max-width:1499.98px){body.term table.mkt col.nm{width:120px} body.term table.mkt col.n{width:auto}}
+body.term table.mkt td:first-child .badge{margin-left:4px;padding:0 3px}
 /* a roll day in the one-screen layout: ROLL leaves the narrow name cell, where it put DELAYED behind an ellipsis, for a
    one-letter mark after the 1D in σ (the reviewer's S3); the scrolling layout keeps ROLL beside the name */
 body.term table.mkt td:first-child .badge.roll{display:none}
@@ -583,14 +599,13 @@ body.term .curvechart .krow .v{font-size:10.5px}
 /* policy rates: chart and table side by side; the source links stay on hover in the head */
 body.term .panel[data-k="policy"] table th:last-child,body.term .panel[data-k="policy"] table td:last-child{display:none}
 body.term .panel[data-k="policy"] .pbody>.chartwrap{flex:1 1 0;min-width:220px}
-/* top bar on one row: the alert line takes whatever is left between the tabs and the search box */
-body.term #alerts{flex:1 1 0;min-width:90px}
+/* top bar on one row: the alert line takes whatever is left between the tabs and the search box (the header's rule
+   at the end of this file) */
+body.term #alerts{flex:1 1 0;min-width:0}
 body.term #alerts .alrt{max-width:100%}
 body.term #search{margin-left:0;flex:0 0 auto}
-body.term #search input{width:150px}
 body.term #topbar .bmq{margin-left:0;flex:0 0 auto;flex-wrap:nowrap}
 body.term #userchip .so{display:none}                 /* the chip's tooltip says "click to sign out" */
-body.term #search input{width:124px}
 /* sector tables in the narrow panels: long sector names give way to the figures (full name on hover) */
 body.term table.secT td.l{max-width:112px;overflow:hidden;text-overflow:ellipsis}
 body.term table.brT td.l{min-width:0}
@@ -1064,12 +1079,9 @@ body.pv2 #nav{display:none}
 #pv2-btns button:focus{outline:none}
 #pv2-btns button:focus-visible{outline:2px solid var(--amber);outline-offset:-2px}
 #pv2-btns svg{width:22px;height:22px}
-body.pv2 #alerts{order:6;flex:1 1 100%;width:auto;margin:0 10px 10px 0}
-body.pv2 #alerts .alrt{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;max-width:none;white-space:normal;font-size:13.5px;line-height:1.35;padding:9px 11px;border-radius:9px}
-body.pv2 #alerts .alrt>span:nth-child(2){order:3;flex:1 1 100%;min-width:0}   /* label and time on the first line, the whole message under them */
-body.pv2 #alerts .alrt.none>span:nth-child(2){order:0;flex:0 1 auto}   /* nothing to report: one line */
-body.pv2 #alerts .alrt .k{font-size:11px}
-body.pv2 #alerts .alrt .t{font-size:11.5px;margin-left:auto}
+/* the alert line (the designer's D-14 and note (b) of 21 Nov 2026): one line of 40 px, where the whole message stood
+   under the label on two or three; the rules are with the computer's parts of the line, further down */
+body.pv2 #alerts{order:6;flex:1 1 100%;width:auto;margin:0 10px 5px 0}
 body.pv2 #search,body.pv2 #topbar .bmq{display:none}
 body.pv2 #topbar.open #search{display:block;order:3;flex:1 1 100%;margin:2px 10px 10px 0}
 body.pv2 #topbar.open #search input{width:100%;font-size:16px;padding:11px 12px;border-radius:9px}
@@ -1393,11 +1405,6 @@ body.pv2 .mvtip{font-size:13px;padding:9px 11px;border-radius:9px}
 body.pv2 .mvtip .t,body.pv2 .mvtip .l{font-size:12px}
 .mp-moves{list-style:none;margin:0;padding:0 6px 0 0;max-height:min(46vh,372px);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:var(--bord2) transparent}
 .mp-moves:focus-visible{outline:1px solid var(--amber);outline-offset:2px}
-/* the morning's note, offered above the market list: its day, its title, and where a tap goes */
-.mp-today{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px;align-items:center;margin:14px 0 0;padding:13px 14px 14px 16px;border:1px solid var(--bord2);border-left:3px solid var(--amber);border-radius:12px;background:var(--panel2);color:var(--txt);text-decoration:none}
-.mp-today .k{grid-column:1;font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--amber)}
-.mp-today .t{grid-column:1;margin-top:5px;font-size:15.5px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.mp-today .go{grid-column:2;grid-row:1/3;font-size:26px;line-height:1;color:var(--mut)}
 /* a one-line offer inside a card (notifications, on the watchlist) */
 .mp-nudge{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;border-bottom:1px solid var(--bord);font-size:14px;line-height:1.4;color:var(--txt2)}
 .mp-nudge button{flex:0 0 auto;min-height:40px;padding:0 14px;border:1px solid var(--amber);border-radius:9px;background:none;color:var(--amber);font-family:var(--mono);font-size:12.5px;font-weight:700;letter-spacing:.06em;cursor:pointer}
@@ -1439,19 +1446,6 @@ body.pv2 .cf-who{font-size:14.5px}
 body.pv2 .modal .cf-btns{flex-direction:column-reverse;gap:8px}
 body.pv2 .modal .cf-btns button.go.ghost{margin-top:0}
 body.pv2 .modal.acct h3 .x{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;margin:-12px -10px -12px 0;font-size:20px}
-
-/* phone layout: the "add to your home screen" hint (Shota, 18 Nov 2026; lib/install.ts) */
-.mp-a2hs{display:grid;grid-template-columns:28px minmax(0,1fr) 44px;gap:0 10px;align-items:start;margin:2px 0 16px;padding:13px 2px 13px 13px;border:1px solid var(--amber);border-radius:14px;background:var(--sel);font-family:var(--sans)}
-.mp-a2hs .ic{width:28px;height:28px;margin-top:1px;color:var(--amber)}
-.mp-a2hs .tx{min-width:0;display:flex;flex-direction:column;gap:5px}
-.mp-a2hs .tx>b{font-size:15.5px;font-weight:600;line-height:1.25}
-.mp-a2hs .tx>span{font-size:13.5px;line-height:1.5;color:var(--txt2)}
-.mp-a2hs .how b{color:var(--txt);font-weight:600}
-.mp-a2hs .sh{display:inline-block;width:17px;height:17px;margin:0 1px;vertical-align:-3px;color:var(--amber)}
-.mp-a2hs .go{align-self:flex-start;min-height:44px;margin-top:6px;padding:0 22px;border:0;border-radius:11px;background:var(--amber);color:#000;font-family:var(--sans);font-size:15px;font-weight:700;cursor:pointer}
-.mp-a2hs .x{width:44px;height:44px;margin:-10px 0 0;padding:0;border:0;border-radius:10px;background:transparent;color:var(--txt2);font-size:24px;line-height:1;cursor:pointer}
-.mp-a2hs .x:active{background:var(--panel2)}
-.mp-a2hs .go:focus,.mp-a2hs .x:focus{outline:none}
 
 /* the bars at the foot of every screen (Shota, 18 Nov 2026; components/FootBars.tsx): the connection and "a new
    version is ready", above the phone's tab bar */
@@ -1520,7 +1514,9 @@ body.term .mtile.cp>.vl>.tags{display:none}
 .mp-hero .mtile.cp>.vl{flex-direction:column-reverse;align-items:flex-start}
 .mp-hero .mtile.cp>.vl>.tags{margin:0 0 6px;justify-content:flex-start;gap:4px 6px}
 .mp-hero .mtile.cp>.vl>.tags .badge{margin:0}
-.mp-hero .mtile.cp>.vl>.tags .opens{font-size:12px;text-align:left}
+/* the opening has no margin of its own here (it had 4 px): on the stamp's line the row's gap of 6 px separates the two,
+   and on a line of its own it starts under the badges' left edge (it stood 4 px to their right: the designer, 21 Nov 2026) */
+.mp-hero .mtile.cp>.vl>.tags .opens{font-size:12px;text-align:left;margin-left:0}
 /* SHORT INTEREST (D-07): three columns at natural height (two for FINRA), one when the panel is narrow or on a phone */
 .msg3{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:12px 18px;align-items:start}
 .msg3>div{min-width:0}
@@ -1589,7 +1585,8 @@ body.term .pcols,body.term .pcol{display:contents}
 table.wlT td.nm{white-space:normal;overflow:visible;text-overflow:clip;max-width:240px;overflow-wrap:break-word}
 table.wlT td.nm .mut{white-space:nowrap}
 /* the alert line in the header, on a computer: label · name · figure · time, and only the name is ever cut (the
-   designer's I-9 note); a phone's header shows the whole message under the label instead */
+   designer's I-9 note). The whole message (`.msg`) is drawn on no layout's line: it is in the line's tooltip and in the
+   list the line opens (a phone's line is the same parts on one line: the rules under body.pv2 below) */
 #alerts .alrt .msg{display:none}
 #alerts .alrt .one{display:inline-flex;align-items:baseline;gap:6px;min-width:0;flex:0 1 auto;overflow:hidden}
 #alerts .alrt .one .kd{flex:none;color:var(--amber);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase}
@@ -1598,8 +1595,24 @@ table.wlT td.nm .mut{white-space:nowrap}
 #alerts .alrt .one .q,#alerts .alrt .one .src{flex:none;color:var(--mut)}   /* what the figure is; a news alert's publisher */
 #alerts .alrt.new .one .q,#alerts .alrt.new .one .src{color:rgba(255,255,255,.75)}
 #alerts .alrt>.k,#alerts .alrt>.t{flex:none}
-body.pv2 #alerts .alrt .msg{display:inline}
-body.pv2 #alerts .alrt .one{display:none}
+/* A phone's line (the designer's note (b) of 21 Nov 2026, block 2): the same parts on one line of 40 px that takes a
+   44-px tap: the label, the kind of a σ move or a news alert, the name (the only part ever cut, with an ellipsis), the
+   figure in its sign's colour, the time at the right and a chevron. Not on it: the word after the figure ("intraday",
+   "at close", "1D") and a news alert's publisher; both are in the list one tap away and in the line's tooltip. */
+body.pv2 #alerts .alrt{position:relative;display:flex;flex-wrap:nowrap;align-items:center;gap:8px;height:40px;box-sizing:border-box;max-width:none;overflow:visible;white-space:nowrap;font-size:13.5px;line-height:1.2;padding:0 11px;border-radius:9px}
+body.pv2 #alerts .alrt::before{content:"";position:absolute;inset:-3px -1px}   /* 2 px beyond the line's own border above and below: a 44-px tap */
+body.pv2 #alerts .alrt .k{font-size:11px}
+body.pv2 #alerts .alrt .one{flex:1 1 auto;gap:8px}
+/* The name gives way down to nothing before the figure is touched. With the computer's floor of three letters' width
+   under it, a line with the least room hid the end of its figure behind this box's edge, with no ellipsis: a σ move
+   that is lit (the label "NEW ALERT") and was raised before midnight (its time carries its day) on a 375-px phone read
+   "σ MOVE USD/… +2." (the checks of round 3b, 21 Nov 2026). The kind, the figure and the time are never cut */
+body.pv2 #alerts .alrt .one .nm{min-width:0}
+body.pv2 #alerts .alrt .one .kd{font-size:11px}
+body.pv2 #alerts .alrt .one .q,body.pv2 #alerts .alrt .one .src{display:none}
+body.pv2 #alerts .alrt .t{font-size:11.5px;margin-left:auto}
+body.pv2 #alerts .alrt:not(.none)::after{content:"\203A";flex:none;color:var(--mut);font-size:18px;line-height:1;font-family:var(--sans)}
+body.pv2 #alerts .alrt.new::after{color:#fff}
 /* search (D-10, D-37): "/" as a key cap at the box's right on a computer; on a phone, rows of 52 px or more under the
    field, the whole name on the first line and "7203.T · Equity · NK225" under it */
 #search .skey{position:absolute;right:6px;top:50%;transform:translateY(-50%);padding:0 4px;border:1px solid var(--bord2);border-radius:3px;color:var(--mut);font:inherit;font-size:10px;line-height:1.35;pointer-events:none}
@@ -1782,21 +1795,132 @@ body.term .sgcell{flex-direction:row;align-items:baseline;gap:5px;padding:1px 5p
 body.term .sgcell .nm{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
 body.term .sgcell .z{font-size:11px}
 body.term .sgcell .mv,body.term .sgnote{display:none}
+/* B-32 (21 Nov 2026; the designer's note (a) of round 3b). The strip's two readings, TODAY and LAST SESSION, as two
+   joined chips right after the title (one shared border, the current one filled), with a line-height that leaves the
+   head its height. A cell's second line is the σ at the left and, at the right, the day of a move that is not today's;
+   "last session -2.2σ" is a cell's third line while a currency's or a future's day is under three hours old. */
+.sgpick{display:inline-flex;align-items:center;flex:none;margin:0 0 0 2px}
+.sgpick .chip-sm{margin-left:0;border-radius:0;line-height:1.3;padding:0 8px;background:transparent;font-family:inherit}
+.sgpick .chip-sm:first-child{border-radius:2px 0 0 2px}
+.sgpick .chip-sm:last-child{border-radius:0 2px 2px 0}
+.sgpick .chip-sm+.chip-sm{border-left:0}
+.sgpick .chip-sm.on{background:var(--amber);border-color:var(--amber);color:#000;font-weight:700}
+.sgpick .chip-sm:focus{outline:none}
+.sgpick .chip-sm:focus-visible{outline:1px solid var(--txt);outline-offset:1px}
+body.term .sgpick .chip-sm{margin-left:0;line-height:1.3;padding:0 5px}
+.sgcell .zl{display:flex;align-items:baseline;justify-content:space-between;gap:6px;min-width:0}
+.sgcell .day{flex:none;font-family:var(--mono);font-size:10px;font-weight:400;color:var(--mut);white-space:nowrap}
+.sgcell .mv .ls .f{white-space:nowrap}   /* in a narrow cell (text L) the line breaks after "session"; the figure is never broken */
+.sgcell .mv .d2{display:none}
+/* the table: a row whose last figure is not today's carries its day after the name and its badges; not a badge, no box */
+table.mkt td.l .asday{margin-left:6px;font-family:var(--mono);font-size:9.5px;color:var(--mut);white-space:nowrap}
+body.term table.mkt td.l .asday{font-size:9px;margin-left:4px}
+/* the classic phone layout: the name column is 104 px, for short names alone (the figures show beside it), and a day
+   after a name of seven letters or more was cut behind an ellipsis ("Nikkei 225 …"). There the day stands under its
+   name, whole, on a line of its own; a row without a day is as tall as it was */
+@media (max-width:720px){table.mkt td.l .asday{display:block;margin:1px 0 0;line-height:1.15}}
+/* The one-screen layout, where the server sends the last session: a cell takes two lines where it had one, as a date
+   does not fit beside the longest name and its σ. Line 1: the name and the σ. Line 2, 9 px, one line: the day when it
+   is not today's, then the change ("20 Nov · -1.74%"); "last session -2.2σ" while the day is young. */
+body.term .sgstrip[data-ls] .sgcell{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:5px;row-gap:0;align-items:baseline;padding:1px 5px 2px}
+body.term .sgstrip[data-ls] .sgcell .nm{grid-column:1;grid-row:1;line-height:13px}
+body.term .sgstrip[data-ls] .sgcell .zl{grid-column:2;grid-row:1;line-height:13px}   /* both lines of a set height: the panel is as tall in any font */
+body.term .sgstrip[data-ls] .sgcell .zl .day{display:none}
+body.term .sgstrip[data-ls] .sgcell .mv{display:block;grid-column:1/-1;grid-row:2;font-size:9px;line-height:11px;white-space:nowrap;overflow:hidden}
+body.term .sgstrip[data-ls] .sgcell .mv .lv{display:none}
+body.term .sgstrip[data-ls] .sgcell .mv .d2{display:inline}
 /* the 1D IN σ header sorts (▼ while sorted), and a future's ROLL mark beside its name (B-27) */
 table.mkt th.sortable{cursor:pointer;user-select:none}
 table.mkt th.sortable:hover,table.mkt th.sortable.on{color:var(--amber)}
 .badge.roll{color:var(--txt2);border-color:var(--bord2);cursor:help}
 .mp-st .roll{color:var(--txt2)}
-/* the phone: Movers in σ first, one row of cards that moves sideways and stops on a card, no scrollbar; 132 x 76 px */
-.mp-sgrow{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:0 0 2px}
+/* the phone: Movers in σ first, one row of cards that moves sideways and stops on a card, no scrollbar; 144 x 76 px
+   since 21 Nov 2026 (132 before): the day of a move stands at the right of its σ, and at 430 px of screen three cards of
+   132 fitted exactly, so nothing said that seven more follow (the designer's D-71) */
+.mp-sgrow{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:0}
 .mp-sgrow::-webkit-scrollbar{display:none}
-.mp-sgcard{flex:0 0 132px;box-sizing:border-box;height:76px;scroll-snap-align:start;display:flex;flex-direction:column;justify-content:space-between;padding:8px 10px;border:1px solid var(--bord2);border-radius:10px;background:var(--panel);color:var(--txt);text-decoration:none;overflow:hidden}
+.mp-sgcard{flex:0 0 144px;box-sizing:border-box;height:76px;scroll-snap-align:start;display:flex;flex-direction:column;justify-content:space-between;padding:8px 10px;border:1px solid var(--bord2);border-radius:10px;background:var(--panel);color:var(--txt);text-decoration:none;overflow:hidden}
 .mp-sgcard .nm{font-size:14px;line-height:1.15;color:var(--cyan);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mp-sgcard .z{font-family:var(--mono);font-size:18px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .mp-sgcard .mv{font-family:var(--mono);font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mp-sgcard.hot{border-color:var(--amber)}
 .mp-sgcard.quiet .z{color:var(--mut)}
-#mk-sigma.mp-sec h2{margin-top:10px}
+/* B-32 and the first screen (the designer's notes (a) and (b) of 21 Nov 2026). The head is 44 px: the title over the
+   screen's as-of at the left, and at the right the choice Today | Last session, a frame of two parts each taking a 44-px
+   tap. A card's second line is the σ with the move's day at its right; its third line the change, or "last session" with
+   that session's σ at the right while the day is young (only the words may be cut, never the figure). */
+#mk-sigma.mp-sec h2{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;align-content:center;align-items:center;column-gap:10px;row-gap:2px;height:44px;min-height:0;margin:0 8px}
+#mk-sigma.mp-sec h2>span:first-child{grid-column:1;grid-row:1;line-height:15px;white-space:nowrap}
+#mk-sigma.mp-sec h2>.aux{grid-column:1;grid-row:2;justify-self:start;font-family:var(--mono);font-size:11px;line-height:13px;white-space:nowrap}
+#mk-sigma.mp-sec h2>.mp-seg{grid-column:2;grid-row:1/3}
+.mp-seg{display:inline-flex;flex:none;border:1px solid var(--bord2);border-radius:8px}
+.mp-seg button{position:relative;height:32px;box-sizing:border-box;margin:0;padding:0 10px;border:0;border-radius:7px;background:transparent;color:var(--txt2);font-family:var(--sans);font-size:13px;font-weight:500;letter-spacing:0;text-transform:none;white-space:nowrap;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.mp-seg button::before{content:"";position:absolute;inset:-6px 0}
+.mp-seg button.on{background:var(--amber);color:#000;font-weight:600}
+.mp-seg button:focus{outline:none}
+.mp-seg button:focus-visible{outline:2px solid var(--txt);outline-offset:-2px}
+.mp-sgcard .zl{display:flex;align-items:baseline;justify-content:space-between;gap:6px;min-width:0}
+.mp-sgcard .day{flex:none;font-family:var(--mono);font-size:11px;font-weight:400;color:var(--mut);white-space:nowrap}
+.mp-sgcard .mv.ls{display:flex;align-items:baseline;justify-content:space-between;gap:6px;font-size:11px;overflow:visible}
+.mp-sgcard .mv.ls .w{min-width:0;overflow:hidden;text-overflow:ellipsis;font-family:var(--sans)}
+.mp-sgcard .mv.ls .f{flex:none}
+/* a list line's pill names the row's day in place of "1D" where its move is not today's; an opened row's last session */
+.mp-chg>.w .day{letter-spacing:.02em}
+.mp-grid .ls{color:var(--mut);font-size:11px;line-height:1.25;white-space:normal}
+/* ---- the phone's first MARKETS screen (the designer's D-14 and note (b) of 21 Nov 2026): every block above the list a
+   fixed height on one line, so no font can move the list: the site header 52, the alert line 40 + 6, the title row 44,
+   the strip's head 44, the cards 76 + 6, the morning note 44, the install line 44 + 1, the first class head 28 + 1. The
+   first list row then starts at y 386 with everything showing, and four whole rows stand above the tab bar in a window
+   of 375 x 667 (it started at y 790 there, below the tab bar). 375 x 667 is an iPhone SE's whole screen: four rows need
+   648 px, and a browser on that phone leaves less. ---- */
+/* the title row: 44 px, "Markets" at 26 px with the local copy's MOCK badge after it; the screen's as-of is in the
+   strip's head (while the table loads, fails or sends no σ the line is under the title as before, and the row is taller) */
+.mp-head.one{height:44px;box-sizing:border-box;align-items:center;padding:0 8px 0 16px}
+.mp-head.one h1{font-size:26px;line-height:1}
+.mp-head.one .mp-ttl{display:flex;align-items:baseline;gap:8px;min-width:0}
+.mp-head.one .mp-asof{margin:0}
+/* the morning note and the install line: rows of 44 px in one block, a 1-px rule between two */
+.mp-lines{margin:6px 0 0;border-left:3px solid var(--amber);border-radius:10px;background:var(--panel2);overflow:hidden}
+.mp-line{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;height:44px;box-sizing:border-box;padding:0 0 0 13px;color:var(--txt);text-decoration:none;font-family:var(--sans)}
+.mp-line+.mp-line{height:45px;border-top:1px solid var(--bord)}
+.mp-line .tx{min-width:0;display:flex;flex-direction:column;gap:1px}
+.mp-line .k{font-family:var(--mono);font-size:11px;line-height:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--amber);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-line .t{font-size:14.5px;line-height:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-line .t.one{font-weight:600}
+.mp-line .go{width:30px;text-align:center;font-size:22px;line-height:1;color:var(--mut)}
+.mp-line .open{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;min-width:0;height:44px;margin:0;padding:0;border:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.mp-line .x{width:44px;height:44px;margin:0;padding:0;border:0;background:transparent;color:var(--txt2);font-size:22px;line-height:1;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.mp-line .open:focus,.mp-line .x:focus{outline:none}
+.mp-line .open:focus-visible,.mp-line .x:focus-visible,a.mp-line:focus-visible{outline:2px solid var(--amber);outline-offset:-2px}
+a.mp-line:active,.mp-line .open:active,.mp-line .x:active{background:var(--panel)}
+/* the first class head after the strip: 28 px with no margin above or below (every other head keeps its 22 and 8); the
+   gap above it is the lines' own, or 6 px under the cards where no line shows */
+.mp-sec.first h2{height:28px;min-height:0;margin:0 8px}
+#mk-sigma+.mp-sec.first{margin-top:6px}
+/* ---- the bottom sheet (components/Sheet.tsx; the designer's note (b) and D/p1-design.md §9): a panel fixed to the bottom
+   edge, as wide as the screen and at most 80% of its height, over a dimmed page; its head the title and ✕, its body
+   scrolling inside ---- */
+.sheet-bg{position:fixed;inset:0;z-index:80;display:flex;align-items:flex-end;background:rgba(0,0,0,.6);touch-action:none}
+.sheet{width:100%;max-height:80vh;max-height:80dvh;display:flex;flex-direction:column;box-sizing:border-box;background:var(--panel2);border-top:1px solid var(--bord2);border-radius:16px 16px 0 0;font-family:var(--sans);color:var(--txt);touch-action:auto}
+.sheet:focus{outline:none}
+.sheet-head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;padding:6px 6px 0 16px}
+.sheet-head .t{min-width:0;font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--amber)}
+.sheet-head .x{flex:none;width:44px;height:44px;margin:0;padding:0;border:0;border-radius:10px;background:transparent;color:var(--txt2);font-size:24px;line-height:1;cursor:pointer}
+.sheet-head .x:active{background:var(--panel)}
+.sheet-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:4px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+.sheet-link{display:flex;align-items:center;min-height:44px;margin:6px 0 0;padding:0;border:0;background:transparent;color:var(--cyan);font-family:var(--sans);font-size:14.5px;cursor:pointer}
+/* the install sheet's words and steps (they were the card's) */
+.a2hs-tx{display:flex;flex-direction:column;gap:8px}
+.a2hs-tx p{margin:0;font-size:14.5px;line-height:1.5;color:var(--txt2)}
+.a2hs-tx .how b{color:var(--txt);font-weight:600}
+.a2hs-tx .sh{display:inline-block;width:17px;height:17px;margin:0 1px;vertical-align:-3px;color:var(--amber)}
+.a2hs-tx .go{align-self:flex-start;min-height:52px;margin-top:4px;padding:0 26px;border:0;border-radius:12px;background:var(--amber);color:#000;font-family:var(--sans);font-size:15.5px;font-weight:700;cursor:pointer}
+.a2hs-tx .go:focus{outline:none}
+/* ---- an old price while its market trades (the designer's D-66, 21 Nov 2026): a phone line reads what the figure is as
+   of, "Last print 08:40", in amber, where it read "No new print"; a tile's and a page's LAST PRINT word turns amber in
+   the same state ---- */
+.mp-st .state.stale{color:var(--warn)}
+.mtile.cp .asof .st.stale{color:var(--warn);border-color:#7a5a1a}
 /* a roll's card on the chart: a hollow diamond for its dot (B-27) */
 .mvtip .t .dot.roll{width:7px;height:7px;border-radius:0;transform:rotate(45deg);background:transparent;border:1.5px solid var(--txt2);margin-right:7px}
 /* a σ move in the alert list: its window and source under its line (I-6) */
@@ -1857,3 +1981,99 @@ table#in-key td.l{min-width:9.5em}
 .aldrop.ph .al-fig{margin-left:auto;font-size:13.5px;font-variant-numeric:tabular-nums}
 .aldrop.ph .al-msg{overflow-wrap:anywhere}
 .aldrop.ph .alrules{margin:10px 14px 2px}
+
+/* ===== the paper portfolio's entry (P-1, 21 Nov 2026; the designer's build note D/p1-design.md §1) =====
+   Only while the entry is drawn: #topbar carries .t7 with its seventh tab, #pnav .n7 with its seventh item (the
+   published page has six of each until the paper book's switch is turned, lib/paper.ts). The screens' own rules are
+   in styles/pf.css, loaded with the screens. */
+/* one-screen layout: the seventh tab takes nothing from the header's row: its rule (below, "the one-screen header")
+   gives every item its width whatever the number of tabs (until 22 Nov 2026 the search box was 64 px with seven tabs,
+   200 px with the focus and laid over what followed, and the row still took two lines in GitHub's letter placement) */
+/* the phone's bar with seven items: a label never leaves its item (in a font wider than any phone uses it is cut with
+   an ellipsis and does not run into its neighbour), and under 360 px of width the bar shows each icon and the label
+   of the current tab only (every link keeps its aria-label) */
+#pnav.n7 a span{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:359px){#pnav.n7 a:not(.on) span{display:none}}
+/* the tab's pages are pages, not dashboards: in the one-screen layout they scroll, as a piece of RESEARCH does */
+body.term #grid[data-view="portfolio"]{display:block;overflow:auto;overscroll-behavior:contain}
+
+/* ===== "personal use" (the owner's decision P4 of 20 Nov 2026; the designer's §1.6) =====
+   The two words at the end of a source line that names a JPX or Nikkei file. On a computer they are teal and open
+   Help at its paragraph; on a phone the whole source line takes the tap (44 px by its ::before) and opens a card. */
+.puse{margin:0;padding:0;border:0;border-radius:0;background:none;color:var(--cyan);font:inherit;letter-spacing:inherit;cursor:pointer}
+.puse:hover{text-decoration:underline}
+.puse:focus{outline:none}
+.puse:focus-visible{outline:1px solid var(--amber);outline-offset:2px}
+.helpsec dl>div.at{outline:1px solid var(--cyan);outline-offset:3px;border-radius:2px}
+.psrc{position:relative;display:inline-flex;align-items:center;justify-content:flex-end;min-width:44px;min-height:28px;margin:0;padding:0;border:0;border-radius:0;background:none;color:var(--mut);font:inherit;font-weight:400;letter-spacing:0;text-transform:none;white-space:nowrap;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.psrc::before{content:"";position:absolute;inset:-8px -4px}
+.psrc .pu{color:var(--cyan)}
+.psrc:focus{outline:none}
+.psrc:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.psrc-p{margin:4px 0 12px;font-size:15px;line-height:1.5}
+
+/* ===== the one-screen header: one row by rule (the designer's notes of 22 Nov 2026, Part A; D/r3b-fix/header-proto.css)
+   For body.term only. The layout is offered where its own width is at least 1,300 CSS px (lib/prefs.ts); body.tight:
+   under 1,420, where the Monitor's name shows its mark only. Every item has its width by rule, the same in every state
+   (the focus, typing, the results list open, a lit alert, the menu open); only the alert line's holder takes what is
+   left, at least 101 px more than the line's longest promise in both letter placements. The scrolling layout and the
+   phone layout are as before. */
+/* 1 · one row, always. Nothing wraps; only the alert line gives way */
+body.term #topbar{flex-wrap:nowrap}
+body.term #topbar .brand,body.term #nav,body.term #search,body.term #topbar .bmq{flex:0 0 auto}
+body.term #nav{flex-wrap:nowrap}
+body.term #alerts{flex:1 1 0;min-width:0}
+/* 2 · the tabs: 5 px of side padding, six tabs or seven (body.term #nav a, above) */
+/* 3 · the search box: 96 px, the same with the focus, empty or typed in. Its words "Search" (components/Search.tsx);
+   the "/" key cap until something is typed */
+body.term #search{flex:0 0 auto;width:auto}
+body.term #search input{width:96px;position:static}
+/* 4 · the clock: Singapore's hour and minute. The seconds, Tokyo's and New York's time are in its tooltip and on the
+   menu's first line */
+body.term #clock .ss,body.term #clock .zz{display:none}
+/* 5 · the Monitor's name: the mark always; its words from 1,420 CSS px of layout (the mark's tooltip says them) */
+body.term.tight #topbar .brand .bw{display:none}
+body.term.tight #topbar .brand{gap:0}
+/* 6 · the menu: text size, COMPACT, FULL and the account leave the row for a list under one button (22 px).
+   Outside the one-screen layout the button is not drawn and the span is not a box: nothing changes there */
+#more-btn{display:none}
+#more{display:contents}
+#more .mclock{display:none}
+body.term #more-btn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:15px;padding:0;margin-left:2px;border:1px solid var(--bord2);border-radius:2px;background:none;color:var(--txt2);cursor:pointer}
+body.term #more-btn:hover,body.term #topbar.more #more-btn{border-color:var(--amber);color:var(--amber)}
+body.term #more-btn:focus{outline:none}
+body.term #more-btn:focus-visible{outline:1px solid var(--amber);outline-offset:1px}
+body.term #more-btn svg{width:11px;height:11px;display:block}
+body.term #more{display:none}
+body.term #topbar{position:relative}
+body.term #topbar.more #more{display:flex;flex-direction:column;align-items:flex-start;gap:7px;position:absolute;right:8px;top:calc(100% + 3px);z-index:60;min-width:200px;padding:8px 10px;background:var(--panel2);border:1px solid var(--bord2);border-radius:4px;box-shadow:0 10px 28px rgba(0,0,0,.6)}
+body.term #topbar.more #more .mclock{display:block;align-self:stretch;padding-bottom:6px;border-bottom:1px solid var(--bord);color:var(--txt2);font-size:10.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+body.term #topbar.more #more .chip-sm,body.term #topbar.more #more .chip,body.term #topbar.more #more .pick{margin:0}
+body.term #topbar.more #more #userchip .so{display:inline}
+/* COMPACT on where its one-screen layout is not offered (a layout under 1,300 CSS px): the chip is muted and says why */
+#cmp-ctl.off{opacity:.55}
+/* 7 · the alert line. Never cut: the label, the kind, the figure with its word ("intraday", "at close", "1D"), the
+   time. The name is the only part that is cut, with an ellipsis, and never below its first 8 characters (the fit in
+   components/Alerts.tsx holds that). "via <publisher>" shows only beside a whole name: `.one` is one line high and
+   wraps, so what does not fit beside `.core` stands on a second line that is not drawn */
+#alerts .alrt .one .core{display:contents}                                 /* outside the one-screen layout (scrolling layout, phone) the line is as before */
+body.term #alerts .alrt{display:flex;width:fit-content;max-width:100%}
+body.term #alerts .alrt .one{flex:1 1 auto;display:flex;flex-wrap:wrap;align-content:flex-start;align-items:baseline;column-gap:6px;row-gap:6px;height:1.28em;line-height:1.28;min-width:0;overflow:hidden}
+body.term #alerts .alrt .one .core{display:flex;align-items:baseline;gap:6px;flex:0 1 auto;min-width:0;max-width:100%;overflow:hidden}
+body.term #alerts .alrt .one .core .nm{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.term #alerts .alrt .one .core .kd,body.term #alerts .alrt .one .core .fig,body.term #alerts .alrt .one .core .q{flex:none}
+body.term #alerts .alrt .one .src{flex:none}
+/* 8 · what gives way in a drawing wider than the row was measured for, by rule and never a cut figure: the fit finds the
+   line cannot hold its promise (label, kind, 8 characters of the name, figure and word, time) and drops whole parts:
+   first the label (a lit line still says "new" by its colour and pulse); then, if still short, everything but the label
+   and the time ("NEW ALERT 07:07", all of it one hover or click away); if even that cannot stand whole, the one-screen
+   layout is refused for that window (lib/prefs.ts) */
+body.term #alerts.a-nolabel .alrt:not(.none)>.k{display:none}
+body.term #alerts.a-min .alrt:not(.none)>.k{display:inline}
+body.term #alerts.a-min .alrt .one{display:none}
+/* A phone's line (body.pv2), in the same order (SF-2 of the checks of 22 Nov 2026): where the line has too little room
+   for the label, the kind, the name's first letter and "…", the figure and the time, the label's "NEW" leaves first (a
+   lit line keeps its colour and pulse), then the time's day ("23 Nov"); only then is the name cut below one letter.
+   The whole time is in the line's tooltip and in the list a tap opens */
+body.pv2 #alerts.a-nonew .alrt .k .kn{display:none}
+body.pv2 #alerts.a-noday .alrt .t .td{display:none}

@@ -11,7 +11,8 @@ import { StockNews } from "../components/StockNews";
 import { useApi } from "../lib/useApi";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtDate, fmtStamp } from "../lib/time";
-import { avgTurnover, avgVolume, LARGEST_FALL, MKT_CAP, NEWS, NEXT_RESULTS, PERIOD, REALISED_VOL, SIGMA_WINDOW } from "../lib/labels";
+import { avgTurnover, avgVolume, JPX_REPORTS_FILE, LARGEST_FALL, MKT_CAP, NEWS, NEXT_RESULTS, PERIOD, REALISED_VOL, SIGMA_WINDOW } from "../lib/labels";
+import { SourceLine } from "../components/PersonalUse";
 import { chartMarks, finSections, fmtCount, fmtPc, fmtPp, fmtX, isSmallMove, moveRule, siteOf, whyText, type MoveRow, type StockPage } from "../lib/stock";
 import { periodHolding } from "../lib/periods";
 import { chartRow, GuidanceLine, MoveText, profileOf, shortLine } from "./Asset";
@@ -156,7 +157,7 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
         </Section>
       )}
 
-      <Section title="Short interest" aux={s ? (s.kind === "jpx" ? "JPX reports" : s.kind === "interest" ? "exchange-reported" : "FINRA") : ""} card={false}>
+      <Section title="Short interest" aux={s ? (s.kind === "jpx" ? <SourceLine short="JPX reports" full={JPX_REPORTS_FILE} /> : s.kind === "interest" ? "exchange-reported" : "FINRA") : ""} card={false}>
         <div className="mp-card pad" id="st-short">
           {!s ? <Empty title="No short data">None reported for this name.</Empty> : s.kind === "jpx" ? (
             <table className="mp-t left kv"><tbody>

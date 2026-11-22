@@ -1,0 +1,137 @@
+// What pf_jpx prints of a JPX page, and which links it may follow: the rules, pure, so that they can be checked without
+// a request (sim/logic.test.ts). Written after the checks of round 3b (21 Nov 2026: PR-3, PR-4, PR-5).
+//
+// The owner's record: a probe of JPX prints the values the plan needs (numbers, dates, clock times, each page's own
+// title and date, and the row and column labels a number needs to be read), not the pages' text. The first pf_jpx
+// printed every line that held a match, cut at 220 characters: four sentences of JPX's prose, two navigation labels,
+// seventeen link labels and three notice titles went into a public job log. So nothing here returns a line of a page.
+// What a page gives is one of:
+//   - a value with the few words beside it (`valueBits`: the match and at most two words on each side);
+//   - the cells of a table of figures (`figureTables`: a table most of whose cells are figures; a cell of prose in it
+//     is counted, not printed; a table of notices or of text is not a table of figures and is left out whole);
+//   - a date the page gives for a market holiday (`calendarDays`: the date itself, from a line that carries its weekday).
+// `sayable` is the last guard: pf_jpx passes every piece of a page it prints through it.
+import { addressOf, decoded, tablesOf, textLines } from "./lib.ts";
+
+/** The most words a printed piece of a page may have (a value with its words beside it, a table cell, a label). */
+export const MAX_WORDS = 9;
+const words = (s: string): string[] => s.trim().split(/\s+/).filter(Boolean);
+const CJK = /[぀-ヿ㐀-鿿]/;
+/** The characters of a piece written without spaces between words (Japanese), its figures and marks aside. */
+const jaLength = (t: string): number => t.replace(/[\s\d\/（）().,:：|%％-]/g, "").length;
+/** Whether a piece of a page may be printed: no more than MAX_WORDS words and 90 characters; and, where it is written
+ *  without spaces between words (Japanese), no more than 28 characters and no full stop (。): a Japanese sentence may be
+ *  shorter than that, but it ends with one ("2026年9月22日（火）は、…休日です。" is 21 characters, and went into the log). */
+export const sayable = (s: string): boolean => { const t = s.trim(); return words(t).length <= MAX_WORDS && t.length <= 90 && !(CJK.test(t) && (t.includes("。") || jaLength(t) > 28)); };
+
+/** Whether an address is on jpx.co.jp: the host itself or one under it, as a request reads the address (lib.ts). */
+export const onJpx = (url: string): boolean => { const a = addressOf(url); return !!a && (a.host === "jpx.co.jp" || a.host.endsWith(".jpx.co.jp")); };
+/** The first link whose text matches `want` AND whose address is on jpx.co.jp. A rule page is read only when a JPX
+ *  page links it: no address is tried from memory (the first pf_jpx tried one for the short-selling rule and read
+ *  JPX's daily list of triggered stocks, which is not a rule page), and a link to another site is never followed.
+ *  `also`: the text must match this too; `never`: a text that matches this is passed over. */
+export const linkedOnJpx = (links: Array<{ href: string; text: string }>, want: RegExp, also: RegExp | null = null, never: RegExp | null = null): { href: string; text: string } | null =>
+  links.find((l) => want.test(l.text) && (!also || also.test(l.text)) && !(never && never.test(l.text)) && onJpx(l.href)) ?? null;
+/** The short-selling RULE page among a page's links: its text names short selling and a rule (regulation, restriction,
+ *  rule, price), and is not a page of figures or of names (value, ratio, statistics, data, a list, triggered stocks,
+ *  balances, a daily, weekly or monthly report): those are not what the owner released, and the list of triggered
+ *  stocks is what the first run read by mistake. */
+export const SHORT_SELLING = /short[- ]?sell/i, RULE_WORD = /regulat|restrict|rule|price/i, NOT_A_RULE = /value|ratio|statistic|data|list|trigger|balance|report|daily|weekly|monthly|outstanding/i;
+export const shortRuleLink = (links: Array<{ href: string; text: string }>): { href: string; text: string } | null => linkedOnJpx(links, SHORT_SELLING, RULE_WORD, NOT_A_RULE);
+/** The addresses of the links that name short selling on jpx.co.jp and were not taken as the rule page (addresses
+ *  only: a person reads them and gives the rule page's address). */
+export const shortOtherLinks = (links: Array<{ href: string; text: string }>): string[] => { const taken = shortRuleLink(links)?.href; return [...new Set(links.filter((l) => SHORT_SELLING.test(l.text) && onJpx(l.href) && l.href !== taken).map((l) => l.href))]; };
+
+/** The values a page's text gives: every match of `want`, each with at most `around` words before and after it, as one
+ *  short piece ("from 9:00 am to 11:30"); in text without spaces, at most eight characters on each side, and none
+ *  from beyond the sentence's end (。). Each piece once, at most `max`. Never a whole line. */
+export function valueBits(lines: string[], want: RegExp, max = 30, around = 2): string[] {
+  const re = new RegExp(want.source, want.flags.includes("g") ? want.flags : `${want.flags}g`), out: string[] = [], seen = new Set<string>();
+  for (const line of lines) {
+    for (const m of line.matchAll(re)) {
+      if (!m[0].trim()) continue;
+      const at = m.index ?? 0, end = at + m[0].length;
+      let bit: string;
+      if (CJK.test(line) && words(line).length <= 3) {
+        const left = line.slice(0, at).split(/[。|]/).pop() ?? "", right = line.slice(end).split(/[。|]/)[0] ?? "";
+        bit = `${left.length > 8 ? "…" : ""}${left.slice(-8)}${m[0]}${right.slice(0, 8)}${right.length > 8 ? "…" : ""}`;
+      } else {
+        // the words beside the value, within its own table cell: a cell's edge (" | " in a line of text) is not crossed
+        const left = line.slice(0, at).split("|").pop() ?? "", right = line.slice(end).split("|")[0] ?? "";
+        const before = words(left).slice(-around), after = words(right).slice(0, around);
+        bit = `${words(left).length > around ? "… " : ""}${[...before, m[0].trim(), ...after].map((w) => (w.length > 24 ? `${w.slice(0, 24)}…` : w)).join(" ")}${words(right).length > around ? " …" : ""}`;
+      }
+      bit = bit.replace(/\s+/g, " ").replace(/ ([,.;:)）、])/g, "$1").trim();
+      if (seen.has(bit)) continue;
+      seen.add(bit);
+      if (out.length < max) out.push(bit);
+    }
+  }
+  return out;
+}
+
+const digitsOf = (c: string): number => (c.match(/[\d.,:%]/g) ?? []).length;
+/** A cell that is a figure: it holds a digit, and it is short (three words at most; in Japanese, which has no spaces
+ *  between words, twelve characters beside its figures) or at least three of its ten characters are digits and their
+ *  marks ("More than 3,000 yen up to 5,000 yen" is; a notice's title with a year in it is not). A Japanese sentence
+ *  (it ends with 。) is none, whatever figures it holds. */
+export const figureCell = (c: string): boolean => /\d/.test(c) && !(CJK.test(c) && c.includes("。")) && ((words(c).length <= 3 && (!CJK.test(c) || jaLength(c) <= 12)) || digitsOf(c) / Math.max(1, c.replace(/\s/g, "").length) >= 0.3);
+/** A cell as it may be printed: a figure or a label (cut at 40 characters); a cell of prose is not printed, only said
+ *  to be there. */
+export const cellOut = (c: string): string => (c === "" ? "" : figureCell(c) || sayable(c) ? (c.length > 40 ? `${c.slice(0, 40)}…` : c) : CJK.test(c) && words(c).length <= 3 ? `(text of ${c.length} characters: not printed)` : `(text of ${words(c).length} words: not printed)`);
+const HELD_CELL = /^\(text of \d+ (?:words|characters): not printed\)$/;
+/** A page's tables of figures: those in which at least six in ten of the filled cells below the first row and right of
+ *  the first column are figures. A table of dated notices (a date and a title a row) or of text is none. Each with
+ *  the heading before it where that is a label, and its rows as they may be printed. */
+export function figureTables(html: string, want: RegExp | null = null): Array<{ heading: string; rows: string[][]; held: number }> {
+  const out: Array<{ heading: string; rows: string[][]; held: number }> = [];
+  for (const t of tablesOf(html)) {
+    const body = t.rows.slice(1).flatMap((r) => r.slice(1)).filter((c) => c !== "");
+    const figures = body.filter(figureCell).length;
+    if (!body.length || figures / body.length < 0.6) continue;
+    if (want && !want.test(`${t.heading} ${t.rows.slice(0, 3).flat().join(" ")}`)) continue;
+    const rows = t.rows.map((r) => r.map(cellOut));
+    out.push({ heading: sayable(t.heading) ? t.heading : "", rows, held: rows.flat().filter((c) => HELD_CELL.test(c)).length });
+  }
+  return out;
+}
+/** How many of a page's tables are not tables of figures (left out whole). */
+export const otherTables = (html: string): number => tablesOf(html).length - figureTables(html).length;
+
+const MON = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], WD_EN = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"], WD_JA = "日月火水木金土";
+const iso = (y: number, m: number, d: number): string | null => { const t = new Date(Date.UTC(y, m - 1, d)); return t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d ? t.toISOString().slice(0, 10) : null; };
+const weekdayOf = (ymd: string): number => new Date(`${ymd}T00:00:00Z`).getUTCDay();
+/** The market holidays a calendar page gives, as dates. A day counts only where the page gives it with its weekday
+ *  and the two agree: "2026/11/23（月）", which carries its year; or "Nov. 23 (Mon.)", which carries none, and is the
+ *  one year among `years` in which that date falls on that weekday (two years running never share one). The first
+ *  pf_jpx looked for the month and the day alone, so a row of the wrong year, or a slip of a day in one year, was
+ *  "named" by the other year's line (PR-3). A line that says when the page was updated is no holiday. `odd`: dated
+ *  pieces whose weekday did not fit. */
+export function calendarDays(lines: string[], years: number[] = [2026, 2027]): { days: string[]; odd: number } {
+  const days = new Set<string>();
+  let odd = 0;
+  for (const l of lines) {
+    if (/更新|update|updated|last modified/i.test(l)) continue;
+    for (const m of l.matchAll(/(20\d\d)\s*[\/年.]\s*(\d{1,2})\s*[\/月.]\s*(\d{1,2})\s*日?\s*[（(]\s*([日月火水木金土])/g)) {
+      const d = iso(Number(m[1]), Number(m[2]), Number(m[3]));
+      if (d && weekdayOf(d) === WD_JA.indexOf(m[4])) days.add(d); else odd++;
+    }
+    for (const m of l.matchAll(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?\s*(?:,\s*(20\d\d)\s*)?[（(]\s*(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*\.?\s*[)）]/gi)) {
+      const mo = MON.indexOf(m[1].toLowerCase()) + 1, wd = WD_EN.indexOf(m[4].toLowerCase());
+      const fits = (m[3] ? [Number(m[3])] : years).map((y) => iso(y, mo, Number(m[2]))).filter((d): d is string => !!d && weekdayOf(d) === wd);
+      if (fits.length === 1) days.add(fits[0]); else odd++;
+    }
+  }
+  return { days: [...days].sort(), odd };
+}
+/** The Monitor's rows set against the page's days, both ways, between two dates (inclusive): the rows the page gives,
+ *  the rows it does not, and the page's weekday holidays the Monitor has no row for (a weekend's is no session
+ *  either way). */
+export function calendarCheck(pageDays: string[], mine: string[], from: string, to: string): { named: string[]; notNamed: string[]; lacking: string[] } {
+  const page = new Set(pageDays), rows = mine.filter((d) => d >= from && d <= to), have = new Set(mine);
+  const weekday = (d: string) => { const w = weekdayOf(d); return w >= 1 && w <= 5; };
+  return { named: rows.filter((d) => page.has(d)), notNamed: rows.filter((d) => !page.has(d)), lacking: pageDays.filter((d) => d >= from && d <= to && weekday(d) && !have.has(d)) };
+}
+
+/** A page's text lines and its title, for pf_jpx (the helper's own readers, re-exported so the probe has one import). */
+export { decoded, textLines };

@@ -104,7 +104,12 @@ export const holidaysNow = (): HolidayMap => HOLIDAYS;
 // supabase/README.md). In Singapore that is Monday 06:00 to Saturday 06:00 while New York is on winter time, and
 // Monday 05:00 to Saturday 05:00 on its summer time. Until 21 Nov 2026 this table kept the week in SGT, Monday 05:00
 // to Saturday 06:00 all year: an hour early at the open in New York's winter, an hour late at the close in its summer.
-// What the feed itself does at the two ends of the week is not in any log yet (jobs/probes/sessions_check.ts reads it).
+// What the feed itself does at the two ends of the week (jobs/probes/sessions_check.ts, the log of 21 Nov 2026, four
+// weekends): Yahoo's bars for USD/JPY end on Friday at 16:55 to 17:00 New York and EUR/USD's at 17:25, and both begin
+// again on Monday at 00:00 UTC (08:00 SGT), two hours after this table opens the week in New York's winter and three in
+// its summer. In those hours a pair is OPEN here while its row is still Friday's close, and the feed's health does not
+// take Friday's prints for a stopped feed (the server's feedState). The quote's own time and a future's first bar on
+// a Sunday evening are in no log yet (the probe's first section, run on a Sunday between 22:30 and 23:59 UTC).
 export const FX_TZ = "America/New_York", FX_BELL = hm(17);
 /** Whether the FX week is in progress at `now`: not from Friday 17:00 New York to Sunday 17:00. */
 const fxOpen = (now: Date): boolean => { const p = partsIn(FX_TZ, now), minute = p.h * 60 + p.m; return !(p.wd === 6 || (p.wd === 5 && minute >= FX_BELL) || (p.wd === 0 && minute < FX_BELL)); };

@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Checks of the rules that live in the database, run on PGlite (Postgres inside Node). No live database is touched.",
   "scripts": {
-    "test": "node signup.test.cjs && node moves.test.cjs && node --experimental-strip-types words.test.cjs && node --experimental-strip-types sigma.test.cjs"
+    "test": "node signup.test.cjs && node moves.test.cjs && node --experimental-strip-types words.test.cjs && node --experimental-strip-types sigma.test.cjs && node --experimental-strip-types pf.test.cjs && node results-mark.test.cjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.16"

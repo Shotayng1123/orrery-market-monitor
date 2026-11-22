@@ -63,8 +63,10 @@ workflow says "Not set up yet" and does nothing.
 
 What a deploy does, in order: the logic checks (`sim/logic.test.ts`; a failure stops it); a list of what is waiting;
 a guard; `supabase db push`; the notification key, made on the runner and stored on the server if the server has
-none (never shown, never in git); `supabase functions deploy tick daily api`; and, if `NOTE_DISPATCH_TOKEN` is set,
-storing it in the database with `monitor_set_github_token`.
+none (never shown, never in git); `supabase functions deploy tick daily api`; if `NOTE_DISPATCH_TOKEN` is set,
+storing it in the database with `monitor_set_github_token`; the page's reads against the live tables (a warning only);
+and last the paper portfolio's walls as the database sees them (`pf_selftest`, the live check's part `pf`: a wall down
+fails the run, "The paper portfolio" below; last, so that a red step there skips nothing of the rest).
 
 The Supabase CLI is pinned to one version in the workflow (3.2.0). Version 3 changed which database a command
 talks to (a local one unless `--remote` is given) and what it prints, and taking "latest" brought that in
@@ -136,6 +138,33 @@ is kept).
   yield once its day is booked, against `sd63x`) and sends `z1d`, `sd1d`, `zFrom`, `zTo`, `zN` (`zN`, the changes counted,
   also where they are too few for a σ: the page says how many). The rule is written once
   in `_shared/sigma.ts`; `sim/sql/sigma.test.cjs` checks the database's figures against it.
+- **The last session** (B-32, 2026-11-21; no migration, no new source). Each row of the table also carries `ls`, the
+  instrument's newest completed day: the change between its two newest booked closes (`fn_table_anchors`' `last_d` and
+  the close before it) over `sd63x`, the σ of the 63 daily changes that end at the earlier of the two, so the change is
+  never in its own yardstick (`lastSession` and `tableLastSession` in `_shared/sigma.ts`; the close before a newest
+  close that the anchors do not give is read from `prices_daily` in pages, `selectAll`: one answer ends at 1,000
+  rows, the read spans those instruments' closes from fourteen days before the oldest of their newest, and cut
+  short it left the newest dates out). It holds the session's date, both closes,
+  the change in % (for a yield, in points of its level: -0.064 is -6.4 bp), the σ with its window and count, and on a
+  future's roll day the change within the new contract
+  (`fut_rolls.prev_close`); where that close is not known the change is the series' own and there is no σ. A σ is
+  given only when the window the database returns ends at the earlier close. The page reads `ls` for MOVERS IN σ's
+  LAST SESSION, for the line under a currency's figure in its day's first three hours, and as the sign that the
+  server can say which day a figure is of; a page from before ignores it.
+- **The mark of a results date** (A-37, 2026-11-21). `earningsOf` in `_shared/yahoo.ts` passes Yahoo's
+  `isEarningsDateEstimate` as given: true, false, or none where Yahoo sends none. Until then it wrote false
+  ("confirmed") by a rule of its own whenever the date it kept was `earningsTimestamp` and `earningsTimestampStart`
+  was another value or absent. A stock's page and a watchlist name outside the indices are read at the request and
+  follow at once; an index member's stored mark (`constituent_stats.earnings_est`) is rewritten by that list's next
+  quote run (`daily?job=flow`, `mflow` or `stats`: on weekdays, in each market's hours) and by nothing else, and a
+  stored "confirmed" of the old rule cannot be told from one of Yahoo's. So the migration
+  `20261121000002_results_mark_as_given.sql` sets every stored false to null ("not said": the page writes a dash, and a
+  Tokyo company's date, est. whatever is stored, changes only its tooltip's words), and each list's next run writes
+  Yahoo's own flag again. Until that run a date Yahoo did mark confirmed reads a dash as well: less than Yahoo said,
+  and never a mark Yahoo did not give (`sim/sql/results-mark.test.cjs`). Such a dash is not one the source withholds,
+  so the page says what a dash is: the source gives none, or the Monitor has not read it again since 22 Nov 2026
+  (Help, MY NAMES' header, the date's tooltip: `NO_MARK_HELD` in `web/src/lib/results.ts`; the checks of 22 Nov, RK-1).
+  For a US member that lasts until Monday's run at 14:00 UTC.
 - **σ alerts** (`alerts.kind` 'sigma', with `sigma` and `note`): the tick scans the table every minute
   (`scanSigmaAlerts`) for every currency, yield, commodity, volatility index, future and coin at 2σ or beyond; one row
   per instrument and session (a currency pair's FX day; a future's CME trade date, so an evening's move from 18:00 New
@@ -442,6 +471,65 @@ search (two before to five after). The job looks up only the marks of the rule i
 symbol it first puts that stock's marks on the queue itself (`--seed`, an S&P 500 member), as its page would, so
 the reasons can be there before the page is opened: Actions › move-causes › Run workflow with `symbol`.
 
+## The paper portfolio (added 2026-11-21; migration `20261121000001_pf_store.sql`)
+
+P-1 of the paper portfolio: the statement an account agrees to, its portfolios, their settings with the history, and
+its notes. No orders, no prices and no NAV yet. **Nothing of it is usable on the live Monitor until P-4a is accepted**:
+the API's portfolio routes refuse while `PAPER_ON_SERVER` (`functions/_shared/pf/switch.ts`) is `false`, and the page
+shows no entry while `PAPER_ON_LIVE_SITE` (`web/src/lib/paper.ts`) is `false`. Both are turned in one pull request
+(`README.md`, "The paper portfolio's two switches"). The migration deploys now: six tables, empty.
+
+- **Tables**: `consent_statements` (version 1 seeded), `account_consents`, `pf_portfolios`, `pf_settings` (append-only:
+  a change is a new row, in force from the next session), `pf_notes` (never edited; a removed note keeps a line with
+  its time and loses its text), `pf_ladder_events` (January's reset lines; written from P-3).
+- **Who may see what.** A portfolio belongs to one account. Row level security is on for all six tables, and nothing
+  is granted to `anon`, `authenticated` or `service_role` (Supabase grants new tables to all three by default; the
+  migration takes that away). The only door is the functions `pf_*(p_account, …)`, which `service_role` may call and
+  nobody else, each naming the account in every statement. A second wall: a role without login, `monitor_account`,
+  owns those functions, and one policy per table lets it see only the rows of the account the function set for its
+  transaction. If the hosted database does not let the migration make that role or hand it the functions, a notice
+  says so, the functions stay with their maker and still filter by account, and `pf_selftest()` reports which way it
+  is. Every child row carries `(portfolio_id, account)` with a foreign key to its portfolio. Nothing an account is
+  handed counts another account's rows: a portfolio's id is random, and a setting's row, a note and a line of the
+  ladder are numbered inside their own portfolio from 1 (no table of the store has a sequence).
+- **One statement.** The whole migration is a single `DO` block, so the database applies all of it or none of it,
+  whether or not the deploy wraps a file in a transaction; at no moment do `anon` or `authenticated` hold `EXECUTE` on
+  a `pf_` function, nor any API role a privilege on a table of the store (`sim/sql/pf.test.cjs` applies the file
+  statement by statement, each committed on its own, and looks after every one).
+- **How much a portfolio holds.** Every change is kept, so a portfolio holds at most 500 notes (a removed one keeps
+  its line and counts), 500 changes of its limits and assumptions, 50 renamings and 20 entries of the targets for one
+  year; the next one is refused in words and no row is dropped. `pf_get` returns a portfolio whole, so these also bound
+  one answer (about a million characters at the most notes).
+- **What is never changed.** What is fixed at creation cannot be updated (a trigger refuses); settings and notes are
+  only added to; a portfolio's rows go only with the portfolio, by `pf_delete`, after its account has typed its name;
+  an account's rows go with the account.
+- **The API** (`functions/api/index.ts`) names none of these tables: its routes `pf_form`, `pf_list`, `pf_get`,
+  `pf_create`, `pf_rename`, `pf_setting_set`, `pf_targets_set`, `pf_note_add`, `pf_note_remove`, `pf_delete`,
+  `consent` and `consent_agree` run the engine (`_shared/pf/route.ts`) over the database's functions
+  (`_shared/pfstore.ts`). The ranges, steps and refusals are the engine's (`_shared/pf/form.ts`), the same file the
+  page's form runs. Nothing in these routes writes a log line: a refusal goes back to the page that asked.
+- **The statement** is the owner's wording (b) of 20 Nov 2026, kept as version 1. The owner's record reads:
+
+> "Private notes, levels and paper portfolios are kept for your account only. Do not enter non-public or confidential information, in notes or in positions: nothing material and non-public about a company or a market, and nothing confidential of your firm or its clients. ☐ I agree"
+
+  The "☐" is the checkbox itself. The logic checks compare this line, the migration's seed and the engine's file
+  (`_shared/pf/statement.ts`) character for character. A new wording is a new version, asked again of every account.
+- **Looking.** `pf_selftest()` prints `pf_selftest ok` with counts only (tables, policies, grants that should not
+  exist on a table, a sequence or a function, the server's own role included, functions, whether the second wall is in
+  force): no row, no name, no account. Its `ok` is true only when every wall stands. `deploy-server` runs it after each
+  deploy, as the job's last step (step "The paper portfolio's walls", `jobs/live_check.ts` part `pf`): a wall that is down,
+  or a look that cannot be made, fails that step and the run is red. Actions › live-check with `only` = `pf` runs the
+  same look by hand.
+- **Checks.** `sim/sql/pf.test.cjs` applies the migration on PGlite (twice; statement by statement; as a superuser, as
+  a role that may make roles, and as one that may not), runs the same 56 calls through the engine against the
+  database's functions and against the local copy's store and compares every answer, and tries each rule above from
+  outside the functions: the numbering inside a portfolio, the caps, and `pf_selftest`'s verdict with a grant put
+  back.
+  `sim/logic.test.ts` sections [AF] and [AH] check the engine, the routes over the local copy's store, and the guards
+  that keep a private row out of a log or a job.
+
+The welcome email still says "the six tabs": it is to say seven in the pull request that turns the switches.
+
 ## Changing the shared sign-in password
 
 The password exists only as the function secret `MONITOR_PASSWORD`; it is not in git or in the database, and
@@ -485,7 +573,19 @@ What the Monitor does about it:
 
 - **On screen.** `health.feed` (`_shared/feedhealth.ts`) reads the prints themselves: among the instruments whose
   market is open, and has been for half an hour, it takes the one that printed most recently, allowing each
-  market its feed's own delay; if even that one is more than twenty minutes behind, the feed has stopped. The
+  market its feed's own delay; if even that one is more than twenty minutes behind, the feed has stopped. In the
+  week's first hours a currency's or a future's print from before the weekend is not counted: the session table
+  opens currencies on Sunday at 17:00 New York, and the source's own bars for them begin on Monday at 00:00 UTC, so
+  until half an hour after that hour Friday's prints say nothing about the feed; one that has printed since the week
+  began is judged as at any hour. What that rests on: the probe `sessions_check` of 21 Nov 2026 read two pairs only,
+  USD/JPY and EUR/USD, on four weekends, and both began the week at 00:00 UTC. The minute job's own log of the two
+  Sunday evenings on record (8 and 15 Nov 2026, both in New York's winter; the live check's part `sundays`, read on
+  22 Nov) shows more: from 21:00 to 23:00 UTC, the hour after Sunday's bell included, every pair then due (21)
+  answered with Friday's bar and none added a bar; the CME futures, due from 23:00 UTC, answered with no priced bar
+  until 23:14 to 23:23 UTC and then printed (15 of 16). From 23:00 to 00:00 UTC the counts cannot tell whether a pair
+  added a bar, and New York's summer is in no log. A pair that printed once after the bell and then stood still
+  would bring the alarm back for the rest of those hours, as the rule of 19 Nov raised it; no Sunday on record shows
+  one. The
   page then shows DATA ✕ with the reason, and a red bar at the foot of every screen: "No new prices since … The
   source has stopped sending them; the figures on screen are as of then." Both go when prices arrive again. The
   prices already on screen stay, with their own times. While the feed is stopped no move can be seen, so no alert

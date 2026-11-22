@@ -4,6 +4,7 @@ import { DEV_MOCK } from "../lib/useApi";
 import { mockAction } from "../lib/mock";
 import { openAsset } from "./CompanyCard";
 import { hitLine } from "../lib/labels";
+import { termMode } from "../lib/prefs";
 
 interface Hit { symbol: string; name: string; kind: string; note: string }
 
@@ -42,7 +43,9 @@ export function Search() {
   const go = (h: Hit | undefined) => { if (!h) return; setOpen(false); setQ(""); openAsset(h.symbol); };
   return (
     <div id="search" ref={box}>
-      <input type="text" value={q} placeholder="Search stocks, bonds, currencies" aria-label="search" onChange={(e) => setQ(e.target.value)} onFocus={() => hits.length && setOpen(true)}
+      {/* the one-screen header's box is 96 px wide whatever the tabs (the designer's notes of 22 Nov 2026): "Search" in
+          it; its label and tooltip say the rest */}
+      <input type="text" value={q} placeholder={termMode() ? "Search" : "Search stocks, bonds, currencies"} aria-label="Search stocks, bonds, currencies" title="Search stocks, bonds, currencies (key /)" onChange={(e) => setQ(e.target.value)} onFocus={() => hits.length && setOpen(true)}
         onKeyDown={(e) => { if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => Math.min(hits.length - 1, s + 1)); } else if (e.key === "ArrowUp") { e.preventDefault(); setSel((s) => Math.max(0, s - 1)); } else if (e.key === "Enter") { e.preventDefault(); go(hits[sel] ?? (q.trim() ? { symbol: q.trim().toUpperCase(), name: q.trim(), kind: "", note: "" } : undefined)); } else if (e.key === "Escape") setOpen(false); }} />
       {!q && <kbd className="skey" aria-hidden="true" title="Press / to search">/</kbd>}
       {open && (hits.length > 0 || busy) && (

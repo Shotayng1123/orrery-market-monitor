@@ -74,13 +74,16 @@ async function crumb(): Promise<{ cookie: string; crumb: string }> {
   crumbCache = { cookie, crumb: c, at: Date.now() };
   return crumbCache;
 }
-interface EarningsFields { earningsTimestamp?: number; earningsTimestampStart?: number; isEarningsDateEstimate?: boolean }
+export interface EarningsFields { earningsTimestamp?: number; earningsTimestampStart?: number; isEarningsDateEstimate?: boolean }
 /** The next earnings date: the start of Yahoo's next window when it lies ahead, otherwise the last reported date
- *  (which is still "next" on the day itself). `earningsEst` says whether the company has confirmed it. */
-function earningsOf(q: EarningsFields): { earningsAt: number | null; earningsEst: boolean | null } {
-  const now = Date.now() / 1000;
-  const next = q.earningsTimestampStart && q.earningsTimestampStart > now - 86400 ? q.earningsTimestampStart : q.earningsTimestamp && q.earningsTimestamp > now - 86400 ? q.earningsTimestamp : null;
-  return { earningsAt: next, earningsEst: next == null ? null : next === q.earningsTimestamp && q.earningsTimestampStart !== q.earningsTimestamp ? false : q.isEarningsDateEstimate ?? null };
+ *  (which is still "next" on the day itself). `earningsEst` is Yahoo's own mark for it, as Yahoo gives it
+ *  (`isEarningsDateEstimate`: true an estimate, false confirmed), and null where Yahoo sends none. The Monitor writes
+ *  no mark of its own (A's A-37, 21 Nov 2026): until then a date that was Yahoo's `earningsTimestamp` beside another
+ *  start, or beside none, was marked confirmed whatever the flag said, and the screens read "confirmed (Yahoo
+ *  Finance)" for a date Yahoo had marked an estimate or had not marked. Pure: sim/logic.test.ts checks it. */
+export function earningsOf(q: EarningsFields, nowSec: number = Date.now() / 1000): { earningsAt: number | null; earningsEst: boolean | null } {
+  const next = q.earningsTimestampStart && q.earningsTimestampStart > nowSec - 86400 ? q.earningsTimestampStart : q.earningsTimestamp && q.earningsTimestamp > nowSec - 86400 ? q.earningsTimestamp : null;
+  return { earningsAt: next, earningsEst: next == null ? null : typeof q.isEarningsDateEstimate === "boolean" ? q.isEarningsDateEstimate : null };
 }
 
 /** Batched quotes (100 symbols per request). Symbols Yahoo does not know are absent. */

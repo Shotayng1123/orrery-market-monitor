@@ -20,7 +20,7 @@ const see = (p) => p.evaluate(() => { const c = document.querySelector("#tab-cra
     await p.locator(tab("news")).click(); await p.waitForSelector("#tab-crash"); await p.waitForTimeout(300);
     const a = await see(p);
     ck("the tab says it could not be drawn and that the others are not affected, with the error's own words", a.crash && /THIS TAB COULD NOT BE DRAWN/.test(a.text) && /other tabs are not affected/.test(a.text) && /crash switch for the news tab/.test(a.text) && /TRY AGAIN/.test(a.text), a);
-    ck("the header and the tabs are still there, and the notice fits the screen", a.topbar && a.nav === 6 && a.view === "news" && a.wide > a.page * 0.8 && a.wide <= a.page && a.over <= 0, a);
+    ck("the header and the tabs are still there (seven on a development server, with the paper portfolio's), and the notice fits the screen", a.topbar && a.nav === 7 && a.view === "news" && a.wide > a.page * 0.8 && a.wide <= a.page && a.over <= 0, a);
     await p.locator(tab("market")).click(); await p.waitForSelector(drawn); await p.waitForTimeout(300);
     const m = await see(p);
     ck("another tab opens as usual", !m.crash && m.view === "market" && m.kids > 0, m);

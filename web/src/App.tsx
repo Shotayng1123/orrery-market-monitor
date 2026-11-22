@@ -1,10 +1,11 @@
 import { pageHash } from "./lib/indices";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Topbar, VIEWS, type ViewId } from "./components/Topbar";
 import { CrashSwitch, TabGuard } from "./components/TabGuard";
 import { Gate } from "./auth/Gate";
 import { takeVerifyLink } from "./lib/verify";
-import { api, apiConfigured, clearToken, getToken, tokenId, type Me } from "./lib/api";
+import { api, apiConfigured, getToken, signOutHere, tokenId, type Me } from "./lib/api";
+import { keepClear } from "./lib/keep";
 import { AccountModal, ChangePassword } from "./auth/Account";
 import { Logo } from "./components/Logo";
 import { DEV_MOCK } from "./lib/useApi";
@@ -23,7 +24,7 @@ import { RatesPhone } from "./views/RatesPhone";
 import { WatchlistPhone } from "./views/WatchlistPhone";
 import { AssetPhone } from "./views/AssetPhone";
 import { PhoneNav } from "./components/PhoneNav";
-import { InstallHint } from "./components/InstallHint";
+import { InstallSheet } from "./components/InstallHint";
 import { FootBars } from "./components/FootBars";
 import { Notify } from "./components/Notify";
 import { NOTIFY_EVENT, pushOff } from "./lib/push";
@@ -36,6 +37,10 @@ import { AssetView } from "./views/Asset";
 import { WatchlistView } from "./views/Watchlist";
 import { CardLayer } from "./components/CompanyCard";
 import { navChanged, navDrawn, navPopped, navStart } from "./lib/nav";
+
+// The paper portfolio's screens (P-1) are a file of their own, asked for when the tab is first opened, and only where
+// the build carries the paper book (lib/paper.ts): a build with the switch off does not make that file.
+const PortfolioView = __PAPER_BUILD__ ? lazy(() => import("./views/Portfolio")) : null;
 
 interface Route { view: ViewId; sub: string }
 function parseHash(): Route {
@@ -69,7 +74,7 @@ export default function App() {
   const [token, setTok] = useState<string | null>(() => getToken());
   const [prefs, setPrefsState] = useState<Prefs>(loadPrefs);
   const [full, setFull] = useState(false);
-  const [, setTerm] = useState(false);   // re-render when the one-screen layout switches on or off (views read it from <body>)
+  const [term, setTerm] = useState(false);   // re-render when the one-screen layout switches on or off (views read it from <body>)
   const [health, setHealth] = useState<Health | null>(null);
   const [healthErr, setHealthErr] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
@@ -127,7 +132,7 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if (["INPUT", "SELECT", "TEXTAREA"].includes((e.target as HTMLElement | null)?.tagName ?? "")) return;   // typing in a field or a drop-down (its list jumps to the typed character) is not a shortcut
       if (e.key === "Escape") goFull(false);
-      if (e.key >= "1" && e.key <= "6" && e.key.length === 1) { const v = VIEWS[Number(e.key) - 1]; if (v) setHash(v.id); }
+      if (e.key.length === 1 && e.key >= "1" && e.key <= String(VIEWS.length)) { const v = VIEWS[Number(e.key) - 1]; if (v) setHash(v.id); }   // 1 to 6; 1 to 7 where the paper portfolio's tab is drawn
     };
     window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey);
   }, []);
@@ -169,7 +174,10 @@ export default function App() {
 
   const setPrefs = (p: Prefs) => { setPrefsState(p); savePrefs(p); };
   // signing out also ends this device's notifications: they belong to the account, and it is leaving this browser
-  const signOut = () => { void pushOff().catch(() => undefined).finally(() => { clearToken(); setTok(null); setAcct(false); setNotify(false); }); };
+  const signOut = () => { void pushOff().catch(() => undefined).finally(() => { signOutHere(); setTok(null); setAcct(false); setNotify(false); }); };
+  // A start that finds no sign-in: one that was not to be remembered ended with its tab, or one ran out. What the page
+  // kept on this device for opening without a connection belongs to nobody who is here now, and goes (lib/keep.ts).
+  useEffect(() => { if (!DEV_BYPASS && !getToken()) void keepClear(); }, []);
 
   // a feed that has stopped is the worst reading there is: every price on screen is old, whatever the jobs say
   const feedStopped = !!health?.feed && health.feed.expected && !health.feed.ok;
@@ -198,6 +206,8 @@ export default function App() {
       <CardLayer />
       {acct && me && <AccountModal me={me} onClose={() => setAcct(false)} onSignOut={signOut} onChanged={() => setTok(getToken())} />}
       {notify && <Notify onClose={() => setNotify(false)} />}
+      {/* "Add Orrery to your Home Screen": its steps open in a sheet, from the line on MARKETS or from the menu on any tab */}
+      {pv2 && <InstallSheet />}
       {verify && !DEV_BYPASS && userId !== verify.email && (
         <div className="modal-bg confirm"><div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="vf-title" aria-describedby="vf-text">
           <h3 id="vf-title">Verification link</h3>
@@ -209,11 +219,9 @@ export default function App() {
           </div>
         </div></div>
       )}
-      <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={me?.email ?? userId} onSignOut={() => (me ? setAcct(true) : signOut())} updatedAt={updatedAt} nextAt={nextAt} polling={polling} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} pv2={pv2} canPreview={phone} />
-      <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–6 TABS · ESC</span><span>&#9974;</span></div>
+      <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={me?.email ?? userId} onSignOut={() => (me ? setAcct(true) : signOut())} updatedAt={updatedAt} nextAt={nextAt} polling={polling} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} pv2={pv2} canPreview={phone} term={term} />
+      <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–{VIEWS.length} TABS · ESC</span><span>&#9974;</span></div>
       <div id="wrap">
-        {/* on MARKETS the hint sits under the data's first block, in the screen itself (MarketPhone; the designer's I-6 check) */}
-        {pv2 && view !== "market" && <InstallHint home={false} />}
         <div id="grid" data-view={view}>
           <TabGuard key={`${view}/${pv2 ? "p" : "d"}`} resetKey={sub ?? ""}>
           {import.meta.env.DEV && <CrashSwitch view={view} />}
@@ -224,6 +232,7 @@ export default function App() {
           {view === "equities" && (pv2 ? <EquitiesPhone sub={sub} onSub={(s) => setHash("equities", s)} tick={tick} /> : <EquitiesView sub={sub} onSub={(s) => setHash("equities", s)} tick={tick} />)}
           {view === "rates" && (pv2 ? <RatesPhone tick={tick} /> : <RatesFxView sub={sub} onSub={(s) => setHash("rates", s)} tick={tick} />)}
           {view === "asset" && (pv2 ? <AssetPhone symbol={sub} tick={tick} /> : <AssetView symbol={sub} tick={tick} />)}
+          {view === "portfolio" && PortfolioView && <Suspense fallback={<div className="c12 mut" id="pf-wait">loading…</div>}><PortfolioView sub={sub} tick={tick} phone={pv2} classic={phone && !pv2} /></Suspense>}
           </TabGuard>
         </div>
         <footer>Orrery Monitor shows market data from third-party feeds (Yahoo Finance; US Treasury; Japan MOF; exchange and central-bank publications) that may be delayed or incomplete; every panel states its source and as-of time. Information only; nothing here is investment advice. Default time zone: Singapore.</footer>

@@ -1,0 +1,83 @@
+// Notes on a paper portfolio, and what happened to it (P-1). A note is the account's own text, visible to that
+// account only: at most 2,000 characters, never edited (a later note says what changed), removable by its writer, and
+// then its text goes for good while a line with the time stays. Under the box, always, the statement's gist.
+import { useState } from "react";
+import { Consent } from "./Consent";
+import { failureWords, pfNoteAdd, pfNoteRemove, PfError } from "../../lib/pf";
+import { noteLeft, noteRefusal, NOTE_MAX } from "../../lib/pf/form.ts";
+import { NOTE_GIST } from "../../lib/pf/statement.ts";
+import { stampSgt, timeSgt } from "../../lib/pf/calendar.ts";
+import type { ActivityRow } from "../../lib/pf/view.ts";
+import type { ConsentState, NoteRow } from "../../lib/pf/types.ts";
+import { fmtFull } from "../../lib/pf/money.ts";
+
+const PAGE = 20, LONG_LINES = 8;
+export function Notes({ id, notes, consent, phone, onChanged }: { id: string; notes: NoteRow[]; consent: ConsentState; phone: boolean; onChanged: () => void }) {
+  const [text, setText] = useState(""), [busy, setBusy] = useState(false), [msg, setMsg] = useState<string | null>(null), [card, setCard] = useState(false), [agreed, setAgreed] = useState(consent);
+  const [shown, setShown] = useState(PAGE), [asking, setAsking] = useState<number | null>(null), [open, setOpen] = useState<Set<number>>(() => new Set());
+  const left = noteLeft(text), over = left < 0, refusal = over ? noteRefusal(text) : null;
+  const save = (c = agreed) => {
+    if (busy || !text.trim() || over) return;
+    if (!c.agreedAt) { setCard(true); return; }
+    setBusy(true); setMsg(null);
+    pfNoteAdd(id, text).then(() => { setText(""); setBusy(false); onChanged(); })
+      .catch((e: unknown) => { setBusy(false); if (e instanceof PfError && e.status === 409) { setAgreed({ ...c, agreedAt: null }); setCard(true); return; }
+        setMsg(failureWords(e, { offline: "Offline: a note needs the server. Your text is kept in the box on this device.", signedOut: "Signed out: sign in again. Nothing was saved.", refused: (w) => `Not saved: ${w}. Your text is still in the box.` })); });
+  };
+  const remove = (n: number) => { setAsking(null); pfNoteRemove(id, n).then(onChanged).catch((e: unknown) => setMsg(failureWords(e, { offline: "Offline: removing a note needs the server.", signedOut: "Signed out: sign in again. Nothing was removed.", refused: (w) => `Not removed: ${w}. Nothing was removed.` }))); };
+  const rows = Math.min(8, Math.max(3, text.split("\n").length + Math.floor(text.length / 90)));
+  return (
+    <div className={`pf-notes${phone ? " ph" : ""}`} id="pf-notes">
+      <textarea id="pf-note-box" rows={rows} value={text} placeholder="add a note …" aria-label="A note on this portfolio" aria-invalid={over ? true : undefined} aria-describedby="pf-note-gist"
+        onChange={(e) => { setText(e.target.value); setMsg(null); }} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); } }} />
+      <p className="pf-mut gist" id="pf-note-gist">{NOTE_GIST}</p>
+      <div className="pf-noteact">
+        <button type="button" className={phone ? "pf-btn big" : "pf-btn"} id="pf-note-save" disabled={busy || !text.trim() || over} onClick={() => save()} title={phone ? undefined : "Ctrl+Enter saves"}>{busy ? "Saving…" : phone ? "Save note" : "SAVE NOTE"}</button>
+        {refusal ? <span className="pf-no" id="pf-note-count" role="alert">{refusal}</span> : left <= NOTE_MAX - 1500 ? <span className="pf-mut" id="pf-note-count">{fmtFull(left)} left</span> : null}
+      </div>
+      {msg && <p className="pf-msg" id="pf-note-msg" role="status">{msg}</p>}
+      {notes.length === 0 ? <p className="pf-mut" id="pf-nonotes">No notes yet.</p> : (
+        <ul className="pf-notelist">
+          {notes.slice(0, shown).map((n) => {
+            if (n.body == null) return <li key={n.id} className="gone" data-note="removed">note removed {n.removedAt ? timeSgt(n.removedAt) : ""}</li>;
+            const long = n.body.split("\n").length > LONG_LINES || n.body.length > LONG_LINES * (phone ? 44 : 60), all = open.has(n.id);
+            return (
+              <li key={n.id} data-note={n.id}>
+                <div className="hd"><span className="t" title={stampSgt(n.at)}>{timeSgt(n.at)}</span>
+                  {asking === n.id ? null : <button type="button" className="pf-link rm" onClick={() => setAsking(n.id)}>REMOVE</button>}</div>
+                <div className={`tx${long && !all ? " clip" : ""}`}>{n.body}</div>
+                {long && !all && <button type="button" className="pf-link" data-act="all" onClick={() => setOpen((s) => new Set(s).add(n.id))}>SHOW ALL</button>}
+                {asking === n.id && <p className="pf-ask" role="alertdialog">Remove this note? Its text goes for good; a line saying a note was removed stays. <button type="button" className="pf-btn" onClick={() => setAsking(null)}>KEEP</button> <button type="button" className="pf-btn danger" data-act="remove" onClick={() => remove(n.id)}>REMOVE</button></p>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {notes.length > shown && <button type="button" className={phone ? "mp-more" : "pf-link more"} id="pf-notes-more" onClick={() => setShown((s) => s + PAGE)}>{phone ? "Show 20 more" : "SHOW 20 MORE"}</button>}
+      {card && <Consent consent={agreed} what="note" phone={phone} onAgreed={(c) => { setAgreed(c); setCard(false); save(c); }} onNotNow={() => { setCard(false); setMsg("Not saved: the statement was not agreed. Your text is still in the box."); }} />}
+    </div>
+  );
+}
+
+const DAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+/** "THURSDAY 12 NOV", the day in Singapore. */
+function dayBar(iso: string): string {
+  const p = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Singapore", weekday: "long", day: "numeric", month: "short" }).formatToParts(new Date(iso)), g = (t: string) => p.find((x) => x.type === t)?.value ?? "";
+  const wd = DAYS.find((d) => d.toLowerCase() === g("weekday").toLowerCase()) ?? g("weekday").toUpperCase();
+  return `${wd} ${g("day")} ${g("month").toUpperCase()}`;
+}
+const hm = (iso: string): string => timeSgt(iso).split(" ").pop() ?? "";
+/** What happened to the book, under day bars, newest first; times in SGT. Thirty lines, then SHOW 30 MORE. */
+export function Activity({ rows, phone }: { rows: ActivityRow[]; phone: boolean }) {
+  const [shown, setShown] = useState(30);
+  let last = "";
+  return (
+    <div className={`pf-activity${phone ? " ph" : ""}`} id="pf-activity">
+      {rows.slice(0, shown).map((r, i) => {
+        const bar = dayBar(r.at), head = bar !== last; last = bar;
+        return <div key={`${r.at}|${i}`}>{head && <div className="daybar">{bar}</div>}<div className="act" data-kind={r.kind}><span className="t">{hm(r.at)}</span><span className="k">{r.kind}</span><span className="x">{r.text}</span></div></div>;
+      })}
+      {rows.length > shown && <button type="button" className={phone ? "mp-more" : "pf-link more"} onClick={() => setShown((s) => s + 30)}>{phone ? "Show 30 more" : "SHOW 30 MORE"}</button>}
+    </div>
+  );
+}

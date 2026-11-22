@@ -1,9 +1,9 @@
 // The market table: one row per active instrument with last print, period anchors and % changes.
 // Rebuilt by `tick` once a minute (and by `daily` after history runs) into snapshots.key = 'table'.
 import { fxDay, isFxPair } from "./fx.ts";
-import { db, type InstrumentRow } from "./db.ts";
+import { db, selectAll, type InstrumentRow } from "./db.ts";
 import { localDate, marketById, marketState, partsIn, type Holidays } from "./sessions.ts";
-import { usableSd, z1mOf, zDay } from "./sigma.ts";
+import { prevCloses, tableLastSession, usableSd, z1mOf, zDay, type AnchorLite, type Booked, type LastSession } from "./sigma.ts";
 import { isFuture, rollDay, tradeDate } from "./futures.ts";
 
 type PeriodKey = "d1" | "w1" | "m1" | "m3" | "m12" | "m36";
@@ -36,6 +36,9 @@ export interface TableRow {
   // 1D is then the change within the new contract; `step` the change of contract in % (null where not measured)
   contract: string | null;
   roll: { d: string; from: string | null; to: string; step: number | null } | null;
+  // B-32 (21 Nov 2026): the instrument's newest completed session, between its last two booked closes, over the σ of the
+  // 63 daily changes before it (sigma.ts lastSession); null where the Monitor holds fewer than two closes
+  ls: LastSession | null;
 }
 
 /** Yields are compared in points; a bond future in the rates group is a price and is compared in per cent. */
@@ -72,13 +75,18 @@ export async function computeTable(now: Date = new Date()): Promise<{ rows: Tabl
   // quote is not a new session (a currency pair's Friday quote that Yahoo re-stamps on Saturday), the SQL hands
   // back the last close itself as the "previous close". Fetch the close before it for those symbols.
   const stuck = (anchors as Anchor[]).filter((a) => a.last_d && a.d1_d === a.last_d);
-  const prevBy = new Map<string, { d: string; close: number }>();
+  let prevBy = new Map<string, Booked>();
   if (stuck.length) {
     const lo = stuck.map((a) => a.last_d as string).sort()[0];
     const from = new Date(Date.parse(lo + "T00:00:00Z") - 14 * 86400e3).toISOString().slice(0, 10);
-    const { data: prevRows } = await db.from("prices_daily").select("symbol,d,close").in("symbol", stuck.map((a) => a.symbol)).gte("d", from).order("d");
-    const lastOf = new Map(stuck.map((a) => [a.symbol, a.last_d as string]));
-    for (const r of (prevRows ?? []) as Array<{ symbol: string; d: string; close: number }>) if (r.d < lastOf.get(r.symbol)!) prevBy.set(r.symbol, { d: r.d, close: r.close });   // ascending: the latest before last_d wins
+    // Read page by page (the checks of round 3b: LS-5). One request brought at most 1,000 rows, and in New York's
+    // hours this read asks for 650 to 740 (most instruments' quotes are then the newer view); with one instrument's
+    // closes unbooked for a week it passed 1,000, the newest dates were the ones left out, and those rows lost their
+    // earlier close without a word. Ordered by day, then symbol, so that the pages do not overlap. A read that fails
+    // leaves the rows without that close, as before, and the table is still built.
+    let prevRows: Array<{ symbol: string; d: string; close: number }> = [];
+    try { prevRows = await selectAll<{ symbol: string; d: string; close: number }>(() => db.from("prices_daily").select("symbol,d,close").in("symbol", stuck.map((a) => a.symbol)).gte("d", from).order("d").order("symbol")); } catch { prevRows = []; }
+    prevBy = prevCloses(prevRows, new Map(stuck.map((a) => [a.symbol, a.last_d as string])));
   }
   const rows: TableRow[] = [];
   for (const i of inst as InstrumentRow[]) {
@@ -125,11 +133,16 @@ export async function computeTable(now: Date = new Date()): Promise<{ rows: Tabl
     // last booked close itself (a closed market, an official yield) against the 63 before it (sigma.ts)
     const own = useQuote, sd = usableSd(own ? st?.sd63 : st?.sd63x, own ? st?.n63 : st?.n63x);
     const z1d = roll && roll.step == null ? null : zDay(isYield(i) ? chg.d1 : pct.d1, sd);
+    // B-32: the newest completed session, whatever the row shows now: the last booked close against the one before it
+    // (the anchors give that one unless the quote is the newer view, when it was fetched above: `stuck`), over the σ of
+    // the 63 changes before it; a roll between the two closes counted within the new contract
+    // (which closes, which roll and which window: sigma.ts tableLastSession, where the logic checks run it)
+    const ls = tableLastSession(a as AnchorLite | undefined, prevBy.get(i.symbol), rollsOf.get(i.symbol) ?? [], st, isYield(i) ? "yield" : "price", isFuture(i.symbol));
     const pos52 = st && st.hi252 != null && st.lo252 != null && st.hi252 > st.lo252 && last != null ? ((last - st.lo252) / (st.hi252 - st.lo252)) * 100 : null;
     const vs200 = st && st.mean200 && last != null ? (isYield(i) ? last - st.mean200 : (last / st.mean200 - 1) * 100) : null;
     rows.push({ marketTab: i.market_tab !== false, chart: i.chart !== false, z1m, pos52, vs200,
       z1d, sd1d: sd, zFrom: sd == null ? null : (own ? st?.from63 : st?.from63x) ?? null, zTo: sd == null ? null : (own ? st?.to63 : st?.to63x) ?? null, zN: (own ? st?.n63 : st?.n63x) ?? null,
-      contract: isFuture(i.symbol) ? contractOf.get(i.symbol) ?? null : null, roll, symbol: i.symbol, name: i.name, cls: i.cls, group: i.grp, market: i.market, currency: i.currency, decimals: i.decimals, proxyFor: i.proxy_for ?? undefined, order: i.ord, last, lastAt, live, source: i.provider, closes, closeDates, pct, chg });
+      contract: isFuture(i.symbol) ? contractOf.get(i.symbol) ?? null : null, roll, ls, symbol: i.symbol, name: i.name, cls: i.cls, group: i.grp, market: i.market, currency: i.currency, decimals: i.decimals, proxyFor: i.proxy_for ?? undefined, order: i.ord, last, lastAt, live, source: i.provider, closes, closeDates, pct, chg });
   }
   return { rows, asOf: now.toISOString() };
 }

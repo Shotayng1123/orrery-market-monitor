@@ -8,6 +8,14 @@
 //   - a computer: a name low on MARKETS opens its page at y 0, and Back returns MARKETS to where it stood;
 //   - answers that come late (as on the live site; the local copy answers at once): Back waits for the list to be drawn
 //     tall enough and then returns to where it stood, and a page still loading opens at its top.
+//   - a phone's WATCHLIST of eleven names (B's B-33, 21 Nov 2026): the browser's Back (and so a swipe from the edge)
+//     returns the row that was tapped to where it stood, in ten fresh contexts of ten; the same for the last row and
+//     for the page's own Back, and with the list's answers 0.8 s late. The list is first drawn without its rows, and
+//     the rows then arrive above what is on screen: the hold of lib/nav.ts ended at that first drawing and the browser
+//     kept the sections below in place, so the row stood 589 px higher (B's measurement, ten of ten);
+//   - the same fault from an answer of its own that draws above a list after the list's rows: WATCHLIST's "Closed now"
+//     line once the market table comes (42 px), and MARKETS' morning note (44 px). Each view says while such an answer
+//     is on its way (`data-nav-wait`), and Back holds the place until it has come.
 // Positions are compared with where the same list stood when it was left, never with a number of pixels, so taller
 // rows on another machine move both alike.
 // Run from web/:  node e2e/run.cjs page-top   (the runner starts the servers this needs; see e2e/run.cjs)
@@ -15,9 +23,9 @@ const { chromium, devices } = require("playwright");
 const MOCK = "http://localhost:5179/orrery-market-monitor/", STANDIN = "http://localhost:5181/orrery-market-monitor/";
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d)}`); };
 const AUTO = { size: "AUTO", compact: false, v: 2 };
-async function page(b, opts) {
+async function page(b, opts, store) {
   const ctx = await b.newContext({ ...opts, deviceScaleFactor: 1 });
-  await ctx.addInitScript((pr) => { try { localStorage.setItem("om_prefs", JSON.stringify(pr)); localStorage.setItem("om_a2hs_hide", "1"); } catch {} }, AUTO);
+  await ctx.addInitScript(([pr, st]) => { try { localStorage.setItem("om_prefs", JSON.stringify(pr)); localStorage.setItem("om_a2hs_hide", "1"); for (const [k, v] of Object.entries(st || {})) localStorage.setItem(k, v); } catch {} }, [AUTO, store || null]);
   const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message)); return { ctx, p, errs };
 }
 // a fresh page at an address: loaded anew, so every case starts from a page as it is opened
@@ -136,7 +144,61 @@ const openRow = (p) => p.evaluate(() => document.querySelector(".mp-item.open .m
     const back = await at(p), open = await openRow(p);
     ck(`Back while MARKETS' table is still on its way (y ${early.y}, ${early.items} lines drawn): once it is drawn, MARKETS where it stood (y ${back.y} against ${o.y}), Gold's line open`, early.items === 0 && back.hash === "#market" && near(back.y, o.y) && open === "Gold", { early, back, open, o });
     ck("no page errors", errs.length === 0, errs);
-    await ctx.close(); }
+    await ctx.close();
+    // The morning note's line stands above the list and comes from an answer of its own. A second after the table's,
+    // it arrives when the rows are drawn and the place is reached: the browser then keeps the rows on screen by moving
+    // the page, and the list stood 50 px from where it was left (the same fault as B-33's, seen while fixing it).
+    { const { ctx, p, errs } = await page(b, devices["iPhone 13"]);
+      const note = { id: 1, d: new Date().toISOString().slice(0, 10), title: "A stand-in morning note, for the check of Back", generatedAt: new Date(Date.now() - 2 * 3600e3).toISOString(), kind: "daily" };
+      await p.route("**/fakeapi?*", async (r) => { const a = new URL(r.request().url()).searchParams.get("action"), wait = (ms) => new Promise((res) => setTimeout(res, ms));
+        const ok = (body) => r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(body) });
+        if (a === "table" || a === "stock") { await wait(400); return ok(a === "table" ? ans.table : ans.gold); }
+        if (a === "notes") { await wait(1400); return ok({ rows: [note] }); }
+        return ok(a === "health" ? { ok: true, at: new Date().toISOString(), tick: { lastAt: new Date().toISOString(), ageMin: 1, ok: true }, daily: { lastAt: new Date().toISOString(), ok: true }, sources: [], holidays: {}, holidaysVerified: true } : { rows: [] }); });
+      await p.goto(STANDIN + "#market", { waitUntil: "networkidle" }); await p.waitForSelector("#mk-note"); await settle(p, 600);
+      const o = await openFromRow(p, "Gold", "Open Gold's page"); await p.waitForSelector(".mp-doc h1"); await settle(p, 300);
+      await p.goBack(); await p.waitForSelector("#mk-note"); await settle(p, 900);
+      const back = await at(p), open = await openRow(p);
+      ck(`Back with the morning note's answer a second after the table's: once its line is drawn above the list, MARKETS where it stood (y ${back.y} against ${o.y}), Gold's line open`, back.hash === "#market" && near(back.y, o.y) && open === "Gold" && errs.length === 0, { back, open, o, errs });
+      await ctx.close(); } }
+
+  console.log("\n[a phone's WATCHLIST of eleven names (B-33): Back returns the row that was tapped to where it stood]");
+  { const WATCH = ["USDJPY=X", "EURUSD=X", "DX-Y.NYB", "^TNX", "UST2Y", "JGB10Y", "GC=F", "CL=F", "NKD=F", "^STOXX50E", "^GSPC"], NK = "Nikkei 225 future (CME)";
+    const STORE = { om_mock_watch: JSON.stringify(WATCH.map((symbol) => ({ symbol, name: null }))), om_mock_now: "2026-11-23T23:10:00Z" };   // the clock is the page's own: Tue 24 Nov 07:10 SGT
+    // where a row stands on screen: by its name, or the list's last
+    const rowTop = (p, pick) => p.evaluate((pick) => { const rows = [...document.querySelectorAll(".mp-sec .mp-row.tap")], r = pick === "last" ? rows[rows.length - 1] : rows.find((x) => x.querySelector(".n")?.textContent === pick); return r ? { top: Math.round(r.getBoundingClientRect().top), y: Math.round(scrollY), rows: rows.length, name: r.querySelector(".n")?.textContent ?? null } : null; }, pick);
+    const rowOf = (p, pick) => pick === "last" ? p.locator(".mp-sec .mp-row.tap").last() : p.locator(".mp-sec .mp-row.tap", { has: p.locator(".n", { hasText: pick }) }).first();
+    // one visit in a context of its own: the list, the row brought into view, the tap, Back, and 1.5 s later where the row stands
+    const visit = async (base, pick, how, routes, wait = 1500) => { const { ctx, p, errs } = await page(b, devices["iPhone 13"], STORE);
+      if (routes) await routes(p);
+      await p.goto(base + "#watch", { waitUntil: "networkidle" }); await p.waitForSelector(".mp-sec .mp-row.tap"); await p.evaluate(() => document.fonts.ready); await p.addStyleTag({ content: "#mockbar{display:none!important}" }); await settle(p, 600);
+      const row = rowOf(p, pick); await row.scrollIntoViewIfNeeded(); await settle(p, 250);
+      const before = await rowTop(p, pick); await row.click(); await settle(p, 900);
+      const opened = await p.evaluate(() => ({ hash: location.hash, y: Math.round(scrollY) }));
+      if (how === "page") await p.locator(".mp-head .mp-back").click(); else await p.goBack();
+      await settle(p, wait); const after = await rowTop(p, pick), hash = await p.evaluate(() => location.hash);
+      await ctx.close(); return { before, after, opened, hash, moved: before && after ? after.top - before.top : null, errs }; };
+    const held = (v) => v.hash === "#watch" && v.moved != null && Math.abs(v.moved) <= 2 && v.opened.y === 0 && v.opened.hash !== "#watch" && v.errs.length === 0;
+    { const vs = []; for (let k = 0; k < 10; k++) vs.push(await visit(MOCK, NK, "browser"));
+      ck(`WATCHLIST › ${NK} (the ninth of ${vs[0].before?.rows} lines, brought into view at y ${vs[0].before?.y}) › its page (${vs[0].opened.hash}, at y ${vs[0].opened.y}) › the browser's Back: 1.5 s later the line is where it was, in ten fresh contexts of ten (moved ${vs.map((v) => v.moved).join(", ")} px; it stood 589 px higher)`, vs.length === 10 && vs.every(held) && vs[0].before.rows === 11 && vs[0].before.y > 100 && vs[0].opened.hash === "#asset/NKD%3DF", vs.filter((v) => !held(v)).slice(0, 3)); }
+    { const vs = []; for (let k = 0; k < 2; k++) vs.push(await visit(MOCK, "last", "browser"));
+      ck(`the list's last line (${vs[0].before?.name}, which opens ${vs[0].opened.hash}) › the browser's Back: where it was (moved ${vs.map((v) => v.moved).join(", ")} px)`, vs.every(held) && vs[0].before.name === "S&P 500" && vs[0].opened.hash === "#equities/spx", vs); }
+    { const vs = []; for (let k = 0; k < 2; k++) vs.push(await visit(MOCK, NK, "page"));
+      ck(`${NK} › the page's own Back: where it was, as before (moved ${vs.map((v) => v.moved).join(", ")} px)`, vs.every(held), vs); }
+    // the list's answers 0.8 s late, as on the live site (B expected the same or worse there): the local copy's own answers, served by the suite
+    { const { ctx: c0, p: p0 } = await page(b, devices["iPhone 13"], STORE); await fresh(p0, MOCK, "#watch", ".mp-sec .mp-row.tap");
+      const ans = await p0.evaluate(async () => { const { mockAction } = await import("/orrery-market-monitor/src/lib/mock.ts"); return { watch_syms: mockAction("watch_syms"), watch_list: mockAction("watch_list"), watch_feed: mockAction("watch_feed"), table: mockAction("table"), stock: mockAction("stock", { symbol: "NKD=F" }) }; }); await c0.close();
+      const late = (p, ms = {}) => p.route("**/fakeapi?*", async (r) => { const a = new URL(r.request().url()).searchParams.get("action"), now = "2026-11-23T23:10:00Z";
+        const ok = (body) => r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(body) });
+        if (a in ans) { await new Promise((res) => setTimeout(res, ms[a] ?? (a === "watch_syms" ? 200 : 800))); return ok(ans[a]); }
+        return ok(a === "health" ? { ok: true, at: now, tick: { lastAt: now, ageMin: 1, ok: true }, daily: { lastAt: now, ok: true }, sources: [], holidays: {}, holidaysVerified: true } : { rows: [] }); });
+      const vs = []; for (let k = 0; k < 2; k++) vs.push(await visit(STANDIN, NK, "browser", async (p) => { await p.clock.setFixedTime(new Date("2026-11-23T23:10:00Z")); await late(p); }));
+      ck(`the same with the list's answers 0.8 s late (the stand-in server): the browser's Back, and 1.5 s later the line is where it was (moved ${vs.map((v) => v.moved).join(", ")} px)`, vs.every(held) && vs[0].before?.rows === 11, vs);
+      // the names 0.5 s late and the market table, which names each row's market for the "Closed now" line above the
+      // list, a second after them: that line grows when the table comes, above the row that was tapped
+      const vt = []; for (let k = 0; k < 2; k++) vt.push(await visit(STANDIN, NK, "browser", async (p) => { await p.clock.setFixedTime(new Date("2026-11-23T23:10:00Z")); await late(p, { watch_list: 500, watch_feed: 500, table: 1500 }); }, 3000));
+      ck(`and with the names 0.5 s late and the market table 1.5 s late: 3 s after Back the line is where it was (moved ${vt.map((v) => v.moved).join(", ")} px)`, vt.every(held) && vt[0].before?.rows === 11, vt); }
+  }
 
   await b.close();
   console.log(fails ? `\n${fails} check(s) failed` : "\nall checks passed");

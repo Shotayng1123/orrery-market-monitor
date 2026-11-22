@@ -41,6 +41,18 @@ export interface TableRow extends Instrument {
   // then the change within the new contract; `step` the change of contract in %, null where not measured)
   contract?: string | null;
   roll?: { d: string; from: string | null; to: string; step: number | null } | null;
+  // B-32 (21 Nov 2026; absent from a server of before): the instrument's newest completed session, whatever the row
+  // shows now (lib/movers.ts; the server's sigma.ts lastSession)
+  ls?: LastSession | null;
+}
+/** An instrument's newest completed session: the change between its last two booked closes over the σ of the 63 daily
+ *  changes before it. `d` and `from` are the dates of the two closes; `close` the newest and `base` the close the change
+ *  is measured from (the one before, or on a future's roll day the new contract's own close before); `chg` in the row's
+ *  units (% for a price, points for a yield); `sd`, `n`, `wFrom`, `wTo` the σ, the changes counted in it and its window. */
+export interface LastSession {
+  d: string; from: string; close: number; base: number | null; chg: number | null; z: number | null;
+  sd: number | null; n: number | null; wFrom: string | null; wTo: string | null;
+  roll?: { from: string | null; to: string; step: number | null } | null;
 }
 
 export interface SeriesPoint { t: number; v: number; q?: number | null }   // epoch seconds, value; q = volume of the bar, where the feed has it (stocks)

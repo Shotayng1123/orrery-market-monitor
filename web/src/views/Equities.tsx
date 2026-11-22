@@ -16,7 +16,8 @@ import { useApi } from "../lib/useApi";
 import type { TableRow } from "../lib/types";
 import { fmtNum, fmtPct, fmtSigned, signCls, stockDecimals } from "../lib/fmt";
 import { fmtDate, fmtStamp } from "../lib/time";
-import { DRIVERS, MKT_CAP, PERIOD, VS_200D, VS_50D } from "../lib/labels";
+import { DRIVERS, MEMBERS_SOURCE, MKT_CAP, PERIOD, VS_200D, VS_50D } from "../lib/labels";
+import { PersonalUse } from "../components/PersonalUse";
 import { mergeClasses } from "../lib/classes";
 import { RANGE_52W } from "./Market";
 import { sectorShort } from "../lib/sectors";
@@ -317,7 +318,7 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
       <Panel no="06" title="MARKET BREADTH" span={12} k="eq-breadth" aux={statsAux}>
         {s ? <div className="brwrap"><div><BreadthTable s={s} hist={bh.data?.rows ?? []} /></div><div className="brchart"><div className="minih" id="br-caption" title="Each day counted over the index's members as of today: a company that has left the index is not in the line, and one that joined later counts from before it joined">Breadth over three years, daily · today's {s.breadth?.n ?? s.rows.length} members</div><BreadthChart rows={bh.data?.rows ?? []} height={210} /></div></div> : noStats}
       </Panel>
-      <Panel no="07" title="SHORT INTEREST" span={12} k="eq-short" aux={jp ? "JPX short-selling ratio (空売り集計) · short-position reports (空売り残高報告) · margin balances (信用取引現在高)" : s?.shorts ? <>FINRA consolidated short-sale volume · {fmtDate(s.shorts.d)}</> : ""}>
+      <Panel no="07" title="SHORT INTEREST" span={12} k="eq-short" aux={jp ? <span id="eq-short-src">JPX short-selling ratio (空売り集計) · short-position reports (空売り残高報告) · margin balances (信用取引現在高) · <PersonalUse /></span> : s?.shorts ? <>FINRA consolidated short-sale volume · {fmtDate(s.shorts.d)}</> : ""}>
         {jp ? <JpShortPanel idx={ix.stats} /> : s?.shorts ? (
           <div className="msg3" id="eq-short">
             <div>
@@ -334,7 +335,7 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
         ) : <Empty title={us ? "No short-volume data" : "No short data for this market"}>{us ? "The FINRA job runs after the US close." : "Public per-name short data is not available for this exchange."}</Empty>}
       </Panel>
       <Panel no="08" title="HEAT MAP" span={12} k="eq-heat" aux={s ? <>{statsAux} · GICS sectors · colour = 1D % · size = {hasMcap ? MKT_CAP.toLowerCase() : s.rows.some((r) => r.weight != null) ? "index weight" : "equal"}</> : ""}>{s ? <HeatMap s={s} rows={merged} /> : noStats}</Panel>
-      <Panel no="09" title="SCREENER" span={12} k="eq-screener" aux={statsAux}>{s ? <Screener s={s} /> : noStats}</Panel>
+      <Panel no="09" title="SCREENER" span={12} k="eq-screener" aux={s && MEMBERS_SOURCE[ix.stats] ? <>{statsAux} · <span id="eq-members-src">{MEMBERS_SOURCE[ix.stats].line} · <PersonalUse /></span></> : statsAux}>{s ? <Screener s={s} /> : noStats}</Panel>
       {drawer && s && <SectorDrawer title={ix.label} sector={drawer} rows={drawerRows} ccy={ccy} jp={jp} onClose={() => setDrawer(null)} />}
     </>
   );

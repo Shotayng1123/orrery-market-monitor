@@ -1,0 +1,426 @@
+/* The paper portfolio's screens (P-1, 21 Nov 2026; the designer's build note D/p1-design.md).
+   Loaded with those screens only (components/pf/shared.tsx imports it, and the screens are a file of their own): the
+   published page has none of this until the paper book's switch is turned (lib/paper.ts).
+   Sizes follow the note: 11-px mono heads, 12-px lines, 13-px sans for what is read; on a phone 16-px inputs of at
+   least 48 px, 52-px buttons, 56-px radio rows, 44 px for anything tapped. Colour is never the only sign: a refusal
+   is a sentence, a warning says WARN, a fixed value says "fixed". Nothing here cuts text: every cell wraps. */
+
+/* ---- the page ---- */
+.pf{grid-column:1 / -1;min-width:0;display:flex;flex-direction:column;gap:var(--gap,10px)}
+.pf .panel{width:100%}
+.pf table.secT td.wrap{white-space:normal;overflow-wrap:anywhere}
+.pf table.secT td,.pf table.secT th{vertical-align:top}
+.pf table.secT td{padding:3px 6px 3px 4px}
+body.term #grid[data-view="portfolio"] table.secT td.l{max-width:none;overflow:visible;text-overflow:clip}
+body.term #grid[data-view="portfolio"] .pbody{display:block;overflow:visible}
+.pf-head{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 14px}
+.pf-head h2{margin:0;color:var(--amber);font-size:13px;font-weight:700;letter-spacing:.14em}
+.pf-after{color:var(--mut);font-size:10.5px;letter-spacing:.02em;min-width:0}
+.phead:has(.pf-after){flex-wrap:wrap;row-gap:2px}
+
+/* ---- words and controls shared by every screen ---- */
+.pf-link{display:inline;margin:0;padding:0;border:0;border-radius:0;background:none;color:var(--cyan);font:inherit;letter-spacing:.04em;text-decoration:none;cursor:pointer}
+.pf-link:hover{text-decoration:underline}
+.pf-link:focus{outline:none}
+.pf-link:focus-visible{outline:1px solid var(--amber);outline-offset:2px}
+.pf-link.more{display:block;margin-top:8px;font-size:11px}
+/* the page's one filled button: teal, black letters (never two on one screen) */
+.pf-go{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;padding:5px 14px;border:1px solid var(--cyan);border-radius:3px;background:var(--cyan);color:#000;font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.06em;line-height:1.4;text-decoration:none;white-space:nowrap;cursor:pointer}
+.pf-go:hover{background:#4fe0d2}
+.pf-go:disabled{border-color:#2c4a47;background:#16302e;color:#8fa3a0;cursor:not-allowed}
+.pf-go.big{display:flex;width:100%;min-height:52px;border-radius:12px;font-family:var(--sans);font-size:16px;letter-spacing:0}
+.pf-btn{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;padding:4px 12px;border:1px solid var(--bord2);border-radius:3px;background:transparent;color:var(--txt2);font-family:var(--mono);font-size:11px;letter-spacing:.05em;line-height:1.4;white-space:nowrap;cursor:pointer}
+.pf-btn:hover{border-color:var(--amber);color:var(--txt)}
+.pf-btn.danger{border-color:var(--dn);color:var(--dn)}
+.pf-btn.danger:hover{background:rgba(255,77,66,.12);color:var(--dn)}
+.pf-btn:disabled{border-color:var(--bord);color:#77746c;cursor:not-allowed;background:transparent}
+.pf-btn.big{display:flex;width:100%;min-height:52px;border-radius:12px;font-family:var(--sans);font-size:16px;letter-spacing:0}
+.pf-textbtn{display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;margin-top:6px;padding:0;border:0;background:none;color:var(--txt2);font-family:var(--sans);font-size:15px;cursor:pointer}
+.pf-btns{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;align-items:center;margin-top:8px}
+.pf-mut{margin:4px 0 0;color:var(--mut);font-size:11px;line-height:1.5;overflow-wrap:anywhere}
+.pf-mut.notyet{font-size:12px;margin:3px 0 0}
+.pf-err{margin:0;padding:8px 10px;border:1px solid #6b241f;border-radius:4px;background:rgba(255,77,66,.08);color:var(--txt);font-size:12px;line-height:1.5;overflow-wrap:anywhere}
+.pf-capline{margin:0 0 8px;color:var(--txt);font-size:12px;line-height:1.5}
+.pf-msg{display:block;margin:4px 0 0;color:var(--warn);font-size:11.5px;line-height:1.45;overflow-wrap:anywhere}
+.pf-no{display:block;margin-top:2px;color:var(--dn);font-size:11px;line-height:1.4;overflow-wrap:anywhere}
+.pf-line{display:block;margin-top:2px;color:var(--mut);font-size:11px;line-height:1.45;overflow-wrap:anywhere}
+.pf-line.tie.warned{color:var(--warn)}
+.pf-line.tie.refused{color:var(--dn)}
+.pf-line.tie .w{font-weight:700}
+.pf-unit2{margin-left:6px;color:var(--mut);font-size:11px}
+.pf-changed{margin-left:8px;color:var(--warn);font-size:10.5px;white-space:nowrap}
+.pf-pending{display:block;color:var(--warn);font-size:10.5px;line-height:1.4}
+.pf-fixed{color:var(--mut);font-size:10.5px}
+.pf-fixedtext{overflow-wrap:anywhere}
+.pf-paper{display:inline-block;padding:0 5px;border:1px solid #5a4a80;border-radius:2px;color:var(--asia);font-family:var(--mono);font-size:10px;letter-spacing:.1em;line-height:1.5}
+.pf-tap{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;margin:0;padding:0 2px;border:0;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.pf-tap.by{justify-content:flex-end}
+.pf-tap .pf-paper{font-size:11px;padding:1px 7px}
+.pf-by{margin:0;padding:0;border:0;background:none;color:var(--txt2);font-family:var(--mono);font-size:10px;letter-spacing:.02em;line-height:1.4;text-align:left;cursor:pointer}
+button.pf-by:hover{color:var(--cyan)}
+.pf-bywrap{display:inline-block;min-width:0}
+.pf-bycard{display:block;margin-top:3px;color:var(--mut);font-size:10.5px;line-height:1.4;white-space:normal;overflow-wrap:anywhere}
+.pf-a{margin-left:2px;color:var(--warn);font-size:8.5px;font-weight:700}
+.pf-sheet-p{margin:4px 0 10px;font-size:15px;line-height:1.5}
+.pf-flash{position:fixed;left:50%;bottom:18px;z-index:70;transform:translateX(-50%);max-width:calc(100% - 24px);padding:7px 14px;border:1px solid var(--cyan);border-radius:4px;background:var(--panel2);color:var(--txt);font-size:12px;line-height:1.4;box-shadow:0 6px 20px rgba(0,0,0,.6)}
+body.pv2 .pf-flash{bottom:calc(70px + env(safe-area-inset-bottom,0px));width:calc(100% - 24px);box-sizing:border-box;font-family:var(--sans);font-size:14px;border-radius:10px}
+.pf-kept{margin:0}
+.pf-classic{margin:0;font-size:13px;line-height:1.6}
+.pf-classic .pf-link{display:inline-flex;align-items:center;min-height:44px;min-width:44px}
+
+/* ---- one typed setting ---- */
+.pf-num{display:inline-flex;flex-direction:column;min-width:0;max-width:100%;vertical-align:top}
+.pf-in{display:inline-flex;flex-wrap:wrap;align-items:center;gap:2px 5px;min-width:0;max-width:100%}
+.pf-in .pre,.pf-in .unit{color:var(--txt2);font-size:11.5px}
+.pf-in .pre{white-space:nowrap}
+.pf-in .unit{min-width:0;overflow-wrap:anywhere}   /* a long unit ("% of capital, warning at 80% of it") wraps under its field: never over the next column */
+.pf-in input{width:74px;padding:3px 6px;font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+.pf-in input.wide{width:150px}
+.pf-in input.name{width:420px;max-width:100%;text-align:left}
+.pf-num.bad input{border-color:var(--dn)}
+.pf-num.ph{display:flex}
+.pf-num.ph .pf-in{display:flex;flex-wrap:wrap}
+.pf-num.ph .pf-in input{width:128px;min-height:48px;box-sizing:border-box;padding:8px 10px;border-radius:10px;font-size:16px}
+.pf-num.ph .pf-in input.wide{width:190px}
+.pf-num.ph .pf-in input.name{flex:1 1 100%;width:100%}
+.pf-num.ph .pf-in .pre,.pf-num.ph .pf-in .unit{font-size:13.5px;white-space:normal}
+.pf-num.ph .pf-no{font-size:13px}
+.pf-chips{display:inline-flex;flex-wrap:wrap;gap:4px}
+.pf-chip{padding:3px 10px;border:1px solid var(--bord2);border-radius:3px;background:transparent;color:var(--txt2);font-family:var(--mono);font-size:11px;line-height:1.4;cursor:pointer}
+.pf-chip:hover{border-color:var(--amber)}
+.pf-chip.on{border-color:var(--amber);background:var(--amber);color:#000;font-weight:700}
+.pf-chips.ph .pf-chip{min-width:64px;min-height:44px;padding:0 16px;border-radius:10px;font-family:var(--sans);font-size:15px}
+.pf-select{width:auto;max-width:100%;padding:3px 6px;font-size:12px}
+.pfp .pf-select{min-height:48px;padding:8px 10px;border-radius:10px;font-size:16px}
+.pf-fund .on{display:block}
+.pf-ref .l{display:block}
+
+/* ---- what the targets mean, the ladder's bases, what a start can trade ---- */
+.pf-bases{display:flex;flex-direction:column;align-items:stretch;gap:4px;max-width:640px}
+.pf-base{display:flex;align-items:flex-start;gap:8px;padding:5px 8px;border:1px solid var(--bord);border-radius:3px;cursor:pointer}
+.pf-base.on{border-color:var(--amber)}
+.pf-base input{flex:none;margin:2px 0 0}
+.pf-base .tx{min-width:0}
+.pf-base .n{display:block;font-size:12px;line-height:1.4}
+.pf-base .def{color:var(--mut);font-size:10.5px}
+.pf-bases>.pf-link{align-self:flex-start;font-size:11px}
+.pf-base .rd{display:none}
+/* on a phone the radio covers its whole row, so the row is what takes the tap; its dot is drawn */
+.pf-bases.ph .pf-base{position:relative;min-height:56px;box-sizing:border-box;padding:8px 12px;border-radius:10px;gap:12px;align-items:center}
+.pf-bases.ph .pf-base input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.pf-bases.ph .pf-base .rd{display:block;flex:none;box-sizing:border-box;width:20px;height:20px;border:2px solid var(--bord2);border-radius:50%}
+.pf-bases.ph .pf-base.on .rd{border-color:var(--amber);background:radial-gradient(circle,var(--amber) 0 42%,transparent 48%)}
+.pf-bases.ph .pf-base:focus-within{outline:2px solid var(--amber);outline-offset:-2px}
+.pf-bases.ph .pf-base .n{font-size:15px}
+.pf-bases.ph .pf-line{font-size:12.5px}
+.pf-bases.ph>.pf-link{display:inline-flex;align-items:center;min-height:44px;min-width:44px;font-size:14px}
+.pf-trade .minih{margin:8px 0 3px}
+.pf-trade .minih:first-child{margin-top:0}
+.pf-trade ul{margin:0;padding:0 0 0 16px;font-size:12px;line-height:1.5}
+.pf-trade ul.not{color:var(--txt2)}
+.pf-trade li{overflow-wrap:anywhere}
+.pf-trade li b{color:var(--txt)}
+.pfp .pf-trade ul{font-size:13.5px}
+
+/* ---- the statement ---- */
+.modal.pf-consent{width:min(480px,94vw)}
+.pf-statement{margin:8px 0 12px;color:var(--txt);font-family:var(--sans);font-size:13px;line-height:1.5}
+.pf-statement.small{margin:0;color:var(--txt2);font-size:12.5px}
+.pf-agree{display:flex;align-items:center;gap:8px;margin:0 0 12px;color:var(--txt);font-size:12.5px;cursor:pointer}
+.pf-agree input{flex:none;margin:0}
+.sheet .pf-statement{font-size:15px}
+.pf-agree .bx{display:none}
+/* in the sheet the box covers its whole row of 44 px; the box itself is drawn */
+.sheet .pf-agree{position:relative;min-height:44px;gap:12px;font-family:var(--sans);font-size:16px}
+.sheet .pf-agree input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.sheet .pf-agree .bx{display:flex;align-items:center;justify-content:center;flex:none;box-sizing:border-box;width:24px;height:24px;border:2px solid var(--bord2);border-radius:5px;color:#000;font-size:17px;font-weight:700;line-height:1}
+.sheet .pf-agree input:checked+.bx{border-color:var(--amber);background:var(--amber)}
+.sheet .pf-agree input:checked+.bx::after{content:"\2713"}
+.sheet .pf-agree:focus-within .bx{outline:2px solid var(--txt);outline-offset:2px}
+.sheet .pf-no{margin-bottom:8px;font-size:13px}
+.pf-agreedline{margin:0 0 6px;font-size:12px}
+
+/* ---- with no book, and the list ---- */
+.pf-intro{max-width:920px;margin:0 0 12px;color:var(--txt);font-family:var(--sans);font-size:13px;line-height:1.5}
+.pf-grouphd{margin:12px 0 6px;color:var(--txt2);font-size:10.5px;letter-spacing:.08em}
+.pf-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.pf-card{display:flex;flex-direction:column;gap:3px;min-width:0;padding:10px 12px;border:1px solid var(--bord2);border-radius:3px;background:var(--panel2);color:var(--txt2);text-decoration:none}
+.pf-card:hover,.pf-card:focus-visible{border-color:var(--cyan);outline:none}
+.pf-card .t{margin-bottom:3px;color:var(--cyan);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+.pf-card .l{font-size:12px;line-height:1.45;overflow-wrap:anywhere}
+.pf-card .by{margin-top:4px;color:var(--mut);font-size:10.5px}
+table.pf-list td.nm a{text-decoration:none}
+table.pf-list td.nm a:hover{text-decoration:underline}
+table.pf-list td{font-size:11.5px}
+
+/* ---- NEW PAPER PORTFOLIO on a computer: the form, at most 1,100 px wide, beside its summary ---- */
+.pf-two{display:grid;grid-template-columns:minmax(0,1100px) minmax(240px,330px);gap:var(--gap,10px);align-items:start;justify-content:start}
+.pf-form{display:flex;flex-direction:column;gap:var(--gap,10px);min-width:0}
+.pf-startrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:11px}
+.pf-startrow .k,.pf-namerow .k{color:var(--mut);font-size:9.5px;letter-spacing:.1em}
+.pf-startrow .g{color:var(--txt2);font-size:9.5px;letter-spacing:.1em}
+.pf-startrow .pf-mut,.pf-namerow .pf-mut{margin:0}
+.pf-namerow{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px}
+.pf-namerow .pf-num{flex:0 1 420px}
+.pf-draft,.pf-ask{margin:0;padding:6px 10px;border:1px solid var(--bord2);border-radius:4px;background:var(--panel2);color:var(--txt);font-size:11.5px;line-height:1.6}
+.pf-ask .pf-btn{margin-left:6px}
+.pf-rows{display:flex;flex-direction:column}
+.pf-row{display:grid;grid-template-columns:minmax(120px,1.15fr) minmax(200px,2.1fr) minmax(84px,.8fr) minmax(150px,1.8fr) minmax(58px,.6fr);gap:2px 12px;padding:5px 0;border-bottom:1px solid #16171a;font-size:12px;line-height:1.45}
+.pf-row:last-child{border-bottom:0}
+.pf-row .c{min-width:0;overflow-wrap:anywhere}
+.pf-row .rg,.pf-row .wy{color:var(--mut);font-size:11px}
+.pf-row .rg{font-variant-numeric:tabular-nums}
+.pf-row.hd{padding:0 0 3px;border-bottom:1px solid var(--bord);color:var(--mut);font-size:9px;letter-spacing:.05em;text-transform:uppercase}
+.pf-sum{position:sticky;top:var(--pf-top,0px);min-width:0;border:1px solid var(--bord);border-radius:4px;background:var(--panel);overflow:hidden}
+.pf-sumbody{padding:8px 10px;font-size:11.5px;line-height:1.6}
+.pf-sumbody>div{overflow-wrap:anywhere}
+.pf-sumbody .chg{margin-top:4px;color:var(--txt2);cursor:help}
+.pf-sumbody .fixedline{margin-top:6px}
+.pf-create{display:flex;flex-direction:column;align-items:stretch;gap:6px;padding:8px 10px;border-top:1px solid var(--bord)}
+.pf-count{margin:0;padding:0;border:0;background:none;color:var(--mut);font-family:var(--mono);font-size:11px;text-align:left}
+button.pf-count.bad{color:var(--dn);text-decoration:underline;cursor:pointer}
+.pf-create .pf-msg{margin:0}
+
+/* ---- a book: the strip, Overview, Settings ---- */
+.pf-strip{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:11.5px}
+.pf-strip .meta{min-width:0;color:var(--txt2)}
+.pf-strip .views{display:flex;margin-left:auto}
+.pf-strip .views a.chip-sm,.pf-goto a.chip-sm{text-decoration:none}
+.pf-switch{position:relative;min-width:0;max-width:100%}
+.pf-switch>button{max-width:100%;padding:3px 9px;border:1px solid var(--amber);border-radius:3px;background:var(--sel);color:var(--txt);font-family:var(--mono);font-size:12.5px;font-weight:700;line-height:1.4;text-align:left;white-space:normal;overflow-wrap:anywhere;cursor:pointer}
+.pf-menu{position:absolute;left:0;top:calc(100% + 3px);z-index:15;display:flex;flex-direction:column;width:max-content;min-width:300px;max-width:min(620px,86vw);padding:4px;border:1px solid var(--bord2);border-radius:4px;background:var(--panel2);box-shadow:0 8px 24px rgba(0,0,0,.6)}
+.pf-menu .it{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:5px 8px;border-radius:3px;color:var(--txt);font-size:12px;text-decoration:none}
+.pf-menu .it:hover,.pf-menu .it:focus-visible{background:#1a1b1f;outline:none}
+.pf-menu .it.on .n{color:var(--amber)}
+.pf-menu .it .n{min-width:0;overflow-wrap:anywhere}
+.pf-menu .it .s{flex:none;color:var(--mut);font-size:11px}
+.pf-menu .it.new{margin-top:3px;border-top:1px solid var(--bord);border-radius:0;color:var(--cyan)}
+.pf-menu .it.new~.it{color:var(--cyan)}
+.pf-overview{display:flex;flex-direction:column;gap:var(--gap,10px);min-width:0}
+.pf-cells{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px 16px}
+.pf-cells .cell{display:flex;flex-direction:column;gap:2px;min-width:0}
+.pf-cells .k{color:var(--mut);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase}
+.pf-cells .v{font-size:14px;font-weight:600;line-height:1.3;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.pf-cells .s{color:var(--txt2);font-size:11px;line-height:1.45;overflow-wrap:anywhere}
+.pf-cells .s .badge{margin-left:0}
+.pf-cols{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:var(--gap,10px);align-items:start}
+.pf-col{display:flex;flex-direction:column;gap:var(--gap,10px);min-width:0}
+.pf-notbuilt{margin:0}
+table.pf-limits td.vl,table.pf-set td.vl{font-variant-numeric:tabular-nums}
+.pf-goto{margin:0}
+/* a section named by the address is brought under what stays at the top: the header on a computer, the two views on a phone */
+#pf-settings [data-sec]{scroll-margin-top:var(--pf-top,0px)}
+#pf-settings.pfp-settings [data-sec]{scroll-margin-top:56px}
+.pf-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--gap,10px);align-items:start}
+.pf-grid>.w6{grid-column:span 6;min-width:0}
+.pf-grid>.w12{grid-column:span 12;min-width:0}
+.pf-kvs{display:flex;flex-direction:column}
+.pf-kv{display:grid;grid-template-columns:minmax(110px,170px) minmax(0,1fr) auto;gap:2px 12px;padding:5px 0;border-bottom:1px solid #16171a;font-size:12px;line-height:1.45}
+.pf-kvs>.pf-kv:last-child{border-bottom:0}
+.pf-kv .k{color:var(--mut);font-size:11px}
+.pf-kv .v{min-width:0;overflow-wrap:anywhere}
+.pf-kv .t{min-width:0;text-align:right;color:var(--mut);font-size:10.5px}
+.pf-name{font-weight:700;overflow-wrap:anywhere}
+.pf-window{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:6px 0;border-bottom:1px solid #16171a}
+.pf-window .pf-mut{margin:0}
+.pf-resetform,.pf-change{display:flex;flex-direction:column;gap:2px;width:100%;min-width:0}
+.pf-resetform .ln,.pf-change .ln{display:grid;grid-template-columns:110px minmax(0,1fr);gap:2px 10px;padding:4px 0;font-size:12px;line-height:1.45}
+.pf-resetform .ln .k,.pf-change .ln .k{color:var(--mut);font-size:11px}
+.pf-resetform .ln .v,.pf-change .ln .v{min-width:0}
+.pf-change .ln.when{display:block;color:var(--txt)}
+.pf-change textarea{display:block;width:100%;box-sizing:border-box;resize:vertical;font-family:var(--sans);font-size:12.5px;line-height:1.45}
+.pf-change .pf-mut{display:block;margin-top:3px}
+.pf-changebox{box-sizing:border-box;max-width:680px;margin:4px 0 8px;padding:8px 10px;border:1px solid var(--bord2);border-radius:4px;background:var(--panel2);white-space:normal;text-align:left}
+.pf-changebox>.t{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px;color:var(--amber);font-size:11px;font-weight:700;letter-spacing:.1em}
+.pf-changebox>.t .x{margin:0;padding:0 4px;border:0;background:none;color:var(--mut);font-size:15px;line-height:1;cursor:pointer}
+.pf-changebox>.t .x:hover{color:var(--txt)}
+table.secT tr.pf-changerow td{padding:0 4px;white-space:normal;text-align:left}
+table.secT tbody tr.pf-changerow:hover{background:none}
+table.pf-set tr.cls td{padding-top:9px;border-bottom:1px solid var(--bord);color:var(--amber);font-size:9.5px;letter-spacing:.12em;text-align:left;text-transform:uppercase}
+table.pf-set tbody tr.cls:hover{background:none}
+table.pf-hist td.rs{min-width:160px}
+table.pf-hist .st{color:var(--warn)}
+.pf-tabs{margin:0 0 6px}
+.pf-delete p{margin:0 0 8px;font-size:12px;line-height:1.5}
+.pf-delete .ask b{color:var(--txt);overflow-wrap:anywhere}
+.pf-delete .pf-btns{justify-content:flex-start}
+
+/* ---- notes and activity ---- */
+.pf-notes textarea{display:block;width:100%;box-sizing:border-box;resize:vertical;font-family:var(--sans);font-size:12.5px;line-height:1.45}
+.pf-notes .gist{margin:4px 0 0}
+.pf-noteact{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:6px 0 0}
+.pf-noteact .pf-mut,.pf-noteact .pf-no{margin:0}
+.pf-notelist{margin:8px 0 0;padding:0;list-style:none}
+.pf-notelist li{padding:6px 0;border-top:1px solid var(--bord)}
+.pf-notelist .hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.pf-notelist .hd .t{color:var(--mut);font-size:10.5px;font-variant-numeric:tabular-nums}
+.pf-notelist .rm{font-size:10px}
+.pf-notelist .tx{font-family:var(--sans);font-size:12.5px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+.pf-notelist .tx.clip{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:8;line-clamp:8;overflow:hidden}
+.pf-notelist li.gone{color:var(--mut);font-size:11px}
+.pf-notelist .pf-ask{margin-top:6px}
+.pf-notes.ph textarea{min-height:48px;padding:10px 12px;border-radius:10px;font-size:16px}
+.pf-notes.ph .gist{font-size:12.5px}
+.pf-notes.ph .pf-noteact{flex-direction:column;align-items:stretch}
+.pf-notes.ph .pf-notelist .tx{font-size:14.5px}
+.pf-notes.ph .pf-notelist .hd .t{font-size:12.5px}
+.pf-notes.ph .pf-link{display:inline-flex;align-items:center;justify-content:flex-end;min-width:64px;min-height:44px;font-size:13px}
+.pf-notes.ph .pf-ask{font-family:var(--sans);font-size:14px}
+.pf-notes.ph .pf-ask .pf-btn{min-height:44px;min-width:88px;margin:6px 8px 0 0;border-radius:10px;font-size:14px}
+.pf-notes.ph li.gone{font-size:12.5px}
+.pf-activity .daybar{padding:6px 0 2px;border-bottom:1px solid var(--bord);color:var(--amber);font-size:9.5px;letter-spacing:.14em}
+.pf-activity .act{display:grid;grid-template-columns:38px 58px minmax(0,1fr);gap:8px;padding:3px 0;font-size:11.5px;line-height:1.45}
+.pf-activity .act .t{color:var(--mut);font-variant-numeric:tabular-nums}
+.pf-activity .act .k{color:var(--txt2);font-size:10px;letter-spacing:.06em;padding-top:1px}
+.pf-activity .act .x{min-width:0;overflow-wrap:anywhere}
+.pf-activity.ph .daybar{font-size:11px}
+.pf-activity.ph .act{grid-template-columns:44px 66px minmax(0,1fr);font-family:var(--sans);font-size:13.5px}
+.pf-activity.ph .act .k{font-family:var(--mono);font-size:11px}
+
+/* ---- under 1,100 px of layout width (the page's own, as the two-column pages read it): one column ---- */
+@container wrap (max-width:1100px){
+  .pf-cards{grid-template-columns:minmax(0,1fr)}
+  .pf-two{display:flex;flex-direction:column;align-items:stretch}
+  .pf-form{max-width:1100px}
+  /* the summary follows the form, and CREATE stays in view at every scroll position: its block is the last child of
+     the page's own column, held at the foot of the window */
+  .pf-sum{display:contents}
+  .pf-sum>.phead,.pf-sum>.pf-sumbody{border:1px solid var(--bord);background:var(--panel)}
+  .pf-sum>.phead{margin-bottom:calc(-1 * var(--gap,10px));border-bottom:0;border-radius:4px 4px 0 0}
+  .pf-sum>.pf-sumbody{border-top:0;border-radius:0 0 4px 4px}
+  .pf-sum>.pf-create{position:sticky;bottom:0;z-index:5;flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 12px;border:1px solid var(--bord2);border-radius:4px;background:var(--panel2)}
+  .pf-cells{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .pf-cols{display:flex;flex-direction:column}
+  .pf-col{display:contents}
+  .pf-cols .panel[data-k="pfo-limits"]{order:1}
+  .pf-cols .panel[data-k="pfo-trade"]{order:2}
+  .pf-cols .panel[data-k="pfo-notes"]{order:3}
+  .pf-cols .panel[data-k="pfo-activity"]{order:4}
+  .pf-grid>.w6{grid-column:span 12}
+  table.pf-list .c-ladder{display:none}
+  .pf-row{grid-template-columns:minmax(110px,1fr) minmax(190px,2fr) minmax(80px,.8fr) minmax(130px,1.5fr) minmax(54px,.6fr)}
+}
+@container wrap (max-width:820px){
+  table.pf-list .c-created{display:none}
+}
+
+/* ---- a phone ---- */
+.pfp .mp-head.doc .mp-back{display:inline-flex;align-items:center;text-decoration:none}
+.pfp-title{margin:14px 8px 6px;font-family:var(--serif);font-size:26px;font-weight:700;line-height:1.1}
+.pfp-pad{padding:0 8px}
+.pfp>.pf-err,.pfp>.pf-mut{margin:12px 8px 0}
+.pfp .pf-mut{font-size:12.5px}
+.pfp .pf-err{font-family:var(--sans);font-size:14px}
+.pfp .pf-err .pf-link,.pfp .pf-capline .pf-link{display:inline-flex;align-items:center;min-height:44px;min-width:44px}
+.pfp .pf-capline,.mp .pf-capline{font-family:var(--sans);font-size:14px}
+.pfp .pf-msg{font-family:var(--sans);font-size:13.5px}
+.pfp .pf-line{font-size:12.5px}
+.pfp .pf-draft,.pfp .pf-ask{margin:8px 8px 0;font-family:var(--sans);font-size:14px}
+.pfp .pf-draft .pf-link{display:inline-flex;align-items:center;min-height:44px}
+.pfp .pf-ask .pf-btn{min-height:44px;min-width:88px;margin:6px 8px 0 0;border-radius:10px;font-size:14px}
+.pfp-intro{margin:0;font-size:13.5px;line-height:1.5}
+.pfp-group{display:flex;align-items:flex-end;min-height:28px;box-sizing:border-box;margin:10px 8px 6px;color:var(--mut);font-family:var(--mono);font-size:12px;letter-spacing:.03em}
+.pfp-startlink,.pfp-book-row{display:flex;align-items:center;gap:10px;min-height:64px;box-sizing:border-box;padding:8px 12px 8px 15px;border-top:1px solid var(--bord);color:var(--txt);text-decoration:none;-webkit-tap-highlight-color:transparent}
+.pfp-startlink:first-child,.pfp-book-row:first-child{border-top:0}
+.pfp-startlink:active,.pfp-book-row:active{background:var(--panel2)}
+.pfp-startlink .tx,.pfp-book-row .tx{display:flex;flex:1 1 auto;flex-direction:column;gap:2px;min-width:0}
+.pfp-startlink .n,.pfp-book-row .n{font-size:16px;font-weight:500;line-height:1.25;overflow-wrap:anywhere}
+.pfp-startlink .l,.pfp-book-row .l{color:var(--mut);font-size:12px;line-height:1.35;overflow-wrap:anywhere}
+.pfp-startlink .go,.pfp-book-row .go,.pfp-set .go{flex:none;color:var(--mut);font-size:22px;line-height:1}
+.pfp-new{margin-top:14px}
+.pfp-start{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;box-sizing:border-box;margin:0;padding:8px 14px;border:0;border-top:1px solid var(--bord);border-radius:0;background:transparent;color:var(--txt);font-family:var(--sans);text-align:left;cursor:pointer}
+.pfp-start:first-child{border-top:0}
+.pfp-start .rd{flex:none;box-sizing:border-box;width:20px;height:20px;border:2px solid var(--bord2);border-radius:50%}
+.pfp-start.on .rd{border-color:var(--amber);background:radial-gradient(circle,var(--amber) 0 42%,transparent 48%)}
+.pfp-start .tx{display:flex;flex-direction:column;gap:2px;min-width:0}
+.pfp-start .n{font-size:16px;font-weight:500;line-height:1.25}
+.pfp-start .l{color:var(--mut);font-size:12px;line-height:1.35}
+.pfp-sum .pf-sumbody{padding:10px 14px;font-family:var(--sans);font-size:13.5px}
+.pfp-sum .pf-sumbody .fixedline{font-size:12.5px}
+/* Review and Create stand above the bottom bar (58 px) at every scroll position */
+.pfp-foot{position:sticky;bottom:calc(58px + env(safe-area-inset-bottom,0px));z-index:5;margin:14px -8px 0;padding:8px 12px;border-top:1px solid var(--bord);background:rgba(7,7,7,.96)}
+.pfp-foot .pf-create{padding:0;border-top:0}
+.pfp-foot .pf-count{font-family:var(--sans);font-size:13px}
+.pfp-foot button.pf-count.bad{min-height:44px}
+.pfp-fields{margin:6px 0 10px;border-top:1px solid var(--bord)}
+.pfp-field{padding:10px 10px;border-bottom:1px solid var(--bord)}
+.pfp-field .hd{display:flex;justify-content:space-between;align-items:center;gap:8px;min-height:44px}
+.pfp-field .lb{min-width:0;font-size:15px;font-weight:500;line-height:1.3}
+.pfp-field .vl{font-size:14px;line-height:1.5;overflow-wrap:anywhere}
+.pfp-field .vl .pf-unit2,.pfp-field .vl .pf-changed{display:inline-block;margin:6px 10px 0 0;font-size:12.5px}
+.pfp-field .vl .pf-changed .pf-link{display:inline-flex;align-items:center;min-height:44px;min-width:44px;justify-content:center}
+.pfp-field .rg{margin-top:4px;color:var(--mut);font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+.pfp-fold{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;min-height:56px;box-sizing:border-box;padding:9px 12px 9px 15px;border-top:1px solid var(--bord);color:var(--txt);text-decoration:none}
+.pfp-fold:first-child{border-top:0}
+.pfp-fold .t{font-size:16px;font-weight:500;line-height:1.25}
+.pfp-fold .s{grid-column:1;color:var(--mut);font-size:12px;line-height:1.35;overflow-wrap:anywhere}
+.pfp-fold .s .bad{color:var(--dn);font-weight:600}
+.pfp-fold .e{grid-column:2;grid-row:1 / span 2;align-self:center;color:var(--cyan);font-size:14px;white-space:nowrap}
+/* a book's head, and its two views in a row that stays at the top */
+.pfp-book>.mp-head{position:static}
+.pfp-bookhead{padding:6px 8px 2px}
+.pfp-bookhead .nm{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pfp-name{min-width:0;min-height:44px;margin:0;padding:0;border:0;background:none;color:var(--txt);font-family:var(--serif);font-size:22px;font-weight:700;line-height:1.15;text-align:left;overflow-wrap:anywhere;cursor:pointer}
+.pfp-name .dn{color:var(--amber);font-size:16px}
+.pfp-bookhead .meta{color:var(--mut);font-size:12px;line-height:1.4}
+.pfp-views{position:sticky;top:0;z-index:6;display:flex;gap:8px;margin:6px -8px 0;padding:2px 8px;border-bottom:1px solid var(--bord);background:var(--bg)}
+.pfp-views a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;box-sizing:border-box;padding:0 18px;border:1px solid var(--bord2);border-radius:11px;color:var(--txt);font-size:15px;text-decoration:none}
+.pfp-views a.on{border-color:var(--amber);background:var(--sel);color:var(--amber);font-weight:600}
+.pfp-switch{display:flex;flex-direction:column}
+.pfp-switch .it{display:flex;flex-direction:column;justify-content:center;gap:2px;min-height:52px;box-sizing:border-box;padding:6px 0;border-top:1px solid var(--bord);color:var(--txt);font-size:16px;text-decoration:none}
+.pfp-switch .it:first-child{border-top:0}
+.pfp-switch .it.on .n{color:var(--amber)}
+.pfp-switch .it .n{overflow-wrap:anywhere}
+.pfp-switch .it .s{color:var(--mut);font-size:12px}
+.pfp-switch .it.new,.pfp-switch .it.new~.it{color:var(--cyan)}
+.pfp-lines{font-size:14px;line-height:1.55;overflow-wrap:anywhere}
+.pfp-lines .m{color:var(--mut);font-size:12.5px}
+.pfp-kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 12px;font-size:14px;line-height:1.45}
+.pfp-kv .k{color:var(--mut);font-size:12.5px}
+.pfp-kv .v{min-width:0;overflow-wrap:anywhere}
+.pfp-kv .v .s{display:block;color:var(--mut);font-size:12.5px}
+.pfp-set{display:flex;align-items:center;gap:10px;width:100%;min-height:50px;box-sizing:border-box;margin:0;padding:7px 12px 7px 15px;border:0;border-top:1px solid var(--bord);border-radius:0;background:transparent;color:var(--txt);font-family:var(--sans);text-align:left}
+.pfp-set:first-child,.mp-cap+.pfp-set{border-top:0}
+button.pfp-set{cursor:pointer}
+button.pfp-set:active{background:var(--panel2)}
+.pfp-set .nm{display:flex;flex:1 1 auto;flex-direction:column;gap:1px;min-width:0}
+.pfp-set .n{font-size:15px;line-height:1.3;overflow-wrap:anywhere}
+.pfp-set .s{color:var(--mut);font-size:11.5px;line-height:1.35;overflow-wrap:anywhere}
+.pfp-set .v{flex:0 1 46%;min-width:0;font-family:var(--mono);font-size:13px;line-height:1.4;text-align:right;overflow-wrap:anywhere}
+.pfp-set.long{flex-wrap:wrap}
+.pfp-set.long .v{flex:1 1 100%;font-family:var(--sans);text-align:left}
+.pfp-setlist{border:1px solid var(--bord);border-radius:14px;overflow:hidden;background:var(--panel);margin-top:8px}
+.pfp-rowlink{display:flex;align-items:center;justify-content:center;width:100%;min-height:46px;box-sizing:border-box;margin:0;padding:0 12px;border:0;border-top:1px solid var(--bord);border-radius:0;background:transparent;color:var(--cyan);font-family:var(--sans);font-size:15px;text-decoration:none;cursor:pointer}
+.pfp-hist .h{display:flex;flex-direction:column;gap:2px;padding:8px 2px;border-top:1px solid var(--bord);font-size:13.5px;line-height:1.4}
+.pfp-hist .h:first-child{border-top:0}
+.pfp-hist .h .a{overflow-wrap:anywhere}
+.pfp-hist .h .b{color:var(--mut);font-size:12px}
+.pfp-hist .h .c{color:var(--txt2);font-size:12.5px;overflow-wrap:anywhere}
+.pfp .pf-tabs{gap:8px;margin:0 0 4px}
+.pfp .pf-tabs .chip-sm{display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:92px;margin:0;padding:0 14px;border-radius:10px;background:transparent;font-family:var(--mono);font-size:12.5px}
+.pfp .pf-tabs .chip-sm.on{background:var(--amber)}
+/* a row on a phone: its name on a line of its own, the value under it, and what follows it ("fixed", a range with
+   CHANGE) at the right of the value's line where it fits, else on the next line; the value never gives way to it */
+.pfp-settings .pf-kv,.pf-targets.ph .pf-kv{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 12px;font-family:var(--sans);font-size:14px}
+.pfp-settings .pf-kv .k,.pf-targets.ph .pf-kv .k{flex:1 1 100%;font-size:12.5px}
+.pfp-settings .pf-kv .v,.pf-targets.ph .pf-kv .v{flex:1 1 55%;min-width:55%;overflow-wrap:break-word}
+.pfp-settings .pf-kv .t,.pf-targets.ph .pf-kv .t{flex:0 1 auto;max-width:100%;margin-left:auto;text-align:right;font-size:12px}
+.pfp-settings .pf-kv .t:empty{display:none}
+.pfp-settings .pf-kv .t .pf-link,.pfp-settings #pf-rename{display:inline-flex;align-items:center;justify-content:flex-end;min-height:44px;min-width:64px;font-family:var(--mono);font-size:12.5px}
+.pfp-settings .pf-fixed{font-size:12px}
+.pfp-settings .pf-btn:not(.big){min-height:44px;min-width:64px;border-radius:10px;font-size:13px}
+.pfp-settings .pf-in{flex-wrap:wrap}
+.pf-change.ph .ln,.pf-targets.ph .pf-resetform .ln{display:block;font-family:var(--sans);font-size:14.5px}
+.pf-change.ph .ln .k,.pf-targets.ph .pf-resetform .ln .k{display:block;margin-bottom:4px;font-size:12.5px}
+.pf-change.ph textarea{min-height:48px;padding:10px 12px;border-radius:10px;font-size:16px}
+.pf-change.ph .pf-unit2{display:inline-block;margin:6px 0 0;font-size:12.5px}
+.pf-change.ph .pf-mut{font-size:12.5px}
+.pf-change.ph .ln.when{padding:8px 0;font-size:14.5px}
+.pf-change.ph .pf-btns,.pf-targets.ph .pf-btns,.pf-delete.ph .pf-btns{flex-direction:column-reverse;align-items:stretch;gap:8px}
+.pf-delete.ph p{font-family:var(--sans);font-size:14.5px}
+.pf-delete.ph .pf-num{display:flex}
+.pf-delete.ph .pf-in{display:flex}
+.pf-delete.ph .pf-in input.name{width:100%;min-height:48px;box-sizing:border-box;padding:8px 10px;border-radius:10px;font-size:16px}
+.pfp-settings .pf-statement.small{font-size:14px}
+.pfp-settings .pf-agreedline{font-family:var(--sans);font-size:14px}
+.pfp-overview .mp-note{margin-top:18px}

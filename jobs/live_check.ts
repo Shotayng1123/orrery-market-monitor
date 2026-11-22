@@ -16,7 +16,7 @@ const utc = (iso: string | null | undefined): string => (iso ? iso.slice(0, 16).
 const head = (t: string): void => console.log(`\n== ${t}`);
 // a table or a column that a database from before some change does not have is said, not thrown
 // LIVE_CHECK_ONLY (the workflow's "only" input): a comma-separated choice of parts, by the first word of each title
-// below (jobs, relay, sources, market, source, equities, alerts, reasons, edinet, stock, counts); empty for all of them
+// below (jobs, relay, sources, market, source, equities, alerts, reasons, edinet, stock, counts, pf); empty for all of them
 const ONLY = (process.env.LIVE_CHECK_ONLY ?? "").toLowerCase().split(",").map((x) => x.trim()).filter(Boolean);
 async function part(key: string, title: string, f: () => Promise<void>): Promise<void> { if (ONLY.length && !ONLY.includes(key)) return; head(title); try { await f(); } catch (e) { console.log(`  could not be read: ${e instanceof Error ? e.message : String(e)}`); } }
 const must = <T>(r: { data: T | null; error: { message: string } | null }): T => { if (r.error) throw new Error(r.error.message); return r.data as T; };
@@ -213,6 +213,23 @@ async function main(): Promise<void> {
     console.log(`  7203.T (a stock's NEWS only; its statements are not asked for here): headlines ${f.news.length}, alerts ${f.alerts.length}, feed rows ${f.news.length + f.alerts.length}${f.error ? `, error: ${f.error}` : ""}`);
   });
 
+  // The week's first hours (supabase/functions/_shared/feedhealth.ts, weekFirstPrint): what the minute job's own pull
+  // got on the last Sunday evenings, from its log rows (job_runs, kept 30 days). Each row says how many of the
+  // instruments due answered with a priced bar, and how many one-minute bars of the last 36 hours the answers held
+  // (Friday's bars are older than that by Sunday evening, so a count that grows faster than crypto's shows another
+  // market printing). Numbers and symbols only. Asked for by name: "sundays".
+  if (ONLY.includes("sundays")) await part("sundays", "the minute job on the last Sunday evenings, 20:50 to 00:40 UTC: what its own pull got (numbers only)", async () => {
+    const day = 86400e3, today0 = Math.floor(now / day) * day;
+    for (let s = today0 - 35 * day; s <= today0; s += day) {
+      if (new Date(s).getUTCDay() !== 0) continue;
+      const from = s + 20 * 3600e3 + 50 * 60e3, to = s + day + 40 * 60e3;
+      if (from > now || now - from > 30 * day) continue;
+      const rows = must(await sb.from("job_runs").select("at,ok,detail").eq("job", "tick").gte("at", new Date(from).toISOString()).lt("at", new Date(to).toISOString()).order("at", { ascending: true }).limit(400)) as Array<{ at: string; ok: boolean; detail: string | null }>;
+      console.log(`  Sunday ${new Date(s).toISOString().slice(0, 10)}: ${rows.length} runs of the minute job`);
+      for (const r of rows) console.log(`    ${r.at.slice(11, 16)} ${r.ok ? "" : "FAILED "}${(r.detail ?? "").replace(/, table \d+ rows/, "").slice(0, 140)}`);
+    }
+  });
+
   await part("counts", "counts (numbers only)", async () => {
     for (const [t, what] of [["accounts", "rows in accounts"], ["users", "rows in users"], ["watchlists", "watchlist entries"], ["push_subs", "devices subscribed to notifications"], ["notes", "morning notes"], ["reports", "reports"]] as const) {
       const r = await sb.from(t).select("*", { count: "exact", head: true });
@@ -223,6 +240,26 @@ async function main(): Promise<void> {
     if (acc.error) console.log(`  welcome email: could not be read (${acc.error.message})`);
     else { const rows = (acc.data ?? []) as Array<{ status: string; welcomed_at: string | null; welcome_tries: number | null }>, open = rows.filter((r) => r.status === "active"), had = open.filter((r) => r.welcomed_at), gaveUp = open.filter((r) => !r.welcomed_at && (r.welcome_tries ?? 0) >= 3), last = had.map((r) => r.welcomed_at as string).sort().pop();
       console.log(`  welcome email: ${had.length} of ${open.length} open accounts have had it${last ? ` (the last one ${age(last)})` : ""}; ${open.length - had.length - gaveUp.length} get it at their next sign-in; ${gaveUp.length} given up after three failed sendings`); }
+  });
+
+  // The paper portfolio's store (P-1, 21 Nov 2026): the database's own look at its walls (pf_selftest, in the migration
+  // 20261121000001_pf_store.sql). It reads no portfolio: as a made-up account it must see nothing. What is printed is
+  // counts and one verdict; never an account, a portfolio's name, a note or a figure of any book. This repository's
+  // job logs are public.
+  // Its verdict is acted on (PV-5): a wall down, or a look that could not be made, ends this run with a failure, so the
+  // workflow that runs it turns red (deploy-server runs this part on its own after each deploy). A function the
+  // database has just made may take a few seconds to be found by the API: the look is asked up to six times.
+  await part("pf", "the paper portfolio's store: who may reach it (counts only)", async () => {
+    let r = await sb.rpc("pf_selftest");
+    for (let k = 1; k < 6 && r.error && /could not find|schema cache|does not exist/i.test(r.error.message); k++) { await new Promise((res) => setTimeout(res, 10000)); r = await sb.rpc("pf_selftest"); }
+    if (r.error) { console.log(`  pf_selftest could not be run: ${r.error.message}`); process.exitCode = 1; return; }
+    const t = (r.data ?? {}) as Record<string, number | boolean | null>;
+    if (t.ok !== true) process.exitCode = 1;
+    const n = (k: string): string => (typeof t[k] === "number" ? String(t[k]) : "–");
+    console.log(`  pf_selftest ${t.ok === true ? "ok" : "FAILED"}: ${n("rls")} of ${n("tables")} tables with row level security; ${n("openGrants")} privileges on them held by anon or authenticated, ${n("serviceRoleGrants")} by the server's own role, ${n("sequenceGrants")} on a sequence; ${n("openFunctions")} of its functions callable by anon or authenticated; ${n("rowsSeen")} rows seen as a made-up account; ${n("statements")} version(s) of the statement`);
+    console.log(typeof t.functions === "number" && t.definerOwner === t.functions
+      ? `  the second wall is in force: all ${n("functions")} functions run as the role the policies bind (${n("policies")} policies), and through the policies alone a made-up account sees ${n("rowsThroughPolicies")} rows`
+      : `  the second wall is NOT in force: ${n("definerOwner")} of ${n("functions")} functions are owned by the role the policies bind; each function still names the account in every statement`);
   });
 
   // The one part that is not read-only, and it runs only when asked for by name ("token"), never with the others:

@@ -1,14 +1,20 @@
 import { useRef, type ReactNode } from "react";
 
 /** The largest table of a panel as CSV text (what is on screen: headers, section rows, figures). A control inside a
- *  cell (`.nocsv`, the statements' "‹ earlier years") is not part of the data. */
-function tableCsv(table: HTMLTableElement): string {
+ *  cell (`.nocsv`, the statements' "‹ earlier years") is not part of the data.
+ *  A cell may hold several things that are one column on screen and several in a file: MARKETS' name cell holds the
+ *  name, its marks (PROXY, LIVE …) and the day of a figure that is not today's, and its text run together read
+ *  "S&P 50023 Nov" (the checks of round 3b, 21 Nov 2026). Such a cell marks the extra parts `.nocsv` and names them in
+ *  `data-csv`, a JSON list of texts: each becomes a column of its own right after the cell's, in the head as in the
+ *  rows. */
+export function tableCsv(table: HTMLTableElement): string {
   const text = (c: Element) => { const x = c.cloneNode(true) as Element; x.querySelectorAll(".nocsv").forEach((n) => n.remove()); return x.textContent ?? ""; };
-  const cell = (c: Element) => { const t = text(c).replace(/\s+/g, " ").trim().replace(/−/g, "-"); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const quote = (raw: string) => { const t = raw.replace(/\s+/g, " ").trim().replace(/−/g, "-"); return /[",\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const more = (c: Element): string[] => { try { const v: unknown = JSON.parse(c.getAttribute("data-csv") ?? "[]"); return Array.isArray(v) ? v.map((x) => quote(String(x ?? ""))) : []; } catch { return []; } };
   const lines: string[] = [];
   for (const tr of table.querySelectorAll("tr")) {
     const cells: string[] = [];
-    for (const c of tr.querySelectorAll("th,td")) { cells.push(cell(c)); for (let i = 1; i < ((c as HTMLTableCellElement).colSpan || 1); i++) cells.push(""); }
+    for (const c of tr.querySelectorAll("th,td")) { cells.push(quote(text(c)), ...more(c)); for (let i = 1; i < ((c as HTMLTableCellElement).colSpan || 1); i++) cells.push(""); }
     if (cells.some((x) => x !== "")) lines.push(cells.join(","));
   }
   return lines.join("\r\n");
@@ -17,7 +23,7 @@ function tableCsv(table: HTMLTableElement): string {
 /** Numbered panel: `01 TITLE …aux` head, scrolling body. Span is the 12-column grid width in the scrolling
  *  layout; `k` names the panel kind and `ts` its column span for the one-screen layout's placement rules.
  *  A panel that holds a table offers it as a CSV download (the small CSV button in its header). */
-export function Panel({ no, title, aux, span = 12, children, id, k, ts }: { no: string; title: string; aux?: ReactNode; span?: 3 | 4 | 5 | 6 | 7 | 8 | 9 | 12; children: ReactNode; id?: string; k?: string; ts?: number }) {
+export function Panel({ no, title, aux, span = 12, children, id, k, ts, after, csv = true }: { no: string; title: string; aux?: ReactNode; span?: 3 | 4 | 5 | 6 | 7 | 8 | 9 | 12; children: ReactNode; id?: string; k?: string; ts?: number; after?: ReactNode /* a choice that stands right after the title, on its line (MOVERS IN σ's TODAY · LAST SESSION) */; csv?: boolean /* false for a panel that never holds a table: no button that would do nothing */ }) {
   const body = useRef<HTMLDivElement>(null);
   const exportCsv = () => {
     const tables = [...(body.current?.querySelectorAll("table") ?? [])] as HTMLTableElement[];
@@ -32,7 +38,7 @@ export function Panel({ no, title, aux, span = 12, children, id, k, ts }: { no: 
   };
   return (
     <div className={`panel c${span}`} id={id} data-no={no} data-k={k} data-ts={ts}>
-      <div className="phead"><span className="no">{no}</span><span className="t">{title}</span>{aux !== undefined && <span className="aux">{aux}</span>}<span className="csvbtn" title="Download this panel's table as a CSV file (opens in Excel)" onClick={exportCsv}>CSV</span></div>
+      <div className="phead"><span className="no">{no}</span><span className="t">{title}</span>{after}{aux !== undefined && <span className="aux">{aux}</span>}{csv && <span className="csvbtn" title="Download this panel's table as a CSV file (opens in Excel)" onClick={exportCsv}>CSV</span>}</div>
       <div className="pbody" ref={body}>{children}</div>
     </div>
   );

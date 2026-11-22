@@ -4,12 +4,14 @@ import { Pick } from "./Pick";
 
 /** The building blocks of the phone layout (preview, lib/phone.ts; Shota, 17 Nov 2026), shared by every tab so they
  *  read as one app: a screen whose title stays at the top, sections as cards, the coloured change, small statistics. */
-export function Screen({ title, sub, right, children, subBelow = false }: { title: ReactNode; sub?: ReactNode; right?: ReactNode; children: ReactNode; subBelow?: boolean }) {
+export function Screen({ title, sub, right, children, subBelow = false, slim = false }: { title: ReactNode; sub?: ReactNode; right?: ReactNode; children: ReactNode; subBelow?: boolean; slim?: boolean }) {
   // subBelow: the line under the title runs the full width, below the title and its drop-down, for a line too long
   // to sit beside the drop-down (EQUITIES while a market is open)
+  // slim: a title row of 44 px, the title at 26 px with what `sub` holds after it on its baseline (MARKETS while its
+  // strip carries the screen's as-of: the designer's note of 21 Nov 2026 on the phone's first screen)
   return (
     <div className="mp">
-      <header className={`mp-head${subBelow ? " below" : ""}`}>
+      <header className={`mp-head${subBelow ? " below" : ""}${slim ? " one" : ""}`}>
         <div className="mp-ttl"><h1>{title}</h1>{sub != null && <div className="mp-asof">{sub}</div>}</div>
         {right}
       </header>

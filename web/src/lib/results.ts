@@ -61,6 +61,17 @@ export function resultsDayLabel(ymd: string): string {
   return `${WD[wd]} ${Number(m[3])} ${MON[Number(m[2]) - 1]}`;
 }
 
+/** Whether a results date is still "next": ahead, or no more than a day old. The server stores an index member's date
+ *  with its list's quote runs, which stop for the weekend: a company that reported on a Friday kept Friday's date under
+ *  "Next results" until Monday's first run, 41 hours on (the checks of round 3b, 21 Nov 2026: RM-3), while RESULTS AHEAD
+ *  beside it, the results calendar and the company's own page had dropped it. One rule for every place that draws one. */
+export const RESULTS_KEPT_MS = 86400e3;
+export function resultsAhead(at: string | null | undefined, now: number = Date.now()): boolean {
+  if (at == null || at.trim() === "") return false;
+  const t = Date.parse(at);
+  return Number.isFinite(t) && t > now - RESULTS_KEPT_MS;
+}
+
 /** Rows with a results date in the order of their days (each in its own market), then of their moments: a list
  *  under day bars never shows a day twice. Rows without a date are left out. */
 export function byResultsDay<T>(rows: readonly T[], at: (r: T) => string | null | undefined, symbol: (r: T) => string, indices?: (r: T) => readonly string[] | null | undefined): Array<T & { day: string }> {
@@ -83,11 +94,15 @@ export const resultsStatus = (est: boolean | null | undefined, symbol?: string, 
 export const resultsStatusShort = (est: boolean | null | undefined, symbol?: string, indices?: readonly string[] | null): string => resultsStatus(est, symbol, indices)?.replace("confirmed", "conf.") ?? "–";
 /** What follows the date in KEY DATA: "est. (Yahoo Finance)", "confirmed (Yahoo Finance)", or the source alone. */
 export const resultsWords = (est: boolean | null | undefined, symbol?: string, indices?: readonly string[] | null, source = RESULTS_SOURCE): string => { const s = resultsStatus(est, symbol, indices); return s ? `${s} (${source})` : source; };
+/** What a missing mark is (the checks of 22 Nov 2026, RK-1): the source gives none, or the Monitor has not read it again
+ *  since the deploy of 22 Nov 2026 cleared the marks it had kept by a rule of its own (an index member's mark is read
+ *  again by its list's next weekday quote run; a stock's own page reads Yahoo's at once). */
+export const NO_MARK_HELD = "the source gives none, or the Monitor has not read it again since 22 Nov 2026";
 /** The tooltip of a results date: whose day it is, from whom, its mark and why, and why it has no time of day. */
 export function resultsTip(symbol: string, est: boolean | null | undefined, indices?: readonly string[] | null, source = RESULTS_SOURCE): string {
-  const yahoo = est === true ? "Yahoo marks it estimated" : est === false ? "Yahoo marks it confirmed" : "Yahoo gives no mark";
+  const yahoo = est === true ? "Yahoo marks it estimated" : est === false ? "Yahoo marks it confirmed" : `no mark of Yahoo's held: ${NO_MARK_HELD.replace("the source gives", "it gives")}`;
   const status = jpxDated(symbol, indices) ? `; marked est.: a Tokyo company's date is confirmed by JPX's results calendar (決算発表予定日), which the Monitor does not read yet (${yahoo})`
-    : est === true ? "; estimated by Yahoo, not confirmed by the company" : est === false ? "; confirmed, as Yahoo marks it" : "";
+    : est === true ? "; estimated by Yahoo, not confirmed by the company" : est === false ? "; confirmed, as Yahoo marks it" : `; no mark held: ${NO_MARK_HELD}`;
   return `The next results as ${source} gives them: the day in ${listingCity(symbol, indices)}, where the company is listed${status}. No time of day: the source gives a time with the date but does not say that it is the company's release time.`;
 }
 /** What a list of marks says under it (both layouts): whose mark each is. */
