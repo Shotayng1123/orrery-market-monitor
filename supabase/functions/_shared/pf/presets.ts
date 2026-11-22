@@ -13,6 +13,7 @@
 // given a value may carry the decimals its range is written with, and a finer one is refused as off its step.
 // No source is read for any of this: every figure here is a default or a rule, never a market figure.
 import type { After, Base, Field, SectionId, StartDef, StartId, Who } from "./types.ts";
+import { WINDOW_WORDS } from "./calendar.ts";
 
 // ---- whose ----
 const who = (tag: string, basis: string, card: string): Who => ({ tag, basis, card });
@@ -142,7 +143,17 @@ const FLOOR_CURE = fixed("floor_cure", "cash", "A breach of the floor is cured t
 const UC_ZERO = fixed("uc_zero", "cash", "Unencumbered cash below zero", PM_AB, "the prime broker's call does not wait", "the prime broker's call: cut from each market's next session, no day of grace");
 
 // ---- what a start can trade (BP-5), and what it cannot trade here, with the reason (V-13) ----
-const OSAKA = "Osaka's futures (Nikkei 225, TOPIX): JPX's files are not used in this Monitor. Japan's index futures here are CME's NKD and NIY.";
+// what is not used is Osaka's settlement and volume files, by the owner's answer of 21 Nov 2026; JPX's other files are
+// read (the second review of P-1, DC-9: "JPX's files are not used" was not so)
+/** The Japan start's line on names listed elsewhere: the book's own limit is printed in it (canLines), never a fixed
+ *  20% (the second review of P-1, DC-10: the limit is 0 to 50%, typed at creation and changed later). */
+export const FOREIGN_LINE = "names listed outside Tokyo, within the book's own limit";
+/** What a start can trade, with the lines that depend on a book's values filled in: "up to 40% of capital, gross (a
+ *  limit)", or "none (its limit is 0%)"; the line as it stands where the value is not known. */
+export function canLines(start: StartId, values: Partial<Record<string, number | string>> = {}): string[] {
+  return STARTS[start].trade.can.map((x) => { if (x !== FOREIGN_LINE) return x; const v = values.foreign; return typeof v !== "number" ? x : v === 0 ? "names listed outside Tokyo: none (its limit is 0%)" : `names listed outside Tokyo, up to ${v}% of capital, gross (a limit)`; });
+}
+const OSAKA = "Osaka's futures (Nikkei 225, TOPIX): Osaka's settlement and volume files are not used in this Monitor (the owner's answer of 21 Nov 2026). Japan's index futures here are CME's NKD and NIY.";
 const TPY = "CME's yen TOPIX future (TPY): only if a named month trades at least 100 contracts a day over 20 sessions; not checked yet.";
 const NO_LENDING_FEE = "No lending-fee signal for Tokyo: a Tokyo short is priced as general collateral or warm, never hard to borrow, and never refused for a stop on new shorts.";
 const NOT_IN_START = "Written options, bonds and repo: not in this start.";
@@ -186,7 +197,7 @@ const JP_FIELDS: Field[] = [
   FLOOR_CURE, UC_ZERO,
   fixed("house_margin", "cash", "House margin", noted(PM_A, "FINRA Rule 4210's levels as a stand-in"), "the public US rule; a real prime broker's house rule is stricter and not public", "long 25% of value; short 30%, at least USD 5 a share, 100% under USD 5; futures at the exchange's margin", { ...A_MARK, group: "Margin" }),
   mult("house_multiple", "House margin multiple", "fixed", PM_A, "a stricter prime broker: every margin requirement × this", 1, 2),
-  mult("stress_mult", "Stressed unencumbered cash: every margin ×", "assumption", settled("R-37", "A", "PM B's rule; on the equity long/short starts settled by C"), "margins rise in stress: the floor's real test. Amber below the floor, nothing refused", 1.5, 3),
+  mult("stress_mult", "Stressed unencumbered cash: every margin", "assumption", settled("R-37", "A", "PM B's rule; on the equity long/short starts settled by C"), "margins rise in stress: the floor's real test. Amber below the floor, nothing refused", 1.5, 3),
   ...financingRows(), FUNDING("Tokyo names"), ...borrowRows(), ...costRows(),
 ];
 
@@ -249,7 +260,7 @@ const MACRO_FIELDS: Field[] = [
   mult("fut_multiple", "Futures margin multiple", "assumption", PM_B, "a broker may ask more than the exchange", 1, 2),
   num("fxcoll_g10", "cash", "FX collateral · G10", "assumption", PM_B, "B's desk: the collateral a forward's counterparty asks", "1–10%", { def: 3, lo: 1, hi: 10, dp: 1, refuse: pc(1, 10), unit: "% of notional", show: "{v}% of notional" }, { ...A_MARK, group: "Margin" }),
   num("fxcoll_other", "cash", "FX collateral · others", "assumption", PM_B, "B's desk: the collateral a forward's counterparty asks", "3–20%", { def: 7.5, lo: 3, hi: 20, dp: 1, refuse: pc(3, 20), unit: "% of notional", show: "{v}% of notional" }, { ...A_MARK, group: "Margin" }),
-  mult("stress_mult", "Stressed unencumbered cash: every margin and haircut ×", "assumption", PM_B, "margins and haircuts rise in stress: the floor's real test. Amber below the floor", 1.5, 3),
+  mult("stress_mult", "Stressed unencumbered cash: every margin and haircut", "assumption", PM_B, "margins and haircuts rise in stress: the floor's real test. Amber below the floor", 1.5, 3),
   ...financingRows().map((f) => ({ ...f, who: noted(f.who, "PM B takes PM A's") })),
   ...borrowRows(),
   { key: "repo", section: "costs", label: "Repo, for cash Treasuries", after: "assumption", who: PM_B, why: "a hedge fund borrows through its dealer, above what cash lenders earn", range: "–", group: "Financing", ...A_MARK, text: "SOFR + 0.10%, overnight · later: cash Treasuries are not built" },
@@ -275,7 +286,7 @@ export const STARTS: Record<StartId, StartDef> = {
     reference: { short: "MSCI Japan, hedged", byBase: { USD: { label: "MSCI Japan, net, hedged to USD (E)", note: "" }, JPY: { label: "MSCI Japan, net, JPY", note: "" } }, proxy: "rebuilt from iShares MSCI Japan ETF (EWJ) holdings × Tokyo closes · fee not read yet", state: "waits for its series" },
     fields: JP_FIELDS,
     trade: {
-      can: ["Tokyo-listed stocks and ETFs, long and short", "names listed outside Tokyo, up to 20% of capital, gross", "CME's Nikkei 225 futures by named month (NKD, NIY)", "1306.T and 1321.T", "long options", "USD/JPY spot and forwards"],
+      can: ["Tokyo-listed stocks and ETFs, long and short", FOREIGN_LINE, "CME's Nikkei 225 futures by named month (NKD, NIY)", "1306.T and 1321.T", "long options", "USD/JPY spot and forwards"],
       cannot: [OSAKA, TPY, NO_LENDING_FEE, NOT_IN_START],
     },
     summary: eqSummary,
@@ -301,7 +312,7 @@ export const STARTS: Record<StartId, StartDef> = {
     fields: MACRO_FIELDS,
     trade: {
       can: ["CME's futures by named month, the front and the next: ES, NQ, YM, RTY, NKD, NIY · ZT, ZF, ZN, TN, ZB, UB · CL, BZ, NG, GC, SI, HG", "FX spot, forwards and NDFs", "options, long and short", "stocks and ETFs within its equity limits"],
-      cannot: ["JGB, Bund and Gilt futures: not in the free feed the Monitor reads (Yahoo Finance carries none).", "Osaka's contracts: JPX's files are not used in this Monitor.", "So duration outside the US only through funds.", "Contract months beyond the next: too thin in the feed.", "Futures of Eurex, ICE Europe, Montréal and ASX: none in the feed.", "Cash Treasuries and repo: later, once their prices are read."],
+      cannot: ["JGB, Bund and Gilt futures: not in the free feed the Monitor reads (Yahoo Finance carries none).", "Osaka's contracts: Osaka's settlement and volume files are not used in this Monitor.", "So duration outside the US only through funds.", "Contract months beyond the next: too thin in the feed.", "Futures of Eurex, ICE Europe, Montréal and ASX: none in the feed.", "Cash Treasuries and repo: later, once their prices are read."],
       bold: 3,
     },
     summary: (v) => [`Adjusted gross ≤ ${sumFig(v.adj_gross)} · VaR ≤ ${sumFig(v.var, 1)} · floor ${sumFig(v.floor)}`],
@@ -321,7 +332,7 @@ export const STARTS: Record<StartId, StartDef> = {
     card: { lines: [], phone: "", advice: "PM B's advice" },
     notYet: { line: "Fixed-income long-only (against the Global Aggregate): offered once its benchmark's profile is read.", phone: "Fixed-income long-only: offered once its benchmark's profile is read." },
     reference: null, fields: [],
-    trade: { can: ["Bond ETFs", "government bond futures, long and short, by named month", "FX forwards, to hedge and within the currency limits", "Later: single Treasuries, paid in full (no repo)"], cannot: ["JGB, Bund and Gilt futures: not in the free feed the Monitor reads (Yahoo Finance carries none).", "Osaka's contracts: JPX's files are not used in this Monitor.", "So duration outside the US only through funds.", "No single corporate bonds, options, swaps, shorts of funds or equities."] },
+    trade: { can: ["Bond ETFs", "government bond futures, long and short, by named month", "FX forwards, to hedge and within the currency limits", "Later: single Treasuries, paid in full (no repo)"], cannot: ["JGB, Bund and Gilt futures: not in the free feed the Monitor reads (Yahoo Finance carries none).", "Osaka's contracts: Osaka's settlement and volume files are not used in this Monitor.", "So duration outside the US only through funds.", "No single corporate bonds, options, swaps, shorts of funds or equities."] },
     summary: () => [],
   },
 };
@@ -363,4 +374,5 @@ export function leverageHelp(volPct: number, figs: { es: number | null; zn: numb
 }
 export const ADJ_GROSS_CARD = "equity, option delta, FX and commodity notionals, and rates in 10-year equivalents: a 2-year note counts at its risk. Gross notional is shown, not limited.";
 /** The line on what is fixed, at the foot of the summary. */
-export const FIXED_LINE = "Fixed after creation: the start and kind, the base currency, the starting NAV, the reference, the ladder's base and numbers, the house margin multiple. The targets: re-set only from 1 Dec to a January reset, under a yearly base.";
+// the window's words are calendar.ts's, built from the one moment it opens (the designer's B.0.2, revision 2)
+export const FIXED_LINE = `Fixed after creation: the start and kind, the base currency, the starting NAV, the reference, the ladder's base and numbers, the house margin multiple. The targets: ${WINDOW_WORDS}, under a yearly base.`;

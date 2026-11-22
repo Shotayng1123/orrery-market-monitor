@@ -54,7 +54,16 @@ export function addressOf(url: string): { host: string; path: string } | null {
   try { query = decodeURIComponent(query); } catch { /* as written */ }
   return { host: u.hostname.toLowerCase().replace(/\.+$/, ""), path: path.replace(/\/{2,}/g, "/") + query };
 }
+// What stays held on jpx.co.jp when pf_jpx lifts its hold (PX-7 of the review of fix part 1): the files of the owner's
+// first answer of 21 Nov 2026 (TOPIX's weight file, 品貸料, margin balances by name, Osaka's settlement and volume pages,
+// the 決算発表予定日 workbook), the list of triggered short-selling stocks (not a rule page; the first pf_jpx read it by
+// mistake: PR-4), and JPX's list of ETFs (asked of nobody yet: pf_jpx lifts it only with its own etfList switch). By
+// path, as a request reads it, so that a redirect or a link to one of them is refused like a written address.
+const JPX_RULED_OUT = /topixweight|\/indices\/topix\/[^?]*weight|premium_charges|品貸|\/statistics-equities\/margin\/|\/derivatives\/(?:settlement-price|trading-volume|volume)|settlement-price|\/event-schedules\/financial-announcement\/|kessan\d|\/ss-reg\/|ss-triggered|triggered/i;
+const JPX_ETF_LIST = /\/products\/etfs\//i;
 const HOLDS: Array<{ name: string; test: (host: string, path: string) => boolean; raw: RegExp; why: string }> = [
+  { name: "jpx-ruled-out", test: (h, p) => onSite(h, "jpx.co.jp") && JPX_RULED_OUT.test(p), raw: /jpx\.co\.jp.*(topixweight|premium_charges|品貸|statistics-equities\/margin|settlement-price|financial-announcement|kessan|ss-reg|triggered)/i, why: "a JPX file the owner's answer of 21 Nov 2026 rules out (TOPIX weights, 品貸料, margin balances by name, Osaka's settlement and volume pages, the 決算発表予定日 workbook), or the list of triggered short-selling stocks: held even while pf_jpx reads jpx.co.jp" },
+  { name: "jpx-etf-list", test: (h, p) => onSite(h, "jpx.co.jp") && JPX_ETF_LIST.test(p), raw: /jpx\.co\.jp.*products\/etfs/i, why: "JPX's list of ETFs: not asked of the owner yet (pf_jpx's etfList switch); held even while pf_jpx reads jpx.co.jp" },
   { name: "jpx", test: (h) => onSite(h, "jpx.co.jp"), raw: /jpx\.co\.jp/i, why: "jpx.co.jp: refused to every probe but pf_jpx, which reads only what the owner released on 21 Nov 2026 (\"(c) all\": JPX's rule pages, its holiday calendar and two statistics); the files of the owner's first answer (TOPIX weights, 品貸料, margin balances by name, OSE settlement and volume pages, the 決算発表予定日 workbook) and JPX's ETF list stay unread" },
   { name: "cboe-vix-files", test: (h, p) => onSite(h, "cboe.com") && /daily_prices\/|_History\.csv|vixarchive/i.test(p), raw: /cboe\.com.*(daily_prices|_History\.csv|vixarchive)/i, why: "Cboe's VIX-family history files: the owner's answer of 21 Nov 2026 is to do without them (Yahoo's ^VIX family serves)" },
   { name: "nomura-holdings", test: (h, p) => (onSite(h, "nomura-am.co.jp") && /^\/fund\/monthly_holdings/i.test(p)) || (onSite(h, "nextfunds.jp") && /^\/monthly_holdings/i.test(p)), raw: /(nomura-am\.co\.jp|nextfunds\.jp).*monthly_holdings/i, why: "Nomura's holdings files: the owner's answer of 21 Nov 2026 is to do without them" },
@@ -66,8 +75,9 @@ export const heldWhy = (url: string): string | null => {
   return HOLDS.find((h) => !lifted.has(h.name) && (a ? h.test(a.host, a.path) : h.raw.test(url)))?.why ?? null;
 };
 /** Lifts the hold on jpx.co.jp for this run. Only pf_jpx calls it, and only for the parts its own switches say the
- *  owner has released. */
-export const liftJpxHold = (): void => { lifted.add("jpx"); };
+ *  owner has released. The files the owner's first answer rules out and the list of triggered stocks stay held; JPX's
+ *  list of ETFs is lifted only with `etfList` (PX-7). */
+export const liftJpxHold = (o: { etfList?: boolean } = {}): void => { lifted.add("jpx"); if (o.etfList) lifted.add("jpx-etf-list"); };
 /** For the checks alone: puts the hold on jpx.co.jp back (a check that runs pf_jpx's helpers must not leave it lifted). */
 export const restoreHolds = (): void => { lifted.clear(); };
 const notAsked = (url: string, why: string): void => console.log(`NOT ASKED (held)  ${masked(url)}\n  ${why}`);
@@ -124,8 +134,9 @@ export const head = (t: string): void => console.log(`\n== ${t}`);
 // what it did not (C-38), a site's terms are read before its data files (termsLink, printTerms, readTerms), and a
 // page's tables are read as rows (tablesOf)); read-only like the rest ----
 
-/** Waits `ms` milliseconds: the pace between two requests. */
-export const pause = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+/** Waits `ms` milliseconds: the pace between two requests. The logic checks run a probe offline with its fetch
+ *  replaced and set `globalThis.__probeOffline`, so that its pace costs them no time (no request leaves then). */
+export const pause = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, (globalThis as { __probeOffline?: boolean }).__probeOffline ? 0 : ms));
 
 export interface Page { url: string; final: string; ok: boolean; status: number | null; type: string; bytes: number; html: string; lastModified: string | null; retryAfter?: string | null }
 
@@ -335,21 +346,36 @@ const TOPICS: Array<[string, RegExp]> = [
 //     permission" names no purpose: it is a bar;
 //   - a sentence that forbids automated reading (robots, scraping, crawling, data mining …) is a bar whatever it says
 //     of purpose;
-//   - a sentence that only declines liability ("shall not be liable for … automated systems") forbids nothing.
-// A bar holds the site's files and is printed for a person to read. The gate errs towards holding: a sentence it
-// cannot read as limited is a bar.
-const BAN_EN = /\b(?:may not|must not|shall not|cannot|can not|agree(?:s|d)? not to|undertake(?:s)? not to|not (?:be )?(?:permitted|allowed|authori[sz]ed)|(?:is|are) not to be|prohibit(?:ed|s|ion)?|forbidden|forbids?|refrain(?:s|ing)? from|you (?:will|shall|do) not|do not (?:copy|reproduce|redistribute|distribute|republish|store|scrape|crawl|use))\b|\bno\b[^.]{0,240}\bmay be\b|without (?:the |our |its |any )?(?:prior |express |written |explicit |specific )+(?:permission|consent|authori[sz]ation|approval|agreement)/i;
-const BAN_JA = /禁止|禁じ|できません|出来ません|お断り|ご遠慮|認められません|認めておりません|してはなりません|行わないで|固くお断り/;
-/** A clause that declines liability or a warranty: its "shall not" forbids the reader nothing. */
-const LIABILITY = /\b(?:shall|will|does|do|can|may|would)\s*not\s+(?:be\s+(?:held\s+)?(?:liable|responsible)|accept|assume|bear|warrant|guarantee|represent|have any (?:liability|responsibility))\b[^.;]*/gi;
+//   - a sentence that only declines liability ("shall not be liable for … automated systems") forbids nothing; the
+//     clause is set aside only up to its conjunction, so a ban that follows it in the same sentence still counts.
+// A bar holds the site's files and is printed for a person to read. The gate errs towards holding: once it has found a
+// ban word in a sentence, a ban it cannot read as limited is a bar. A ban written as a list ("You agree not to:" and
+// its items on the lines below) is put to the gate as one sentence (printTerms).
+// Since 22 Nov 2026 (the review of fix part 1, PX-2 and PX-3): the old gate's alternatives are kept as a floor (a bare
+// "do not", "should not" or "will not" with a word of automated reading or re-use in the same sentence), "No … may
+// be" reaches 400 characters, and the other forms the review named are bans too ("No … is allowed", "Neither … may
+// be", "only with our written permission", 禁ず, 禁無断転載, できないものとします, してはならない, しないでください,
+// 一切認めません). A ban "for any commercial or non-commercial purpose" is universal, not limited, and the uses a ban
+// may leave free are read only where the sentence ties them to a use ("other than for your own personal use").
+const BAN_EN = /\b(?:may not|must not|shall not|should not|will not|cannot|can not|do not|does not|agree(?:s|d)? not to|undertake(?:s)? not to|not (?:be )?(?:permitted|allowed|authori[sz]ed)|(?:is|are) not to be|prohibit(?:ed|s|ion)?|forbidden|forbids?|refrain(?:s|ing)? from|you (?:will|shall|do) not)\b|\bno\b[^.]{0,400}\b(?:may|can|shall) be\b|\bno\b[^.]{0,400}\b(?:is|are) (?:allowed|permitted|authori[sz]ed)\b|\bneither\b[^.]{0,400}\b(?:may|can|shall) be\b|\bonly with (?:the |our |its |their |prior |express |written |explicit )*(?:permission|consent|authori[sz]ation|approval)|without (?:the |our |its |any )?(?:prior |express |written |explicit |specific )+(?:permission|consent|authori[sz]ation|approval|agreement)/i;
+const BAN_JA = /禁止|禁じ|禁ず|禁無断|できません|できない|出来ません|出来ない|お断り|ご遠慮|認められません|認めておりません|一切認め|してはなりません|してはならない|行ってはなりません|行わないで|しないでください|しないで下さい|固くお断り/;
+/** A clause that declines liability or a warranty: its "shall not" forbids the reader nothing. It is set aside only up
+ *  to the next conjunction or the sentence's end, so "… shall not be liable for errors, and you may not copy …" keeps
+ *  its ban (PX-3: the clause took the rest of the sentence with it). */
+const LIABILITY = /\b(?:shall|will|does|do|can|may|would)\s*not\s+(?:be\s+(?:held\s+)?(?:liable|responsible)|accept|assume|bear|warrant|guarantee|represent|have any (?:liability|responsibility))\b[^.;]*?(?=,?\s+(?:and|but|nor|or|however|while)\s+(?:you|users?|no|neither|it|we|the)\b|[.;]|$)/gi;
 const REUSE_EN = /\b(?:cop(?:y|ies|ied|ying)|reproduc\w*|re-?distribut\w*|distribut\w*|re-?publish\w*|publish\w*|re-?transmi\w*|transmit\w*|re-?deliver\w*|re-?sell\w*|sell|duplicat\w*|stor(?:e|ed|ing)|download\w*|extract\w*|derivative works?|fram(?:e|ing)|mirror\w*|secondary use|re-?use\w*)\b/i;
 const REUSE_JA = /複製|複写|転載|再配信|再配布|配布|頒布|転送|二次利用|再利用|引用|蓄積|データ収集/;
 const AUTO_EN = /\b(?:automat\w*|robots?|scrap\w*|crawl\w*|spiders?|data[- ]?mining|harvest\w*|bots?|screen[- ]scrap\w*|programmatic\w*)\b/i;
 const AUTO_JA = /自動|機械的|クローラ|スクレイピング|ロボット|プログラムによる/;
-/** The ban is said to hold whatever the purpose or the means. */
-const UNIVERSAL = /\bany purpose|whatever (?:the )?purpose|regardless of (?:the |its )?(?:purpose|use)|for any reason|in any (?:form|manner|way|medium)|by any means|whether or not for profit|いかなる目的|目的の如何|如何なる用途|用途に関わらず|用途にかかわらず|目的を問わず|いかなる方法|方法を問わず|有料・無料を問わず/i;
-/** The ban is limited to a purpose (commercial use), or leaves a use free (personal, private, non-commercial, internal). */
-const LIMITED = /\b(?:for|of|to) (?:any |a |all )?(?:commercial|business|profit[- ]making)(?: or [a-z-]+)? (?:purposes?|use|uses|gain|ends|exploitation|advantage)|\bcommercial(?:ly)? (?:use|uses|purposes?|exploit\w*|gain)|\bfor (?:a )?profit\b|\b(?:other than|except|save|apart from|unless|outside)\b[^.]{0,80}\b(?:personal|private|non-?commercial|own|internal)\b|\b(?:personal|private|non-?commercial|internal)\b[^.]{0,40}\b(?:use|purposes?)\b[^.]{0,30}\b(?:only|is permitted|are permitted|is allowed|excepted)\b|商用目的|営利目的|商業目的|営利を目的|私的使用(?:の場合)?を除|個人的な(?:利用|使用)を除|非営利(?:目的)?(?:の場合)?を除/i;
+/** The ban is said to hold whatever the purpose or the means, a purpose and its opposite named together among them
+ *  ("for any commercial or non-commercial purpose", "whether for commercial purposes or not": PX-3). */
+const UNIVERSAL = /\bany purpose|whatever (?:the )?purpose|regardless of (?:the |its )?(?:purpose|use)|for any reason|in any (?:form|manner|way|medium)|by any means|whether or not for profit|\bcommercial (?:or|and|nor) (?:non-?commercial|other|any other|private|personal)\b|\b(?:non-?commercial|private|personal) (?:or|and|nor) commercial\b|\bwhether (?:or not )?(?:for )?(?:commercial|profit)[^.]{0,40}\bor not\b|\bwhether commercial or not\b|いかなる目的|目的の如何|如何なる用途|用途に関わらず|用途にかかわらず|目的を問わず|いかなる方法|方法を問わず|有料・無料を問わず|営利・非営利を問わず/i;
+/** The ban is limited to a purpose (commercial use), or leaves a use free (personal, private, non-commercial,
+ *  internal), and says so of the ban itself: "for commercial purposes", "other than for your own personal use",
+ *  "permitted for personal use only". A use named elsewhere in the sentence ("This site is for your personal use
+ *  only and you may not copy …") leaves the ban whole (PX-3: "save … own", "the publisher's own" and "personal use
+ *  only and you may not" were read as limits). */
+const LIMITED = /\b(?:for|of|to) (?:any |a |all )?(?<!non-)(?:commercial|business|profit[- ]making) (?:purposes?|use|uses|gain|ends|exploitation|advantage)|(?<!non-)\bcommercial(?:ly)? (?:use|uses|purposes?|exploit\w*|gain)|\bfor (?:a )?profit\b|\b(?:other than|except(?: for| as)?|save for|save as|apart from|unless (?:it is |they are )?(?:for|used for)|outside(?: of)?)\b[^.]{0,60}?\b(?:personal|private|non-?commercial|internal|own)\b[^.]{0,24}?\b(?:use|uses|purposes?|reference|research|study)\b|\b(?:permitted|allowed|authori[sz]ed|may (?:be )?(?:use|used|copy|copied|download|downloaded|print|printed|reproduce|reproduced|store|stored))\b[^.]{0,40}?\b(?:solely |only )?for (?:your |their |its )?(?:own )?(?:personal|private|non-?commercial|internal)\b|商用目的|営利目的|商業目的|営利を目的|私的使用(?:の場合)?を除|個人的な(?:利用|使用)を除|非営利(?:目的)?(?:の場合)?を除/i;
 const sentencesOf = (line: string): string[] => line.split(/(?<=[.!?。！？])\s+|(?<=[。！？])/).map((x) => x.trim()).filter(Boolean);
 /** Whether a line of a site's terms holds its data files, and why: "automated" (it forbids automated reading) or
  *  "re-use" (it forbids copying, reproducing, storing or redistributing and names no purpose the ban is limited to).
@@ -384,20 +410,32 @@ export function printTerms(html: string, opts: { never?: RegExp | null; max?: nu
   }
   const held = never ? ls.filter((l) => never.test(l) && TOPICS.some(([, re]) => re.test(l))).length : 0;
   if (held) console.log(`  ${held} matching line(s) that name a login or a password: not printed`);
-  const found = ls.map((l) => ({ l, bar: never && never.test(l) ? null : termsBar(l) })).filter((x) => x.bar), bars = found.map((x) => x.l);
+  // a ban written as a list: its lead-in line ("You agree not to:", "The following are prohibited:") is put to the gate
+  // with its items, the lines up to the next lead-in, a long line or the tenth (PX-3: each item alone named no ban)
+  const gateLines = ls.map((l, i) => {
+    if (!/:\s*$/.test(l) || !(BAN_EN.test(l.replace(/:\s*$/, " x")) || BAN_JA.test(l) || /\bthe following\b|以下の/i.test(l))) return l;
+    const items: string[] = [];
+    for (let k = i + 1; k < ls.length && items.length < 10 && !/:\s*$/.test(ls[k]) && ls[k].length <= 300; k++) items.push(ls[k]);
+    return items.length ? `${l} ${items.join("; ")}` : l;
+  });
+  const found = ls.map((l, i) => ({ l, bar: never && never.test(l) ? null : termsBar(gateLines[i]) })).filter((x) => x.bar), bars = found.map((x) => x.l);
   console.log(`  lines that bar automated reading, or re-use with no purpose the ban is limited to: ${bars.length ? `${bars.length}: FOR THE OWNER; ${opts.forRecord ? "printed for the record: this is a feed the Monitor already reads, which the plan's gate does not stop" : "this site's data files are left unread by this probe"}` : "none found (a person still reads the lines above before any job is built)"}`);
   for (const x of found.slice(0, 6)) console.log(`  ! (${x.bar!.kind === "automated" ? "automated reading" : "re-use"}) ${masked(x.l.slice(0, 500))}${x.l.length > 500 ? " …" : ""}`);
   if (found.length > 6) console.log(`  … ${found.length - 6} more such lines not printed`);
-  return { personal: out["personal or non-commercial use"] ?? [], bars, lines: seen.size, subjects: Object.values(out).filter((h) => h.length > 0).length };
+  // a list's items count for the subjects too: an item that forbids robots names automated reading
+  const subjects = TOPICS.filter(([, re]) => ls.some((l, i) => re.test(gateLines[i]) && gateLines[i].length > 25 && !(never && never.test(l)))).length;
+  return { personal: out["personal or non-commercial use"] ?? [], bars, lines: seen.size, subjects };
 }
 
 /** A page's first heading (h1, else h2), as text. */
-const firstHeading = (html: string): string => decoded((html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ?? html.match(/<h2\b[^>]*>([\s\S]*?)<\/h2>/i)?.[1] ?? "").replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
-/** Whether a page that a "terms" link led to is a site's terms: its title or its first heading names terms or
- *  conditions of use, or it carries lines on two of the four subjects or more. A link that only says "legal",
- *  "disclaimer" or "copyright" may lead to a hub or a library of documents, where one stray line on a subject (an
- *  advertisement for a robotics fund) used to count as "terms read, no bar" (the checks of round 3b: PR-8). */
-export const isTermsPage = (html: string, subjects: number): boolean => TERMS_FIRST.test(titleOf(html)) || TERMS_FIRST.test(firstHeading(html)) || subjects >= 2;
+export const firstHeading = (html: string): string => decoded((html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ?? html.match(/<h2\b[^>]*>([\s\S]*?)<\/h2>/i)?.[1] ?? "").replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+/** Whether a page that a "terms" link led to is a site's terms, read: its title or its first heading names terms or
+ *  conditions of use, AND it carries lines on two of the four subjects or more, or a line the gate reads as a bar. A
+ *  link that only says "legal", "disclaimer" or "copyright" may lead to a hub or a library of documents, where stray
+ *  lines on two subjects used to count as "terms read, no bar"; and a terms page drawn by scripts (no line read) was
+ *  "read" by its title alone (the checks of round 3b: PR-8; the review of fix part 1: PX-5). Otherwise the terms are
+ *  not found, and a file that needs "read and not barred" stays unread. */
+export const isTermsPage = (html: string, subjects: number, bars = 0): boolean => (TERMS_FIRST.test(titleOf(html)) || TERMS_FIRST.test(firstHeading(html))) && (subjects >= 2 || bars > 0);
 
 /** Reads a site's terms starting from one of its pages: the page's own terms link (termsLink), read and printed
  *  (printTerms). Where the page that link gives is not the site's terms (isTermsPage) and itself links a page named
@@ -416,10 +454,10 @@ export async function readTerms(from: { html: string; final: string }, opts: { a
     if (!p.ok) break;
     const res = printTerms(p.html, { ...(opts.never ? { never: opts.never } : {}), ...(opts.forRecord ? { forRecord: true } : {}) });
     if (res.bars.length) barred = true;
-    if (isTermsPage(p.html, res.subjects)) { read = true; break; }
+    if (isTermsPage(p.html, res.subjects, res.bars.length)) { read = true; break; }
     const here = t.href, more = linksOf(p.html, p.final).filter((l) => /^https?:/i.test(l.href) && TERMS_FIRST.test(l.text) && !NOT_TERMS.test(l.text) && l.text.length < 80 && l.href !== here);
     const better = more.find((l) => siteOf(l.href) === siteOf(here)) ?? more.find((l) => !THIRD_PARTY.test(hostOf(l.href)));
-    if (!better || hop === 1) { console.log(`  that page is not the site's terms (its title and first heading do not name terms of use, and it carries lines on ${res.subjects} of the four subjects): TERMS NOT FOUND`); read = false; break; }
+    if (!better || hop === 1) { console.log(`  that page is not the site's terms, read (its title or first heading must name terms of use, and it must carry lines on two of the four subjects or a line that bars: it carries lines on ${res.subjects}): TERMS NOT FOUND`); read = false; break; }
     console.log(`  that page is not the site's terms (lines on ${res.subjects} of the four subjects); it links "${better.text.slice(0, 50)}" -> ${masked(better.href)}: read too`);
     t = better;
   }
@@ -436,7 +474,16 @@ export function tablesOf(html: string): Array<{ heading: string; rows: string[][
     const hs = [...before.matchAll(/<(h[1-6]|caption)\b[^>]*>([\s\S]*?)<\/\1>/gi)];
     const cap = m[0].match(/<caption\b[^>]*>([\s\S]*?)<\/caption>/i)?.[1];
     const rows = [...m[0].matchAll(/<tr\b[\s\S]*?<\/tr>/gi)].map((r) => [...r[0].matchAll(/<t[hd]\b[^>]*>([\s\S]*?)<\/t[hd]>/gi)].map((c) => cell(c[1]))).filter((r) => r.some((c) => c !== ""));
-    out.push({ heading: cell(cap ?? hs[hs.length - 1]?.[2] ?? ""), rows });
+    // where no heading or caption with text stands before the table, the last short line of text before it (after
+    // the last heading and the table before, a link's text never) is its label: JPX's tick tables carry theirs so
+    // (PX-8); the caller puts it to its guard
+    let heading = cell(cap ?? hs[hs.length - 1]?.[2] ?? "");
+    if (!heading) {
+      const lastH = hs[hs.length - 1], afterH = lastH ? (lastH.index ?? 0) + lastH[0].length : 0, afterT = before.lastIndexOf("</table>");
+      const tail = before.slice(Math.max(afterH, afterT >= 0 ? afterT + 8 : 0)).replace(/<(a|nav|button|select|option)\b[\s\S]*?<\/\1>/gi, " ").replace(/<\/(?:p|div|li|dt|dd|td|th|section|header|span|strong|b|ul|ol)>|<br\b[^>]*>/gi, "\n").replace(/<[^>]+>/g, " ");
+      heading = decoded(tail).split("\n").map((x) => x.replace(/\s+/g, " ").trim()).filter(Boolean).reverse().find((x) => x.length <= 90) ?? "";
+    }
+    out.push({ heading, rows });
   }
   return out;
 }

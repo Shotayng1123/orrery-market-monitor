@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, getToken, onSignInEnd, remembered, tokenId } from "./api";
 import { keepDel, keepGet, keepKey, keepSet, type Kept } from "./keep";
 import type { BookFull, BookRow, CashRate, ConsentState, FormFacts, Refusal, Base } from "./pf/types.ts";
+import { NOT_YET } from "./pf/words.ts";
 
 /** A refusal or a failure, with what the page needs to say it: 0 no connection, 401 signed out, 404 no such
  *  portfolio, 409 the statement is asked first, 400 the server's words (and the fields it refuses). */
@@ -80,6 +81,9 @@ export const consentAgree = (version: number): Promise<ConsentState> => call("co
 
 /** The server's words as part of a sentence of the page's: without the full stop they may end in. */
 export const serverWords = (e: unknown): string => (e instanceof Error ? e.message : String(e)).trim().replace(/\.+$/, "");
+/** A 404 that is the server's own sentence for its paper switch off ("Paper portfolios are not available yet."), not
+ *  "no such portfolio in your account". */
+export const switchedOff = (e: unknown): boolean => e instanceof PfError && e.status === 404 && serverWords(e) === NOT_YET.replace(/\.+$/, "");
 /** What a failed write says, in the page's words: offline, signed out, or the server's own sentence. */
 export function failureWords(e: unknown, what: { offline: string; signedOut: string; refused: (words: string) => string }): string {
   const s = e instanceof PfError ? e.status : -1;
@@ -102,7 +106,9 @@ export function useRead<T>(action: "pf_list" | "pf_form" | "pf_get", query: Quer
       .then((d) => { if (alive) set({ data: d, error: null, loading: false, keptAt: null }); if (kk && getToken() === asked) hold(kk, d); })
       .catch(async (e: unknown) => {
         const err = e instanceof PfError ? e : new PfError(0, String(e));
-        if (kk && err.status === 404 && action === "pf_get" && getToken() === asked && typeof q.id === "string") forgetBook(q.id);   // no longer a book of this account
+        // no longer a book of this account; not when the server's paper switch is off (its own sentence): the book and
+        // what this device keeps of it stay (DC-3 of the second review of P-1)
+        if (kk && err.status === 404 && action === "pf_get" && !switchedOff(err) && getToken() === asked && typeof q.id === "string") forgetBook(q.id);
         const kept = kk && err.status === 0 ? await held<T>(kk) : null;
         if (alive) set((x) => (kept ? { data: kept.data, error: err, loading: false, keptAt: kept.at } : { data: err.status === 404 ? null : x.data, error: err, loading: false, keptAt: x.keptAt }));
       });

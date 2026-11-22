@@ -11,15 +11,15 @@ import { Panel } from "../Panel";
 import { Section } from "../PhoneKit";
 import { Consent } from "./Consent";
 import { Assumed, ByTag, Chips, flash, go, href, Muted, NumInput, setLastBook, useHeaderTop } from "./shared";
-import { EquivalentLine, LadderBases, ReferenceLine, TieLine, TradeLists, VolLines } from "./Blocks";
+import { EquivalentLine, FundingLine, LadderBases, ReferenceLine, TieLine, TradeLists, VolLines } from "./Blocks";
 import { accountId, failureWords, pfCreate, PfError, serverWords, useRead } from "../../lib/pf";
 import { useNet } from "../../lib/net";
-import { checkForm, defaultName, defaultRaw, inputText, outOfRange, usdLine, type Checked, type Raw } from "../../lib/pf/form.ts";
+import { checkForm, defaultRaw, freeName, inputText, outOfRange, usdLine, type Checked, type Raw } from "../../lib/pf/form.ts";
 import { fmtFull, NAV_RANGE, parseAmount } from "../../lib/pf/money.ts";
 import { ADJ_GROSS_CARD, AR_STARTS, CAP_LINE, fieldOf, fieldsOf, FIXED_LINE, isStart, leverageHelp, referenceLabel, RR_STARTS, SECTIONS, STARTS } from "../../lib/pf/presets.ts";
 import { NOT_AGREED } from "../../lib/pf/statement.ts";
 import { cumulative, drawdownLine, ladderShort, restoreLine } from "../../lib/pf/targets.ts";
-import { hmSgt } from "../../lib/pf/calendar.ts";
+import { hmSgt, sgDate, timeSgt, WINDOW_WORDS } from "../../lib/pf/calendar.ts";
 import type { Base, ConsentState, Field, FormFacts, LadderBase, Refusal, SectionId, StartId } from "../../lib/pf/types.ts";
 import { REFERENCE, TARGET_RETURN, TARGET_VOLATILITY } from "../../lib/labels";
 
@@ -37,6 +37,18 @@ function readDraft(): Draft | null {
     if (!who || d.who !== who) { sessionStorage.removeItem(DRAFT); return null; }
     return isStart(d.start) && STARTS[d.start].offered && d.raw && typeof d.name === "string" ? d : null;
   } catch { return null; }
+}
+
+/** Focuses a field once its screen is drawn (`go` changes the address after any open sheet has settled, so it is
+ *  looked for again for up to about a second); with `rowSel` (a phone's section screen) its row is first scrolled to
+ *  just under the page's sticky header, where the screen's title stands at the top (UI-18). */
+function focusRow(sel: string, rowSel?: string, tries = 30): void {
+  const el = document.querySelector<HTMLElement>(sel);
+  if (!el) { if (tries > 0) setTimeout(() => focusRow(sel, rowSel, tries - 1), 40); return; }
+  const row = rowSel ? document.querySelector<HTMLElement>(rowSel) : null;
+  // the header sticks at the top once the page scrolls: the row goes to its height (not to where it stands now)
+  if (row) { const head = document.querySelector<HTMLElement>(".pfp > .mp-head")?.getBoundingClientRect().height ?? 0; window.scrollTo(0, Math.max(0, row.getBoundingClientRect().top + window.scrollY - head - 8)); }
+  el.focus({ preventScroll: !!row });
 }
 
 /** `new`, `new/ar-ls-jp`, and on a phone `new/ar-ls-jp/review` and `new/ar-ls-jp/edit/limits`. An older address
@@ -69,11 +81,14 @@ function Form({ sub, phone, facts, reloadFacts }: { sub: string; phone: boolean;
   const init = first.current;
   const [start, setStart] = useState<StartId>(init?.start ?? addr.start ?? AR_STARTS[0]);
   const [raw, setRawAll] = useState<Raw>(() => init?.raw ?? defaultRaw(init?.start ?? addr.start ?? AR_STARTS[0], "USD"));
-  const [name, setName] = useState<string>(init?.name ?? defaultName(init?.start ?? addr.start ?? AR_STARTS[0], facts.today));
+  // the name typed; while none is, the start's default, free by rule (freeName: " · 2" when an open book has it, UI-1)
+  const [typedName, setName] = useState<string>(init?.nameEdited ? init.name : "");
   const [nameEdited, setNameEdited] = useState<boolean>(init?.nameEdited ?? false);
+  const name = nameEdited ? typedName : freeName(start, facts.today, facts.names);
   const [rid, setRid] = useState<string>(init?.rid ?? newRid());
   const [back, setBack] = useState<string | null>(init?.at ?? null);              // "Your unsaved settings from 17:02 are back"
-  const [touched, setTouched] = useState<Set<string>>(() => new Set());
+  // a field already refused when the form opens (a draft restored, or a name taken since) shows its sentence at once
+  const [touched, setTouched] = useState<Set<string>>(() => (init && checkForm(init.start, init.nameEdited ? init.name : freeName(init.start, facts.today, facts.names), init.raw, facts.names).refusals.length > 0 ? new Set(["*"]) : new Set()));
   const [ask, setAsk] = useState<StartId | null>(null);                             // a change of start waiting for KEEP or CHANGE
   const [costsOpen, setCostsOpen] = useState(false);
   const [consent, setConsent] = useState<ConsentState>(facts.consent);
@@ -82,6 +97,7 @@ function Form({ sub, phone, facts, reloadFacts }: { sub: string; phone: boolean;
   const [msg, setMsg] = useState<string | null>(null);
   const [server, setServer] = useState<Refusal[]>([]);
   const net = useNet();
+  useEffect(() => { if (!net.offline) setMsg((m) => (m && m.startsWith("Offline") ? null : m)); }, [net.offline]);
   const sum = useRef<HTMLElement>(null);
   useHeaderTop(sum);
   const base: Base = raw.base === "JPY" ? "JPY" : "USD", def = STARTS[start];
@@ -90,7 +106,7 @@ function Form({ sub, phone, facts, reloadFacts }: { sub: string; phone: boolean;
 
   // the draft follows the form while anything differs from the start's defaults
   useEffect(() => { writeDraft(dirty ? { start, name, nameEdited, raw, rid, at: new Date().toISOString() } : null); }, [dirty, start, name, nameEdited, raw, rid]);
-  const fresh = (s: StartId) => { setStart(s); setRawAll(defaultRaw(s, "USD")); setName(defaultName(s, facts.today)); setNameEdited(false); setTouched(new Set()); setServer([]); setMsg(null); setRid(newRid()); setBack(null); setAsk(null); };
+  const fresh = (s: StartId) => { setStart(s); setRawAll(defaultRaw(s, "USD")); setName(""); setNameEdited(false); setTouched(new Set()); setServer([]); setMsg(null); setRid(newRid()); setBack(null); setAsk(null); };
   // the address names the start: Back and Forward, or an address typed, switch it without a question
   useEffect(() => { if (addr.start && addr.start !== start) fresh(addr.start); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [addr.start]);
   const pickStart = (s: StartId) => { if (s === start) return; if (c.changed.length > 0) { setAsk(s); return; } fresh(s); go(`new/${s}`); };
@@ -141,8 +157,16 @@ function Form({ sub, phone, facts, reloadFacts }: { sub: string; phone: boolean;
         setMsg(failureWords(e, { offline: "Offline: a portfolio needs the server. Your settings are kept on this device.", signedOut: "Signed out: sign in again. Nothing was created; your settings are kept.", refused: (w) => `Not created: ${w}. Nothing was saved.` }));
       });
   };
-  const toFirst = () => { const k = c.refusals[0]?.key; if (!k) return; setTouched((t) => new Set(t).add("*")); if (k === "name" || !fieldOf(start, k)) { document.querySelector<HTMLElement>(k === "nav" ? '[data-key="nav"]' : "#pf-name")?.focus(); return; }
-    const sec = fieldOf(start, k)!.section; if (sec === "costs") setCostsOpen(true); if (phone) { go(`new/${start}/edit/${sec}`); return; } setTimeout(() => document.querySelector<HTMLElement>(`[data-key="${k}"]`)?.focus(), 30); };
+  // the count goes to the first refused field: on a phone the name is on the first screen, a setting on its section's
+  // screen, scrolled to just under the screen's title (UI-1, UI-18)
+  const toFirst = () => { const k = c.refusals[0]?.key; if (!k) return; setTouched((t) => new Set(t).add("*"));
+    if (k === "name" || !fieldOf(start, k)) {
+      if (phone && k === "name" && addr.step !== "start") { go(`new/${start}`); setTimeout(() => focusRow("#pf-name"), 60); return; }
+      document.querySelector<HTMLElement>(k === "nav" ? '[data-key="nav"]' : "#pf-name")?.focus(); return;
+    }
+    const sec = fieldOf(start, k)!.section; if (sec === "costs") setCostsOpen(true);
+    if (phone) { go(`new/${start}/edit/${sec}`); setTimeout(() => focusRow(`[data-key="${k}"]`, `[data-row="${k}"]`), 60); return; }
+    setTimeout(() => document.querySelector<HTMLElement>(`[data-key="${k}"]`)?.focus(), 30); };
   const createBlock = (
     <div className="pf-create" id="pf-create-block">
       <button type="button" className={`pf-go${phone ? " big" : ""}`} id="pf-create" disabled={busy || count > 0 || offline} onClick={() => create()}>{busy ? "Creating…" : phone ? "Create paper portfolio" : "CREATE PAPER PORTFOLIO"}</button>
@@ -162,7 +186,7 @@ function Form({ sub, phone, facts, reloadFacts }: { sub: string; phone: boolean;
     if (f.key === "base") return <Chips field={f} value={base} onChange={setBase} phone={phone} />;
     if (f.key === "ladder_base") return <LadderBases value={ladderBase} onChange={(b) => set("ladder_base", b)} phone={phone} />;
     if (f.key === "blend") return <select className="pf-select" id="pf-blend" aria-label={f.label} value={typed("blend")} onChange={(e) => set("blend", e.target.value)}>{f.choices!.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>;
-    if (f.key === "funding") { const o = f.choices!.options; return <span className="pf-fund"><span className="on">(●) {o[0].label}: {o[0].line}</span><span className="pf-line">{o[1].label}: {o[1].off}</span></span>; }
+    if (f.key === "funding") return <FundingLine field={f} />;
     if (f.key === "reference") return <ReferenceLine start={start} base={base} blend={blend} />;
     if (f.key === "restore") { const c1 = num("cut1"), c2 = num("cut2"), cp = num("cap1"); return <span id="pf-restore">{c1 != null && c2 != null && cp != null ? `${restoreLine({ cut1: c1, cut2: c2, cap1: cp })}: ` : ""}{f.text}</span>; }
     if (f.key === "cash5") return <span>{f.text}{num("target_x") === 5 ? " (here it is the target)" : ""}</span>;
@@ -185,7 +209,7 @@ function Form({ sub, phone, facts, reloadFacts }: { sub: string; phone: boolean;
   };
   const rowsOf = (sec: SectionId): Field[] => fieldsOf(start, sec, base);
   const badIn = (sec: SectionId): number => c.refusals.filter((r) => (r.key === "nav" ? sec === "kind" : fieldOf(start, r.key)?.section === sec)).length;
-  const extraOf = (sec: SectionId): ReactNode => (sec === "trade" ? <TradeLists start={start} /> : sec === "limits" && start === "ar-macro" ? <Muted id="pf-levhelp">{leverageHelp(num("target_vol") ?? 5, null)}</Muted> : sec === "ladder" ? <Muted id="pf-drawdown">Drawdown: {drawdownLine(ladderBase)}</Muted> : null);
+  const extraOf = (sec: SectionId): ReactNode => (sec === "trade" ? <TradeLists start={start} values={c.values} /> : sec === "limits" && start === "ar-macro" ? <Muted id="pf-levhelp">{leverageHelp(num("target_vol") ?? 5, null)}</Muted> : sec === "ladder" ? <Muted id="pf-drawdown">Drawdown: {drawdownLine(ladderBase)}</Muted> : null);
   const auxOf = (sec: SectionId): string => (sec === "targets" ? "the book aims at no index · neither target is a limit" : sec === "ladder" ? "the owner's rule · fixed after creation" : sec === "trade" ? "what the start can trade, and what it cannot trade here" : sec === "limits" ? "each changes later with a reason, from the next session" : "");
   const summary = (
     <div className="pf-sumbody" id="pf-summary">
@@ -197,11 +221,12 @@ function Form({ sub, phone, facts, reloadFacts }: { sub: string; phone: boolean;
       <div>Ladder {num("cut1") != null && num("cut2") != null && num("out") != null ? ladderShort({ cut1: num("cut1")!, cut2: num("cut2")!, out: num("out")!, cap1: 0, cap2: 0, cooling: 0, deadline: 0 }, ladderBase) : "–"}</div>
       {def.summary(c.values).map((l) => <div key={l}>{l}</div>)}
       <div className="chg" id="pf-changedcount" title={c.changed.map((k) => (k === "nav" ? "Starting NAV" : k === "base" ? "Base currency" : fieldOf(start, k)?.label ?? k)).join(" · ") || undefined}>{c.changed.length} setting{c.changed.length === 1 ? "" : "s"} changed from the defaults</div>
-      <p className="pf-mut fixedline">{ladderBase === "start" ? FIXED_LINE.replace("re-set only from 1 Dec to a January reset, under a yearly base", "re-set: never") : FIXED_LINE}</p>
+      <p className="pf-mut fixedline">{ladderBase === "start" ? FIXED_LINE.replace(`${WINDOW_WORDS}, under a yearly base`, "re-set: never") : FIXED_LINE}</p>
     </div>
   );
-  const draftLine = back && dirty ? <p className="pf-draft" id="pf-draft">Your unsaved settings from {hmSgt(back)} are back · <button type="button" className="pf-link" onClick={() => { writeDraft(null); fresh(start); }}>START AGAIN</button></p> : null;
-  const askLine = ask ? <p className="pf-ask" id="pf-ask" role="alertdialog">Change the start? Your {c.changed.length} changed setting{c.changed.length === 1 ? "" : "s"} go back to the new start's defaults. <button type="button" className="pf-btn" onClick={() => setAsk(null)}>KEEP</button> <button type="button" className="pf-btn" onClick={() => { const s = ask; fresh(s); go(`new/${s}`); }}>CHANGE</button></p> : null;
+  const draftWhen = (iso: string): string => `${sgDate(new Date(iso)) === sgDate(new Date()) ? hmSgt(iso) : timeSgt(iso)} SGT`;
+  const draftLine = back && dirty ? <p className="pf-draft" id="pf-draft">Your unsaved settings from {draftWhen(back)} are back · <button type="button" className="pf-link" onClick={() => { writeDraft(null); fresh(start); }}>START AGAIN</button></p> : null;
+  const askLine = ask ? <p className="pf-ask" id="pf-ask" role="alertdialog">Change the start? Your {c.changed.length} changed setting{c.changed.length === 1 ? " goes" : "s go"} back to the new start's defaults. <button type="button" className="pf-btn" onClick={() => setAsk(null)}>KEEP</button> <button type="button" className="pf-btn" onClick={() => { const s = ask; fresh(s); go(`new/${s}`); }}>CHANGE</button></p> : null;
   const nameNo = touched.has("name") || touched.has("*") || server.some((r) => r.key === "name") ? (server.find((r) => r.key === "name")?.text ?? c.refusals.find((r) => r.key === "name")?.text ?? null) : null;
   const nameField = (
     <span className={`pf-num${nameNo ? " bad" : ""}${phone ? " ph" : ""}`}>
@@ -231,7 +256,7 @@ function Form({ sub, phone, facts, reloadFacts }: { sub: string; phone: boolean;
               <div className="pfp-field" key={f.key} data-row={f.key}>
                 <div className="hd"><span className="lb">{f.label}{f.mark && <Assumed />}</span><ByTag tag={f.who.tag} card={f.who.card} phone /></div>
                 <div className="vl">{valueOf(f)}</div>
-                <div className="rg">{f.range !== "fixed" && f.range !== "–" ? `${f.range} · ` : f.range === "fixed" ? "fixed · " : ""}{f.why}</div>
+                <div className="rg">{f.range !== "fixed" && f.range !== "–" ? `${f.range} · ` : f.range === "fixed" ? "fixed · " : ""}{f.key === "funding" ? null : f.why}</div>
               </div>
             ))}
           </div>
@@ -288,7 +313,7 @@ function Form({ sub, phone, facts, reloadFacts }: { sub: string; phone: boolean;
       <div className="c lb">{f.label}{f.mark && <Assumed />}</div>
       <div className="c vl">{valueOf(f)}</div>
       <div className="c rg">{f.range}</div>
-      <div className="c wy">{f.why}</div>
+      <div className="c wy">{f.key === "funding" ? null /* its why stands once, in its value (FundingLine) */ : f.why}</div>
       <div className="c by"><ByTag tag={f.who.tag} card={f.who.card} /></div>
     </div>
   );

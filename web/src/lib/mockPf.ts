@@ -9,6 +9,8 @@
 //   om_mock_pf_account = "2"       a second account, which sees none of them
 //   om_mock_pf_refuse = "1"        every write is refused by the stand-in server ("stand-in failure");
 //                      "offline"   … fails as without a connection; "signedout" … as with an expired sign-in
+//   om_mock_pf_delay = "400"       every write is answered after that many milliseconds (a slow connection)
+//   om_mock_pf_off = "1"           the stand-in server's paper switch is off: every route answers "not available yet"
 // The page's clock (om_mock_now, lib/mockclock.ts) is this store's clock: 2026-12-15T02:00:00Z opens the targets' window.
 import { pfRoute, type PfAnswer } from "./pf/route.ts";
 import { emptyState, memStore, type MemState } from "./pf/memstore.ts";
@@ -97,8 +99,9 @@ function prepared(): Promise<void> {
 
 export async function mockPf(action: string, method: string, query: Record<string, string>, body: Record<string, unknown>): Promise<PfAnswer> {
   await prepared();
-  const refuse = pref("om_mock_pf_refuse");
+  const refuse = pref("om_mock_pf_refuse"), delay = Number(pref("om_mock_pf_delay")) || 0;
+  if (method === "POST" && delay > 0) await new Promise((r) => setTimeout(r, Math.min(delay, 10_000)));
   if (method === "POST" && refuse) return refuse === "offline" ? { status: 0, body: { error: "No connection to the Monitor's server" } } : refuse === "signedout" ? { status: 401, body: { error: "Signed out" } } : { status: 500, body: { error: "stand-in failure" } };
   const store: PfStore = memStore({ load, save, now: () => new Date(), newId });
-  return pfRoute({ on: true, store, now: () => new Date(), facts }, action, account(), method, (k) => query[k] ?? null, body);
+  return pfRoute({ on: pref("om_mock_pf_off") !== "1", store, now: () => new Date(), facts }, action, account(), method, (k) => query[k] ?? null, body);
 }

@@ -18,7 +18,7 @@
 //   - An official yield is published once a day and has no session: nothing is said of it. Crypto never closes.
 import { calendarState, EARLY_CLOSES, HOLIDAY_SOURCES, holidaysNow, marketOf, marketStatus, nextOpen, openSince, stockMarket, type HolidayMap, type Market, type MarketId, type NextOpen } from "./sessions";
 import { fmtClock, fmtDate, fmtDayMon, fmtDayTime, fmtStamp, fmtWhen, isOfficialRow, TZ_ABBR } from "./time";
-import { delayed } from "./labels";
+import { delayed, PERSONAL_USE_PUBLISHERS } from "./labels";
 import { shortName } from "./short";
 
 /** What the session table says of a market now: shut, in its timetable's hours, or not known to it (no such market in
@@ -64,15 +64,18 @@ export function hoursText(m: Market): string {
   if (m.id === "CME") return "Sunday 18:00 to Friday 17:00 ET, with a break from 17:00 to 18:00 each day";
   return `${m.sessions.map(([a, b]) => `${hhmm(a)}–${hhmm(b)}`).join(", ")} ${zone(m)}`;
 }
+/** A publisher's calendar by name, with "(personal use)" right after a name the owner's P4 covers (JPX's: LV-4 of
+ *  round 3b, the owner's answer of 21 Nov 2026 on JPX's holiday calendar). */
+const calName = (publisher: string): string => `${publisher}'s calendar${PERSONAL_USE_PUBLISHERS.has(publisher) ? " (personal use)" : ""}`;
 /** The calendar a holiday is from, by its publisher's name. */
-const calendarOf = (m: Market): string => (HOLIDAY_SOURCES[m.id] ? `${HOLIDAY_SOURCES[m.id]!.publisher}'s calendar` : "the Monitor's calendar");
+const calendarOf = (m: Market): string => (HOLIDAY_SOURCES[m.id] ? calName(HOLIDAY_SOURCES[m.id]!.publisher) : "the Monitor's calendar");
 /** Whose calendar stands behind a time, or why it is only the scheduled one (`then`: what a holiday would mean). */
 function calendarWords(m: Market, firm: boolean, then: string, cal: Cal): string {
   const src = HOLIDAY_SOURCES[m.id];
-  if (firm && src) return `Holidays${EARLY_CLOSES[m.id] ? " and early closes" : ""}: ${src.publisher}'s calendar.`;
+  if (firm && src) return `Holidays${EARLY_CLOSES[m.id] ? " and early closes" : ""}: ${calName(src.publisher)}.`;
   if (!src) return `The Monitor does not hold this market's holidays: on one ${then}.`;
-  if (cal.state !== "ok") return `The holiday calendar (${src.publisher}'s) could not be loaded: on a holiday ${then}.`;
-  return `The Monitor holds ${src.publisher}'s calendar to ${fmtDate(src.through)}: on a holiday after it ${then}.`;
+  if (cal.state !== "ok") return `${calName(src.publisher)} could not be loaded: on a holiday ${then}.`.replace(/^./, (c) => c.toUpperCase());
+  return `The Monitor holds ${calName(src.publisher)} to ${fmtDate(src.through)}: on a holiday after it ${then}.`;
 }
 /** The time as every line here writes it: "22:30 SGT" today in Singapore, "23 Nov 22:30 SGT" on another day. */
 const when = (at: Date, now: Date): string => `${fmtWhen(at, now)} SGT`;

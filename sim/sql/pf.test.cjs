@@ -258,7 +258,7 @@ const rpcOf = (db) => async (fn, args) => {
     console.log("\n[the targets' window, and what a January reset does to a pending pair]");
     const set = (acct, id, x, vol, day) => refused(db, "select pf_targets_set($1, $2, $3, $4, $5::date)", [acct, id, x, vol, day]);
     const fromStart = (await one("select id from pf_portfolios where name = 'Global, yen'")).id;
-    ck(`outside the window: "${await set(Y, yid, 6, 5.5, "2026-11-30")}"; under "since the start": "${await set(X, fromStart, 6, 5.5, "2026-12-15")}"`, (await set(Y, yid, 6, 5.5, "2026-11-30")) === words.WINDOW_CLOSED && (await set(Y, yid, 6, 5.5, "2026-02-01")) === words.WINDOW_CLOSED && (await set(X, fromStart, 6, 5.5, "2026-12-15")) === words.FIXED_TARGETS);
+    ck(`outside the window: "${await set(Y, yid, 6, 5.5, "2026-11-30")}"; under "since the start": "${await set(X, fromStart, 6, 5.5, "2026-12-15")}"`, (await set(Y, yid, 6, 5.5, "2026-11-30")) === words.STORE_WINDOW_CLOSED && (await set(Y, yid, 6, 5.5, "2026-02-01")) === words.STORE_WINDOW_CLOSED && (await set(X, fromStart, 6, 5.5, "2026-12-15")) === words.FIXED_TARGETS);
     ck("inside it (1 Dec to the January reset) a pair is kept, and may be replaced until the reset", (await set(Y, yid, 6, 5.5, "2026-12-01")) === null && (await set(Y, yid, 7, 6, "2027-01-04")) === null && (await count("pf_settings", "portfolio_id = $1 and for_year = 2027", [yid])) === 4);
     const read = async (acct, id, day) => view.targetsNow((await one("select pf_get($1, $2) as r", [acct, id])).r, day);
     let t = await read(Y, yid, "2027-01-04");
@@ -266,7 +266,7 @@ const rpcOf = (db) => async (fn, args) => {
     // the daily NAV (P-3) will record the January line; here the row is written as that job will write it
     await db.query("insert into pf_ladder_events (portfolio_id, n, account, d, kind) values ($1, 1, $2, '2027-01-04', 'year reset')", [yid, Y]);
     t = await read(Y, yid, "2027-01-05");
-    ck(`after a reset that is made the pair is in force (cash + ${t.x}% · ${t.vol}%, since ${t.since}), nothing is pending, and an entry on 5 Jan is refused: "${await set(Y, yid, 8, 6, "2027-01-05")}"`, t.x === 7 && t.vol === 6 && t.since === "2027-01-04" && t.pending === null && !t.window.open && (await set(Y, yid, 8, 6, "2027-01-05")) === words.WINDOW_CLOSED);
+    ck(`after a reset that is made the pair is in force (cash + ${t.x}% · ${t.vol}%, since ${t.since}), nothing is pending, and an entry on 5 Jan is refused: "${await set(Y, yid, 8, 6, "2027-01-05")}"`, t.x === 7 && t.vol === 6 && t.since === "2027-01-04" && t.pending === null && !t.window.open && (await set(Y, yid, 8, 6, "2027-01-05")) === words.STORE_WINDOW_CLOSED);
     const guarded = (await one("select id from pf_portfolios where name = 'Four'")).id;
     await set(X, guarded, 6, 5.5, "2026-12-15");
     await db.query("insert into pf_ladder_events (portfolio_id, n, account, d, kind) values ($1, 1, $2, '2027-01-04', 'year reset withheld')", [guarded, X]);
@@ -373,7 +373,7 @@ const rpcOf = (db) => async (fn, args) => {
 
     console.log("\n[the targets' window in a book's first January (EN-10)]");
     const jan = await mk(X, "req-x-000002", "Made in January", "2027-01-12");
-    ck(`a book started on 12 Jan 2027 has no January reset that year: an entry on 15 Jan is refused ("${await rf("select pf_targets_set($1, $2, 6, 5, '2027-01-15')", [X, jan])}"); in December the window opens for 2028`, (await rf("select pf_targets_set($1, $2, 6, 5, '2027-01-15')", [X, jan])) === words.WINDOW_CLOSED && (await q1("select pf_targets_set($1, $2, 6, 5, '2027-12-01') as r", [X, jan])).r.forYear === 2028);
+    ck(`a book started on 12 Jan 2027 has no January reset that year: an entry on 15 Jan is refused ("${await rf("select pf_targets_set($1, $2, 6, 5, '2027-01-15')", [X, jan])}"); in December the window opens for 2028`, (await rf("select pf_targets_set($1, $2, 6, 5, '2027-01-15')", [X, jan])) === words.STORE_WINDOW_CLOSED && (await q1("select pf_targets_set($1, $2, 6, 5, '2027-12-01') as r", [X, jan])).r.forYear === 2028);
     await d.close(); }
 
   await db.close();

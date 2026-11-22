@@ -67,6 +67,8 @@ const SUITES = [
   { name: "phone-portfolio", needs: ["mock"] },
   { name: "layout-guard-portfolio", needs: ["mock"] },
   { name: "portfolio-accounts", needs: ["mock", "gate"] },
+  { name: "source-lines", needs: ["mock"] },
+  { name: "portfolio-fixes", needs: ["mock"] },
 ];
 
 const args = process.argv.slice(2), serial = args.includes("--serial"), names = args.filter((a) => !a.startsWith("--"));

@@ -88,8 +88,9 @@ const state = (sym: string) => String(readings.get(sym)?.[0]?.q.marketState ?? "
 // Tokyo's midday break, 11:30 to 12:30 JST: a quote read then is not a trading quote, whatever state Yahoo names for it.
 // It was judged once, at the first reading's clock, and every later reading was counted "in-session": a run begun at
 // 11:28 JST put its last readings in the break without a word (the checks of round 3b, 21 Nov 2026: PR-14). Each
-// reading is now judged at its own time: one taken in the break is printed as such and left out of every count,
-// median and verdict.
+// reading is now judged at its own time: one taken in the break is printed as such and left out of every median,
+// range and verdict, and of the summary's "usable" count; the summary's line for A's four tests counts each test over
+// every reading, test (1) being the one a break reading fails.
 const inBreak = (sym: string, atMs: number): boolean => { if (!/\.T$/.test(sym)) return false; const h = hmIn(TK, atMs / 1000); return h >= "11:30" && h < "12:30"; };
 /** A reading taken in its market's regular session: Yahoo's state REGULAR, and for a Tokyo name not in the break. */
 const inSession = (sym: string, r: { q: J; at: number }): boolean => String(r.q.marketState) === "REGULAR" && !inBreak(sym, r.at);
@@ -179,19 +180,23 @@ if (s && four.length) {
     const sp: number[] = [], width: number[] = [], off: number[] = [], age: number[] = [], sizes: string[] = [];
     let t1 = 0, t2 = 0, t3 = 0, t4 = 0, all4 = 0;
     const distinct = new Set<string>();
+    let brk = 0;
     for (const r of rs) {
       const b = num(r.q.bid), a = num(r.q.ask), last = num(r.q.regularMarketPrice), tm = num(r.q.regularMarketTime), bp = spreadBp(r.q);
       distinct.add(`${b}/${a}`);
-      if (tm != null) age.push(r.at / 1000 - tm);
       const ok1 = inSession(sym, r), ok2 = bp != null;
+      if (inBreak(sym, r.at)) brk++;
+      // the medians and ranges take only the readings in the regular session, Tokyo's midday break left out (PX-10 of
+      // the review of fix part 1: the summary took the break's readings in, as its header and the README said it did not)
+      if (ok1 && tm != null) age.push(r.at / 1000 - tm);
       const ok3 = ok2 && last != null && (b as number) - ((a as number) - (b as number)) <= last && last <= (a as number) + ((a as number) - (b as number));
       const ok4 = ok2 && tier != null && (bp as number) <= 20 * tier.bp;
       if (ok1) t1++; if (ok2) t2++; if (ok3) t3++; if (ok4) t4++; if (ok1 && ok2 && ok3 && (tier == null || ok4)) all4++;
-      if (bp != null) { sp.push(bp); width.push((a as number) - (b as number)); if (last) off.push((((a as number) + (b as number)) / 2 / last - 1) * 1e4); sizes.push(`${r.q.bidSize ?? "–"}×${r.q.askSize ?? "–"}`); }
+      if (bp != null && ok1) { sp.push(bp); width.push((a as number) - (b as number)); if (last) off.push((((a as number) + (b as number)) / 2 / last - 1) * 1e4); sizes.push(`${r.q.bidSize ?? "–"}×${r.q.askSize ?? "–"}`); }
     }
     const worst = off.length ? off.reduce((m, x) => (Math.abs(x) > Math.abs(m) ? x : m), 0) : null;
     console.log(`  ${sym}: "${q0.shortName ?? q0.longName ?? "–"}" · ${q0.fullExchangeName ?? q0.exchange ?? "–"} · ${q0.currency ?? "–"} · state ${q0.marketState ?? "–"} · declared delay ${q0.exchangeDataDelayedBy ?? "–"} min${q0.quoteSourceName ? ` (${q0.quoteSourceName})` : ""} · last ${q0.regularMarketPrice ?? "–"} at ${iso(num(q0.regularMarketTime))}`);
-    console.log(`    usable on ${sp.length} of ${rs.length} readings; ${distinct.size} different bid/ask pairs; spread bp min ${f(sp.length ? Math.min(...sp) : null)} median ${f(median(sp))} max ${f(sp.length ? Math.max(...sp) : null)}; ask − bid median ${g(median(width))}; sizes (bid×ask) ${[...new Set(sizes)].slice(0, 4).join(", ") || "–"}; mid against last: median ${f(median(off), 1)} bp, widest ${f(worst, 1)} bp; the quote's age: median ${f(median(age) == null ? null : (median(age) as number) / 60, 1)} min (${f(age.length ? Math.min(...age) / 60 : null, 1)} to ${f(age.length ? Math.max(...age) / 60 : null, 1)})`);
+    console.log(`    usable in the regular session on ${sp.length} of ${rs.length} readings${brk ? ` (${brk} taken in Tokyo's midday break, left out of the figures on this line)` : ""}; ${distinct.size} different bid/ask pairs; spread bp min ${f(sp.length ? Math.min(...sp) : null)} median ${f(median(sp))} max ${f(sp.length ? Math.max(...sp) : null)}; ask − bid median ${g(median(width))}; sizes (bid×ask) ${[...new Set(sizes)].slice(0, 4).join(", ") || "–"}; mid against last: median ${f(median(off), 1)} bp, widest ${f(worst, 1)} bp; the quote's age: median ${f(median(age) == null ? null : (median(age) as number) / 60, 1)} min (${f(age.length ? Math.min(...age) / 60 : null, 1)} to ${f(age.length ? Math.max(...age) / 60 : null, 1)})`);
     console.log(`    A's tests pass on: (1) ${t1}, (2) ${t2}, (3) ${t3}${tier ? `, (4) ${t4}` : ""} of ${rs.length} readings; ${tier ? "all four" : "(1) to (3)"} on ${all4}${tier ? ` · tier ${tier.bp} bp (average value traded USD ${(tier.usd / 1e6).toFixed(1)}m a day, from ${tier.from})` : ""}`);
   }
 

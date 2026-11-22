@@ -8,7 +8,7 @@ import { Panel } from "../Panel";
 import { JumpPick, Section } from "../PhoneKit";
 import { Sheet } from "../Sheet";
 import { Assumed, ByTag, Chips, flash, go, href, Muted, NumInput, setLastBook, useHeaderTop } from "./shared";
-import { EquivalentLine, ReferenceLine, VolLines } from "./Blocks";
+import { EquivalentLine, FundingLine, ReferenceLine, VolLines } from "./Blocks";
 import { byCard } from "./Book";
 import { failureWords, pfDelete, pfRename, pfSettingSet, pfTargetsSet, type BookAnswer } from "../../lib/pf";
 import { checkChange, checkTargets, cleanName, inputText, nameRefusal, reasonRefusal, showValue, usdLine, REASON_MAX } from "../../lib/pf/form.ts";
@@ -16,8 +16,7 @@ import { fmtFull, fromMinor } from "../../lib/pf/money.ts";
 import { fieldOf, STARTS } from "../../lib/pf/presets.ts";
 import { NOTE_GIST } from "../../lib/pf/statement.ts";
 import { BASE_LINE, BASE_NAME, cumulative, drawdownLine, restoreLine } from "../../lib/pf/targets.ts";
-import { dmy, stampSgt, wdmy } from "../../lib/pf/calendar.ts";
-import { WINDOW_WORDS } from "../../lib/pf/calendar.ts";
+import { bookDayFrom, DAY_ENDS, stampSgt, timeSgt, wdmy, windowWords } from "../../lib/pf/calendar.ts";
 import { changeBasis, historyOf, rowsOf, settingsNow, shortValue, targetsNow, targetsWords, valuesAhead, type HistoryRow, type NowRow } from "../../lib/pf/view.ts";
 import type { After } from "../../lib/pf/types.ts";
 import { ONLY_YOU, TARGET_RETURN, TARGET_VOLATILITY } from "../../lib/labels";
@@ -44,14 +43,14 @@ function ChangeForm({ a, row, phone, onDone, onCancel, reread }: { a: BookAnswer
   };
   const body = (
     <div className={`pf-change${phone ? " ph" : ""}`} id="pf-change" data-key={f.key}>
-      <div className="ln"><span className="k">In force now</span><span>{showValue(f, row.value)} · {row.by} · since {dmy(row.since)}</span></div>
+      <div className="ln"><span className="k">In force now</span><span>{showValue(f, row.value)} · {row.by} · since {wdmy(row.since)}</span></div>
       <div className="ln"><label className="k" htmlFor="pf-change-value">New value</label>
         <span className="v">{f.choices ? <Chips field={f} value={val} onChange={(v) => { setVal(v); setSeen((s) => ({ ...s, v: true })); }} phone={phone} /> : <NumInput id="pf-change-value" field={f} value={val} onChange={(v) => { setVal(v); setSeen((s) => ({ ...s, v: true })); }} refusal={seen.v ? vNo : null} phone={phone} autoFocus={!phone} />}<span className="pf-unit2">{f.range}</span>{f.choices && seen.v && vNo && <span className="pf-no" role="alert">{vNo}</span>}</span></div>
       <div className="ln"><label className="k" htmlFor="pf-change-reason">Reason</label>
         <span className="v"><textarea id="pf-change-reason" rows={phone ? 3 : 2} value={reason} placeholder="why this change" aria-invalid={seen.r && rNo ? true : undefined} aria-describedby="pf-change-gist" onChange={(e) => setReason(e.target.value)} onBlur={() => setSeen((s) => ({ ...s, r: true }))} />
           {(seen.r || over) && rNo && <span className="pf-no" id="pf-change-reason-no" role="alert">{rNo}</span>}
           <span className="pf-mut" id="pf-change-gist">kept in the history · {ONLY_YOU} see it · {NOTE_GIST.replace("Notes are for your own reasoning. ", "")}</span></span></div>
-      <div className="ln when" id="pf-change-when">In force from the next session: {wdmy(a.nextSession)}</div>
+      <div className="ln when" id="pf-change-when">In force from {bookDayFrom(a.nextSession)}</div>
       {msg && <p className="pf-msg" role="status">{msg}</p>}
       <div className="pf-btns"><button type="button" className={`pf-btn${phone ? " big" : ""}`} id="pf-change-cancel" onClick={onCancel}>{phone ? "Cancel" : "CANCEL"}</button><button type="button" className={`pf-go${phone ? " big" : ""}`} id="pf-change-save" disabled={!can} onClick={save}>{busy ? "Saving…" : phone ? "Save change" : "SAVE CHANGE"}</button></div>
     </div>
@@ -65,14 +64,14 @@ function History({ rows, phone }: { rows: HistoryRow[]; phone: boolean }) {
   const more = rows.length > shown && <button type="button" className={phone ? "mp-more" : "pf-link more"} data-act="more" onClick={() => setShown((s) => s + 30)}>{phone ? "Show 30 more" : "SHOW 30 MORE"}</button>;
   if (phone) return (
     <div className="pfp-hist" data-view="history">
-      {rows.slice(0, shown).map((h) => <div className="h" key={h.id} data-key={h.key} data-origin={h.origin}><span className="a">{h.label} · {h.from} → {h.to}</span><span className="b">in force from {h.inForceFrom ? dmy(h.inForceFrom) : "–"} · set {stampSgt(h.at)}{h.state ? ` · ${h.state}` : ""}</span><span className="c">{h.reason ?? h.by}</span></div>)}
+      {rows.slice(0, shown).map((h) => <div className="h" key={h.id} data-key={h.key} data-origin={h.origin}><span className="a">{h.label} · {h.from} → {h.to}</span><span className="b">in force from {h.inForceFrom ? wdmy(h.inForceFrom) : "–"} · set {timeSgt(h.at)} SGT{h.state ? ` · ${h.state}` : ""}</span><span className="c">{h.reason ?? h.by}</span></div>)}
       {more}
     </div>
   );
   return (
     <div data-view="history">
-      <table className="secT pf-hist"><thead><tr><th className="l">When</th><th className="l">Setting</th><th>From</th><th>To</th><th className="l">In force from</th><th className="l">Reason</th><th className="l">By</th></tr></thead>
-        <tbody>{rows.slice(0, shown).map((h) => <tr key={h.id} data-key={h.key} data-origin={h.origin}><td className="l mut nb">{stampSgt(h.at)}</td><td className="l wrap">{h.label}</td><td className="num">{h.from}</td><td className="num">{h.to}</td><td className="l nb">{h.inForceFrom ? dmy(h.inForceFrom) : "–"}{h.state && <span className="st"> · {h.state}</span>}</td><td className="l wrap rs">{h.reason ?? "–"}</td><td className="l wrap mut">{h.by}</td></tr>)}</tbody></table>
+      <table className="secT pf-hist"><thead><tr><th className="l">When (SGT)</th><th className="l">Setting</th><th>From</th><th>To</th><th className="l">In force from</th><th className="l">Reason</th><th className="l">By</th></tr></thead>
+        <tbody>{rows.slice(0, shown).map((h) => <tr key={h.id} data-key={h.key} data-origin={h.origin}><td className="l mut nb">{stampSgt(h.at).replace(/ SGT$/, "")}</td><td className="l wrap">{h.label}</td><td className="num">{h.from}</td><td className="num">{h.to}</td><td className="l nb">{h.inForceFrom ? wdmy(h.inForceFrom) : "–"}{h.state && <span className="st"> · {h.state}</span>}</td><td className="l wrap rs">{h.reason ?? "–"}</td><td className="l wrap mut">{h.by}</td></tr>)}</tbody></table>
       {more}
     </div>
   );
@@ -88,7 +87,7 @@ function SettingList({ a, after, phone, onChanged }: { a: BookAnswer; after: Aft
   const chips = <div className="chips pf-tabs" role="tablist"><button type="button" role="tab" aria-selected={view === "current"} className={`chip-sm${view === "current" ? " on" : ""}`} data-tab="current" onClick={() => setView("current")}>CURRENT</button><button type="button" role="tab" aria-selected={view === "history"} className={`chip-sm${view === "history" ? " on" : ""}`} data-tab="history" onClick={() => setView("history")}>HISTORY</button></div>;
   const can = (r: NowRow | undefined): r is NowRow => !!r && (!!r.field.num || (!!r.field.choices && r.field.choices.options.filter((o) => !o.off).length > 1));
   const valueCell = (f: (typeof lines)[number], r: NowRow | undefined): ReactNode => (
-    <>{r ? showValue(f, r.value) : f.text}{f.key === "funding" && <span className="pf-line">the other way comes with currencies</span>}{r?.pending && <span className="pf-pending" data-pending={f.key}>{shortValue(f, r.pending.value)} from {wdmy(r.pending.from)} · pending</span>}</>
+    <>{f.key === "funding" ? <FundingLine field={f} /> : r ? showValue(f, r.value) : f.text}{r?.pending && <span className="pf-pending" data-pending={f.key}>{shortValue(f, r.pending.value)} from {bookDayFrom(r.pending.from)} · pending</span>}</>
   );
   const done = () => { setOpen(null); onChanged(); };
   if (view === "history") return <>{chips}<History rows={hist} phone={phone} /></>;
@@ -99,7 +98,7 @@ function SettingList({ a, after, phone, onChanged }: { a: BookAnswer; after: Aft
         <div key={g ?? "all"} className="pfp-setlist">
           {g && <div className="mp-cap">{g}</div>}
           {lines.filter((f) => !g || f.group === g).map((f) => { const r = rows.find((x) => x.key === f.key), tap = can(r);
-            const inner = <><span className="nm"><span className="n">{f.label}{f.mark && <Assumed />}</span><span className="s">{f.range === "fixed" ? "fixed" : f.range} · {r ? r.by : f.who.tag} · since {dmy(r?.since ?? a.book.startedOn)}</span></span><span className="v">{valueCell(f, r)}</span></>;
+            const inner = <><span className="nm"><span className="n">{f.label}{f.mark && <Assumed />}</span><span className="s">{f.range === "fixed" ? "fixed" : f.range} · {r ? r.by : f.who.tag} · since {wdmy(r?.since ?? a.book.startedOn)}</span></span><span className="v">{valueCell(f, r)}</span></>;
             // a value in words (a fixed line of text) takes the row's whole width under its name: beside it, it would be a column of a few words
             const long = !f.num && String(r ? showValue(f, r.value) : f.text ?? "").length > 36;
             return tap ? <button type="button" className="pfp-set tap" key={f.key} data-row={f.key} onClick={() => setOpen(f.key)}>{inner}<span className="go" aria-hidden="true">&#8250;</span></button> : <div className={`pfp-set${long ? " long" : ""}`} key={f.key} data-row={f.key}>{inner}</div>; })}
@@ -117,7 +116,7 @@ function SettingList({ a, after, phone, onChanged }: { a: BookAnswer; after: Aft
             {g && <tr className="cls"><td colSpan={7}>{g}</td></tr>}
             {lines.filter((f) => !g || f.group === g).map((f) => { const r = rows.find((x) => x.key === f.key);
               return [
-                <tr key={f.key} data-row={f.key}><td className="l wrap">{f.label}{f.mark && <Assumed />}</td><td className="l wrap vl">{valueCell(f, r)}</td><td className="l mut nb">{f.range}</td><td className="l wrap mut">{f.why}</td><td className="l"><ByTag tag={r ? r.by : f.who.tag} card={r ? byCard(r) : f.who.card} /></td><td className="l mut nb">{dmy(r?.since ?? a.book.startedOn)}</td>
+                <tr key={f.key} data-row={f.key}><td className="l wrap">{f.label}{f.mark && <Assumed />}</td><td className="l wrap vl">{valueCell(f, r)}</td><td className="l mut nb">{f.range}</td><td className="l wrap mut">{f.key === "funding" ? null /* said once, in its value */ : f.why}</td><td className="l"><ByTag tag={r ? r.by : f.who.tag} card={r ? byCard(r) : f.who.card} /></td><td className="l mut nb">{wdmy(r?.since ?? a.book.startedOn)}</td>
                   <td>{can(r) && <button type="button" className="pf-link" data-act="change" aria-expanded={open === f.key} onClick={() => setOpen(open === f.key ? null : f.key)}>CHANGE</button>}</td></tr>,
                 open === f.key && can(r) ? <tr key={`${f.key}-change`} className="pf-changerow"><td colSpan={7}><ChangeForm a={a} row={r} phone={false} onDone={done} onCancel={() => setOpen(null)} reread={onChanged} /></td></tr> : null,
               ]; })}
@@ -138,7 +137,7 @@ function Targets({ a, phone, onChanged }: { a: BookAnswer; phone: boolean; onCha
   const start = () => { setX(inputText(fx, t.pending?.x ?? t.x)); setVol(inputText(fv, t.pending?.vol ?? t.vol)); setMsg(null); setForm(true); };
   const save = () => { if (!c?.ok || busy) return; setBusy(true); setMsg(null);
     pfTargetsSet(b.id, x, vol).then(() => { setBusy(false); setForm(false); onChanged(); }).catch((e: unknown) => { setBusy(false); setMsg(failureWords(e, { offline: "Offline: a change needs the server.", signedOut: "Signed out: sign in again. Nothing was changed.", refused: (w) => `Not saved: ${w}. Nothing changed.` })); }); };
-  const state = t.window.fixed ? "fixed" : WINDOW_WORDS;
+  const state = t.window.fixed ? "fixed" : windowWords(t.window);
   const band = now.filter((r) => r.field.section === "targets" && r.field.after === "limit"), fixedRows = STARTS[b.start].fields.filter((f) => f.section === "targets" && !f.num && !f.choices && f.key !== "reference");
   const line = (label: string, value: ReactNode, tail: ReactNode, key: string) => <div className="pf-kv" key={key} data-row={key}><span className="k">{label}</span><span className="v">{value}</span><span className="t">{tail}</span></div>;
   return (
@@ -146,7 +145,7 @@ function Targets({ a, phone, onChanged }: { a: BookAnswer; phone: boolean; onCha
       {line(TARGET_RETURN, <>cash + {t.x.toFixed(1)}% a year<EquivalentLine x={t.x} rate={a.rates[b.base]} base={b.base} /></>, <span className="pf-fixed" data-state={t.window.fixed ? "fixed" : "window"}>{state}</span>, "target_x")}
       {line(TARGET_VOLATILITY, <>{t.vol.toFixed(1)}% of capital a year</>, <span className="pf-fixed">{state}</span>, "target_vol")}
       <div className="pf-window" id="pf-window">
-        {t.since && <Muted>in force since {dmy(t.since)}</Muted>}
+        {t.since && <Muted>in force since {wdmy(t.since)}</Muted>}
         {t.lapsed != null && !t.pending && <Muted id="pf-lapsed">targets not re-set for {t.lapsed}: no year reset</Muted>}
         {t.pending && <Muted id="pf-pending-targets">pending for {t.pending.forYear}: {targetsWords(t.pending.x, t.pending.vol)}</Muted>}
         {!t.window.fixed && !t.window.open && t.window.next && <Muted id="pf-nextwindow">{t.window.next}</Muted>}
@@ -162,7 +161,7 @@ function Targets({ a, phone, onChanged }: { a: BookAnswer; phone: boolean; onCha
       </div>
       {band.map((r) => (
         <div key={r.key}>
-          {line(r.field.label, <>{showValue(r.field, r.value)}{r.pending && <span className="pf-pending" data-pending={r.key}>{shortValue(r.field, r.pending.value)} from {wdmy(r.pending.from)} · pending</span>}</>, <><span className="pf-mut">{r.field.range} · {r.by} · since {dmy(r.since)}</span> <button type="button" className="pf-link" data-act="change" aria-expanded={open === r.key} onClick={() => setOpen(open === r.key ? null : r.key)}>CHANGE</button></>, r.key)}
+          {line(r.field.label, <>{showValue(r.field, r.value)}{r.pending && <span className="pf-pending" data-pending={r.key}>{shortValue(r.field, r.pending.value)} from {bookDayFrom(r.pending.from)} · pending</span>}</>, <><span className="pf-mut">{r.field.range} · {r.by} · since {wdmy(r.since)}</span> <button type="button" className="pf-link" data-act="change" aria-expanded={open === r.key} onClick={() => setOpen(open === r.key ? null : r.key)}>CHANGE</button></>, r.key)}
           {open === r.key && <ChangeForm a={a} row={r} phone={phone} onDone={() => { setOpen(null); onChanged(); }} onCancel={() => setOpen(null)} reread={onChanged} />}
         </div>
       ))}
@@ -208,7 +207,8 @@ function Delete({ a, phone, last }: { a: BookAnswer; phone: boolean; last: boole
   );
 }
 
-export function Settings({ a, section, others, phone, onChanged }: { a: BookAnswer; section: string; others: string[]; phone: boolean; onChanged: () => void }) {
+export function Settings({ a, section, others, phone, onChanged, csvBook = "book" }: { a: BookAnswer; section: string; others: string[]; phone: boolean; onChanged: () => void; csvBook?: string }) {
+  const tSince = !!targetsNow(a.book, a.nyDate).since;
   const b = a.book, def = STARTS[b.start], L = b.ladder, cum = cumulative(L), usd = b.fx ? usdLine(fromMinor(b.base, b.startingNav), b.fx).line : null;
   const fixed = (label: string, value: ReactNode, key: string) => <div className="pf-kv" key={key} data-row={key}><span className="k">{label}</span><span className="v">{value}</span><span className="t"><span className="pf-fixed">fixed</span></span></div>;
   // an address that names a section opens there (#portfolio/<id>/settings/limits); a chip goes to its panel's head.
@@ -235,7 +235,8 @@ export function Settings({ a, section, others, phone, onChanged }: { a: BookAnsw
         {b.blend != null && fixed("The blend's shares", `${b.blend}% MSCI ACWI / ${100 - b.blend}% Global Aggregate`, "blend")}
         {fixed("House margin multiple", `× ${b.houseMultiple.toFixed(1)}`, "house_multiple")}
       </div>) },
-    targets: { aux: "neither target is a limit", body: <Targets a={a} phone={phone} onChanged={onChanged} /> },
+    // the day's words only once the panel shows a book day ("in force since", P-3): B.0.1, revision 2
+    targets: { aux: tSince ? `neither target is a limit · ${DAY_ENDS}` : "neither target is a limit", body: <Targets a={a} phone={phone} onChanged={onChanged} /> },
     ladder: { aux: <span className="pf-fixed" id="pf-ladder-fixed">fixed</span>, body: (
       <div className="pf-kvs" id="pf-ladder">
         <div className="pf-kv" data-row="ladder_base"><span className="k">Base</span><span className="v">{BASE_NAME[b.ladderBase]}<span className="pf-line">{BASE_LINE[b.ladderBase]}</span></span><span className="t" /></div>
@@ -247,22 +248,22 @@ export function Settings({ a, section, others, phone, onChanged }: { a: BookAnsw
         <div className="pf-kv" data-row="drawdown"><span className="k">Drawdown</span><span className="v">{drawdownLine(b.ladderBase)}</span><span className="t" /></div>
         <div className="pf-kv" data-row="warning"><span className="k">Warning</span><span className="v">{fieldOf(b.start, "warning")?.text}</span><span className="t" /></div>
       </div>) },
-    limits: { aux: "each changes with a reason, from the next session", body: <SettingList a={a} after="limit" phone={phone} onChanged={onChanged} /> },
-    assumptions: { aux: <>each marked <Assumed /> · changes with a reason, from the next session</>, body: <SettingList a={a} after="assumption" phone={phone} onChanged={onChanged} /> },
+    limits: { aux: `each changes with a reason, from the next session · ${DAY_ENDS}`, body: <SettingList a={a} after="limit" phone={phone} onChanged={onChanged} /> },
+    assumptions: { aux: <>each marked <Assumed /> · changes with a reason, from the next session · {DAY_ENDS}</>, body: <SettingList a={a} after="assumption" phone={phone} onChanged={onChanged} /> },
     statement: { body: <div id="pf-agreed"><p className="pf-agreedline">{a.consent.agreedAt ? `Agreed ${stampSgt(a.consent.agreedAt)} · version ${a.consent.version}` : "Not agreed yet"}</p><p className="pf-statement small">{a.consent.text}</p></div> },
     delete: { body: <Delete a={a} phone={phone} last={others.length === 0} /> },
   };
   if (phone) return (
     <div className="pfp-settings" id="pf-settings" ref={root}>
       <div className="mp-picks top pfp-pad"><JumpPick dep={`${b.id}|settings`} /></div>
-      {SETTINGS_SECTIONS.map(([k, title]) => <div key={k} data-sec={k}><Section title={title} aux={k === "ladder" ? "fixed" : undefined} card={false}><div className="mp-card pad">{parts[k].body}</div></Section></div>)}
+      {SETTINGS_SECTIONS.map(([k, title]) => <div key={k} data-sec={k}><Section title={title} aux={k === "ladder" ? "fixed" : (k === "targets" && tSince) || k === "limits" || k === "assumptions" ? <small className="dayend">{DAY_ENDS}</small> : undefined} card={false}><div className="mp-card pad">{parts[k].body}</div></Section></div>)}
     </div>
   );
   return (
     <div id="pf-settings" ref={root}>
       <div className="chips pf-goto" id="pf-goto"><span className="lbl">GO TO</span>{SETTINGS_SECTIONS.map(([k, title]) => <a key={k} className={`chip-sm${section === k ? " on" : ""}`} href={href(`${b.id}/settings/${k}`)}>{title.toUpperCase()}</a>)}</div>
       <div className="pf-grid">
-        {SETTINGS_SECTIONS.map(([k, title]) => <div key={k} className={k === "ladder" || k === "limits" || k === "assumptions" ? "w12" : "w6"} data-sec={k}><Panel no={numbered(k)} title={title.toUpperCase()} k={`pfs-${k}`} aux={parts[k].aux} csv={k === "limits" || k === "assumptions"}>{parts[k].body}</Panel></div>)}
+        {SETTINGS_SECTIONS.map(([k, title]) => <div key={k} className={k === "ladder" || k === "limits" || k === "assumptions" ? "w12" : "w6"} data-sec={k}><Panel no={numbered(k)} title={title.toUpperCase()} k={`pfs-${k}`} aux={parts[k].aux} csv={k === "limits" || k === "assumptions"} csvName={() => `paper-${csvBook}-${k}${root.current?.querySelector(`[data-sec="${k}"] [data-view="history"]`) ? "-history" : ""}`}>{parts[k].body}</Panel></div>)}
       </div>
     </div>
   );

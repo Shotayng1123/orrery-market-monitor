@@ -28,6 +28,9 @@ const targetsOf = (r: BookRow): string => { const t = rowTargets(r, nyDate(new D
 
 const INTRO = "Run a paper portfolio from today. Orders fill only on the market's own prints after they are placed, with spreads, fees and a 20% cap on volume. No real orders, no broker, no money. Only your account sees it.";
 const lower = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1);
+// a phone's list row names the SGT day the book was made, "created 1 Oct 2026", as the computer's CREATED and the
+// book's own head ("since" is a book day only: the designer's B.0.1, revision 2; until 22 Nov 2026 the row read "since"
+// the book's first New York day, the day before from 00:00 to 06:00 SGT)
 const createdDay = (r: BookRow): string => dmy(sgDate(new Date(r.createdAt)));
 const readError = (list: Read<ListAnswer>): ReactNode => (list.error && list.keptAt == null
   ? <p className="pf-err" id="pf-read-error">Your paper portfolios could not be read: {serverWords(list.error)}. Nothing in them has changed. <button type="button" className="pf-link" onClick={list.reload}>RETRY</button></p> : null);
@@ -87,7 +90,7 @@ function List({ list, phone }: { list: Read<ListAnswer>; phone: boolean }) {
         <div id="pf-list">
           {rows.map((r) => (
             <a className="pfp-book-row" key={r.id} href={href(r.id)} data-book={r.id}>
-              <span className="tx"><span className="n">{r.name}</span><span className="l">{STARTS[r.start].short} · {r.base} · {fmtFull(fromMinor(r.base, r.startingNav))}</span><span className="l">{targetsOf(r)} · since {dmy(r.startedOn)}</span></span>
+              <span className="tx"><span className="n">{r.name}</span><span className="l">{STARTS[r.start].short} · {r.base} · {fmtFull(fromMinor(r.base, r.startingNav))}</span><span className="l">{targetsOf(r)} · created {createdDay(r)}</span></span>
               <span className="go" aria-hidden="true">&#8250;</span>
             </a>
           ))}

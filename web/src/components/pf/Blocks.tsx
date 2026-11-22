@@ -1,9 +1,9 @@
 // Pieces of the paper portfolio's form that its book's pages show again (P-1): what the targets mean, the ladder's
 // three bases, what a start can and cannot trade, the Reference's line. The words are the engine's (lib/pf/).
 import { useState } from "react";
-import { STARTS, notBuiltLines, referenceLabel } from "../../lib/pf/presets.ts";
+import { STARTS, notBuiltLines, referenceLabel, canLines } from "../../lib/pf/presets.ts";
 import { BASE_LINE, BASE_NAME, BASE_RULE, equivalentLine, ladderInVols, SCALE_LINE, SCALE_TIP, SHARPE_TIP, sharpeLine, varStep, varTie } from "../../lib/pf/targets.ts";
-import type { Base, CashRate, LadderBase, StartId } from "../../lib/pf/types.ts";
+import type { Base, CashRate, LadderBase, StartId, Field } from "../../lib/pf/types.ts";
 import { TARGET_VOLATILITY } from "../../lib/labels";
 
 /** Under the target return: its absolute equivalent at the latest stored rate, with the rate's date and source. */
@@ -46,19 +46,27 @@ export function ReferenceLine({ start, base, blend, short = false }: { start: St
 
 /** What a start can trade, what is not built yet, and what it cannot trade here, with the reason in each line.
  *  Text only: nothing in the three lists takes a click, a tap or the focus. */
-export function TradeLists({ start }: { start: StartId }) {
-  const t = STARTS[start].trade;
+export function TradeLists({ start, values }: { start: StartId; values?: Partial<Record<string, number | string>> }) {
+  const t = STARTS[start].trade, can = canLines(start, values);
   const lead = (line: string) => { const i = line.indexOf(":"); return i > 0 ? <><b>{line.slice(0, i)}</b>{line.slice(i)}</> : line; };
   return (
     <div className="pf-trade" id="pf-trade">
       <div className="minih">Can trade</div>
-      <ul className="can" data-list="can">{t.can.map((x) => <li key={x}>{x}</li>)}</ul>
+      <ul className="can" data-list="can">{can.map((x) => <li key={x}>{x}</li>)}</ul>
       <div className="minih">Not built yet</div>
       <ul className="not" data-list="notbuilt">{notBuiltLines(start).map((x) => <li key={x}>{x}</li>)}</ul>
       <div className="minih">Cannot trade here, and why</div>
       <ul className="not" data-list="cannot">{t.cannot.map((x, i) => <li key={x}>{i < (t.bold ?? 0) ? <b>{x}</b> : lead(x)}</li>)}</ul>
     </div>
   );
+}
+
+/** The funding of a dollar book's Tokyo names, in one wording for the form and for Settings (the designer's B.2, lead 5):
+ *  the one way built, its line once, and the other way muted, with why it waits; no control until currencies are
+ *  built. */
+export function FundingLine({ field }: { field: Field }) {
+  const o = field.choices?.options ?? [];
+  return <span className="pf-fund" data-row-text="funding"><span className="on">{o[0]?.label}</span><span className="pf-line">{field.why}</span>{o[1] && <span className="pf-line pf-mut">{o[1].label}: {o[1].off}</span>}</span>;
 }
 
 /** The ladder's base: three radio rows, the first preselected and marked "default", each with one line on what it does

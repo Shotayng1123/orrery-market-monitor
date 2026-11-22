@@ -124,6 +124,16 @@ jobs:
           echo "$verdict"
           case "$verdict" in OK*) ;; *) exit 1 ;; esac
 
+      # the rules that live in the database (sim/sql, on PGlite: who may reach the paper portfolio's tables and how its
+      # functions answer, the sign-up's, the σ rules): nothing is applied to the database unless they pass. They ran in
+      # logic-tests alone, beside this job and not in front of it (the second review of P-1, PC-11, 22 Nov 2026).
+      # With none of the job's secrets in its environment, and no package's install script run (the job holds every
+      # secret of the server: a check needs none of them).
+      - name: Database checks
+        if: steps.keys.outputs.ready == 'true'
+        working-directory: sim/sql
+        run: env -i PATH="$PATH" HOME="$HOME" bash -c 'npm ci --ignore-scripts && npm test'
+
       # --yes: version 3 of the CLI makes a change to a hosted project (database, secrets, functions) only when it is
       # said in so many words; nobody is here to be asked. The first deploy (18 Nov 2026) applied the database
       # changes and then stopped at the next step, which had no --yes.

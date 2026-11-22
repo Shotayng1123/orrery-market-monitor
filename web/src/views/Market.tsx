@@ -12,7 +12,7 @@ import { pageHash } from "../lib/indices";
 import { openAsset } from "../components/CompanyCard";
 import { fmtDate, fmtDayMon, rowAsOfTitle } from "../lib/time";
 import { classLabel, delayed, dottedLine, FX, LAST_SESSION, MOVERS_SIGMA, RANGE_52W as RANGE_WORD, RATES, SIGMA_1D, SIGMA_1M as SIGMA_WORD, TODAY, VS_200D } from "../lib/labels";
-import { cellDay, columnTip, commonWindow, dayWords, hasLastSession, lastTip, moveParts, moversInSigma, rowDayTip, showsLast, sigmaOf, SIGMA_LINE, SIGMA_QUIET, sortBySigma, staleDay, STRIP_N, todayTip, type SigmaMode } from "../lib/movers";
+import { cellDay, columnTip, commonWindow, dayWords, hasLastSession, lastTip, moveParts, moversInSigma, rowDayTip, showsLast, sigmaOf, SIGMA_LINE, SIGMA_QUIET, sortBySigma, staleDay, STRIP_N, todayTip, type SigmaMode, stillLive } from "../lib/movers";
 import { useEntryState } from "../lib/nav";
 import { codeOf, monthOf } from "../lib/futures";
 import { Flash } from "../components/Flash";
@@ -40,9 +40,12 @@ export const rollTip = (r: TableRow): string => !r.roll ? "" : `A change of cont
 function marksOf(r: TableRow): Array<{ cls: string; text: string; tip?: string }> {
   const m = marketOf(r.market), out: Array<{ cls: string; text: string; tip?: string }> = [];
   if (r.roll) out.push({ cls: "roll", text: "ROLL", tip: rollTip(r) });
-  if (r.proxyFor) out.push({ cls: "proxy", text: "PROXY", tip: `${r.name} stands in for ${r.proxyFor}; table closes use the official index value when available` });
-  if (r.live && m && m.delayMin > 0) out.push({ cls: "delay", text: delayed(m.delayMin, true), tip: `${m.name} feed is delayed about ${m.delayMin} minutes` });
-  if (r.live && m && m.delayMin === 0) out.push({ cls: "live", text: "LIVE" });
+  if (r.proxyFor) out.push({ cls: "proxy", text: "PROXY", tip: `${r.name} stands in for ${r.proxyFor}: its prices are Yahoo Finance's; the index's own value is not read` });
+  // a row the answer called live, held past the feed's delay and a few minutes (a kept copy, refreshes that fail), is
+  // no longer live: its day stands after its name instead (SF-3 of the review of fix part 1: "USD/JPY LIVE 20 Nov")
+  const live = stillLive(r);
+  if (live && m && m.delayMin > 0) out.push({ cls: "delay", text: delayed(m.delayMin, true), tip: `${m.name} feed is delayed about ${m.delayMin} minutes` });
+  if (live && m && m.delayMin === 0) out.push({ cls: "live", text: "LIVE" });
   return out;
 }
 /** `nocsv`: the marks are not part of the name in the panel's CSV (components/Panel.tsx); the name cell names them there. */
@@ -52,6 +55,9 @@ function Badges({ r }: { r: TableRow }) {
 /** The two columns the name cell adds to the panel's CSV: its marks, and the day its figures are of where that is not
  *  today in Singapore (what stands after the name on screen). */
 export const NAME_CSV_HEADS = ["Marks", "Figures of (blank: today in SGT)"];
+/** The same, for an answer that carries no days (a server of before 21 Nov 2026): no blank can be said to be today's
+ *  (SF-4 of the review of fix part 1). The file's name carries the day in Singapore (components/Panel.tsx). */
+export const nameCsvHeads = (days: boolean): string[] => (days ? NAME_CSV_HEADS : ["Marks", "Figures of (not known: this answer carries no days)"]);
 
 /** A level as every screen writes it: the instrument's own decimals (the instruments table), "%" after a yield
  *  (the designer's D-05 and D-44, I-5): USD/JPY "158.400", the Nikkei "57,000.00", UST 2Y "4.510%". The table used
@@ -80,7 +86,7 @@ function OneTable({ rows, bySigma, onSigma }: { rows: TableRow[]; bySigma: boole
       <colgroup><col className="nm" /><col className="lv" />{PERIODS.map((p) => <Col key={p.key} d1={p.key === "d1"} />)}<col className="n" /><col className="n" /><col className="n" /></colgroup>
       <thead>
         <tr>
-          <th className="l" data-csv={JSON.stringify(NAME_CSV_HEADS)}>Name</th><th>Last</th>
+          <th className="l" data-csv={JSON.stringify(nameCsvHeads(rows.some((r) => r.ls !== undefined)))}>Name</th><th>Last</th>
           {PERIODS.map((p) => (
             <Head key={p.key} d1={p.key === "d1"} bySigma={bySigma} onSigma={onSigma}>
               <th className={p.key === "d1" ? "grp" : ""} title={`Change from the close at the start of the ${p.label} window to the last print (bp for yields)`}>{p.label}</th>
@@ -130,7 +136,7 @@ function GroupRows({ cls, rs }: { cls: string; rs: TableRow[] }) {
         // every row opens its instrument's page (the designer's D-15, B-23): the name a teal link, the row a pointer.
         // Its tooltip says whether its market is open, and when a closed one next opens, in SGT (lib/opens.ts)
         return (
-          <tr key={r.symbol} className={`click${r.live ? " live" : ""}`} title={`${r.symbol} · ${rowAsOfTitle(r)}${rowStateWords(r)} · open its page`} onClick={(e) => { if (!(e.target as HTMLElement).closest("a")) openAsset(r.symbol); }}>
+          <tr key={r.symbol} className={`click${stillLive(r) ? " live" : ""}`} title={`${r.symbol} · ${rowAsOfTitle(r)}${rowStateWords(r)} · open its page`} onClick={(e) => { if (!(e.target as HTMLElement).closest("a")) openAsset(r.symbol); }}>
             <td className="l" title={`${r.name} (${r.symbol})`} data-csv={JSON.stringify([marksOf(r).map((b) => b.text).join(" "), day ? fmtDate(day) : ""])}><a className="lnk" href={`#${pageHash(r.symbol)}`}>{shortName(r.symbol, r.name)}</a><Badges r={r} />{day && <span className="asday nocsv" title={rowDayTip(day)}>{dayWords(day)}</span>}</td>
             <td className="num"><Flash value={r.last}><b>{levelOf(r, r.last)}</b></Flash></td>
             {PERIODS.map((p) => {

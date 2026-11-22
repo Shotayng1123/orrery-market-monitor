@@ -137,7 +137,7 @@ const book = (keys) => keys.filter((k) => /\|pf_/.test(k));
     delete srv.script.pf_create;
     await signIn(p, B, { then: "#pf-name" });
     const again = await form(p);
-    ck(`account B signs in again: "${again.back}" with its own name and limit`, again.name === "B's own draft" && again.net === "15" && /^Your unsaved settings from \d\d:\d\d are back/.test(again.back ?? ""), again);
+    ck(`account B signs in again: "${again.back}" with its own name and limit`, again.name === "B's own draft" && again.net === "15" && /^Your unsaved settings from \d\d:\d\d SGT are back/.test(again.back ?? ""), again);
 
     // the same expiry, and then the OTHER account signs in: nothing of B's draft is shown, and it is dropped
     srv.script.pf_create = () => ({ status: 401, body: { error: "unauthorised" } });

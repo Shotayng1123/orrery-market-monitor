@@ -1,7 +1,7 @@
 import { zoomNow } from "../lib/prefs";
 import { useAddBox } from "../lib/candidates";
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Empty, Panel } from "../components/Panel";
+import { Empty, Panel, SrcParts } from "../components/Panel";
 import { HeadlineList } from "../components/Headlines";
 import { ShowMore } from "../components/StockNews";
 import { Star } from "../components/Star";
@@ -180,7 +180,7 @@ export function WatchlistView({ tick }: { tick: number }) {
           Under 1,100 CSS px of layout, and in the one-screen layout, the panels follow each other. */}
       <div className="pcols">
         <div className="pcol w4">
-          <Panel no="02" title={RESULTS_AHEAD.toUpperCase()} span={4} k="wl-earn" aux={<span title="Each company's day in its own market (Tokyo, New York …), as the source gives it. No time of day: the source gives a time with the date but does not say that it is the company's release time.">my names · {RESULTS_SOURCE} · dates only</span>}>
+          <Panel no="02" title={RESULTS_AHEAD.toUpperCase()} span={4} k="wl-earn" auxShort={<SrcParts parts={[RESULTS_SOURCE, "dates only"]} />} aux={<span title="Each company's day in its own market (Tokyo, New York …), as the source gives it. No time of day: the source gives a time with the date but does not say that it is the company's release time.">my names · {RESULTS_SOURCE} · dates only</span>}>
             {ahead.length ? (
               <table className="secT"><tbody>{ahead.map((r) => <tr key={r.symbol} title={resultsTip(r.symbol, r.earningsEst)}><td className="l mut num">{fmtDate(r.day)}</td><td className="l wrap"><span className="lnk" onClick={() => openAsset(r.symbol)}>{r.name}</span></td><td className="l mut">{resultsStatus(r.earningsEst, r.symbol) ?? "–"}</td></tr>)}</tbody></table>
             ) : <Empty title="No dates ahead">{rows.length ? "None of your names has a results date in the feed." : "Add names to see their results dates."}</Empty>}

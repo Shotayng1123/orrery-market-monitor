@@ -7,6 +7,7 @@
 // Needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (workflow live-check: Actions > live-check > Run workflow).
 import { db } from "./lib/db.js";
 import { spark } from "./lib/yahoo.js";
+import { pfWalls } from "./lib/pfwalls.js";
 import { feedFor, headlineQuery, instrumentPage, INSTRUMENT_COLS, tableRow } from "../supabase/functions/_shared/pagefeed.ts";
 import type { InstrumentDef } from "../supabase/functions/_shared/instrstats.ts";
 
@@ -250,16 +251,9 @@ async function main(): Promise<void> {
   // workflow that runs it turns red (deploy-server runs this part on its own after each deploy). A function the
   // database has just made may take a few seconds to be found by the API: the look is asked up to six times.
   await part("pf", "the paper portfolio's store: who may reach it (counts only)", async () => {
-    let r = await sb.rpc("pf_selftest");
-    for (let k = 1; k < 6 && r.error && /could not find|schema cache|does not exist/i.test(r.error.message); k++) { await new Promise((res) => setTimeout(res, 10000)); r = await sb.rpc("pf_selftest"); }
-    if (r.error) { console.log(`  pf_selftest could not be run: ${r.error.message}`); process.exitCode = 1; return; }
-    const t = (r.data ?? {}) as Record<string, number | boolean | null>;
-    if (t.ok !== true) process.exitCode = 1;
-    const n = (k: string): string => (typeof t[k] === "number" ? String(t[k]) : "–");
-    console.log(`  pf_selftest ${t.ok === true ? "ok" : "FAILED"}: ${n("rls")} of ${n("tables")} tables with row level security; ${n("openGrants")} privileges on them held by anon or authenticated, ${n("serviceRoleGrants")} by the server's own role, ${n("sequenceGrants")} on a sequence; ${n("openFunctions")} of its functions callable by anon or authenticated; ${n("rowsSeen")} rows seen as a made-up account; ${n("statements")} version(s) of the statement`);
-    console.log(typeof t.functions === "number" && t.definerOwner === t.functions
-      ? `  the second wall is in force: all ${n("functions")} functions run as the role the policies bind (${n("policies")} policies), and through the policies alone a made-up account sees ${n("rowsThroughPolicies")} rows`
-      : `  the second wall is NOT in force: ${n("definerOwner")} of ${n("functions")} functions are owned by the role the policies bind; each function still names the account in every statement`);
+    const w = await pfWalls(sb);   // jobs/lib/pfwalls.ts, which the logic checks run against a stand-in (DC-4)
+    for (const l of w.lines) console.log(l);
+    if (!w.ok) process.exitCode = 1;
   });
 
   // The one part that is not read-only, and it runs only when asked for by name ("token"), never with the others:

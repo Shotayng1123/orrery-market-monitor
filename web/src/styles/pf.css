@@ -256,7 +256,7 @@ table.pf-hist .st{color:var(--warn)}
 .pf-notelist .hd .t{color:var(--mut);font-size:10.5px;font-variant-numeric:tabular-nums}
 .pf-notelist .rm{font-size:10px}
 .pf-notelist .tx{font-family:var(--sans);font-size:12.5px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
-.pf-notelist .tx.clip{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:8;line-clamp:8;overflow:hidden}
+.pf-notelist .tx.clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:8;line-clamp:8;overflow:hidden}
 .pf-notelist li.gone{color:var(--mut);font-size:11px}
 .pf-notelist .pf-ask{margin-top:6px}
 .pf-notes.ph textarea{min-height:48px;padding:10px 12px;border-radius:10px;font-size:16px}
@@ -424,3 +424,30 @@ button.pfp-set:active{background:var(--panel2)}
 .pfp-settings .pf-statement.small{font-size:14px}
 .pfp-settings .pf-agreedline{font-family:var(--sans);font-size:14px}
 .pfp-overview .mp-note{margin-top:18px}
+
+/* ---- round 3b, 22 Nov 2026: the second review of P-1, by the designer's Part B ---- */
+/* UI-10: a phone's name field in the sans face (a name is no figure; 16 px keeps iOS from zooming): the start's
+   default whole at 360 px */
+.pf-num.ph .pf-in input.name{font-family:var(--sans);font-size:16px}
+/* UI-11: a value never breaks inside a word; one that does not fit beside its name stands under it, whole */
+.pfp-set{flex-wrap:wrap}
+.pfp-set .v{flex:0 1 auto;min-width:min-content;overflow-wrap:normal;word-break:normal}
+.pfp-set .v .pf-pending,.pfp-set .s{overflow-wrap:normal}
+.pfp-set.tap .go{order:3}
+/* UI-12: a phone's RETRY is a 44-px tap wherever it stands, the first screen of the tab too */
+body.pv2 .pf-err{font-family:var(--sans);font-size:14px}
+body.pv2 .pf-err .pf-link{display:inline-flex;align-items:center;min-height:44px;min-width:44px}
+/* B.2 lead 3: Review's list ends above the opaque Create strip, never under it */
+.pfp-foot{background:var(--bg);border-top-color:var(--bord2)}
+.pfp[data-step="review"]{padding-bottom:12px}
+/* the day's words in a phone section's heading go to a second line, right-aligned, when they do not fit (B.0.1) */
+.mp-sec h2:has(.dayend){flex-wrap:wrap;row-gap:0}
+.mp-sec h2:has(.dayend)>span:first-child{white-space:nowrap}
+.mp-sec h2:has(.dayend)>.aux{margin-left:auto;flex:0 1 auto;text-align:right}
+.dayend{white-space:nowrap;font-size:inherit}
+.pf-fund{display:inline-flex;flex-direction:column;gap:2px}
+/* a phone book screen's heading: the title and its words on one line when both fit, else the words whole on a second
+   line, right-aligned; the title never breaks (NOTES' "on this portfolio · only you · times in SGT", UI-6) */
+.pfp .mp-sec h2{flex-wrap:wrap;row-gap:0}
+.pfp .mp-sec h2>span:first-child{white-space:nowrap}
+.pfp .mp-sec h2>.aux{margin-left:auto;flex:0 1 auto;text-align:right}

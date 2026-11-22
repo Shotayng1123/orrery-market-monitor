@@ -1,4 +1,5 @@
-import { useRef, type ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
+import { csvFile } from "../lib/csvname";
 
 /** The largest table of a panel as CSV text (what is on screen: headers, section rows, figures). A control inside a
  *  cell (`.nocsv`, the statements' "‹ earlier years") is not part of the data.
@@ -20,11 +21,59 @@ export function tableCsv(table: HTMLTableElement): string {
   return lines.join("\r\n");
 }
 
+/** A source line that is drawn whole or in its short form, never cut (the designer's B.0.3, round 3b, 22 Nov 2026;
+ *  LV-1, UI-2). The one-screen layout gives a panel head's source line one line beside the title, and a line longer
+ *  than that room was cut with an ellipsis (EQUITIES' SHORT INTEREST lost its "personal use" whole). Where a panel
+ *  gives `auxShort`, the head measures what this browser draws, a range over the line against the line's own content
+ *  box, with no allowance the wrong way: the whole line beside the title; else the short form beside it; else the
+ *  short form on a second line of the head, right-aligned, wrapping there only between its parts (`SrcParts`). It
+ *  measures again on every change of the head's width, after each drawing of the panel and once the fonts have
+ *  loaded. The whole line is the head's tooltip; "personal use" keeps its click in either form. The scrolling layout
+ *  wraps a long head and draws the whole line only. */
+function useSourceFit(ref: RefObject<HTMLSpanElement | null>, on: boolean) {
+  useLayoutEffect(() => {
+    const a = ref.current;
+    if (!on || !a) return;
+    const long = a.querySelector<HTMLElement>(":scope > .src-long"), short = a.querySelector<HTMLElement>(":scope > .src-short"), head = a.closest<HTMLElement>(".phead");
+    if (!long || !short || !head) return;
+    a.title = (long.textContent ?? "").replace(/\s+/g, " ").trim();
+    const drawn = (el: HTMLElement) => { const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect().width; };
+    const room = () => { const cs = getComputedStyle(a), z = Number(document.body.style.getPropertyValue("--z")) || 1; return a.getBoundingClientRect().width - (parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)) * z; };
+    const fit = () => {
+      a.classList.remove("short", "wrap");
+      if (!document.body.classList.contains("term") || drawn(long) <= room()) return;
+      a.classList.add("short");
+      if (drawn(short) <= room()) return;
+      a.classList.add("wrap");
+    };
+    fit();
+    // a change of the head's width (a window resized, COMPACT or the text size changed): fit again in the next frame,
+    // never inside the observer's own call (which would change what it observes while it reports)
+    let w = head.getBoundingClientRect().width, raf = 0;
+    const later = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(fit); };
+    const ro = new ResizeObserver(() => { const nw = head.getBoundingClientRect().width; if (nw !== w) { w = nw; later(); } });
+    ro.observe(head);
+    const fonts = document.fonts;
+    void fonts?.ready.then(later);
+    fonts?.addEventListener?.("loadingdone", later);
+    window.addEventListener("resize", later);
+    return () => { ro.disconnect(); cancelAnimationFrame(raf); fonts?.removeEventListener?.("loadingdone", later); window.removeEventListener("resize", later); };
+  });
+}
+
+/** A short source line's parts: drawn " · " between them, and broken there only, never inside a part. */
+export function SrcParts({ parts }: { parts: ReactNode[] }) {
+  return <>{parts.map((x, i) => <span key={i}>{i > 0 && <span className="sd"> · </span>}<span className="sp">{x}</span></span>)}</>;
+}
+
 /** Numbered panel: `01 TITLE …aux` head, scrolling body. Span is the 12-column grid width in the scrolling
  *  layout; `k` names the panel kind and `ts` its column span for the one-screen layout's placement rules.
- *  A panel that holds a table offers it as a CSV download (the small CSV button in its header). */
-export function Panel({ no, title, aux, span = 12, children, id, k, ts, after, csv = true }: { no: string; title: string; aux?: ReactNode; span?: 3 | 4 | 5 | 6 | 7 | 8 | 9 | 12; children: ReactNode; id?: string; k?: string; ts?: number; after?: ReactNode /* a choice that stands right after the title, on its line (MOVERS IN σ's TODAY · LAST SESSION) */; csv?: boolean /* false for a panel that never holds a table: no button that would do nothing */ }) {
-  const body = useRef<HTMLDivElement>(null);
+ *  A panel that holds a table offers it as a CSV download (the small CSV button in its header).
+ *  `auxShort`: the source line's short form, for a head the one-screen layout cannot give the whole line (above). */
+export function Panel({ no, title, aux, auxShort, span = 12, children, id, k, ts, after, csv = true, csvName }: { no: string; title: string; aux?: ReactNode; auxShort?: ReactNode; span?: 3 | 4 | 5 | 6 | 7 | 8 | 9 | 12; children: ReactNode; id?: string; k?: string; ts?: number; after?: ReactNode /* a choice that stands right after the title, on its line (MOVERS IN σ's TODAY · LAST SESSION) */; csv?: boolean /* false for a panel that never holds a table: no button that would do nothing */; csvName?: () => string /* the file's name before its day, where the title is not it (a paper book's: "paper-tokyo-l-s-limits") */ }) {
+  const body = useRef<HTMLDivElement>(null), auxEl = useRef<HTMLSpanElement>(null);
+  const fits = aux !== undefined && aux !== "" && auxShort !== undefined && auxShort !== null && auxShort !== "";
+  useSourceFit(auxEl, fits);
   const exportCsv = () => {
     const tables = [...(body.current?.querySelectorAll("table") ?? [])] as HTMLTableElement[];
     if (!tables.length) return;
@@ -32,13 +81,15 @@ export function Panel({ no, title, aux, span = 12, children, id, k, ts, after, c
     const blob = new Blob(["﻿" + tableCsv(biggest)], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `orrery-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${new Date().toISOString().slice(0, 10)}.csv`;
+    // the day in Singapore, as every date on screen (until 22 Nov 2026 the UTC day: from 00:00 to 08:00 SGT the day
+    // before; SF-4, DC-12)
+    a.download = csvFile(csvName ? csvName() : title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
   return (
     <div className={`panel c${span}`} id={id} data-no={no} data-k={k} data-ts={ts}>
-      <div className="phead"><span className="no">{no}</span><span className="t">{title}</span>{after}{aux !== undefined && <span className="aux">{aux}</span>}{csv && <span className="csvbtn" title="Download this panel's table as a CSV file (opens in Excel)" onClick={exportCsv}>CSV</span>}</div>
+      <div className="phead"><span className="no">{no}</span><span className="t">{title}</span>{after}{aux !== undefined && (fits ? <span className="aux src-fit" ref={auxEl}><span className="src-long">{aux}</span><span className="src-short">{auxShort}</span></span> : <span className="aux">{aux}</span>)}{csv && <span className="csvbtn" title="Download this panel's table as a CSV file (opens in Excel)" onClick={exportCsv}>CSV</span>}</div>
       <div className="pbody" ref={body}>{children}</div>
     </div>
   );

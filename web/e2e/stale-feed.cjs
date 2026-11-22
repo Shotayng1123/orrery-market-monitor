@@ -2,7 +2,8 @@
 // supabase/functions/_shared/feedhealth.ts). On 18 Nov 2026 every price was an hour and a half old with New York
 // open and the header said DATA OK, because the jobs had run on time. Checked here on a desktop and in the phone
 // layout: the bar at the foot of the screen and the DATA chip while the feed is stopped, both gone when prices
-// arrive again, and nothing claimed for a server that does not give the reading.
+// arrive again, and nothing claimed for a server that does not give the reading. Then a held answer (SF-3, SF-4 of the
+// review of fix part 1): a row called live a day ago has no LIVE mark and shows its day; the CSV's heads.
 // Run from web/:  node e2e/run.cjs stale-feed   (the runner starts the server this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
 const { routes } = require("./harness.cjs");
@@ -48,6 +49,30 @@ const arriving = () => ({ expected: true, ok: true, newest: new Date(Date.now() 
     feed = stopped(); relay = { since: new Date(Date.now() - 42 * 60e3).toISOString(), ownLateMin: 52 }; await menu(true); await p.locator("#nxt").click(); await menu(false); await p.waitForSelector("#feedbar", { timeout: 8000 });
     const both = await see();
     ck("handed back, the chip is green again; and if the prices stop although a relay is on, the red bar and DATA ✕ stand", /DATA\s*OK/.test(handed.chip) && !/SECOND PATH/.test(handed.title) && both.bar !== null && /DATA\s*✕/.test(both.chip) && /^DATA HEALTH: NO NEW PRICES/.test(both.title) && !/SECOND PATH/.test(both.title) && errs.length === 0, { handed: handed.chip, both: both.chip, title: both.title, errs });
+    await ctx.close();
+  }
+  // a held answer (SF-3, SF-4 of the review of fix part 1, 22 Nov 2026): a row the answer called live whose print is a
+  // day old (a kept copy, refreshes that fail) carries no LIVE or DELAYED mark, its day stands after its name, and a
+  // row printed a minute ago keeps LIVE; the CSV's day column says what a blank is only where the answer carries the
+  // days. The rows are counted back from the moment the page asks, so the hour of the run does not matter.
+  console.log("\n[a held answer: the marks, the CSV's heads]");
+  for (const days of [true, false]) {
+    const ctx = await b.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, acceptDownloads: true }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+    await ctx.addInitScript(() => { try { localStorage.setItem("om_phone_v2", "0"); } catch {} });
+    const ls = (d, close) => ({ d, from: d, close, base: close, chg: 0, z: 0.1, sd: 0.4, n: 60, wFrom: null, wTo: null });
+    const fx = (i, symbol, name, last, agoMin) => { const at = new Date(Date.now() - agoMin * 60e3); return { symbol, name, cls: "Currency", group: "fx", market: "FX", currency: symbol.slice(3, 6), decimals: 3, order: i, marketTab: true, last, lastAt: at.toISOString(), live: true, closes: { d1: last * 0.99 }, closeDates: {}, pct: { d1: 1.01, w1: 2.2, m1: -3.1, m3: 4.4, m12: 12.5, m36: 30 }, z1m: 0.4, pos52: 61, vs200: 3.2, ...(days ? { ls: ls(new Date(at.getTime() - 864e5).toISOString().slice(0, 10), last) } : {}) }; };
+    await routes(p);
+    await p.route("**/fakeapi?*", (r) => { const a = new URL(r.request().url()).searchParams.get("action"); if (a !== "table") return r.fallback();
+      r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ asOf: new Date().toISOString(), rows: [fx(1, "USDJPY=X", "USD/JPY", 158.4, 26 * 60), fx(2, "EURUSD=X", "EUR/USD", 1.052, 1)] }) }); });
+    await p.goto(STANDIN + "#market", { waitUntil: "networkidle" }); await p.waitForSelector("table.mkt tbody tr", { timeout: 8000 }); await p.waitForTimeout(300);
+    const rows = await p.evaluate(() => [...document.querySelectorAll("table.mkt tbody tr")].map((tr) => ({ name: tr.querySelector("td")?.innerText.replace(/\s+/g, " ").trim() ?? "", live: tr.classList.contains("live"), marks: [...tr.querySelectorAll(".badge")].map((x) => x.textContent) })));
+    const held = rows.find((r) => r.name.startsWith("USD/JPY")), fresh = rows.find((r) => r.name.startsWith("EUR/USD"));
+    const dl = p.waitForEvent("download", { timeout: 8000 }); await p.click('.panel[data-k="mkt"] .csvbtn'); const file = await dl;
+    const csv = require("fs").readFileSync(await file.path(), "utf8").replace(/^\uFEFF/, ""), head = csv.split(/\r?\n/)[0];
+    if (days) ck(`a row called live whose print is 26 hours old reads "${held?.name}" with no LIVE or DELAYED mark (${held?.marks.join(", ") || "none"}), its day after its name; a row printed a minute ago keeps ${fresh?.marks.join(", ")} (SF-3)`,
+      !!held && !held.live && !held.marks.some((m) => /LIVE|DELAY|\bD\b|min/i.test(m)) && /\d{1,2} [A-Z][a-z]{2}$/.test(held.name) && !!fresh && fresh.live && fresh.marks.includes("LIVE") && errs.length === 0, { rows, errs });
+    ck(days ? `the CSV of an answer that carries the days heads its day column "${head.split(",").find((x) => /Figures of/.test(x))}" (SF-4)` : `the CSV of an answer from a server that carries no days heads it "${head.split(",").find((x) => /Figures of/.test(x))}": nothing in the file calls a blank today's (SF-4)`,
+      days ? head.includes("Figures of (blank: today in SGT)") : head.includes("Figures of (not known: this answer carries no days)") && !/today/.test(head), { head, name: file.suggestedFilename() });
     await ctx.close();
   }
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0);

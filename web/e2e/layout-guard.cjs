@@ -45,6 +45,9 @@ let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${
 // GUARD_SCREENS and leaves out the statements' walks and the proofs below: the two runs side by side keep each well
 // inside the runner's six minutes
 const ONLY = process.env.GUARD_SCREENS ? process.env.GUARD_SCREENS.split(",").filter(Boolean) : null;
+// GUARD_EXPECT (JSON, screen → selector): a screen's measure counts only where that selector is drawn and no "No such
+// paper portfolio", "loading…", unreadable list or failed tab is on screen (layout-guard-portfolio; PC-9, 22 Nov 2026)
+const EXPECT = process.env.GUARD_EXPECT ? JSON.parse(process.env.GUARD_EXPECT) : null;
 const SCREENS = ONLY ?? ["market", "news", "research", "equities", "rates", "watch", "asset/NVDA", "asset/7203.T"];
 const SIZES = [
   { code: "C1", label: "1440x900", ctx: { viewport: { width: 1440, height: 900 } }, prefs: { size: "AUTO", compact: false, v: 2 } },
@@ -299,6 +302,8 @@ const span = (s) => (s.shown.length ? `${s.shown[0]}–${s.shown[s.shown.length 
     const { ctx, p, errs } = await open(b, s);
     for (const h of screens) {
       await p.goto(MOCK + "#" + h, { waitUntil: "networkidle" }); await settle(p);
+      if (EXPECT?.[h]) { const seen = await p.evaluate((sel) => ({ on: !!document.querySelector(sel), bad: (document.body.innerText.match(/No such paper portfolio|could not be read|COULD NOT BE DRAWN|loading…/i) ?? [null])[0] }), EXPECT[h]);
+        ck(`#${h}: the screen measured is the one named (${EXPECT[h]} drawn: ${seen.on}${seen.bad ? `; "${seen.bad}" on screen` : ""})`, seen.on && !seen.bad, seen); }
       const m = await measure(p, !!s.phone), oc = await occlusion(p), x = problems(m, !!s.phone, oc);
       const allowed = m.scrollX.filter((q) => s.phone && q.ok).map((q) => q.el.replace(/ @.*/, ""));
       ck(`#${h}: no figure cut, unit and all (${m.figures} texts with figures, ${m.hiding} boxes that hide what overflows them), none painted over or clipped (${oc.probed} probed in view), no chart label cut (${m.axes} axes), nothing sideways${allowed.length ? ` but ${[...new Set(allowed)].join(", ")}, by design` : ""}`, clean(x), x);

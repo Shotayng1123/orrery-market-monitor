@@ -56,9 +56,9 @@ const closedNow = (p, id) => p.evaluate((id) => { const o = document.querySelect
     const long = state === "Closed early" || state === "Daily break";
     ck(`iPhone SE, ${when}: under ${name}'s name "${l?.state}" and "${l?.opens}" on one line, whole, the row ${l?.h} px; with a wide font forced ${long ? "two lines, whole" : "still one line"} (${w?.rows} row${w?.rows === 1 ? "" : "s"}, ${w?.h} px), nothing sideways`, l?.state === state && l.opens === opens && l.rows === 1 && l.whole && l.h === 50 && w?.state === state && w.opens === opens && (long ? w.rows <= 2 && w.h <= 63 : w.rows === 1 && w.h === 50) && w.whole && l.ox <= 0 && w.ox <= 0, { l, w });
     if (clock === SAT) { await p.locator(".mp-row.inst", { has: p.locator(".n", { hasText: /^Nikkei 225$/ }) }).tap(); await p.waitForSelector(".mp-item.open .mp-full"); const full = await p.locator(".mp-item.open .mp-full").textContent();
-      ck(`its opened row names the holiday the opening passes over: "…${full.split(" · ").slice(-3).join(" · ")}"`, / · market closed · opens 24 Nov 08:00 SGT · 23 Nov 2026: a holiday in JPX's calendar$/.test(full), full); }
+      ck(`its opened row names the holiday the opening passes over: "…${full.split(" · ").slice(-3).join(" · ")}"`, / · market closed · opens 24 Nov 08:00 SGT · 23 Nov 2026: a holiday in JPX's calendar \(personal use\)$/.test(full), full); }
     if (clock === HOL) { await p.locator(".mp-row.inst", { has: p.locator(".n", { hasText: /^Nikkei 225$/ }) }).tap(); await p.waitForSelector(".mp-item.open .mp-full"); const full = await p.locator(".mp-item.open .mp-full").textContent();
-      ck(`its opened row says it in full: "…${full.split(" · ").slice(-2).join(" · ")}"`, / · market closed: a holiday in JPX's calendar · opens 24 Nov 08:00 SGT$/.test(full), full); }
+      ck(`its opened row says it in full: "…${full.split(" · ").slice(-2).join(" · ")}"`, / · market closed: a holiday in JPX's calendar \(personal use\) · opens 24 Nov 08:00 SGT$/.test(full), full); }
     ck("no page errors", errs.length === 0, errs); await ctx.close();
   }
 

@@ -14,7 +14,7 @@ import { shortName } from "../lib/short";
 import { cellBp, cellPct, CurvePanel, levelOf, RANGE_52W, RANGE_52W_TIP, rollTip, SIGMA_1D_TIP, SIGMA_1M, SIGMA_1M_TIP } from "./Market";
 import { asOfCell, fmtDate, isOfficialRow, rowAsOf, rowAsOfTitle } from "../lib/time";
 import { classLabel, delayed, LAST_SESSION, MOVERS_SIGMA, PERIOD, SIGMA_1D, TAB, TODAY, VS_200D } from "../lib/labels";
-import { cellDay, columnTip, commonWindow, dayWords, hasLastSession, lastLine, lastTip, moveParts, moversInSigma, rowDayTip, showsLast, sigmaOf, SIGMA_LINE, SIGMA_QUIET, staleDay, STRIP_N, todayTip, type SigmaMode } from "../lib/movers";
+import { cellDay, columnTip, commonWindow, dayWords, hasLastSession, lastLine, lastTip, moveParts, moversInSigma, rowDayTip, showsLast, sigmaOf, SIGMA_LINE, SIGMA_QUIET, staleDay, STRIP_N, todayTip, type SigmaMode, stillLive } from "../lib/movers";
 import { pageHash } from "../lib/indices";
 import { Sig } from "../components/Sig";
 import { InstallLine } from "../components/InstallHint";
@@ -59,7 +59,7 @@ function Status({ r }: { r: TableRow }) {
   const m = marketOf(r.market), ses = rowSession(r), pub = isOfficialRow(r) ? rowAsOf(r) : null, stale = staleInSession(ses);
   return (
     <span className="mp-st">
-      {r.live ? (m && m.delayMin > 0 ? <span className="delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>{delayed(m.delayMin)}</span> : <span className="live">Live</span>)
+      {stillLive(r) ? (m && m.delayMin > 0 ? <span className="delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>{delayed(m.delayMin)}</span> : <span className="live">Live</span>)
         : pub ? <span className="pub" title={rowAsOfTitle(r)}>Published {fmtDate(pub.ymd)}</span>
         : <span className={`state${stale ? " stale" : ""}`} title={rowAsOfTitle(r)}>{stale ? lastWords(r) : stateWord(ses) ?? lastWords(r)}</span>}
       {ses.note && <span className={`opens ${ses.note.kind}`} title={ses.note.tip}>{ses.note.text}</span>}

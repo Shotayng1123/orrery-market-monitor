@@ -65,12 +65,26 @@ export const NAME_MAX = 60, REASON_MIN = 10, REASON_MAX = 500, NOTE_MAX = 2000;
 const chars = (s: string): number => { let n = s.length; for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) { const d = s.charCodeAt(i + 1); if (d >= 0xdc00 && d <= 0xdfff) { n--; i++; } } } return n; };
 /** "Equity L/S · Japan · 21 Nov 2026": the start's short name and today's date in Singapore. */
 export const defaultName = (start: StartId, today: string): string => `${STARTS[start].short} · ${dmy(today)}`;
+/** The form's default name, free by rule (UI-1 of round 3b, the designer's B.1): the default, or, when an open book of
+ *  the account already has it, the default with " · 2" (then " · 3" …), so that the form is never refused by its own
+ *  default. Compared as names are stored (cleanName). */
+export function freeName(start: StartId, today: string, others: string[]): string {
+  const taken = new Set(others.map((o) => cleanName(o)));
+  const base = defaultName(start, today);
+  if (!taken.has(cleanName(base))) return base;
+  for (let i = 2; ; i++) { const n = `${base} · ${i}`; if (!taken.has(cleanName(n))) return n; }
+}
 /** A name as it is stored and shown (RT-5): composed letters (NFC), every run of white space (a tab, a no-break or a
  *  full-width space among them) one ordinary space, and no space at either end. What the screens draw is then what
  *  is stored, and a name can be typed again as it is seen. */
 export const cleanName = (name: string): string => name.normalize("NFC").replace(/[ \t\n\r\f\v\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+/g, " ").trim();
-/** Characters that draw nothing or turn the text round: control characters, zero-width ones, direction marks. */
-const UNSEEN = /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/u;
+/** Characters that draw nothing or turn the text round: every control and format character by Unicode's own classes
+ *  (zero-width ones, direction marks, the deprecated format characters U+206A to U+206F, tags), the line and paragraph
+ *  separators, and the letters that are drawn blank: the Hangul fillers (U+115F, U+1160, U+3164, U+FFA0), the blank
+ *  Braille pattern, the combining grapheme joiner, Khmer's invisible vowels; and every code point Unicode itself calls
+ *  default-ignorable, the variation selectors among them (EG-1 of the review of part 2a: a name of one U+3164, or
+ *  "Tokyo L/S" with U+206F or U+FE0F, passed). */
+const UNSEEN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u115f\u1160\u3164\uffa0\u2800\u034f\u17b4\u17b5]/u;
 export const NAME_UNSEEN = "a name holds only characters that show: no control, zero-width or direction characters";
 /** A portfolio's name: 1 to 60 characters, every one of them seen, and not the name of another open book of the
  *  account (both compared as stored: cleanName). */

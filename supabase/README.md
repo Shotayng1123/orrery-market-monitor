@@ -62,7 +62,8 @@ Set up once, in the repository's Settings › Secrets and variables › Actions 
 workflow says "Not set up yet" and does nothing.
 
 What a deploy does, in order: the logic checks (`sim/logic.test.ts`; a failure stops it); a list of what is waiting;
-a guard; `supabase db push`; the notification key, made on the runner and stored on the server if the server has
+a guard; the database checks (`sim/sql`, on PGlite, with none of the job's secrets in their environment and no
+package's install script run; a failure stops it, since 22 Nov 2026); `supabase db push`; the notification key, made on the runner and stored on the server if the server has
 none (never shown, never in git); `supabase functions deploy tick daily api`; if `NOTE_DISPATCH_TOKEN` is set,
 storing it in the database with `monitor_set_github_token`; the page's reads against the live tables (a warning only);
 and last the paper portfolio's walls as the database sees them (`pf_selftest`, the live check's part `pf`: a wall down

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Empty, Panel } from "../components/Panel";
+import { Empty, Panel, SrcParts } from "../components/Panel";
 import { ASSET_PERIODS, ChartPanel, type ChartPeriod } from "../components/ChartPanel";
 import { PeriodBar } from "../components/PeriodBar";
 import type { SigmaWindow } from "../components/SigmaChart";
@@ -209,7 +209,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
               <StockNews key={d.symbol} symbol={d.symbol} feed={feed} fit even={even} onEven={setEven} />
             </Panel>
           )}
-          {on("short") && <Panel no={no("short")} k="st-short" title="SHORT INTEREST" span={4} aux={s ? (s.kind === "jpx" ? <span id="st-short-src">JPX short-position reports · <PersonalUse /></span> : s.kind === "interest" ? "exchange-reported · Yahoo Finance" : "FINRA") : ""}>
+          {on("short") && <Panel no={no("short")} k="st-short" title="SHORT INTEREST" span={4} auxShort={s?.kind === "jpx" ? <SrcParts parts={["JPX", <PersonalUse key="pu" />]} /> : undefined} aux={s ? (s.kind === "jpx" ? <span id="st-short-src">JPX short-position reports · <PersonalUse /></span> : s.kind === "interest" ? "exchange-reported · Yahoo Finance" : "FINRA") : ""}>
             {!s ? <Empty title="No short data">None reported for this name.</Empty> : s.kind === "jpx" ? (
               <table className="secT" id="st-short"><tbody>
                 <tr><td className="l"><b>Reported positions (0.5% and above) · <span className="nb">{fmtDate(s.d)}</span></b></td><td className="num"><b>{(s.ratio * 100).toFixed(2)}%</b></td></tr>

@@ -74,21 +74,53 @@ export function timeSgt(iso: string): string {
 /** "17:02": the time of day in Singapore. */
 export function hmSgt(iso: string): string { const t = new Date(iso); if (Number.isNaN(t.getTime())) return "–"; const p = parts("Asia/Singapore", t); return `${p.hour}:${p.minute}`; }
 
+// ---- a book day and the moment it begins (the designer's B.0.1, 22 Nov 2026) ----
+// A book day is the day whose NAV is struck at 17:00 New York; it is written as a date ("Mon 23 Nov 2026"). Where one
+// day is promised (the CHANGE form, a pending line) the moment it begins is printed in SGT with it: 17:00 New York on
+// the day before, 06:00 SGT in New York's winter and 05:00 SGT in its summer.
+/** The ISO instant of a wall-clock time in New York on a date (`hour` 0 to 23). */
+function nyAt(ymd: string, hour: number): string {
+  for (const off of [5, 4]) {   // New York's winter (UTC−5), then its summer (UTC−4)
+    const t = new Date(Date.parse(`${ymd}T00:00:00Z`) + (hour + off) * 3600e3), p = parts("America/New_York", t);
+    if (`${p.year}-${p.month}-${p.day}` === ymd && Number(p.hour) === hour && p.minute === "00") return t.toISOString();
+  }
+  return new Date(Date.parse(`${ymd}T00:00:00Z`) + (hour + 5) * 3600e3).toISOString();
+}
+/** The moment a book day begins: 17:00 New York on the day before. */
+export const bookDayStarts = (ymd: string): string => nyAt(addDays(ymd, -1), 17);
+/** "Mon 23 Nov 2026, 06:00 SGT": a book day with the moment it begins in Singapore. */
+export const bookDayFrom = (ymd: string): string => `${wdmy(ymd)}, ${hmSgt(bookDayStarts(ymd))} SGT`;
+/** The day a book was created, in Singapore: "created 22 Nov 2026" on its strip, the phone's head and the lists. */
+export const createdDay = (iso: string): string => sgDate(new Date(iso));
+/** Said once in the head of every panel or phone section that holds a book day. */
+export const DAY_ENDS = "a day ends 17:00 New York";
+
 // ---- the targets' window (C-26) ----
 // Both targets are fixed at creation and may be re-set only for the year after a January reset, under a yearly base:
-// entered from 1 December (New York's date) until the January reset, kept as "pending", in force from the interval
-// after the reset if it is made, lapsed if it is held (a cut in force) or withheld (a losing year, guarded base).
-// Under "since the start" they are fixed. The reset itself is the daily NAV's (P-3); until a year's reset is on
-// record its January counts as before the reset.
-export const WINDOW_WORDS = "re-set only from 1 Dec to a January reset";
+// entered from 1 December (New York's date: 00:00 there, 13:00 SGT in its winter) until the January reset, kept as
+// "pending", in force from the interval after the reset if it is made, lapsed if it is held (a cut in force) or
+// withheld (a losing year, guarded base). Under "since the start" they are fixed. The reset itself is the daily NAV's
+// (P-3); until a year's reset is on record its January counts as before the reset. The lines print the moment the
+// window opens, in SGT with its time (the designer's B.0.2 of 22 Nov 2026, revision 2: "from 1 Dec" with no zone was
+// shut on the reader's 1 Dec until 13:00); which moment it should be (00:00 New York, as here, or the first strike of
+// December) is for the PMs. Every text that names the window is built from the one moment below.
+/** The moment the window opens for a year's targets: 00:00 New York on 1 December, as "1 Dec 2026, 13:00 SGT". */
+export const windowOpens = (year: number): string => { const t = nyAt(`${year}-12-01`, 0); return `${dmy(sgDate(new Date(t)))}, ${hmSgt(t)} SGT`; };
+/** The same moment with no year: "1 Dec, 13:00 SGT" (1 December is in New York's winter time in every year). */
+export const WINDOW_OPENS = windowOpens(2026).replace(/ \d{4},/, ",");
+/** The window in words: "re-set only from 1 Dec, 13:00 SGT, to a January reset" (02 TARGETS, the form's fixed line). */
+export const WINDOW_WORDS = `re-set only from ${WINDOW_OPENS}, to a January reset`;
+/** The window in words for a book (the same for every book: the moment names no year). */
+export const windowWords = (_w: { from: string | null }): string => WINDOW_WORDS;
 // A book started in a year has no January reset in that year (the plan's §2.9: its first calendar year runs as "since
 // the start"), so in the January of its own first year its window is shut (EN-10): a pair entered then would wait for
 // a reset that never comes. `startedOn` is the book's first valuation day, the date the database checks too.
-export interface TargetWindow { open: boolean; forYear: number | null; fixed: boolean; next: string | null }
+/** `from`: the moment the window in force (or the next one) opened or opens, in SGT. */
+export interface TargetWindow { open: boolean; forYear: number | null; fixed: boolean; next: string | null; from: string | null }
 export function targetWindow(nyYmd: string, base: LadderBase, resets: ResetRow[], startedOn?: string): TargetWindow {
-  if (base === "start") return { open: false, forYear: null, fixed: true, next: null };
+  if (base === "start") return { open: false, forYear: null, fixed: true, next: null, from: null };
   const y = Number(nyYmd.slice(0, 4)), m = Number(nyYmd.slice(5, 7)), first = startedOn ? Number(startedOn.slice(0, 4)) : null;
-  if (m === 12) return { open: true, forYear: y + 1, fixed: false, next: null };
-  if (m === 1 && (first == null || first < y) && !resets.some((r) => r.year === y)) return { open: true, forYear: y, fixed: false, next: null };
-  return { open: false, forYear: null, fixed: false, next: `next window: 1 Dec ${y} to the first NAV of ${y + 1}` };
+  if (m === 12) return { open: true, forYear: y + 1, fixed: false, next: null, from: windowOpens(y) };
+  if (m === 1 && (first == null || first < y) && !resets.some((r) => r.year === y)) return { open: true, forYear: y, fixed: false, next: null, from: windowOpens(y - 1) };
+  return { open: false, forYear: null, fixed: false, next: `next window: from ${windowOpens(y)}, to the first NAV of ${y + 1}`, from: windowOpens(y) };
 }

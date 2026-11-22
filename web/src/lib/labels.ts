@@ -24,6 +24,9 @@ export const ONLY_YOU_TIP = "Visible to your account only";
 // sources" and the README carry the paragraph, word for word (sim/logic.test.ts compares the README with it).
 export const PERSONAL_USE = "personal use";
 export const PERSONAL_USE_TEXT = "Files from JPX, Nikkei, JSF and fund issuers are used on the owner's statement that this Monitor's use is personal and non-commercial (20 Nov 2026). Each is credited where it is used.";
+/** The publishers whose files carry "personal use" where a line names them in passing (LV-4 of round 3b: JPX's
+ *  holiday calendar): "JPX's calendar (personal use)". */
+export const PERSONAL_USE_PUBLISHERS: ReadonlySet<string> = new Set(["JPX", "Nikkei", "JSF"]);
 /** What is read today, said beside the paragraph so that it claims no file the Monitor does not read. */
 export const PERSONAL_USE_READ = "Read today: JPX's list of TSE-listed issues (TOPIX's members and their sectors), its short-selling ratio, short-position reports and margin balances, and Tokyo's holidays from its calendar; Nikkei's file of the Nikkei 225's members and weights. No JSF or fund issuer's file is read yet.";
 /** What the owner's answer of 21 Nov 2026 rules out: named so that no screen is read as using them. */

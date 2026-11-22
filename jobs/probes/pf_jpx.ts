@@ -18,13 +18,16 @@
 // To run a held part once the owner has said yes to it: set its switch below to true, in a commit whose message quotes
 // the owner's answer, and run the probe. A part whose switch is false makes no request.
 //
-// WHAT IT PRINTS (jpx_read.ts holds the rules, and sim/logic.test.ts checks them). Only values, never a page's text:
-// each page's own title and date; the cells of a table of figures (a table of notices or of text is left out whole,
-// and a cell of prose in a table of figures is counted, not printed); a value (a clock time, a date, a percentage, a
-// number of units) with at most two words on each side of it; a market holiday as its date; addresses. Every piece of
-// a page goes through one guard (`piece`): nothing of more than nine words or ninety characters is printed, and in
-// Japanese nothing that ends with a full stop or runs past 28 characters, so no path can print a sentence of the
-// kind that was printed. (The run of 21 Nov, before this rule, printed every line that held a match, cut at 220
+// WHAT IT PRINTS (jpx_read.ts holds the rules, and sim/logic.test.ts checks them, also by running this file offline
+// with its fetch replaced). Only values, never a page's text: each page's own title and date; the cells of a table of
+// figures, under its heading or the short label before it (a table of notices or of text is left out whole, and a
+// cell of prose in a table of figures is counted, not printed); a page's values (a clock time, a date, a percentage, a
+// number of units) in order, joined only by the one short word between two of them ("9:00 am to 11:30 am"), never the
+// words around them; a market holiday as its date; addresses. Every piece of a page goes through one guard (`piece`):
+// nothing of more than nine words or ninety characters, nothing that reads as a sentence however short (a verb of
+// being or a modal, a full stop after a word), and in Japanese nothing that ends as a sentence or runs past 28
+// characters. (Until 22 Nov 2026 a value came with two words on each side, and the pieces of one paragraph of the
+// hours page touched and overlapped, so consecutive lines gave its sentences back: PX-1.) (The run of 21 Nov, before this rule, printed every line that held a match, cut at 220
 // characters: four sentences of JPX's pages, two navigation labels, seventeen link labels and three notice titles
 // went into a public job log: the checks of round 3b, PR-5.)
 // WHAT IT ASKS. Only addresses on jpx.co.jp, and only these: its robots.txt; the four pages on domestic stock trading
@@ -54,7 +57,7 @@
 //   Actions > source-probe > Run workflow: probe = pf_jpx, runtime = deno
 import { readFileSync } from "node:fs";
 import { bytes, head, liftJpxHold, linksOf, masked, page, pause, pdfPages, requestsMade, robots, tablesOf, textLines, titleOf, type Page, type Robots } from "./lib.ts";
-import { calendarCheck, calendarDays, cellOut, figureTables, linkedOnJpx, onJpx, otherTables, sayable, shortOtherLinks, shortRuleLink, valueBits } from "./jpx_read.ts";
+import { calendarCheck, calendarDays, cellOut, figureTables, linkedOnJpx, notRulePage, onJpx, otherTables, sayable, shortOtherLinks, shortRuleLink, valueBits } from "./jpx_read.ts";
 
 /** THE OWNER'S ANSWER, part by part. rules and calendar: "(c) all", 21 Nov 2026, about 18:00 SGT. etfList: not asked yet. */
 const OWNER_HAS_RELEASED = { rules: true, etfList: false, calendar: true };
@@ -129,7 +132,7 @@ const CLOCK = /\b\d{1,2}[:：]\d{2}\s*(?:a\.?m\.?|p\.?m\.?)?|\d{1,2}時\d{0,2}�
 const DATED = /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+20\d\d\b|\b\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+20\d\d\b|\b20\d\d[\/.\-]\d{1,2}[\/.\-]\d{1,2}\b|20\d\d年\s*\d{1,2}月\s*\d{1,2}日/i;
 
 if (any) {
-  liftJpxHold();
+  liftJpxHold({ etfList: OWNER_HAS_RELEASED.etfList });   // the ruled-out files and the list of triggered stocks stay held (lib.ts)
   head("JPX's robots.txt");
   rb = await robots(JPX, ["/english/equities/trading/domestic/", "/english/markets/equities/", "/equities/products/etfs/issues/", "/english/corporate/about-jpx/calendar/", "/corporate/about-jpx/calendar/"]);
   await pause(GAP);
@@ -183,7 +186,14 @@ if (OWNER_HAS_RELEASED.rules) {
 
   head("rules 5. The short-selling price restriction: a percentage, a number of units");
   const SS = /\d+(?:\.\d+)?\s*(?:%|％|percent)|\d+\s*(?:trading )?units|\d+\s*単元/i;
-  if (short) { console.log(`  linked from JPX's own pages: ${masked(short.href)}`); const p = await get(short.href); if (p) { printValues(textLines(p.html), SS, 20); printTables(p.html, /short|空売り|%|％/i, 20); } }
+  if (short) {
+    console.log(`  linked from JPX's own pages: ${masked(short.href)}`);
+    const p = await get(short.href);
+    // the page taken by its link's name is read only if its own title and first heading say it is not a list of
+    // figures or names (PX-6: JPX's section name for the list of triggered stocks passes the link's test)
+    if (p && notRulePage(p.html)) console.log("  that page's own title or first heading names a list, figures or a report, not the rule: nothing of it is printed; a person gives the address of the rule page");
+    else if (p) { printValues(textLines(p.html), SS, 20); printTables(p.html, /short|空売り|%|％/i, 20); }
+  }
   else console.log("  NOT FOUND: no page read (the index, tick sizes, trading hours) links a page on jpx.co.jp whose name says short selling and a rule (regulation, restriction, rule, price). No address is tried from memory: a person gives the address of JPX's rule page, and it is read in a later run");
   const others = [...new Set(shortSeen)].filter((h) => h !== short?.href);
   if (others.length) console.log(`  links that name short selling and were not read (figures, lists or reports by their names; addresses only): ${others.slice(0, 8).map((h) => masked(h)).join(" · ")}`);

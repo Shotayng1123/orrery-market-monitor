@@ -100,6 +100,13 @@ const without = async (p) => { const st = await p.addStyleTag({ content: "#mk-sg
   await st.evaluate((e) => e.remove()); await p.waitForTimeout(250); return v; };
 
 (async () => { const b = await chromium.launch();
+  // the measure itself (CF-5 of the review of fix part 1, 22 Nov 2026): a part that ends on a badge has the room its
+  // box has, not its letters: a 100-px cell holding a 100-px badge whose letters end 5 px before its border
+  { const ctx = await b.newContext({ viewport: { width: 400, height: 200 }, deviceScaleFactor: 1 }); await ctx.addInitScript({ content: ROOM }); const p = await ctx.newPage();
+    await p.setContent('<div id="c" style="width:100px;overflow:hidden;white-space:nowrap;font:12px monospace"><span id="t"><span id="g" style="display:inline-block;padding:0 4px;border:1px solid #888">DELAYED~10</span></span></div>');
+    const m = await p.evaluate(() => { const t = document.getElementById("t"), g = document.getElementById("g"), c = document.getElementById("c").getBoundingClientRect(); return { spare: window.__room.spare(g), outer: window.__room.spare(t), boxRoom: Math.round((c.right - g.getBoundingClientRect().right) * 10) / 10, textRoom: Math.round((c.right - window.__room.text(g).right) * 10) / 10 }; });
+    ck(`the room of a part that ends on a badge is measured to the badge's border: ${m.spare} px (its box leaves ${m.boxRoom}, its letters ${m.textRoom})`, Math.abs(m.spare - m.boxRoom) <= 0.1 && Math.abs(m.outer - m.boxRoom) <= 0.1 && m.textRoom - m.spare >= 4, m);
+    await ctx.close(); }
   for (const code of ["C1", "C4", "C4b"]) {
     const one = code !== "C1";
     console.log(`\n[${code}, ${SIZES[code].vp.join("x")}${one ? ", the one-screen layout" : ""}: Tue 24 Nov 2026, 07:10 SGT]`);

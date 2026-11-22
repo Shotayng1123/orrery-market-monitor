@@ -1,7 +1,8 @@
 // Notes on a paper portfolio, and what happened to it (P-1). A note is the account's own text, visible to that
 // account only: at most 2,000 characters, never edited (a later note says what changed), removable by its writer, and
 // then its text goes for good while a line with the time stays. Under the box, always, the statement's gist.
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useNet } from "../../lib/net";
 import { Consent } from "./Consent";
 import { failureWords, pfNoteAdd, pfNoteRemove, PfError } from "../../lib/pf";
 import { noteLeft, noteRefusal, NOTE_MAX } from "../../lib/pf/form.ts";
@@ -11,20 +12,26 @@ import type { ActivityRow } from "../../lib/pf/view.ts";
 import type { ConsentState, NoteRow } from "../../lib/pf/types.ts";
 import { fmtFull } from "../../lib/pf/money.ts";
 
-const PAGE = 20, LONG_LINES = 8;
+const PAGE = 20;
 export function Notes({ id, notes, consent, phone, onChanged }: { id: string; notes: NoteRow[]; consent: ConsentState; phone: boolean; onChanged: () => void }) {
   const [text, setText] = useState(""), [busy, setBusy] = useState(false), [msg, setMsg] = useState<string | null>(null), [card, setCard] = useState(false), [agreed, setAgreed] = useState(consent);
   const [shown, setShown] = useState(PAGE), [asking, setAsking] = useState<number | null>(null), [open, setOpen] = useState<Set<number>>(() => new Set());
-  const left = noteLeft(text), over = left < 0, refusal = over ? noteRefusal(text) : null;
+  const [rmNo, setRmNo] = useState<{ n: number; text: string } | null>(null);   // a removal that failed, said at its note
+  const left = noteLeft(text), over = left < 0, refusal = over ? noteRefusal(text) : null, net = useNet();
+  // a sentence of a failure goes once the thing has worked, and an "Offline" one when the connection is back (UI-16)
+  useEffect(() => { if (!net.offline) { setMsg((m) => (m && m.startsWith("Offline") ? null : m)); setRmNo((r) => (r && r.text.startsWith("Offline") ? null : r)); } }, [net.offline]);
   const save = (c = agreed) => {
     if (busy || !text.trim() || over) return;
     if (!c.agreedAt) { setCard(true); return; }
     setBusy(true); setMsg(null);
-    pfNoteAdd(id, text).then(() => { setText(""); setBusy(false); onChanged(); })
+    // the box is emptied only if it still holds the text that was sent: what was typed while it was on its way stays
+    // (UI-8: it was wiped without a word)
+    const sent = text;
+    pfNoteAdd(id, sent).then(() => { setText((t) => (t === sent ? "" : t)); setBusy(false); setMsg(null); onChanged(); })
       .catch((e: unknown) => { setBusy(false); if (e instanceof PfError && e.status === 409) { setAgreed({ ...c, agreedAt: null }); setCard(true); return; }
         setMsg(failureWords(e, { offline: "Offline: a note needs the server. Your text is kept in the box on this device.", signedOut: "Signed out: sign in again. Nothing was saved.", refused: (w) => `Not saved: ${w}. Your text is still in the box.` })); });
   };
-  const remove = (n: number) => { setAsking(null); pfNoteRemove(id, n).then(onChanged).catch((e: unknown) => setMsg(failureWords(e, { offline: "Offline: removing a note needs the server.", signedOut: "Signed out: sign in again. Nothing was removed.", refused: (w) => `Not removed: ${w}. Nothing was removed.` }))); };
+  const remove = (n: number) => { setAsking(null); setRmNo(null); pfNoteRemove(id, n).then(() => { setRmNo(null); setMsg((m) => (m && /removing|removed/i.test(m) ? null : m)); onChanged(); }).catch((e: unknown) => setRmNo({ n, text: failureWords(e, { offline: "Offline: removing a note needs the server.", signedOut: "Signed out: sign in again. Nothing was removed.", refused: (w) => `Not removed: ${w}. Nothing was removed.` }) })); };
   const rows = Math.min(8, Math.max(3, text.split("\n").length + Math.floor(text.length / 90)));
   return (
     <div className={`pf-notes${phone ? " ph" : ""}`} id="pf-notes">
@@ -40,13 +47,13 @@ export function Notes({ id, notes, consent, phone, onChanged }: { id: string; no
         <ul className="pf-notelist">
           {notes.slice(0, shown).map((n) => {
             if (n.body == null) return <li key={n.id} className="gone" data-note="removed">note removed {n.removedAt ? timeSgt(n.removedAt) : ""}</li>;
-            const long = n.body.split("\n").length > LONG_LINES || n.body.length > LONG_LINES * (phone ? 44 : 60), all = open.has(n.id);
+            const all = open.has(n.id);
             return (
               <li key={n.id} data-note={n.id}>
                 <div className="hd"><span className="t" title={stampSgt(n.at)}>{timeSgt(n.at)}</span>
                   {asking === n.id ? null : <button type="button" className="pf-link rm" onClick={() => setAsking(n.id)}>REMOVE</button>}</div>
-                <div className={`tx${long && !all ? " clip" : ""}`}>{n.body}</div>
-                {long && !all && <button type="button" className="pf-link" data-act="all" onClick={() => setOpen((s) => new Set(s).add(n.id))}>SHOW ALL</button>}
+                <NoteText body={n.body} all={all} onAll={() => setOpen((s) => new Set(s).add(n.id))} />
+                {rmNo?.n === n.id && <p className="pf-msg" data-note-msg={n.id} role="status">{rmNo.text}</p>}
                 {asking === n.id && <p className="pf-ask" role="alertdialog">Remove this note? Its text goes for good; a line saying a note was removed stays. <button type="button" className="pf-btn" onClick={() => setAsking(null)}>KEEP</button> <button type="button" className="pf-btn danger" data-act="remove" onClick={() => remove(n.id)}>REMOVE</button></p>}
               </li>
             );
@@ -57,6 +64,22 @@ export function Notes({ id, notes, consent, phone, onChanged }: { id: string; no
       {card && <Consent consent={agreed} what="note" phone={phone} onAgreed={(c) => { setAgreed(c); setCard(false); save(c); }} onNotNow={() => { setCard(false); setMsg("Not saved: the statement was not agreed. Your text is still in the box."); }} />}
     </div>
   );
+}
+
+/** A note's text, clamped to eight lines; SHOW ALL only where the clamp hides something, as drawn (UI-14: it was decided
+ *  by a count of characters, and a note already whole carried a link that did nothing). Measured again when its width
+ *  changes. */
+function NoteText({ body, all, onAll }: { body: string; all: boolean; onAll: () => void }) {
+  const box = useRef<HTMLDivElement>(null), [hides, setHides] = useState(false);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el || all) return;
+    const fit = () => setHides(el.scrollHeight > el.clientHeight + 1);
+    fit();
+    const ro = new ResizeObserver(fit); ro.observe(el);
+    return () => ro.disconnect();
+  }, [all, body]);
+  return <><div ref={box} className={`tx${all ? "" : ` clamp${hides ? " clip" : ""}`}`}>{body}</div>{!all && hides && <button type="button" className="pf-link" data-act="all" onClick={onAll}>SHOW ALL</button>}</>;
 }
 
 const DAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];

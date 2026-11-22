@@ -5,7 +5,7 @@ import type { After, BookFull, BookRow, Field, SettingRow } from "./types.ts";
 import type { Values } from "./form.ts";
 import { numText, showValue } from "./form.ts";
 import { BY_ACCOUNT, STARTS } from "./presets.ts";
-import { dm, dmy, targetWindow, valuationDay, type TargetWindow } from "./calendar.ts";
+import { bookDayFrom, dmy, targetWindow, valuationDay, type TargetWindow } from "./calendar.ts";
 import { fmtFull, fromMinor } from "./money.ts";
 
 export interface NowRow {
@@ -133,7 +133,9 @@ export function activityOf(book: BookFull): ActivityRow[] {
     }
   }
   for (const h of historyOf(book, null, valuationDay(new Date(book.createdAt)))) {
-    if (h.origin === "change") out.push({ at: h.at, kind: "SETTING", text: `${h.label} ${h.from} → ${h.to}${h.inForceFrom ? ` · in force from ${dm(h.inForceFrom)}` : ""}${h.reason ? ` · "${h.reason}"` : ""}` });
+    // the day promised, with the moment it begins in SGT (B.0.1; the orchestrator's settlement of 22 Nov, 10:20 UTC):
+    // "in force from Fri 13 Nov 2026, 06:00 SGT", a moment under ACTIVITY's "times in SGT"
+    if (h.origin === "change") out.push({ at: h.at, kind: "SETTING", text: `${h.label} ${h.from} → ${h.to}${h.inForceFrom ? ` · in force from ${bookDayFrom(h.inForceFrom)}` : ""}${h.reason ? ` · "${h.reason}"` : ""}` });
   }
   for (const p of re.values()) if (p.x != null && p.vol != null) out.push({ at: p.at, kind: "SETTING", text: `Targets for ${p.year}: ${targetsWords(p.x, p.vol)} · pending until the January reset` });
   for (const n of book.notes) { out.push({ at: n.at, kind: "NOTE", text: "added" }); if (n.removedAt) out.push({ at: n.removedAt, kind: "NOTE", text: "removed" }); }
@@ -141,4 +143,5 @@ export function activityOf(book: BookFull): ActivityRow[] {
   return out.map((r, i) => ({ r, i })).sort((a, b) => Date.parse(b.r.at) - Date.parse(a.r.at) || b.i - a.i).map((x) => x.r);
 }
 /** "since 1 Oct 2026". */
-export const sinceWords = (ymd: string): string => `since ${dmy(ymd)}`;
+/** The book's own start on its strip: the SGT day it was created ("since" is a book day only: B.0.1, revision 2). */
+export const createdWords = (ymd: string): string => `created ${dmy(ymd)}`;
