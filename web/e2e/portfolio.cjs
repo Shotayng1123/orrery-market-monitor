@@ -4,9 +4,9 @@
 // Nothing here reads the machine's clock: every page sets `om_mock_now` (17:00 SGT on Sat 21 Nov 2026 for the forms
 // and the books, so the next session is Mon 23 Nov 2026; 15 Dec 2026 for the targets' window; 07:10 SGT on Tue 24 Nov
 // for the header), and what must have room is measured in the machine's fonts and with a wide font forced.
-//   [1] the entry: the seventh tab, the header's height with seven tabs and with six at six sizes (in both fonts), key 7
-//       (in full screen too), Help; with the page's switch off (om_paper = "0") nothing of it. The one-screen header with
-//       seven tabs and with six is e2e/header.cjs (the designer's rule of 22 Nov 2026)
+//   [1] the entry: the seventh tab, the header's height with seven tabs and with six at six sizes (in both fonts), key 7,
+//       Help; with the page's switch off (om_paper = "0") nothing of it. The one-screen header with seven tabs and with
+//       six, and key 7 in FULL, are e2e/header.cjs (the designer's rule of 22 Nov 2026)
 //   [2] with no book: the three starts as cards, two muted lines, nothing drawn as a disabled button
 //   [3] the list, the cap, and what `#portfolio` opens
 //   [4] the statement once, and the three starts created with their defaults
@@ -78,20 +78,9 @@ const header = (p) => p.evaluate(() => { const z = Number(document.body.style.zo
         && Math.abs(aw.h - cw.h) <= 1 && aw.name != null && Math.abs(aw.name - cw.name) <= 1 && aw.sideways <= 0 && seven.errs.length === 0, { a, c, aw, cw, errs: seven.errs });
       await seven.ctx.close(); await six.ctx.close();
     }
-    // The one-screen header with seven tabs and with six, one row by rule, is e2e/header.cjs (the designer's notes of
-    // 22 Nov 2026, Part A, its check A.7): it replaced this suite's two checks of 21 Nov, which failed in GitHub's letter
-    // placement. Here: full screen, where the header is gone, the corner strip says the keys, and key 7 opens the tab.
-    {
-      const seven = await open(b, { clock: MORNING, compact: true, vw: 1440, vh: 900 });
-      await go(seven.p, "market", "table.mkt");
-      const term = await seven.p.evaluate(() => document.body.classList.contains("term"));
-      await seven.p.click("#more-btn"); await seven.p.click("#fs-ctl"); await seven.p.waitForFunction(() => document.body.classList.contains("full"));
-      const strip = await seven.p.evaluate(() => document.querySelector("#fsx").textContent);
-      await seven.p.keyboard.press("7"); await seven.p.waitForSelector("#pf-list");
-      const fs7 = await seven.p.evaluate(() => ({ hash: location.hash, full: document.body.classList.contains("full"), view: document.querySelector("#grid").dataset.view }));
-      ck(`one-screen layout at 1440x900: FULL, under the header's menu (≡), hides the header; the corner strip reads "${strip.replace(/\s+/g, " ").trim().slice(0, 14)}" and key 7 opens #portfolio`, term && /^1–7 TABS · ESC/.test(strip) && fs7.hash === "#portfolio" && fs7.full && fs7.view === "portfolio" && seven.errs.length === 0, { strip, fs7, term, errs: seven.errs });
-      await seven.ctx.close();
-    }
+    // The one-screen header with seven tabs and with six, one row by rule, and FULL from its menu with key 7, are
+    // e2e/header.cjs (the designer's notes of 22 Nov 2026, Part A, its check A.7): it replaced this suite's loop of 21 Nov,
+    // whose two checks failed in GitHub's letter placement and whose FULL step pressed FULL in the row.
     const { ctx, p, errs } = await open(b, { clock: MORNING });
     await go(p, "market", "table.mkt");
     await p.keyboard.press("7"); await p.waitForSelector("#pf-list");

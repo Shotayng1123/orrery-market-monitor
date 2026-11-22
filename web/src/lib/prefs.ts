@@ -23,7 +23,7 @@ const REF_W = 1440, REF_H = 800, TERM_MIN_W = 1100, TERM_MIN_H = 540;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const round3 = (v: number) => Math.round(v * 1000) / 1000;
 /** The one-screen header is one row by rule (the designer's notes of 22 Nov 2026, Part A): its items have their widths
- *  by rule and only the alert line takes what is left, with a margin of 101 px over the line's longest promise in
+ *  by rule and only the alert line takes what is left, with a margin of 102 px over the line's longest promise in
  *  both letter placements. That holds where the page's own layout (the window's width over the zoom) is at least
  *  1,300 CSS px wide: a window of 1,170 px at AUTO, 1,105 at S, 1,300 at M, 1,495 at L, 1,755 at XL. Below it COMPACT
  *  keeps the scrolling layout. Under 1,420 the Monitor's name shows its mark only (body.tight; the mark's tooltip
@@ -32,12 +32,13 @@ export const TERM_MIN_LAYOUT_W = 1300, NAME_FROM_W = 1420;
 
 export function termFits(): boolean { return window.innerWidth >= TERM_MIN_W && window.innerHeight >= TERM_MIN_H; }
 
-// The alert line's fit, last step (components/Alerts.tsx): in a drawing so much wider than the Monitor's own (about
-// 60%) that even "NEW ALERT 07:07" cannot stand whole, the one-screen layout is refused for that window size, text size
-// and number of tabs, and COMPACT gives the scrolling layout. Kept in memory: a reload or another size tries again.
+// The alert line's fit, last step (components/Alerts.tsx; the designer's A.2.5): in a drawing so much wider than the
+// Monitor's own that even "NEW ALERT 07:07" (or "no excessive moves"), or the row's fixed items alone, cannot stand whole,
+// the one-screen layout is refused for this window size and text size, and COMPACT gives the scrolling layout. Kept
+// for the page's life; another size tries again. App's resize handler applies the prefs again at once.
 const refused = new Set<string>();
-const refuseKey = (size: SizeKey) => `${window.innerWidth}x${window.innerHeight} ${size} ${document.querySelectorAll("#nav a").length}`;
-export function refuseTerm(): void { refused.add(refuseKey(loadPrefs().size)); window.dispatchEvent(new Event("resize")); }
+let termKey = "";
+export function refuseTerm(): void { if (termKey && !refused.has(termKey)) { refused.add(termKey); window.dispatchEvent(new Event("resize")); } }
 
 /** The scale for the current window. COMPACT fits both dimensions; the scrolling layout follows the width only. */
 export function autoZoom(term: boolean): number {
@@ -55,7 +56,8 @@ export function applyPrefs(p: Prefs, full: boolean, phoneApp = false): boolean {
   const fixed = SIZES.find((s) => s.k === p.size)?.z ?? 0;
   // the one-screen layout's own zoom first: it is offered only where its layout is at least TERM_MIN_LAYOUT_W wide
   const zt = round3(fixed || autoZoom(true));
-  const term = !phoneApp && p.compact && termFits() && window.innerWidth / zt >= TERM_MIN_LAYOUT_W && !refused.has(refuseKey(p.size));
+  termKey = `${window.innerWidth}x${window.innerHeight}|${p.size}`;
+  const term = !phoneApp && p.compact && termFits() && window.innerWidth / zt >= TERM_MIN_LAYOUT_W && !refused.has(termKey);
   const z = phoneApp ? 1 : round3(fixed || autoZoom(term));
   const b = document.body;
   b.style.setProperty("--z", String(z));
@@ -68,9 +70,15 @@ export function applyPrefs(p: Prefs, full: boolean, phoneApp = false): boolean {
   return term;
 }
 
-/** COMPACT is on but its one-screen layout is not offered in this window (it is at least 1,100 x 540, and its layout
- *  would be under TERM_MIN_LAYOUT_W, or the alert line's fit refused it): the scrolling layout is drawn instead. */
-export const compactRefused = (p: Prefs, phoneApp = false): boolean => !phoneApp && p.compact && termFits() && !document.body.classList.contains("term");
+/** Why COMPACT, on, draws the scrolling layout in a window of at least 1,100 x 540 (its chip's tooltip, A.6.6):
+ *  "narrow", its layout would be under TERM_MIN_LAYOUT_W; "refused", the alert line's fit refused it for this window
+ *  and text size; "" when the one-screen layout is drawn, or COMPACT is off, or the window is smaller, or a phone. */
+export function termWhy(p: Prefs, phoneApp = false): "" | "narrow" | "refused" {
+  if (phoneApp || !p.compact || !termFits() || document.body.classList.contains("term")) return "";
+  const fixed = SIZES.find((s) => s.k === p.size)?.z ?? 0;
+  if (window.innerWidth / round3(fixed || autoZoom(true)) < TERM_MIN_LAYOUT_W) return "narrow";
+  return refused.has(`${window.innerWidth}x${window.innerHeight}|${p.size}`) ? "refused" : "";
+}
 
 /** Current zoom factor (pointer coordinates are in visual pixels, layout in zoomed CSS pixels). */
 export const zoomNow = (): number => Number(document.body.style.getPropertyValue("--z")) || 1;

@@ -524,7 +524,7 @@ body.term{overflow:auto}                              /* scrolls only when the w
 body.term #root{min-height:560px}
 body.term #alerts{min-width:0}
 body.term #alerts .alrt{max-width:min(320px,100%)}
-body.term #search input{width:180px;padding:1px 6px;font-size:10px}
+body.term #search input{width:96px;padding:1px 6px;font-size:10px}   /* the one-screen header's box (its rule at the end of this file) */
 body.term .phead .aux{display:block;flex:1 1 0;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 body.term .phead .aux:has(.chips){display:inline-flex;flex-wrap:wrap;white-space:normal;overflow:visible}
 
@@ -2012,65 +2012,68 @@ body.term #grid[data-view="portfolio"]{display:block;overflow:auto;overscroll-be
 .psrc:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 .psrc-p{margin:4px 0 12px;font-size:15px;line-height:1.5}
 
-/* ===== the one-screen header: one row by rule (the designer's notes of 22 Nov 2026, Part A; D/r3b-fix/header-proto.css)
-   For body.term only. The layout is offered where its own width is at least 1,300 CSS px (lib/prefs.ts); body.tight:
-   under 1,420, where the Monitor's name shows its mark only. Every item has its width by rule, the same in every state
-   (the focus, typing, the results list open, a lit alert, the menu open); only the alert line's holder takes what is
-   left, at least 101 px more than the line's longest promise in both letter placements. The scrolling layout and the
-   phone layout are as before. */
-/* 1 · one row, always. Nothing wraps; only the alert line gives way */
+/* ===== the one-screen header: one row, by rule (the designer's notes of 22 Nov 2026, Part A, revision 1; the block is
+   D/r3b-fix/header-proto.css as it is, with the ten edits of the older lines that its A.6.2 lists). Every rule of the
+   one-screen layout starts with "body.term #topbar": it outranks every older rule of that header, so the block gives
+   the same page wherever it stands in the file. The lines marked "every layout" keep the phone's header and the
+   scrolling layout's header as they were. The layout itself is offered where its own width is at least 1,300 CSS px
+   (lib/prefs.ts); body.tight: under 1,420, where the Monitor's name shows its mark only. Only the alert line's holder
+   takes what is left: at least 102 px more than the line's longest promise in both letter placements. */
+/* 1 · one row, always. Nothing wraps; every item has its width by rule; only the alert line's holder takes what is left */
 body.term #topbar{flex-wrap:nowrap}
-body.term #topbar .brand,body.term #nav,body.term #search,body.term #topbar .bmq{flex:0 0 auto}
-body.term #nav{flex-wrap:nowrap}
-body.term #alerts{flex:1 1 0;min-width:0}
-/* 2 · the tabs: 5 px of side padding, six tabs or seven (body.term #nav a, above) */
-/* 3 · the search box: 96 px, the same with the focus, empty or typed in. Its words "Search" (components/Search.tsx);
-   the "/" key cap until something is typed */
-body.term #search{flex:0 0 auto;width:auto}
-body.term #search input{width:96px;position:static}
-/* 4 · the clock: Singapore's hour and minute. The seconds, Tokyo's and New York's time are in its tooltip and on the
-   menu's first line */
-body.term #clock .ss,body.term #clock .zz{display:none}
-/* 5 · the Monitor's name: the mark always; its words from 1,420 CSS px of layout (the mark's tooltip says them) */
+body.term #topbar .brand,body.term #topbar #nav,body.term #topbar #search,body.term #topbar .bmq{flex:0 0 auto}
+body.term #topbar #nav{flex-wrap:nowrap}
+body.term #topbar #alerts{flex:1 1 0;min-width:0}
+
+/* 2 · the tabs: 5 px of side padding, six tabs or seven */
+body.term #topbar #nav a{padding:2px 5px}
+
+/* 3 · the search box: 96 px, focused or not, empty or typed in. Nothing grows; nothing is laid over anything */
+body.term #topbar #search{width:auto}
+body.term #topbar #search input{width:96px;position:static}
+
+/* 4 · the clock: Singapore's hour and minute. Its seconds, Tokyo's and New York's time: its tooltip and the menu's first line */
+body.term #topbar #clock .ss,body.term #topbar #clock .zz{display:none}
+
+/* 5 · the Monitor's name: the mark always, its words from a layout 1,420 px wide (body.tight under that: lib/prefs.ts) */
 body.term.tight #topbar .brand .bw{display:none}
 body.term.tight #topbar .brand{gap:0}
-/* 6 · the menu: text size, COMPACT, FULL and the account leave the row for a list under one button (22 px).
-   Outside the one-screen layout the button is not drawn and the span is not a box: nothing changes there */
-#more-btn{display:none}
-#more{display:contents}
-#more .mclock{display:none}
-body.term #more-btn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:15px;padding:0;margin-left:2px;border:1px solid var(--bord2);border-radius:2px;background:none;color:var(--txt2);cursor:pointer}
-body.term #more-btn:hover,body.term #topbar.more #more-btn{border-color:var(--amber);color:var(--amber)}
-body.term #more-btn:focus{outline:none}
-body.term #more-btn:focus-visible{outline:1px solid var(--amber);outline-offset:1px}
-body.term #more-btn svg{width:11px;height:11px;display:block}
-body.term #more{display:none}
-body.term #topbar{position:relative}
-body.term #topbar.more #more{display:flex;flex-direction:column;align-items:flex-start;gap:7px;position:absolute;right:8px;top:calc(100% + 3px);z-index:60;min-width:200px;padding:8px 10px;background:var(--panel2);border:1px solid var(--bord2);border-radius:4px;box-shadow:0 10px 28px rgba(0,0,0,.6)}
+
+/* 6 · the menu "≡": Tokyo's and New York's time, TEXT SIZE, COMPACT, FULL, the account (and NEW LAYOUT where it is drawn) */
+#more-btn{display:none}                                   /* every layout: no button outside the one-screen layout */
+#more{display:contents}                                   /* every layout: the span is no box, its items stand in the row as at c374776 */
+#more .mclock{display:none}                               /* every layout: the menu's clock line only in the open menu */
+body.term #topbar .bmq{position:relative}
+body.term #topbar #more-btn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:15px;padding:0;margin-left:2px;border:1px solid var(--bord2);border-radius:2px;background:none;color:var(--txt2);cursor:pointer}
+body.term #topbar #more-btn:hover,body.term #topbar.more #more-btn{border-color:var(--amber);color:var(--amber)}
+body.term #topbar #more-btn svg{width:11px;height:11px;display:block}
+body.term #topbar #more{display:none}
+body.term #topbar.more #more{display:flex;flex-direction:column;align-items:flex-start;gap:7px;position:absolute;right:0;top:calc(100% + 6px);z-index:60;min-width:200px;padding:8px 10px;background:var(--panel2);border:1px solid var(--bord2);border-radius:4px;box-shadow:0 10px 28px rgba(0,0,0,.6)}
 body.term #topbar.more #more .mclock{display:block;align-self:stretch;padding-bottom:6px;border-bottom:1px solid var(--bord);color:var(--txt2);font-size:10.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
 body.term #topbar.more #more .chip-sm,body.term #topbar.more #more .chip,body.term #topbar.more #more .pick{margin:0}
 body.term #topbar.more #more #userchip .so{display:inline}
-/* COMPACT on where its one-screen layout is not offered (a layout under 1,300 CSS px): the chip is muted and says why */
-#cmp-ctl.off{opacity:.55}
+
 /* 7 · the alert line. Never cut: the label, the kind, the figure with its word ("intraday", "at close", "1D"), the
-   time. The name is the only part that is cut, with an ellipsis, and never below its first 8 characters (the fit in
-   components/Alerts.tsx holds that). "via <publisher>" shows only beside a whole name: `.one` is one line high and
-   wraps, so what does not fit beside `.core` stands on a second line that is not drawn */
-#alerts .alrt .one .core{display:contents}                                 /* outside the one-screen layout (scrolling layout, phone) the line is as before */
-body.term #alerts .alrt{display:flex;width:fit-content;max-width:100%}
-body.term #alerts .alrt .one{flex:1 1 auto;display:flex;flex-wrap:wrap;align-content:flex-start;align-items:baseline;column-gap:6px;row-gap:6px;height:1.28em;line-height:1.28;min-width:0;overflow:hidden}
-body.term #alerts .alrt .one .core{display:flex;align-items:baseline;gap:6px;flex:0 1 auto;min-width:0;max-width:100%;overflow:hidden}
-body.term #alerts .alrt .one .core .nm{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-body.term #alerts .alrt .one .core .kd,body.term #alerts .alrt .one .core .fig,body.term #alerts .alrt .one .core .q{flex:none}
-body.term #alerts .alrt .one .src{flex:none}
-/* 8 · what gives way in a drawing wider than the row was measured for, by rule and never a cut figure: the fit finds the
-   line cannot hold its promise (label, kind, 8 characters of the name, figure and word, time) and drops whole parts:
-   first the label (a lit line still says "new" by its colour and pulse); then, if still short, everything but the label
-   and the time ("NEW ALERT 07:07", all of it one hover or click away); if even that cannot stand whole, the one-screen
-   layout is refused for that window (lib/prefs.ts) */
-body.term #alerts.a-nolabel .alrt:not(.none)>.k{display:none}
-body.term #alerts.a-min .alrt:not(.none)>.k{display:inline}
-body.term #alerts.a-min .alrt .one{display:none}
+   time. The name is the only part that gives way, with "…", never under its first 8 characters (the fit in Alerts.tsx
+   holds that: A.6.4). "via <publisher>" stands only beside a whole name: `.one` is one line high and wraps, so what does
+   not fit beside `.core` goes to a second line that is not drawn */
+#alerts .alrt .one .core{display:contents}                /* every layout: outside the one-screen layout the line is as at c374776 */
+body.term #topbar #alerts .alrt{display:flex;width:fit-content;max-width:100%}
+body.term #topbar #alerts .alrt .one{flex:1 1 auto;display:flex;flex-wrap:wrap;align-content:flex-start;align-items:baseline;column-gap:6px;row-gap:6px;height:1.28em;line-height:1.28;min-width:0;overflow:hidden}
+body.term #topbar #alerts .alrt .one .core{display:flex;align-items:baseline;gap:6px;flex:0 1 auto;min-width:0;max-width:100%;overflow:hidden}
+body.term #topbar #alerts .alrt .one .core .nm{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.term #topbar #alerts .alrt .one .core .kd,body.term #topbar #alerts .alrt .one .core .fig,body.term #topbar #alerts .alrt .one .core .q,body.term #topbar #alerts .alrt .one .src{flex:none}
+
+/* 8 · what gives way in a drawing wider than measured, by rule, never a cut figure (the fit, A.2.5): first the label
+   (a lit line still says "new" by its colour and pulse); then everything but the label and the time ("NEW ALERT 07:07",
+   the rest one hover or click away); then the one-screen layout itself is refused for that window (lib/prefs.ts) */
+body.term #topbar #alerts.a-nolabel .alrt:not(.none)>.k{display:none}
+body.term #topbar #alerts.a-min .alrt .one{display:none}
+/* the menu button's ring for the keyboard only (not in the prototype) */
+body.term #topbar #more-btn:focus{outline:none}
+body.term #topbar #more-btn:focus-visible{outline:1px solid var(--amber);outline-offset:1px}
+/* COMPACT on where its one-screen layout is not offered (A.6.6): the chip muted, its tooltip says why */
+#cmp-ctl.off{opacity:.55}
 /* A phone's line (body.pv2), in the same order (SF-2 of the checks of 22 Nov 2026): where the line has too little room
    for the label, the kind, the name's first letter and "…", the figure and the time, the label's "NEW" leaves first (a
    lit line keeps its colour and pulse), then the time's day ("23 Nov"); only then is the name cut below one letter.

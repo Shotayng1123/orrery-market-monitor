@@ -20,80 +20,109 @@ const isNews = (r: Alert) => r.kind === "buyback" || r.kind === "revision" || r.
 const isSigma = (r: Alert) => r.kind === "sigma";
 const hasPage = (r: Alert) => !!r.symbol && !r.symbol.startsWith("news:");
 
-// ---- the line's fit (the designer's notes of 22 Nov 2026, A.2 point 5; SF-2 of the checks of 22 Nov) ----
+// ---- the line's fit (the designer's notes of 22 Nov 2026, A.2 point 5 and A.6.4, revision 1; SF-2 of the checks) ----
 // The line promises whole parts: the label, the kind, the figure with its word, the time, and at least the first
-// characters of the name with "…" (8 in the one-screen header, 1 on a phone). Where a drawing wider than the one the
-// layout was measured for cannot hold that, whole parts leave in a fixed order, never a cut figure:
-//   the one-screen header: the label (a lit line still says "new" by its colour and pulse), then all but the label and
-//     the time ("NEW ALERT 07:07"); if even that cannot stand whole, the one-screen layout is refused for that window
-//     (lib/prefs.ts refuseTerm) and COMPACT gives the scrolling layout;
+// characters of the name with "…" (8 in the one-screen header, 1 on a phone). It measures what this browser draws, in
+// its own letters, with no allowance in the wrong direction. Where a drawing wider than the one the layout was measured
+// for cannot hold the promise, whole parts leave in a fixed order, never a cut figure:
+//   the one-screen header: (1) the label (a lit line still says "new" by its colour and pulse); (2) all but the label
+//     and the time ("NEW ALERT 07:07"); (3) if even that cannot stand whole, or the row's fixed items alone pass the row,
+//     or "no excessive moves" cannot stand whole, the one-screen layout is refused for this window size and text size
+//     (lib/prefs.ts refuseTerm), only once the page's fonts have loaded, and never while the header is not drawn (FULL);
 //   a phone: the label's "NEW", then the time's day ("23 Nov"); only then is the name cut below one letter.
 // The whole message is the line's tooltip and the list a click or a tap opens. Classes on #alerts (tokens.css).
-/** The width the name needs to show its first `n` characters and "…", or the whole name when it is no longer: a hidden
- *  copy of its box with that text, so the face, the size and any spacing are its own. */
-function keepWidth(nm: HTMLElement, n: number): number {
-  const t = nm.textContent ?? "";
-  if (!t || !nm.parentElement) return 0;
-  const probe = nm.cloneNode(false) as HTMLElement;
-  probe.textContent = t.length > n ? `${t.slice(0, n)}…` : t;
-  probe.style.cssText = "position:absolute;visibility:hidden;left:0;top:0;width:auto;min-width:0;max-width:none;flex:none;overflow:visible";
-  nm.parentElement.appendChild(probe);
-  const w = probe.getBoundingClientRect().width;
-  probe.remove();
+let fontsReady = false;
+const drawn = (e: Element | null | undefined): e is Element => !!e && e.getClientRects().length > 0 && getComputedStyle(e).display !== "none";
+/** The width of the name's first `n` characters and "…", drawn by a hidden span inside the name (its own font, size and
+ *  spacing); null when the name has `n` characters or fewer (it is then promised whole). */
+function keepWidth(nm: HTMLElement, n: number): number | null {
+  const ch = [...(nm.textContent ?? "")];
+  if (ch.length <= n) return null;
+  const s = document.createElement("span");
+  s.textContent = `${ch.slice(0, n).join("")}…`;
+  s.style.cssText = "position:absolute;visibility:hidden;white-space:pre;left:0;top:0";
+  nm.appendChild(s);
+  const w = s.getBoundingClientRect().width;
+  s.remove();
   return w;
+}
+function fitDesk(holder: HTMLElement): void {
+  const tb = document.querySelector("#topbar"), al = holder.querySelector<HTMLElement>(".alrt");
+  if (!al || !drawn(tb)) return;   // FULL: the header is not drawn; nothing is measured or changed
+  holder.classList.remove("a-nolabel", "a-min", "a-refuse");
+  if (!termMode()) return;
+  const z = zoomNow(), R = (e: Element) => e.getBoundingClientRect();
+  // a part is whole only when its box lies inside the line's box (less its border), `.one` and `.core`, on their line
+  const inside = (e: Element | null): boolean => {
+    if (!drawn(e)) return true;
+    const r = R(e);
+    for (const box of [al, e.closest(".one"), e.closest(".core")]) {
+      if (!box || box === e || !drawn(box)) continue;
+      const o = R(box), bw = box === al ? parseFloat(getComputedStyle(al).borderRightWidth) * z : 0;
+      if (r.right > o.right - bw + 0.01 || r.left < o.left + bw - 0.01 || r.top >= o.bottom - 1) return false;
+    }
+    return true;
+  };
+  const nm = al.querySelector<HTMLElement>(".nm");
+  const nameShort = () => { if (!nm) return false; const n = keepWidth(nm, 8); return n != null && R(nm).width + 0.01 < n; };
+  const cut = (sels: string[]) => sels.some((q) => !inside(al.querySelector(q)));
+  const bmq = tb!.querySelector(".bmq");
+  const row = () => { const t = R(tb!), pr = parseFloat(getComputedStyle(tb!).paddingRight) * z; return drawn(bmq) && R(bmq).right > t.right - pr + 0.5; };
+  const refuse = () => { if (fontsReady) refuseTerm(); holder.classList.add("a-refuse"); };
+  if (row()) return refuse();
+  if (al.classList.contains("none")) { if (cut([":scope > .k", ":scope > .mut"])) refuse(); return; }
+  if (!cut([":scope > .k", ".kd", ".fig", ".q", ":scope > .t"]) && !nameShort()) return;
+  holder.classList.add("a-nolabel");
+  if (!cut([".kd", ".fig", ".q", ":scope > .t"]) && !nameShort()) return;
+  holder.classList.remove("a-nolabel"); holder.classList.add("a-min");
+  if (!cut([":scope > .k", ":scope > .t"])) return;
+  refuse();
 }
 /** Whether a part stands past the right edge of the box that hides it (its content box: the line's padding included). */
 function past(box: Element, parts: Array<Element | null>): boolean {
   const r = box.getBoundingClientRect(), cs = getComputedStyle(box), z = zoomNow();
-  const edge = r.right - (parseFloat(cs.borderRightWidth) + parseFloat(cs.paddingRight)) * z + 0.5;
+  const edge = r.right - (parseFloat(cs.borderRightWidth) + parseFloat(cs.paddingRight)) * z + 0.01;
   return parts.some((e) => { if (!e) return false; const q = e.getBoundingClientRect(); return q.width > 0 && q.right > edge; });
-}
-function fitDesk(holder: HTMLElement): void {
-  holder.classList.remove("a-nolabel", "a-min");
-  const al = holder.querySelector<HTMLElement>(".alrt");
-  if (!al || al.classList.contains("none") || !termMode()) return;
-  const core = al.querySelector(".core"), nm = al.querySelector<HTMLElement>(".nm"), k = al.querySelector(":scope > .k"), t = al.querySelector(":scope > .t");
-  const need = nm ? keepWidth(nm, 8) : 0;
-  const cut = () => past(al, [k, al.querySelector(":scope > .one"), t]) || (!!core && past(core, [...core.children])) || (!!nm && nm.getBoundingClientRect().width + 0.5 < need);
-  if (!cut()) return;
-  holder.classList.add("a-nolabel");
-  if (!cut()) return;
-  holder.classList.add("a-min");
-  // the last step, in a drawing about 60% wider than the Monitor's: not even the label and the time stand whole.
-  // Only once the page's own faces are in, so a fallback face drawn for a moment cannot refuse the layout.
-  if (past(al, [k, t]) && document.fonts?.status === "loaded") refuseTerm();
 }
 function fitPhone(holder: HTMLElement): void {
   holder.classList.remove("a-nonew", "a-noday");
   const al = holder.querySelector<HTMLElement>(".alrt"), one = al?.querySelector(".one");
   if (!al || !one || al.classList.contains("none")) return;
   const nm = one.querySelector<HTMLElement>(".nm"), k = al.querySelector(":scope > .k"), t = al.querySelector(":scope > .t");
-  const need = nm ? keepWidth(nm, 1) : 0;
-  const cut = () => past(one, [...one.querySelectorAll(".kd,.nm,.fig")]) || past(al, [k, one, t]) || (!!nm && nm.getBoundingClientRect().width + 0.5 < need);
+  const cut = () => { const need = nm ? keepWidth(nm, 1) : null; return past(one, [...one.querySelectorAll(".kd,.nm,.fig")]) || past(al, [k, t]) || (!!nm && need != null && nm.getBoundingClientRect().width + 0.01 < need); };
   if (!cut()) return;
   if (al.querySelector(".k .kn")) { holder.classList.add("a-nonew"); if (!cut()) return; }
   if (al.querySelector(".t .td")) holder.classList.add("a-noday");
 }
-/** Runs the fit when the line's width changes (a ResizeObserver on #alerts), when its words or their drawing change (a
- *  MutationObserver: the alert, its lit state, its time, a style), when the layout changes, and once the page's faces
- *  are in. */
-function useFit(box: RefObject<HTMLDivElement | null>, phone: boolean, term: boolean, key: string): void {
+/** Runs the fit after every render of the line, when its width changes (a ResizeObserver on #alerts), when its words or
+ *  their drawing change between renders (a MutationObserver: a style, a class), and once the page's faces are in. The
+ *  watchers follow the line's box: a phone draws none while there is no alert, and one once there is. */
+function useFit(box: RefObject<HTMLDivElement | null>, phone: boolean): void {
+  const onPhone = useRef(phone);
+  onPhone.current = phone;
+  const st = useRef<{ el: HTMLDivElement | null; run: () => void; off: () => void }>({ el: null, run: () => undefined, off: () => undefined });
   useLayoutEffect(() => {
     const el = box.current;
-    if (!el) return;
-    const mo = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => run());
-    const run = () => {
-      mo?.disconnect();   // the fit's own probe of the name's width is not a change of the line
-      if (phone) { el.classList.remove("a-nolabel", "a-min"); fitPhone(el); } else { el.classList.remove("a-nonew", "a-noday"); fitDesk(el); }
-      mo?.takeRecords(); mo?.observe(el, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["class", "style"] });
-    };
-    run();
-    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => run());
-    ro?.observe(el);
-    let live = true;
-    void document.fonts?.ready.then(() => { if (live) run(); });
-    return () => { live = false; ro?.disconnect(); mo?.disconnect(); };
-  }, [box, phone, term, key]);
+    if (st.current.el !== el) {
+      st.current.off();
+      st.current = { el, run: () => undefined, off: () => undefined };
+      if (el) {
+        const mo = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => run());
+        const run = () => {
+          mo?.disconnect();   // the fit's own probe of the name's width is not a change of the line
+          if (onPhone.current) { el.classList.remove("a-nolabel", "a-min", "a-refuse"); fitPhone(el); } else { el.classList.remove("a-nonew", "a-noday"); fitDesk(el); }
+          mo?.takeRecords(); mo?.observe(el, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["class", "style"] });
+        };
+        const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => run());
+        ro?.observe(el);
+        let live = true;
+        void document.fonts?.ready.then(() => { fontsReady = true; if (live) run(); });
+        st.current = { el, run, off: () => { live = false; ro?.disconnect(); mo?.disconnect(); } };
+      }
+    }
+    st.current.run();
+  });
+  useEffect(() => () => st.current.off(), []);
 }
 
 /** Alerts: the latest one as a single line next to the tabs, refreshed with every load; click for the last
@@ -101,7 +130,7 @@ function useFit(box: RefObject<HTMLDivElement | null>, phone: boolean, term: boo
  *  and guidance revisions at companies worth USD 5bn or more, M&A with a stated size of USD 1bn or more.
  *  A new alert lights the line up (bright, pulsing) until it is opened or half an hour has passed (Shota, 15 Nov). */
 /** `phone`: the phone layout is on. Its list is rows, not a table (the designer's D-63, 21 Nov 2026). */
-export function Alerts({ tick, phone = false, term = false }: { tick: number; phone?: boolean; term?: boolean }) {
+export function Alerts({ tick, phone = false }: { tick: number; phone?: boolean }) {
   const a = useApi<{ rows: Alert[] }>("alerts", { n: 20 }, tick);
   const [open, setOpen] = useState(false);
   const [seen, setSeen] = useState<number>(readSeen);
@@ -148,7 +177,7 @@ export function Alerts({ tick, phone = false, term = false }: { tick: number; ph
   // when there is no alert (a new server, or none raised yet): "no excessive moves" took the height of a list row.
   // While the answer is on its way the line says so, and "unavailable" when it does not come.
   const when = latest ? fmtWhen(latest.at) : "", cut = when.lastIndexOf(" "), day = cut > 0 ? when.slice(0, cut + 1) : "";
-  useFit(box, phone, term, latest ? `${latest.id}|${lit}|${latest.name}|${latest.msg}|${when}` : a.error ? "error" : "none");
+  useFit(box, phone);
   if (phone && a.data && !rows.length) return null;
   return (
     <div id="alerts" ref={box}>
@@ -169,7 +198,7 @@ export function Alerts({ tick, phone = false, term = false }: { tick: number; ph
             {orphan && latest.market && <span className="src">via {latest.market}</span>}
           </span>
           <span className="t">{day && <span className="td">{day}</span>}{when.slice(day.length)}</span>
-        </> : <span className="mut">{phone ? (a.error ? "· unavailable" : "· loading…") : a.error ? "unavailable" : "no excessive moves"}</span>}
+        </> : <span className="mut">{phone ? (a.error ? "· unavailable" : "· loading…") : a.error ? "unavailable" : a.data ? "no excessive moves" : "loading…"}</span>}
       </span>
       {/* The list (the designer's D-63, 21 Nov 2026; B-34). It was a table whose cells did not wrap in a box that scrolled
           sideways: on a phone every message was cut at the box's edge and a σ move's source was off the screen; on a
