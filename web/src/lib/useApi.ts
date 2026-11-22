@@ -37,7 +37,8 @@ export function useApi<T>(action: string | null, params: Record<string, string |
     }
     if (!apiConfigured) { set({ data: null, error: "API not configured (VITE_API_URL)", loading: false, keptAt: null }); return; }
     let alive = true, answered = false;
-    const kk = NOT_KEPT.has(action) ? null : keepKey(tokenId(getToken()), action, params);
+    // an answer is kept for the sign-in it was asked with: one that arrives after a sign-out is not written back
+    const asked = getToken(), kk = NOT_KEPT.has(action) ? null : keepKey(tokenId(asked), action, params);
     const fill = async (error: string | null, loading: boolean) => {
       const kept = kk ? await keepGet<T>(kk) : null;
       if (!alive || (loading && answered)) return;   // the answer arrived while the store was being read
@@ -49,7 +50,7 @@ export function useApi<T>(action: string | null, params: Record<string, string |
     if (w) void w.then(arm); else arm();
     set((s) => ({ ...s, loading: true }));
     api<T>(action, params)
-      .then((d) => { answered = true; clearTimeout(slow); if (alive) set({ data: d, error: null, loading: false, keptAt: null }); if (kk) keepSet(kk, d); })
+      .then((d) => { answered = true; clearTimeout(slow); if (alive) set({ data: d, error: null, loading: false, keptAt: null }); if (kk && getToken() === asked) keepSet(kk, d); })
       .catch((e: unknown) => { answered = true; clearTimeout(slow); if (alive) void fill(e instanceof Error ? e.message : String(e), false); });
     return () => { alive = false; clearTimeout(slow); };
     // eslint-disable-next-line react-hooks/exhaustive-deps

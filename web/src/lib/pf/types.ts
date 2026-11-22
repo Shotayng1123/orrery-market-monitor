@@ -99,6 +99,9 @@ export interface BookRow {
   valuation: string;
   status: "open" | "stopped" | "closed";
   createdAt: string; startedOn: string;
+  /** in the list (pf_list): the targets' re-sets and the January lines, so the list can say the targets in force
+   *  (EN-6). An answer of a server from before 22 Nov 2026 has neither: the targets of creation stand. */
+  resets?: ResetRow[]; retargets?: SettingRow[];
 }
 export interface Ladder { cut1: number; cap1: number; cut2: number; cap2: number; out: number; cooling: number; deadline: number }
 export interface SettingRow {

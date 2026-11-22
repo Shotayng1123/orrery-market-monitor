@@ -2,19 +2,21 @@
 // its range, one line of why and whose it is; a value out of its range or off its step is refused in words under the
 // field, never corrected. The same rules run on the server before anything is stored (lib/pf/form.ts is the server's
 // file). A computer shows the form beside its summary; a phone two screens (the start, then Review) and one screen per
-// section to edit. What is typed is kept on this device while the form is open elsewhere (sessionStorage,
-// `om_pf_draft`), and is never sent anywhere before CREATE.
+// section to edit. What is typed is kept in this tab while the form is open elsewhere (sessionStorage, `om_pf_draft`),
+// and is never sent anywhere before CREATE. The draft belongs to the account that typed it: it carries that account's
+// id, a draft that is another account's is dropped when the form opens, and SIGN OUT removes it (lib/api.ts). An
+// expired sign-in keeps it, for the same person to find on signing in again.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Panel } from "../Panel";
 import { Section } from "../PhoneKit";
 import { Consent } from "./Consent";
 import { Assumed, ByTag, Chips, flash, go, href, Muted, NumInput, setLastBook, useHeaderTop } from "./shared";
 import { EquivalentLine, LadderBases, ReferenceLine, TieLine, TradeLists, VolLines } from "./Blocks";
-import { failureWords, pfCreate, PfError, serverWords, useRead } from "../../lib/pf";
+import { accountId, failureWords, pfCreate, PfError, serverWords, useRead } from "../../lib/pf";
 import { useNet } from "../../lib/net";
 import { checkForm, defaultName, defaultRaw, inputText, outOfRange, usdLine, type Checked, type Raw } from "../../lib/pf/form.ts";
 import { fmtFull, NAV_RANGE, parseAmount } from "../../lib/pf/money.ts";
-import { ADJ_GROSS_CARD, AR_STARTS, CAP_LINE, fieldOf, fieldsOf, FIXED_LINE, isStart, leverageHelp, RR_STARTS, SECTIONS, STARTS } from "../../lib/pf/presets.ts";
+import { ADJ_GROSS_CARD, AR_STARTS, CAP_LINE, fieldOf, fieldsOf, FIXED_LINE, isStart, leverageHelp, referenceLabel, RR_STARTS, SECTIONS, STARTS } from "../../lib/pf/presets.ts";
 import { NOT_AGREED } from "../../lib/pf/statement.ts";
 import { cumulative, drawdownLine, ladderShort, restoreLine } from "../../lib/pf/targets.ts";
 import { hmSgt } from "../../lib/pf/calendar.ts";
@@ -22,10 +24,20 @@ import type { Base, ConsentState, Field, FormFacts, LadderBase, Refusal, Section
 import { REFERENCE, TARGET_RETURN, TARGET_VOLATILITY } from "../../lib/labels";
 
 const DRAFT = "om_pf_draft";
-interface Draft { start: StartId; name: string; nameEdited: boolean; raw: Raw; rid: string; at: string }
+/** `who`: the account that typed it (lib/pf.ts accountId). */
+interface Draft { start: StartId; name: string; nameEdited: boolean; raw: Raw; rid: string; at: string; who: string }
 const newRid = (): string => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 8)}`;
-const readDraft = (): Draft | null => { try { const d = JSON.parse(sessionStorage.getItem(DRAFT) ?? "null") as Draft | null; return d && isStart(d.start) && STARTS[d.start].offered && d.raw && typeof d.name === "string" ? d : null; } catch { return null; } };
-const writeDraft = (d: Draft | null): void => { try { if (d) sessionStorage.setItem(DRAFT, JSON.stringify(d)); else sessionStorage.removeItem(DRAFT); } catch { /* not kept */ } };
+const writeDraft = (d: Omit<Draft, "who"> | null): void => { try { const who = accountId(); if (d && who) sessionStorage.setItem(DRAFT, JSON.stringify({ ...d, who } satisfies Draft)); else sessionStorage.removeItem(DRAFT); } catch { /* not kept */ } };
+/** The draft this tab holds, if it is this account's. One that is another account's (or names none) is removed. */
+function readDraft(): Draft | null {
+  try {
+    const d = JSON.parse(sessionStorage.getItem(DRAFT) ?? "null") as Draft | null;
+    if (!d) return null;
+    const who = accountId();
+    if (!who || d.who !== who) { sessionStorage.removeItem(DRAFT); return null; }
+    return isStart(d.start) && STARTS[d.start].offered && d.raw && typeof d.name === "string" ? d : null;
+  } catch { return null; }
+}
 
 /** `new`, `new/ar-ls-jp`, and on a phone `new/ar-ls-jp/review` and `new/ar-ls-jp/edit/limits`. An older address
  *  (`new/ar-ls`) opens the Japan start; a start that is not offered yet opens the form's own first start. */
@@ -123,6 +135,9 @@ function Form({ sub, phone, facts, reloadFacts }: { sub: string; phone: boolean;
         setBusy(false);
         if (e instanceof PfError && e.status === 409) { setConsent(e.consent ?? { ...consent, agreedAt: null }); setCard(true); return; }
         if (e instanceof PfError && e.refusals) { setServer(e.refusals); setTouched((t) => new Set(t).add("*")); setMsg(e.message); reloadFacts(); return; }
+        // An earlier press of this form did create a book (its answer never arrived) and the form has changed since:
+        // nothing is announced, the page says what exists, and the form as it now stands is a request of its own.
+        if (e instanceof PfError && e.made) { setRid(newRid()); reloadFacts(); setMsg(`Nothing new was created: an earlier press of this form created "${e.made.name}", which is among your portfolios. Press ${phone ? "Create" : "CREATE"} again to create this one as well.`); return; }
         setMsg(failureWords(e, { offline: "Offline: a portfolio needs the server. Your settings are kept on this device.", signedOut: "Signed out: sign in again. Nothing was created; your settings are kept.", refused: (w) => `Not created: ${w}. Nothing was saved.` }));
       });
   };
@@ -162,7 +177,7 @@ function Form({ sub, phone, facts, reloadFacts }: { sub: string; phone: boolean;
         {f.key === "out" && cum && num("out") != null && <span className="pf-unit2" id="pf-at3">(at {cum.out.toFixed(1)}%)</span>}
         {!isDefault(f) && <span className="pf-changed">changed · <button type="button" className="pf-link" onClick={() => resetField(f)}>reset</button></span>}
         {f.key === "target_x" && <EquivalentLine x={num("target_x")} rate={facts.rates[base]} base={base} />}
-        {f.key === "target_vol" && <VolLines x={num("target_x")} vol={num("target_vol")} cut1={num("cut1")} varLimit={num("var")} />}
+        {f.key === "target_vol" && <VolLines x={num("target_x")} vol={num("target_vol")} cut1={num("cut1")} varLimit={num("var")} start={start} />}
         {f.key === "var" && c.tie && (c.tie.state !== "clear" || touched.has("var")) && <TieLine state={c.tie.state} line={c.tie.line} id="pf-tie-var" />}
         {f.key === "adj_gross" && <span className="pf-line">{ADJ_GROSS_CARD}</span>}
       </>
@@ -198,7 +213,7 @@ function Form({ sub, phone, facts, reloadFacts }: { sub: string; phone: boolean;
   // ---------------- a phone ----------------
   if (phone) {
     const sumOf = (sec: SectionId): string => (sec === "kind" ? `${base} · ${c.nav != null ? fmtFull(c.nav) : "–"} · absolute return`
-      : sec === "targets" ? `cash + ${num("target_x") ?? "–"}% · ${num("target_vol") ?? "–"}% of capital · ${def.reference?.short ?? ""} PROXY`
+      : sec === "targets" ? `cash + ${num("target_x") ?? "–"}% · ${num("target_vol") ?? "–"}% of capital · ${referenceLabel(start, base, blend)?.short ?? ""} PROXY`
       : sec === "trade" ? `${def.trade.can[0]} · ${def.trade.cannot.length} lines of what it cannot trade here`
       : sec === "limits" ? def.summary(c.values)[0]
       : sec === "ladder" ? (num("cut1") != null && num("cut2") != null && num("out") != null ? ladderShort({ cut1: num("cut1")!, cut2: num("cut2")!, out: num("out")!, cap1: 0, cap2: 0, cooling: 0, deadline: 0 }, ladderBase) : "–")

@@ -4,7 +4,8 @@ import { Topbar, VIEWS, type ViewId } from "./components/Topbar";
 import { CrashSwitch, TabGuard } from "./components/TabGuard";
 import { Gate } from "./auth/Gate";
 import { takeVerifyLink } from "./lib/verify";
-import { api, apiConfigured, clearToken, getToken, tokenId, type Me } from "./lib/api";
+import { api, apiConfigured, getToken, signOutHere, tokenId, type Me } from "./lib/api";
+import { keepClear } from "./lib/keep";
 import { AccountModal, ChangePassword } from "./auth/Account";
 import { Logo } from "./components/Logo";
 import { DEV_MOCK } from "./lib/useApi";
@@ -173,7 +174,10 @@ export default function App() {
 
   const setPrefs = (p: Prefs) => { setPrefsState(p); savePrefs(p); };
   // signing out also ends this device's notifications: they belong to the account, and it is leaving this browser
-  const signOut = () => { void pushOff().catch(() => undefined).finally(() => { clearToken(); setTok(null); setAcct(false); setNotify(false); }); };
+  const signOut = () => { void pushOff().catch(() => undefined).finally(() => { signOutHere(); setTok(null); setAcct(false); setNotify(false); }); };
+  // A start that finds no sign-in: one that was not to be remembered ended with its tab, or one ran out. What the page
+  // kept on this device for opening without a connection belongs to nobody who is here now, and goes (lib/keep.ts).
+  useEffect(() => { if (!DEV_BYPASS && !getToken()) void keepClear(); }, []);
 
   // a feed that has stopped is the worst reading there is: every price on screen is old, whatever the jobs say
   const feedStopped = !!health?.feed && health.feed.expected && !health.feed.ok;

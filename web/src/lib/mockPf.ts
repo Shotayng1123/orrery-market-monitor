@@ -43,7 +43,8 @@ const fxDay = (): string => bookedDays("FX", Date.now(), 1)?.[0] ?? valuationDay
 const FX_RATE = 158.4, FX_SOURCE = "Yahoo Finance, unofficial";
 const facts = () => Promise.resolve({
   rates: { USD: { name: "EFFR", rate: 3.88, d: "2026-11-18", source: "New York Fed", standIn: false }, JPY: { name: "TONA", rate: 1.227, d: "2026-11-18", source: "Bank of Japan", standIn: false } },
-  usdjpy: { rate: FX_RATE, d: fxDay(), source: FX_SOURCE }, holidays: mockHolidays(),
+  // the holiday rows reach as the Monitor's do (supabase/functions/_shared/sessions.ts HOLIDAY_SOURCES, "through")
+  usdjpy: { rate: FX_RATE, d: fxDay(), source: FX_SOURCE }, holidays: { ...mockHolidays(), through: "2027-12-31" },
 });
 
 // ---- the stand-in books (the designer's hard cases, D/p1-design.md §8) ----

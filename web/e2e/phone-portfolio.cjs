@@ -236,6 +236,21 @@ const aboveBar = (p, sel) => p.evaluate(async (s) => { const seen = []; for (con
     ck("the macro start's lists of what it can trade: three lists, the three lines on duration outside the US whole in bold, and no line takes a tap (an address that names another start switches without a question)", tr.heads.length === 3 && tr.bold === 3 && tr.taps === 0 && !tr.asked, tr);
     await ctx.close();
   }
+  // EN-3 (DC-6): Review's line for the targets names the Reference the book will have, as the card does: the macro
+  // start's blend as chosen, a Japan book's on a yen base (the second review of P-1, 22 Nov 2026)
+  {
+    const { ctx, p, errs } = await open(b, "P2");
+    await go(p, "portfolio/new/ar-macro/edit/targets", "#pf-blend");
+    await p.selectOption("#pf-blend", "70"); await settle(p, 150);
+    await pf(p, "new/ar-macro/review", "#pf-create");
+    const macro = await p.evaluate(() => document.querySelector('.pfp-fold[data-sec="targets"] .s').textContent);
+    await pf(p, "new/ar-ls-jp/edit/kind", '[data-row="base"]');
+    await p.locator('[data-row="base"] .pf-chip[data-value="JPY"]').tap(); await settle(p, 150);
+    await pf(p, "new/ar-ls-jp/review", "#pf-create");
+    const yen = await p.evaluate(() => document.querySelector('.pfp-fold[data-sec="targets"] .s').textContent);
+    ck(`EN-3: on a phone's Review the targets' line names the Reference the book will have: the macro start on a 70/30 blend "${macro}", the Japan start on a yen base "${yen}" (the start's default label is "60/40 blend" and "MSCI Japan, hedged")`, /· 70\/30 blend PROXY$/.test(macro) && /· MSCI Japan PROXY$/.test(yen) && errs.length === 0, { macro, yen, errs });
+    await ctx.close();
+  }
 
   console.log("\n[5] a book: its head and two views, Overview, a change in the sheet, the targets' window, notes, delete");
   {

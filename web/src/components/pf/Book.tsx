@@ -16,7 +16,7 @@ import { showValue } from "../../lib/pf/form.ts";
 import { fmtFull, fmtMoney2, fromMinor } from "../../lib/pf/money.ts";
 import { NOT_BUILT_YET, referenceLabel, STARTS } from "../../lib/pf/presets.ts";
 import { equivalentLine, equivalentShort, ladderCaps, ladderShort, sharpeLine, BASE_NAME, SHARPE_TIP } from "../../lib/pf/targets.ts";
-import { dm, dmy, stampSgt, wdmy } from "../../lib/pf/calendar.ts";
+import { dm, dmy, stampSgt, valuationDay, wdmy } from "../../lib/pf/calendar.ts";
 import { activityOf, settingsNow, shortValue, sinceWords, targetsNow, type NowRow } from "../../lib/pf/view.ts";
 import { NO_SUCH } from "../../lib/pf/words.ts";
 import type { BookRow } from "../../lib/pf/types.ts";
@@ -62,7 +62,7 @@ function Switcher({ book, rows, phone }: { book: BookRow; rows: BookRow[]; phone
 /** A limit's value with what is pending under it. */
 const limitValue = (r: NowRow): ReactNode => <>{showValue(r.field, r.value)}{r.pending && <span className="pf-pending" data-pending={r.key}>{shortValue(r.field, r.pending.value)} from {wdmy(r.pending.from)} · pending</span>}</>;
 /** Whose a value is, in full: a default's adviser, or "you · set by the account, 12 Nov 2026 10:02 SGT". */
-export const byCard = (r: NowRow): string => (r.changed ? `you · ${r.basis}, ${stampSgt(r.at)}` : r.field.who.card);
+export const byCard = (r: NowRow): string => (r.own ? `you · ${r.basis}, ${stampSgt(r.at)}` : r.field.who.card);   // the account's own value, also one set back to a default (EN-4)
 
 function Overview({ a, phone, onChanged }: { a: BookAnswer; phone: boolean; onChanged: () => void }) {
   const b = a.book, t = targetsNow(b, a.nyDate), nav = fromMinor(b.base, b.startingNav);
@@ -149,7 +149,9 @@ export const NoSuch = ({ phone }: { phone: boolean }) => (
 /** `#portfolio/<id>` (Overview) and `#portfolio/<id>/settings[/<section>]`. Any other view of a book is not built: it
  *  opens Overview. */
 export function Book({ id, view, section, phone, tick }: { id: string; view: "overview" | "settings"; section: string; phone: boolean; tick: number }) {
-  const slow = Math.floor(tick / 5);   // what is on screen is the account's own: asked again every few minutes, and after every change
+  // what is on screen is the account's own: asked again every few minutes, after every change, and as soon as the
+  // valuation day turns at 17:00 New York, so that "in force now" and "from the next session" are the server's (RT-9)
+  const slow = `${Math.floor(tick / 5)}|${valuationDay(new Date())}`;
   const book = useRead<BookAnswer>("pf_get", { id }, slow), list = useRead<ListAnswer>("pf_list", {}, slow);
   const missing = !book.data && book.error?.status === 404;
   useEffect(() => { if (book.data) setLastBook(id); else if (missing && lastBook() === id) setLastBook(null); }, [book.data, missing, id]);

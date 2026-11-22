@@ -63,8 +63,9 @@ workflow says "Not set up yet" and does nothing.
 
 What a deploy does, in order: the logic checks (`sim/logic.test.ts`; a failure stops it); a list of what is waiting;
 a guard; `supabase db push`; the notification key, made on the runner and stored on the server if the server has
-none (never shown, never in git); `supabase functions deploy tick daily api`; and, if `NOTE_DISPATCH_TOKEN` is set,
-storing it in the database with `monitor_set_github_token`.
+none (never shown, never in git); `supabase functions deploy tick daily api`; the paper portfolio's walls as the
+database sees them (`pf_selftest`, the live check's part `pf`: a wall down fails the run, "The paper portfolio"
+below); and, if `NOTE_DISPATCH_TOKEN` is set, storing it in the database with `monitor_set_github_token`.
 
 The Supabase CLI is pinned to one version in the workflow (3.2.0). Version 3 changed which database a command
 talks to (a local one unless `--remote` is given) and what it prints, and taking "latest" brought that in
@@ -483,7 +484,17 @@ shows no entry while `PAPER_ON_LIVE_SITE` (`web/src/lib/paper.ts`) is `false`. B
   owns those functions, and one policy per table lets it see only the rows of the account the function set for its
   transaction. If the hosted database does not let the migration make that role or hand it the functions, a notice
   says so, the functions stay with their maker and still filter by account, and `pf_selftest()` reports which way it
-  is. Every child row carries `(portfolio_id, account)` with a foreign key to its portfolio.
+  is. Every child row carries `(portfolio_id, account)` with a foreign key to its portfolio. Nothing an account is
+  handed counts another account's rows: a portfolio's id is random, and a setting's row, a note and a line of the
+  ladder are numbered inside their own portfolio from 1 (no table of the store has a sequence).
+- **One statement.** The whole migration is a single `DO` block, so the database applies all of it or none of it,
+  whether or not the deploy wraps a file in a transaction; at no moment do `anon` or `authenticated` hold `EXECUTE` on
+  a `pf_` function, nor any API role a privilege on a table of the store (`sim/sql/pf.test.cjs` applies the file
+  statement by statement, each committed on its own, and looks after every one).
+- **How much a portfolio holds.** Every change is kept, so a portfolio holds at most 500 notes (a removed one keeps
+  its line and counts), 500 changes of its limits and assumptions, 50 renamings and 20 entries of the targets for one
+  year; the next one is refused in words and no row is dropped. `pf_get` returns a portfolio whole, so these also bound
+  one answer (about a million characters at the most notes).
 - **What is never changed.** What is fixed at creation cannot be updated (a trigger refuses); settings and notes are
   only added to; a portfolio's rows go only with the portfolio, by `pf_delete`, after its account has typed its name;
   an account's rows go with the account.
@@ -498,13 +509,19 @@ shows no entry while `PAPER_ON_LIVE_SITE` (`web/src/lib/paper.ts`) is `false`. B
 
   The "☐" is the checkbox itself. The logic checks compare this line, the migration's seed and the engine's file
   (`_shared/pf/statement.ts`) character for character. A new wording is a new version, asked again of every account.
-- **Looking.** Actions › live-check with `only` = `pf` calls `pf_selftest()` and prints `pf_selftest ok` with counts
-  only (tables, policies, grants that should not exist, functions, whether the second wall is in force): no row, no
-  name, no account. `deploy-server` does not run it; run it once after the first deploy of this migration.
-- **Checks.** `sim/sql/pf.test.cjs` applies the migration on PGlite (twice; as a superuser, as a role that may make
-  roles, and as one that may not), runs the same 53 calls through the engine against the database's functions and
-  against the local copy's store and compares every answer, and tries each rule above from outside the functions.
-  `sim/logic.test.ts` section [AE] checks the engine.
+- **Looking.** `pf_selftest()` prints `pf_selftest ok` with counts only (tables, policies, grants that should not
+  exist on a table, a sequence or a function, the server's own role included, functions, whether the second wall is in
+  force): no row, no name, no account. Its `ok` is true only when every wall stands. `deploy-server` runs it after each
+  deploy, after the functions (step "The paper portfolio's walls", `jobs/live_check.ts` part `pf`): a wall that is down,
+  or a look that cannot be made, fails that step and the run is red. Actions › live-check with `only` = `pf` runs the
+  same look by hand.
+- **Checks.** `sim/sql/pf.test.cjs` applies the migration on PGlite (twice; statement by statement; as a superuser, as
+  a role that may make roles, and as one that may not), runs the same 56 calls through the engine against the
+  database's functions and against the local copy's store and compares every answer, and tries each rule above from
+  outside the functions: the numbering inside a portfolio, the caps, and `pf_selftest`'s verdict with a grant put
+  back.
+  `sim/logic.test.ts` sections [AF] and [AH] check the engine, the routes over the local copy's store, and the guards
+  that keep a private row out of a log or a job.
 
 The welcome email still says "the six tabs": it is to say seven in the pull request that turns the switches.
 

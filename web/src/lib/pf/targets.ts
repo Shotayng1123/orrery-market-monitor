@@ -5,8 +5,9 @@
 // The target return is cash + x% a year, never a fixed percentage: cash is the base currency's overnight rate (EFFR on
 // a dollar base, Act/360; TONA on a yen base, Act/365), compounded at each strike as the book's own cash is, with the
 // x on top. The target volatility is in % of capital a year. Neither is a limit.
-import type { Base, CashRate, Ladder, LadderBase } from "./types.ts";
+import type { Base, CashRate, Ladder, LadderBase, StartId } from "./types.ts";
 import { dmy } from "./calendar.ts";
+import { fieldOf } from "./presets.ts";
 
 const DAYCOUNT: Record<Base, number> = { USD: 360, JPY: 365 };
 /** The cash line's growth over 365 days at a flat overnight rate, in per cent: 261 weekday strikes, 209 of one day and
@@ -42,12 +43,16 @@ export const SHARPE_TIP = "the target return's margin over cash ÷ the target vo
 /** The normal 99% one-day VaR a target volatility implies, in % of capital: 2.326 × σ* ÷ √252. */
 export const normalVar = (volPct: number): number => (2.326 * volPct) / Math.sqrt(252);
 export type TieState = "clear" | "warned" | "refused";
+/** The step a start's VaR limit is typed in (0.1 on the equity starts, 0.05 on the macro start). */
+export const varStep = (start: StartId): number => fieldOf(start, "var")?.num?.step ?? 0.01;
 /** The tie to the VaR limit (R-31): clear at most 80% of the limit, warned above it (CREATE still allowed), refused
- *  above the limit itself. The refused sentence is the plan's; the warned one the designer's (Q-P1). */
-export function varTie(volPct: number, limitPct: number): { state: TieState; v: number; line: string } {
+ *  above the limit itself. The refused sentence is the plan's; the warned one the designer's (Q-P1). The limit it asks
+ *  for is the smallest one the VaR field itself takes (on the field's step, EN-11): typed as advised, it passes. */
+export function varTie(volPct: number, limitPct: number, step = 0.01): { state: TieState; v: number; line: string } {
   const v = normalVar(volPct), lim = two(limitPct);
   if (v > limitPct + 1e-12) {
-    const need = (Math.ceil(v * 100 - 1e-9) / 100).toFixed(2);   // a limit that would pass: never a figure that is still refused
+    const k = Math.ceil(v / step - 1e-9), up = Math.round(k * step * 1e6) / 1e6, s = String(up), d = s.includes(".") ? s.split(".")[1].length : 0;
+    const need = step < 0.05 ? up.toFixed(2) : d >= 1 ? s : up.toFixed(1);   // "1.1", "1.05", "0.74": never a figure that is still refused
     return { state: "refused", v, line: `Target volatility ${one(volPct)}% implies a 99% one-day VaR of ${two(v)}% of capital on a normal law, above your ${lim}% VaR limit: lower the target or raise the limit to at least ${need}%` };
   }
   if (v > 0.8 * limitPct + 1e-12) return { state: "warned", v, line: `Target volatility ${one(volPct)}% implies a 99% one-day VaR of ${two(v)}% of capital on a normal law: above 80% of your ${lim}% VaR limit, where the limit's own warning starts.` };
@@ -57,9 +62,12 @@ export function varTie(volPct: number, limitPct: number): { state: TieState; v: 
 /** The ladder's first step in target volatilities (C-31): words only, it refuses nothing. Under 0.8 the scale line. */
 export const SCALE_LINE = "For scale (E, the PMs' simulations, independent returns at a constant volatility): at 0.5 σ* a book on target meets the first cut in about four years out of five.";
 export const SCALE_TIP = "A: 83–86% of years at 8%; B: 81% at a Sharpe ratio of 1";
+/** The ratio is written to one decimal where it is a whole tenth and to two where it is not, and the scale line is
+ *  decided on the ratio itself (EN-12): 6% at 8% is 0.75 σ*, below 0.8, and has the line. */
 export function ladderInVols(cut1: number, volPct: number): { ratio: number; line: string; scale: boolean } {
-  const ratio = volPct > 0 ? Math.round((cut1 / volPct) * 10) / 10 : 0;
-  return { ratio, line: `first cut at ${one(cut1)}% of the reference capital = ${one(ratio)} target volatilities (${one(ratio)} σ*)`, scale: ratio < 0.8 - 1e-9 };
+  const exact = volPct > 0 ? cut1 / volPct : 0, tenth = Math.abs(exact * 10 - Math.round(exact * 10)) < 1e-9;
+  const ratio = tenth ? Math.round(exact * 10) / 10 : Math.round(exact * 100) / 100, t = tenth ? one(ratio) : two(ratio);
+  return { ratio, line: `first cut at ${one(cut1)}% of the reference capital = ${t} target volatilities (${t} σ*)`, scale: exact < 0.8 - 1e-9 };
 }
 
 // ---- the ladder as the form prints it (the plan's §2.9) ----

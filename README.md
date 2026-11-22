@@ -209,13 +209,20 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   targets lines, refusals, ladder and trade lists, its width at four sizes with CREATE in view, a draft, the errors;
   a book's Overview with no figure P-1 does not hold, fixed rows without a control, a change with its reason, the
   pending value and HISTORY, the targets' window on 21 Nov and 15 Dec, notes, renaming, delete after typing the name,
-  a second account seeing nothing; and the page's own calls answered by the suite (a server with its switch off, the
-  statement first, a refusal). `phone-portfolio` (an iPhone SE, an iPhone 13, a Pixel 7): the seventh bar item with
+  a second account seeing nothing; the page's own calls answered by the suite (a server with its switch off, the
+  statement first, a refusal); and the change form's date after 17:00 New York passes with the page open.
+  `phone-portfolio` (an iPhone SE, an iPhone 13, a Pixel 7): the seventh bar item with
   every label inside its item in the machine's fonts and in a wide one, the current label alone at 320 px; the
   statement's sheet; the form's start, Review and sections with 16-px inputs and Review and Create above the bar at
-  every scroll position; a book's head, views, change sheet, notes and delete; every tap target 44 px on 23 screens.
+  every scroll position, Review naming the Reference the book will have; a book's head, views, change sheet, notes and
+  delete; every tap target 44 px on 23 screens.
   `layout-guard-portfolio`: the layout guard on the list, the three forms and the three stand-in books' Overview and
   Settings at its eight sizes. All three set the page's clock (`om_mock_now`) and never read the machine's.
+  `portfolio-accounts` (the sign-in server): what the page keeps belongs to the account that signed in. A second
+  account signed into the same tab through the page's own SIGN OUT (and SIGN OUT AND CONTINUE) is shown nothing of
+  the first one's form; an expired sign-in keeps the form for the same account; nothing of a book is written to the
+  device for a sign-in that is not to be remembered, nor from an answer that arrives after sign-out, nor of a deleted
+  book; a create whose answer was lost announces no book that was not made.
   `portfolio`, `phone-portfolio` and `local-copy` also check the "personal use" lines, which are live on the published
   page, and `local-copy` opens the built site on both layouts to check the state the page's switch says: with it off,
   six tabs, no "PORTFOLIO" or "Portfolio" anywhere, `#portfolio/new` showing MARKETS, no portfolio route asked, and
@@ -275,10 +282,12 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   run with the migration file itself on PGlite, a Postgres inside Node; and the pattern an instrument's headlines are
   matched by in the database (`words.test.cjs`); and the market table's σ of daily changes and σ vs 1M avg against the
   server's own rule, rolls included, with the probe's record of futures and the alerts' and devices' new columns
-  (`sigma.test.cjs`); and the paper portfolio's store (`pf.test.cjs`: the migration applied twice, as a superuser, as
-  a role that may make roles and as one that may not; no API role reading a table; one scenario of 53 calls run
-  through the engine against the database's functions and against the local copy's store, every answer compared;
-  the append-only and fixed-column rules tried from outside the functions; an account's rows going with it); and
+  (`sigma.test.cjs`); and the paper portfolio's store (`pf.test.cjs`: the migration applied twice, statement by
+  statement with a look after each, as a superuser, as a role that may make roles and as one that may not; no API
+  role reading a table; one scenario of 56 calls run through the engine against the database's functions and against
+  the local copy's store, every answer compared; the append-only and fixed-column rules tried from outside the
+  functions; rows numbered inside their own book; the caps; `pf_selftest`'s verdict with a grant put back; an
+  account's rows going with it); and
   the results mark's migration (`results-mark.test.cjs`: every stored "confirmed" becomes "not said", an estimate
   and an unmarked date stay as they were, and a second run changes nothing).
   `cd sim/sql && npm ci && npm test`.
@@ -488,8 +497,13 @@ name. There are no orders, no NAV and no limits at work yet: the book's page say
   (`web/src/lib/pf/`, written by `node tools/sync-pf.cjs`) so the form on screen and the server refuse by the same
   rules in the same words; the local copy runs the same routes over a list kept in the browser (`lib/mockPf.ts`).
 - **Who sees what.** A portfolio's rows are reached only through database functions that answer for one account
-  (`supabase/README.md`, "The paper portfolio"). No workflow, job or log names a private table or prints a row: the
-  live check's part `pf` calls one function that returns counts and prints `pf_selftest ok`.
+  (`supabase/README.md`, "The paper portfolio"). No workflow, job or log names a private table or a function of the
+  store, or prints a row: the live check's part `pf` calls one function that returns counts and prints
+  `pf_selftest ok`, and fails the run when a wall is down (deploy-server runs it after each deploy). On the device:
+  a form's unsent draft belongs to the account that typed it (dropped for another account, removed at SIGN OUT); a
+  book's last answers are kept on the device for a week only where the sign-in is remembered, and in memory for the
+  tab otherwise; an answer that arrives after its sign-in ended is not kept; a deleted book's answers go with it; a
+  start that finds no sign-in empties what an ended session left.
 - **Addresses.** `#portfolio` (the book last opened on this device, else the list, else the starts),
   `#portfolio/all`, `#portfolio/new[/<start>]`, `#portfolio/<id>`, `#portfolio/<id>/settings[/<section>]`. `<id>` is
   the portfolio's own id, never its name.

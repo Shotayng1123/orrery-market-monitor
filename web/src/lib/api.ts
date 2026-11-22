@@ -15,9 +15,29 @@ export function setToken(token: string, remember: boolean): void {
     (remember ? sessionStorage : localStorage).removeItem(KEY);
   } catch { /* storage blocked: the session still works in memory via the caller */ }
 }
+/** Whether the sign-in is to be remembered on this browser (the box on the sign-in screen): the token is then in the
+ *  browser's own storage; without it the sign-in lives in this tab and ends with it. */
+export function remembered(): boolean {
+  try { return localStorage.getItem(KEY) != null; } catch { return false; }
+}
+const leaving = new Set<() => void>();
+/** What a part of the page holds in memory for the signed-in account is dropped when that sign-in ends. */
+export const onSignInEnd = (f: () => void): void => { leaving.add(f); };
 export function clearToken(): void {
   try { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); } catch { /* ignore */ }
   void keepClear();   // the data kept for opening without a connection belongs to the account that signed out
+  leaving.forEach((f) => { try { f(); } catch { /* one part's fault is not another's */ } });
+}
+// What this browser holds for the account besides its token and its kept answers: a form's unsent draft (the tab's
+// storage) and which page of its own the account last opened (the browser's). Each is written by the screen that
+// uses it; they are named here so that SIGN OUT removes them whatever screens this visit has opened. An expired
+// sign-in (a 401) removes neither: the same person signs in again and finds the form as it was, and the screen that
+// reads a draft drops one that is another account's (components/pf/NewPortfolio.tsx).
+const OWN_IN_TAB = ["om_pf_draft"], OWN_IN_BROWSER = ["om_pf_last"];
+/** SIGN OUT, pressed: the sign-in ends and nothing the account typed or opened here stays for the next person. */
+export function signOutHere(): void {
+  clearToken();
+  try { for (const k of OWN_IN_TAB) sessionStorage.removeItem(k); for (const k of OWN_IN_BROWSER) localStorage.removeItem(k); } catch { /* storage blocked: nothing was kept */ }
 }
 /** The ID inside the token (the payload is readable; the signature is what the server checks). */
 export function tokenId(token: string | null): string | null {

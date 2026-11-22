@@ -2,7 +2,7 @@
 // three bases, what a start can and cannot trade, the Reference's line. The words are the engine's (lib/pf/).
 import { useState } from "react";
 import { STARTS, notBuiltLines, referenceLabel } from "../../lib/pf/presets.ts";
-import { BASE_LINE, BASE_NAME, BASE_RULE, equivalentLine, ladderInVols, SCALE_LINE, SCALE_TIP, SHARPE_TIP, sharpeLine, varTie } from "../../lib/pf/targets.ts";
+import { BASE_LINE, BASE_NAME, BASE_RULE, equivalentLine, ladderInVols, SCALE_LINE, SCALE_TIP, SHARPE_TIP, sharpeLine, varStep, varTie } from "../../lib/pf/targets.ts";
 import type { Base, CashRate, LadderBase, StartId } from "../../lib/pf/types.ts";
 import { TARGET_VOLATILITY } from "../../lib/labels";
 
@@ -11,9 +11,9 @@ export const EquivalentLine = ({ x, rate, base }: { x: number | null; rate: Cash
 
 /** Under the target volatility: the implied Sharpe ratio, the tie to the VaR limit in its three states, and the
  *  ladder's first step in target volatilities, with the scale line under 0.8. Each follows the fields as typed. */
-export function VolLines({ x, vol, cut1, varLimit }: { x: number | null; vol: number | null; cut1: number | null; varLimit: number | null }) {
+export function VolLines({ x, vol, cut1, varLimit, start }: { x: number | null; vol: number | null; cut1: number | null; varLimit: number | null; start: StartId }) {
   if (vol == null) return null;
-  const tie = varLimit != null ? varTie(vol, varLimit) : null, lad = cut1 != null ? ladderInVols(cut1, vol) : null;
+  const tie = varLimit != null ? varTie(vol, varLimit, varStep(start)) : null, lad = cut1 != null ? ladderInVols(cut1, vol) : null;
   return (
     <>
       {x != null && <span className="pf-line" id="pf-sharpe" title={SHARPE_TIP}>{sharpeLine(x, vol)}</span>}

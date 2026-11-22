@@ -14,7 +14,7 @@ import { pushState, pushSubscribe, pushTest, pushUnsubscribe } from "../_shared/
 import { stockPage } from "../_shared/stock.ts";
 import { liveRows } from "../_shared/intraday.ts";
 import { watchRowFromQuote, watchRowFromTable, type TableLike } from "../_shared/watchrow.ts";
-import { localDate, type Holidays } from "../_shared/sessions.ts";
+import { HOLIDAY_SOURCES, localDate, type Holidays } from "../_shared/sessions.ts";
 import { feedState } from "../_shared/feedhealth.ts";
 import { beatFresh, type Reading, type RelayNote } from "../_shared/relay.ts";
 import { LISTED_ALERTS } from "../_shared/sigma.ts";
@@ -165,12 +165,15 @@ Deno.serve(async (req) => {
  *  stored yet: they come with the daily NAV (P-3), and until then the form says the cash rate is not read. */
 async function paperFacts(): Promise<PfFacts> {
   const since = new Date(Date.now() - 10 * 86400e3).toISOString().slice(0, 10);
-  const [{ data: cal }, { data: fx }] = await Promise.all([
+  const [{ data: cal, error: calError }, { data: fx }] = await Promise.all([
     db.from("sessions_cal").select("market,d").in("market", ["TSE", "NYSE"]).gte("d", since),
     db.from("prices_daily").select("d,close").eq("symbol", "USDJPY=X").order("d", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const days = (m: string) => ((cal ?? []) as Array<{ market: string; d: string }>).filter((r) => r.market === m).map((r) => r.d);
-  return { rates: { USD: null, JPY: null }, usdjpy: fx && Number(fx.close) > 0 ? { rate: Number(fx.close), d: fx.d as string, source: "Yahoo Finance, unofficial" } : null, holidays: { TSE: days("TSE"), NYSE: days("NYSE") } };
+  // how far the holiday rows reach (the sources' own "through"): a change dated past it, or with no rows read, is
+  // refused, never dated as if no market were shut (EN-15)
+  const through = calError ? null : [HOLIDAY_SOURCES.TSE?.through, HOLIDAY_SOURCES.NYSE?.through].filter((x): x is string => !!x).sort()[0] ?? null;
+  return { rates: { USD: null, JPY: null }, usdjpy: fx && Number(fx.close) > 0 ? { rate: Number(fx.close), d: fx.d as string, source: "Yahoo Finance, unofficial" } : null, holidays: { TSE: days("TSE"), NYSE: days("NYSE"), through } };
 }
 
 // ---------- sign-in ----------

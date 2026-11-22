@@ -244,8 +244,8 @@ const header = (p) => p.evaluate(() => { const z = Number(document.body.style.zo
     await set(p, "target_vol", "7.0"); const t7 = await lines();
     await set(p, "target_vol", "5.0"); await set(p, "var", "0.7"); const low = await lines();
     await set(p, "var", "1.0");
-    ck(`a target volatility of 6.0% shows the amber line with 0.88% and WARN, and CREATE can be pressed; 7.0% the red sentence with 1.03%, and CREATE cannot ("${t7.count}"); with the VaR limit typed as 0.7% and the target at 5.0% the same sentence stands under the VaR row`, t6.state === "warned" && /^! WARN Target volatility 6\.0% implies a 99% one-day VaR of 0\.88% of capital/.test(t6.tie) && !t6.create && t6.count === "0 settings out of range"
-      && t7.state === "refused" && /implies a 99% one-day VaR of 1\.03% of capital on a normal law, above your 1\.00% VaR limit: lower the target or raise the limit to at least 1\.03%$/.test(t7.tie) && t7.create && t7.count === "1 setting out of range" && /Target volatility 5\.0% implies a 99% one-day VaR of 0\.73% of capital on a normal law, above your 0\.70% VaR limit/.test(low.tieVar ?? "") && low.create, { t6, t7, low });
+    ck(`a target volatility of 6.0% shows the amber line with 0.88% and WARN, and CREATE can be pressed; 7.0% the red sentence with 1.03% and a limit the VaR field takes ("at least 1.1%", EN-11), and CREATE cannot ("${t7.count}"); with the VaR limit typed as 0.7% and the target at 5.0% the same sentence stands under the VaR row`, t6.state === "warned" && /^! WARN Target volatility 6\.0% implies a 99% one-day VaR of 0\.88% of capital/.test(t6.tie) && !t6.create && t6.count === "0 settings out of range"
+      && t7.state === "refused" && /implies a 99% one-day VaR of 1\.03% of capital on a normal law, above your 1\.00% VaR limit: lower the target or raise the limit to at least 1\.1%$/.test(t7.tie) && t7.create && t7.count === "1 setting out of range" && /Target volatility 5\.0% implies a 99% one-day VaR of 0\.73% of capital on a normal law, above your 0\.70% VaR limit/.test(low.tieVar ?? "") && low.create, { t6, t7, low });
     const said = {};
     await set(p, "nav", "5m"); said.nav = await refusalOf(p, "nav"); const c1 = await lines();
     await set(p, "nav", "100m"); said.navBack = await p.evaluate(() => document.querySelector('input[data-key="nav"]').value);
@@ -526,6 +526,21 @@ const header = (p) => p.evaluate(() => { const z = Number(document.body.style.zo
     const msg = await text(p, "#pf-create-msg"), creates = seen.filter((s) => s.a === "pf_create"), agree = seen.find((s) => s.a === "consent_agree");
     ck(`RETRY reads the form's facts; with no rate stored the form says so ("${rate}") and prints no figure; CREATE asks the statement the server hands back, sends the agreement, and creates with the same request id as before`, rate === "= cash + 5.0% a year · the cash rate is not read yet" && asked === STATEMENT && agree?.method === "POST" && agree.body.version === 1 && creates.length === 1 && creates[0].method === "POST" && /application\/json/.test(creates[0].type ?? "") && /^[A-Za-z0-9_-]{8,64}$/.test(creates[0].body.requestId) && creates[0].body.start === "ar-ls-jp" && creates[0].body.name === "Equity L/S · Japan · 21 Nov 2026" && Object.keys(creates[0].body.values).length >= 38 && creates[0].body.values.nav === "100,000,000", { rate, agree, n: creates.length, body: creates[0]?.body && { ...creates[0].body, values: Object.keys(creates[0].body.values).length } });
     ck(`the server's refusal is shown in the page's sentence, without a doubled full stop: "${msg}", and the form is kept`, msg === "Not created: the stand-in server refuses this. Nothing was saved." && (await p.evaluate(() => document.querySelector("#pf-name").value)) === "Equity L/S · Japan · 21 Nov 2026" && errs.length === 0, { msg, errs });
+    await ctx.close();
+  }
+
+  // RT-9: the change form prints the session the server will store. The book is read at 16:59:40 New York on Tue 24
+  // Nov 2026 (its next session then: Wed 25 Nov); 17:00 passes with the page open; CHANGE is pressed after it and
+  // reads the book again, so it prints Thu 26 Nov (Thanksgiving shuts New York, not Tokyo), as the save would store.
+  console.log("\n[9] the change form's date after 17:00 New York has passed with the page open (RT-9)");
+  {
+    const { ctx, p, errs } = await open(b, { clock: "2026-11-24T21:59:40Z" });
+    await go(p, `portfolio/${ID(1)}/settings/limits`, '[data-row="one_long"] [data-act="change"]');
+    await p.waitForFunction(() => Date.now() >= Date.parse("2026-11-24T22:00:02Z"), null, { timeout: 45000, polling: 250 });
+    await p.click('[data-row="one_long"] [data-act="change"]'); await p.waitForSelector("#pf-change-when");
+    await p.waitForFunction(() => /Thu 26 Nov 2026/.test(document.querySelector("#pf-change-when")?.textContent ?? ""), null, { timeout: 8000 }).catch(() => undefined);
+    const when = await text(p, "#pf-change-when");
+    ck(`opened after 17:00 New York, CHANGE prints the session the server will store: "${when}" (the book was read at 16:59:40, when the next session was Wed 25 Nov)`, when === "In force from the next session: Thu 26 Nov 2026" && errs.length === 0, { when, errs });
     await ctx.close();
   }
 

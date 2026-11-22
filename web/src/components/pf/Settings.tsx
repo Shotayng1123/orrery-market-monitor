@@ -11,14 +11,14 @@ import { Assumed, ByTag, Chips, flash, go, href, Muted, NumInput, setLastBook, u
 import { EquivalentLine, ReferenceLine, VolLines } from "./Blocks";
 import { byCard } from "./Book";
 import { failureWords, pfDelete, pfRename, pfSettingSet, pfTargetsSet, type BookAnswer } from "../../lib/pf";
-import { checkChange, checkTargets, inputText, nameRefusal, reasonRefusal, showValue, usdLine, REASON_MAX } from "../../lib/pf/form.ts";
+import { checkChange, checkTargets, cleanName, inputText, nameRefusal, reasonRefusal, showValue, usdLine, REASON_MAX } from "../../lib/pf/form.ts";
 import { fmtFull, fromMinor } from "../../lib/pf/money.ts";
 import { fieldOf, STARTS } from "../../lib/pf/presets.ts";
 import { NOTE_GIST } from "../../lib/pf/statement.ts";
 import { BASE_LINE, BASE_NAME, cumulative, drawdownLine, restoreLine } from "../../lib/pf/targets.ts";
 import { dmy, stampSgt, wdmy } from "../../lib/pf/calendar.ts";
 import { WINDOW_WORDS } from "../../lib/pf/calendar.ts";
-import { historyOf, rowsOf, settingsNow, shortValue, targetsNow, targetsWords, valuesNow, type HistoryRow, type NowRow } from "../../lib/pf/view.ts";
+import { changeBasis, historyOf, rowsOf, settingsNow, shortValue, targetsNow, targetsWords, valuesAhead, type HistoryRow, type NowRow } from "../../lib/pf/view.ts";
 import type { After } from "../../lib/pf/types.ts";
 import { ONLY_YOU, TARGET_RETURN, TARGET_VOLATILITY } from "../../lib/labels";
 
@@ -27,8 +27,12 @@ type SectionKey = (typeof SETTINGS_SECTIONS)[number][0];
 const numbered = (k: SectionKey): string => String(SETTINGS_SECTIONS.findIndex((s) => s[0] === k) + 1).padStart(2, "0");
 
 /** CHANGE: the value in force, the new value against its range, the reason, and the date it is in force from. */
-function ChangeForm({ a, row, phone, onDone, onCancel }: { a: BookAnswer; row: NowRow; phone: boolean; onDone: () => void; onCancel: () => void }) {
-  const f = row.field, values = useMemo(() => valuesNow(settingsNow(a.book, a.valuationDay)), [a]);
+function ChangeForm({ a, row, phone, onDone, onCancel, reread }: { a: BookAnswer; row: NowRow; phone: boolean; onDone: () => void; onCancel: () => void; reread?: () => void }) {
+  // checked as the server checks it: against what will be in force with it (the changes already saved, the targets
+  // after a January re-set: RT-2, RT-3, EN-6), and the book read again as the form opens, so that the date it prints
+  // is the one the server will store (RT-9)
+  const f = row.field, values = useMemo(() => changeBasis(a.book, a.valuationDay, a.nyDate), [a]);
+  useEffect(() => { reread?.(); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [val, setVal] = useState(f.num && typeof row.value === "number" ? "" : String(row.value)), [reason, setReason] = useState(""), [seen, setSeen] = useState({ v: false, r: false }), [busy, setBusy] = useState(false), [msg, setMsg] = useState<string | null>(null);
   const p = val === "" && f.num ? null : checkChange(a.book, f.key, val, values), vNo = p && !p.ok ? p.text : null, rNo = reasonRefusal(reason), over = [...reason.trim()].length > REASON_MAX;
   const can = !!p && p.ok && !rNo && !busy;
@@ -101,7 +105,7 @@ function SettingList({ a, after, phone, onChanged }: { a: BookAnswer; after: Aft
             return tap ? <button type="button" className="pfp-set tap" key={f.key} data-row={f.key} onClick={() => setOpen(f.key)}>{inner}<span className="go" aria-hidden="true">&#8250;</span></button> : <div className={`pfp-set${long ? " long" : ""}`} key={f.key} data-row={f.key}>{inner}</div>; })}
         </div>
       ))}
-      {open && can(rows.find((x) => x.key === open)) && <ChangeForm a={a} row={rows.find((x) => x.key === open)!} phone onDone={done} onCancel={() => setOpen(null)} />}
+      {open && can(rows.find((x) => x.key === open)) && <ChangeForm a={a} row={rows.find((x) => x.key === open)!} phone onDone={done} onCancel={() => setOpen(null)} reread={onChanged} />}
     </>
   );
   return (
@@ -115,7 +119,7 @@ function SettingList({ a, after, phone, onChanged }: { a: BookAnswer; after: Aft
               return [
                 <tr key={f.key} data-row={f.key}><td className="l wrap">{f.label}{f.mark && <Assumed />}</td><td className="l wrap vl">{valueCell(f, r)}</td><td className="l mut nb">{f.range}</td><td className="l wrap mut">{f.why}</td><td className="l"><ByTag tag={r ? r.by : f.who.tag} card={r ? byCard(r) : f.who.card} /></td><td className="l mut nb">{dmy(r?.since ?? a.book.startedOn)}</td>
                   <td>{can(r) && <button type="button" className="pf-link" data-act="change" aria-expanded={open === f.key} onClick={() => setOpen(open === f.key ? null : f.key)}>CHANGE</button>}</td></tr>,
-                open === f.key && can(r) ? <tr key={`${f.key}-change`} className="pf-changerow"><td colSpan={7}><ChangeForm a={a} row={r} phone={false} onDone={done} onCancel={() => setOpen(null)} /></td></tr> : null,
+                open === f.key && can(r) ? <tr key={`${f.key}-change`} className="pf-changerow"><td colSpan={7}><ChangeForm a={a} row={r} phone={false} onDone={done} onCancel={() => setOpen(null)} reread={onChanged} /></td></tr> : null,
               ]; })}
           </tbody>
         ))}
@@ -126,7 +130,7 @@ function SettingList({ a, after, phone, onChanged }: { a: BookAnswer; after: Aft
 
 /** 02 TARGETS: the two targets with their window, and the band and the amber line, which change as limits do. */
 function Targets({ a, phone, onChanged }: { a: BookAnswer; phone: boolean; onChanged: () => void }) {
-  const b = a.book, t = targetsNow(b, a.nyDate), now = useMemo(() => settingsNow(b, a.valuationDay), [b, a.valuationDay]), values = valuesNow(now);
+  const b = a.book, t = targetsNow(b, a.nyDate), now = useMemo(() => settingsNow(b, a.valuationDay), [b, a.valuationDay]), values = valuesAhead(now);   // the VaR limit the pair will stand beside, a pending one included (RT-2)
   const [form, setForm] = useState(false), [x, setX] = useState(""), [vol, setVol] = useState(""), [busy, setBusy] = useState(false), [msg, setMsg] = useState<string | null>(null), [open, setOpen] = useState<string | null>(null);
   const fx = fieldOf(b.start, "target_x")!, fv = fieldOf(b.start, "target_vol")!, lim = typeof values.var === "number" ? values.var : null;
   const c = form ? checkTargets(b.start, x, vol, lim) : null, no = (k: string): string | null => (c && !c.ok ? c.refusals.find((r) => r.key === k && !/implies a 99%/.test(r.text))?.text ?? null : null);
@@ -143,14 +147,14 @@ function Targets({ a, phone, onChanged }: { a: BookAnswer; phone: boolean; onCha
       {line(TARGET_VOLATILITY, <>{t.vol.toFixed(1)}% of capital a year</>, <span className="pf-fixed">{state}</span>, "target_vol")}
       <div className="pf-window" id="pf-window">
         {t.since && <Muted>in force since {dmy(t.since)}</Muted>}
-        {t.lapsed != null && !t.pending && <Muted id="pf-lapsed">targets not re-set: no year reset</Muted>}
+        {t.lapsed != null && !t.pending && <Muted id="pf-lapsed">targets not re-set for {t.lapsed}: no year reset</Muted>}
         {t.pending && <Muted id="pf-pending-targets">pending for {t.pending.forYear}: {targetsWords(t.pending.x, t.pending.vol)}</Muted>}
         {!t.window.fixed && !t.window.open && t.window.next && <Muted id="pf-nextwindow">{t.window.next}</Muted>}
         {t.window.open && !form && <button type="button" className={`pf-btn${phone ? " big" : ""}`} id="pf-reset" onClick={start}>{phone ? `Re-set for ${t.window.forYear}` : "RE-SET FOR NEXT YEAR"}</button>}
         {form && (
           <div className="pf-resetform" id="pf-resetform">
             <div className="ln"><label className="k" htmlFor="pf-reset-x">{TARGET_RETURN}</label><span className="v"><NumInput id="pf-reset-x" field={fx} value={x} onChange={setX} refusal={no("target_x")} phone={phone} /><span className="pf-unit2">{fx.range}</span><EquivalentLine x={xv} rate={a.rates[b.base]} base={b.base} /></span></div>
-            <div className="ln"><label className="k" htmlFor="pf-reset-vol">{TARGET_VOLATILITY}</label><span className="v"><NumInput id="pf-reset-vol" field={fv} value={vol} onChange={setVol} refusal={no("target_vol")} phone={phone} /><span className="pf-unit2">{fv.range}</span><VolLines x={xv} vol={vv} cut1={b.ladder.cut1} varLimit={lim} /></span></div>
+            <div className="ln"><label className="k" htmlFor="pf-reset-vol">{TARGET_VOLATILITY}</label><span className="v"><NumInput id="pf-reset-vol" field={fv} value={vol} onChange={setVol} refusal={no("target_vol")} phone={phone} /><span className="pf-unit2">{fv.range}</span><VolLines x={xv} vol={vv} cut1={b.ladder.cut1} varLimit={lim} start={b.start} /></span></div>
             {msg && <p className="pf-msg" role="status">{msg}</p>}
             <div className="pf-btns"><button type="button" className={`pf-btn${phone ? " big" : ""}`} onClick={() => setForm(false)}>{phone ? "Cancel" : "CANCEL"}</button><button type="button" className={`pf-go${phone ? " big" : ""}`} id="pf-reset-save" disabled={!c?.ok || busy} onClick={save}>{busy ? "Saving…" : phone ? "Save" : "SAVE"}</button></div>
           </div>
@@ -159,7 +163,7 @@ function Targets({ a, phone, onChanged }: { a: BookAnswer; phone: boolean; onCha
       {band.map((r) => (
         <div key={r.key}>
           {line(r.field.label, <>{showValue(r.field, r.value)}{r.pending && <span className="pf-pending" data-pending={r.key}>{shortValue(r.field, r.pending.value)} from {wdmy(r.pending.from)} · pending</span>}</>, <><span className="pf-mut">{r.field.range} · {r.by} · since {dmy(r.since)}</span> <button type="button" className="pf-link" data-act="change" aria-expanded={open === r.key} onClick={() => setOpen(open === r.key ? null : r.key)}>CHANGE</button></>, r.key)}
-          {open === r.key && <ChangeForm a={a} row={r} phone={phone} onDone={() => { setOpen(null); onChanged(); }} onCancel={() => setOpen(null)} />}
+          {open === r.key && <ChangeForm a={a} row={r} phone={phone} onDone={() => { setOpen(null); onChanged(); }} onCancel={() => setOpen(null)} reread={onChanged} />}
         </div>
       ))}
       {fixedRows.map((f) => line(f.label, f.text, <span className="pf-fixed">fixed</span>, f.key))}
@@ -169,7 +173,7 @@ function Targets({ a, phone, onChanged }: { a: BookAnswer; phone: boolean; onCha
 
 function Rename({ a, others, phone, onChanged }: { a: BookAnswer; others: string[]; phone: boolean; onChanged: () => void }) {
   const [edit, setEdit] = useState(false), [name, setName] = useState(a.book.name), [busy, setBusy] = useState(false), [msg, setMsg] = useState<string | null>(null);
-  const no = nameRefusal(name, others), same = name.trim() === a.book.name;
+  const no = nameRefusal(name, others), same = cleanName(name) === a.book.name;
   const save = () => { if (no || same || busy) return; setBusy(true); setMsg(null); pfRename(a.book.id, name.trim()).then(() => { setBusy(false); setEdit(false); onChanged(); }).catch((e: unknown) => { setBusy(false); setMsg(failureWords(e, { offline: "Offline: a change needs the server.", signedOut: "Signed out: sign in again. Nothing was changed.", refused: (w) => `Not saved: ${w}. Nothing changed.` })); }); };
   if (!edit) return <><span className="pf-name">{a.book.name}</span> <button type="button" className="pf-link" id="pf-rename" onClick={() => { setName(a.book.name); setEdit(true); }}>RENAME</button></>;
   return (
@@ -184,7 +188,7 @@ function Rename({ a, others, phone, onChanged }: { a: BookAnswer; others: string
 /** 07 DELETE: the sentence, the button, then the name to type. No UNDO: the sentence said so. */
 function Delete({ a, phone, last }: { a: BookAnswer; phone: boolean; last: boolean }) {
   const [open, setOpen] = useState(false), [typed, setTyped] = useState(""), [busy, setBusy] = useState(false), [msg, setMsg] = useState<string | null>(null);
-  const exact = typed.trim() === a.book.name, wrong = !exact && typed.trim().length >= 6;
+  const exact = cleanName(typed) === a.book.name, wrong = !exact && typed.trim().length >= 6;   // as the server compares it (RT-5)
   const del = () => { if (!exact || busy) return; setBusy(true); setMsg(null);
     pfDelete(a.book.id, a.book.name).then(() => { setLastBook(null); flash(`Paper portfolio deleted · ${a.book.name}`); go(last ? "" : "all"); })
       .catch((e: unknown) => { setBusy(false); setMsg(failureWords(e, { offline: "Offline: deleting needs the server.", signedOut: "Signed out: sign in again. Nothing was removed.", refused: (w) => `Not deleted: ${w}. Nothing was removed.` })); }); };

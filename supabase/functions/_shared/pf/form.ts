@@ -6,8 +6,8 @@
 // value". Nothing is corrected silently. A warning (the amber line of the VaR tie) never stops a create.
 import type { Base, BookRow, Field, Ladder, LadderBase, NewBook, NewSetting, Refusal, StartId } from "./types.ts";
 import { AMOUNT_EXAMPLE, fmtFull, fmtShort, NAV_RANGE, parseAmount, toMinor } from "./money.ts";
-import { BY_ACCOUNT, fieldOf, STARTS } from "./presets.ts";
-import { capitalRefusal, varTie, type TieState } from "./targets.ts";
+import { BY_ACCOUNT, fieldOf, referenceLabel, STARTS } from "./presets.ts";
+import { capitalRefusal, varStep, varTie, type TieState } from "./targets.ts";
 import { dmy } from "./calendar.ts";
 import { FIXED_SETTING, REASON_SHORT, TOGETHER } from "./words.ts";
 
@@ -60,24 +60,39 @@ export function parseNav(base: Base, raw: string): Parsed {
 
 // ---- names, reasons, notes ----
 export const NAME_MAX = 60, REASON_MIN = 10, REASON_MAX = 500, NOTE_MAX = 2000;
-const chars = (s: string): number => [...s].length;
+/** Characters (code points), counted without copying the text: a request of many megabytes is refused at once (the
+ *  second review of P-1: a 32 MB note took 290 MB of memory to be refused while it was spread into an array). */
+const chars = (s: string): number => { let n = s.length; for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) { const d = s.charCodeAt(i + 1); if (d >= 0xdc00 && d <= 0xdfff) { n--; i++; } } } return n; };
 /** "Equity L/S · Japan · 21 Nov 2026": the start's short name and today's date in Singapore. */
 export const defaultName = (start: StartId, today: string): string => `${STARTS[start].short} · ${dmy(today)}`;
-/** A portfolio's name: 1 to 60 characters, not the name of another open book of the account. */
+/** A name as it is stored and shown (RT-5): composed letters (NFC), every run of white space (a tab, a no-break or a
+ *  full-width space among them) one ordinary space, and no space at either end. What the screens draw is then what
+ *  is stored, and a name can be typed again as it is seen. */
+export const cleanName = (name: string): string => name.normalize("NFC").replace(/[ \t\n\r\f\v\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+/g, " ").trim();
+/** Characters that draw nothing or turn the text round: control characters, zero-width ones, direction marks. */
+const UNSEEN = /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/u;
+export const NAME_UNSEEN = "a name holds only characters that show: no control, zero-width or direction characters";
+/** A portfolio's name: 1 to 60 characters, every one of them seen, and not the name of another open book of the
+ *  account (both compared as stored: cleanName). */
 export function nameRefusal(name: string, others: string[]): string | null {
-  const n = name.trim();
+  const n = cleanName(name);
+  if (UNSEEN.test(n)) return NAME_UNSEEN;
   if (!n) return "give the portfolio a name";
   if (chars(n) > NAME_MAX) return `${NAME_MAX} characters at most · ${chars(n) - NAME_MAX} over`;
-  return others.includes(n) ? "you already have an open portfolio with this name" : null;
+  return others.some((o) => cleanName(o) === n) ? "you already have an open portfolio with this name" : null;
 }
+/** U+0000 cannot be stored in the database's text: refused in words on both sides, never a server error. */
+export const NO_NUL = "this text holds the character U+0000, which cannot be stored";
 /** The reason of a change: 10 to 500 characters, kept in the history. */
 export function reasonRefusal(reason: string): string | null {
+  if (reason.includes("\u0000")) return NO_NUL;
   const n = chars(reason.trim());
   if (n < REASON_MIN) return REASON_SHORT;
   return n > REASON_MAX ? `${REASON_MAX} characters at most · ${n - REASON_MAX} over` : null;
 }
 /** A note: at most 2,000 characters; nothing is cut silently. */
 export function noteRefusal(body: string): string | null {
+  if (body.includes("\u0000")) return NO_NUL;
   const n = chars(body);
   if (!body.trim()) return "write the note first";
   return n > NOTE_MAX ? `${fmtFull(NOTE_MAX)} characters at most · ${fmtFull(n - NOTE_MAX)} over` : null;
@@ -145,7 +160,7 @@ export function checkForm(start: StartId, name: string, raw: Raw, others: string
   let tie: Checked["tie"] = null;
   const vol = n("target_vol"), lim = n("var");
   if (vol != null && lim != null) {
-    const t = varTie(vol, lim);
+    const t = varTie(vol, lim, varStep(start));
     tie = { state: t.state, line: t.line };
     if (t.state === "refused") refusals.push({ key: "target_vol", text: t.line });
     else if (t.state === "warned") warnings.push({ key: "target_vol", text: t.line });
@@ -165,14 +180,15 @@ export function usdLine(nav: number, fx: { rate: number; d: string; source: stri
 /** A checked form as the store's rows: the portfolio, and one setting per typed row and choice, each with whose it is
  *  ("set by the account" where it is not the start's default). */
 export function buildCreate(start: StartId, name: string, c: Checked, ctx: { requestId: string; startedOn: string; usdjpy: { rate: number; d: string; source: string } | null }): { book: NewBook; settings: NewSetting[] } {
-  const def = STARTS[start], v = c.values, base = c.base, nav = c.nav ?? NAV_RANGE[base].def;
+  const def = STARTS[start], v = c.values, base = c.base, nav = c.nav ?? NAV_RANGE[base].def, blend = typeof v.blend === "string" ? Number(v.blend) : null;
   const num = (k: string): number => v[k] as number;
   const ladder: Ladder = { cut1: num("cut1"), cap1: num("cap1"), cut2: num("cut2"), cap2: num("cap2"), out: num("out"), cooling: num("cooling"), deadline: num("deadline") };
   const fx = base === "JPY" ? usdLine(nav, ctx.usdjpy) : null;
   const book: NewBook = {
-    requestId: ctx.requestId, name: name.trim(), kind: def.kind, start, base, startingNav: toMinor(base, nav),
+    requestId: ctx.requestId, name: cleanName(name), kind: def.kind, start, base, startingNav: toMinor(base, nav),
     fx: fx && fx.usd != null && ctx.usdjpy ? { usd: Math.round(fx.usd), rate: ctx.usdjpy.rate, d: ctx.usdjpy.d, source: ctx.usdjpy.source } : null,
-    targetX: num("target_x"), targetVol: num("target_vol"), reference: def.reference?.short ?? "", blend: typeof v.blend === "string" ? Number(v.blend) : null,
+    // the Reference the book will have, on its base and with its blend (EN-5): never the start's default label
+    targetX: num("target_x"), targetVol: num("target_vol"), reference: referenceLabel(start, base, blend)?.short ?? "", blend,
     ladderBase: v.ladder_base as LadderBase, ladder, houseMultiple: num("house_multiple"), valuation: "17:00 New York", startedOn: ctx.startedOn,
   };
   const settings: NewSetting[] = stored(start, base).map((f) => {
@@ -184,22 +200,39 @@ export function buildCreate(start: StartId, name: string, c: Checked, ctx: { req
 
 // ---- CHANGE: one setting, after creation ----
 export const SAME_VALUE = "this is the value in force";
-/** A new value for one limit or assumption, against its row and the values in force. */
-export function checkChange(book: Pick<BookRow, "start" | "base">, key: string, typed: string, now: Values): Parsed | { ok: true; v: string } {
+export const SAME_PENDING = "this is the value already pending";
+/** What a change is checked against (RT-2, RT-3, EN-6, EN-7): the values in force today (`now`); the values that will
+ *  be in force once the changes already saved are (`ahead`: each setting's pending value where one waits, else its
+ *  value in force); and the target volatilities the VaR limit has to cover (the pair in force, after a January
+ *  re-set, and a pair entered for next year). Without `ahead` and `vols`, what is in force today. */
+export interface ChangeBasis { now: Values; ahead?: Values; vols?: number[] }
+/** A new value for one limit or assumption, against its row and what will be in force with it. A change waits for the
+ *  next session; while one waits, the value in force is a change of its own (it replaces the one pending), and the
+ *  pending value typed again is refused. A setting tied to another is checked against the other's value as it will
+ *  stand: the pending one where one waits. */
+export function checkChange(book: Pick<BookRow, "start" | "base">, key: string, typed: string, basis: Values | ChangeBasis): Parsed | { ok: true; v: string } {
+  const b: ChangeBasis = "now" in basis && typeof basis.now === "object" && basis.now !== null ? (basis as ChangeBasis) : { now: basis as Values };
+  const now = b.now, ahead = b.ahead ?? now, waiting = ahead[key] !== undefined && ahead[key] !== now[key];
+  const same = (v: number | string): string | null => (v === ahead[key] ? (waiting ? SAME_PENDING : SAME_VALUE) : null);
   const f = fieldOf(book.start, key);
   if (f?.after === "window") return { ok: false, text: TOGETHER };   // a target is re-set with its pair, in its window
   if (!f || (f.after !== "limit" && f.after !== "assumption")) return { ok: false, text: FIXED_SETTING };
   if (f.choices) {
     const opt = f.choices.options.find((o) => o.value === typed && !o.off);
     if (!opt) return { ok: false, text: "choose one of the values offered" };
-    return opt.value === now[key] ? { ok: false, text: SAME_VALUE } : { ok: true, v: opt.value };
+    const t = same(opt.value);
+    return t ? { ok: false, text: t } : { ok: true, v: opt.value };
   }
   if (!f.num) return { ok: false, text: FIXED_SETTING };   // a row no PM has given a range: no CHANGE
   const p = parseNum(f, typed);
   if (!p.ok) return p;
-  if (p.v === now[key]) return { ok: false, text: SAME_VALUE };
-  const n = (k: string): number | null => (typeof now[k] === "number" ? (now[k] as number) : null);
-  if (key === "var") { const vol = n("target_vol"); if (vol != null) { const t = varTie(vol, p.v); if (t.state === "refused") return { ok: false, text: t.line }; } }
+  const t0 = same(p.v);
+  if (t0) return { ok: false, text: t0 };
+  const n = (k: string): number | null => (typeof ahead[k] === "number" ? (ahead[k] as number) : null);
+  if (key === "var") {
+    const vols = (b.vols ?? [n("target_vol")]).filter((x): x is number => typeof x === "number");
+    if (vols.length) { const t = varTie(Math.max(...vols), p.v, varStep(book.start)); if (t.state === "refused") return { ok: false, text: t.line }; }
+  }
   if (key === "amber") { const band = n("band"); if (band != null) { const t = amberRefusal(p.v, band); if (t) return { ok: false, text: t }; } }
   if (key === "band") { const amber = n("amber"); if (amber != null) { const t = bandRefusal(p.v, amber); if (t) return { ok: false, text: t }; } }
   return p;
@@ -211,6 +244,6 @@ export function checkTargets(start: StartId, xTyped: string, volTyped: string, v
   if (!x.ok) refusals.push({ key: "target_x", text: x.text });
   if (!vol.ok) refusals.push({ key: "target_vol", text: vol.text });
   let tie: { state: TieState; line: string } | null = null;
-  if (vol.ok && varLimit != null) { const t = varTie(vol.v, varLimit); tie = { state: t.state, line: t.line }; if (t.state === "refused") refusals.push({ key: "target_vol", text: t.line }); }
+  if (vol.ok && varLimit != null) { const t = varTie(vol.v, varLimit, varStep(start)); tie = { state: t.state, line: t.line }; if (t.state === "refused") refusals.push({ key: "target_vol", text: t.line }); }
   return x.ok && vol.ok && refusals.length === 0 ? { ok: true, x: x.v, vol: vol.v, tie } : { ok: false, refusals };
 }

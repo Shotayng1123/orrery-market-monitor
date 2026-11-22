@@ -16,12 +16,15 @@ import { serverWords, useRead, type ListAnswer, type Read } from "../lib/pf";
 import { fmtFull, fromMinor } from "../lib/pf/money.ts";
 import { AR_STARTS, CAP_LINE, RR_STARTS, STARTS } from "../lib/pf/presets.ts";
 import { BASE_NAME } from "../lib/pf/targets.ts";
-import { dmy, sgDate } from "../lib/pf/calendar.ts";
-import { targetsWords } from "../lib/pf/view.ts";
+import { dmy, nyDate, sgDate } from "../lib/pf/calendar.ts";
+import { rowTargets, targetsWords } from "../lib/pf/view.ts";
 import type { BookRow } from "../lib/pf/types.ts";
 import { ONLY_YOU, PORTFOLIO } from "../lib/labels";
 import { setPhoneV2 } from "../lib/phone";
 import { fmtStamp } from "../lib/time";
+
+/** The targets in force, after a January re-set (EN-6): the list's row carries the re-sets; an older answer does not. */
+const targetsOf = (r: BookRow): string => { const t = rowTargets(r, nyDate(new Date())); return targetsWords(t.x, t.vol); };
 
 const INTRO = "Run a paper portfolio from today. Orders fill only on the market's own prints after they are placed, with spreads, fees and a 20% cap on volume. No real orders, no broker, no money. Only your account sees it.";
 const lower = (s: string): string => s.charAt(0).toLowerCase() + s.slice(1);
@@ -84,7 +87,7 @@ function List({ list, phone }: { list: Read<ListAnswer>; phone: boolean }) {
         <div id="pf-list">
           {rows.map((r) => (
             <a className="pfp-book-row" key={r.id} href={href(r.id)} data-book={r.id}>
-              <span className="tx"><span className="n">{r.name}</span><span className="l">{STARTS[r.start].short} · {r.base} · {fmtFull(fromMinor(r.base, r.startingNav))}</span><span className="l">{targetsWords(r.targetX, r.targetVol)} · since {dmy(r.startedOn)}</span></span>
+              <span className="tx"><span className="n">{r.name}</span><span className="l">{STARTS[r.start].short} · {r.base} · {fmtFull(fromMinor(r.base, r.startingNav))}</span><span className="l">{targetsOf(r)} · since {dmy(r.startedOn)}</span></span>
               <span className="go" aria-hidden="true">&#8250;</span>
             </a>
           ))}
@@ -100,7 +103,7 @@ function List({ list, phone }: { list: Read<ListAnswer>; phone: boolean }) {
         {atCap && <p className="pf-capline" id="pf-cap">{CAP_LINE}</p>}
         <table className="secT pf-list" id="pf-list"><thead><tr><th className="l">Name</th><th className="l">Start</th><th className="l">Base</th><th>Starting NAV</th><th className="l">Targets</th><th className="l c-ladder">Ladder base</th><th className="l c-created">Created</th></tr></thead>
           <tbody>{rows.map((r) => (
-            <tr key={r.id} data-book={r.id}><td className="l wrap nm"><a href={href(r.id)}>{r.name}</a></td><td className="l">{STARTS[r.start].short}</td><td className="l">{r.base}</td><td className="num">{fmtFull(fromMinor(r.base, r.startingNav))}</td><td className="l">{targetsWords(r.targetX, r.targetVol)}</td><td className="l wrap c-ladder">{lower(BASE_NAME[r.ladderBase])}</td><td className="l nb c-created">{createdDay(r)}</td></tr>
+            <tr key={r.id} data-book={r.id}><td className="l wrap nm"><a href={href(r.id)}>{r.name}</a></td><td className="l">{STARTS[r.start].short}</td><td className="l">{r.base}</td><td className="num">{fmtFull(fromMinor(r.base, r.startingNav))}</td><td className="l">{targetsOf(r)}</td><td className="l wrap c-ladder">{lower(BASE_NAME[r.ladderBase])}</td><td className="l nb c-created">{createdDay(r)}</td></tr>
           ))}</tbody></table>
       </Panel>
     </div>

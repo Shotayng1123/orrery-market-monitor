@@ -260,7 +260,14 @@ const MACRO_FIELDS: Field[] = [
   { key: "fx_conv", section: "costs", label: "FX conversion", after: "assumption", who: noted(PM_B, "R-21"), why: "B's desk: the cost of a spot conversion in a G10 pair", range: "–", group: "Costs", ...A_MARK, text: "1 bp of the price (G10)" },
 ];
 
-const eqSummary = (v: Record<string, number | string>): string[] => [`Gross ≤ ${v.gross}% · net ±${v.net}% · β ±${v.beta_net}%`, `One name: long ${v.one_long}%, short ${v.one_short}%`, `Unencumbered cash ≥ ${v.floor}% of NAV`];
+/** A value of the summary as its row writes it ("10", "1.0", "1.05"), and a dash for a field that does not read (empty,
+ *  not a number, off its step or out of range: the form refuses it, and the summary says no figure). */
+export function sumFig(v: number | string | undefined, fix = 0, pre = "", unit = "%"): string {
+  if (typeof v !== "number" || !Number.isFinite(v)) return "–";
+  const s = String(Math.round(v * 1e6) / 1e6), d = s.includes(".") ? s.split(".")[1].length : 0;
+  return `${pre}${d >= fix ? s : v.toFixed(fix)}${unit}`;
+}
+const eqSummary = (v: Record<string, number | string>): string[] => [`Gross ≤ ${sumFig(v.gross)} · net ${sumFig(v.net, 0, "±")} · β ${sumFig(v.beta_net, 0, "±")}`, `One name: long ${sumFig(v.one_long)}, short ${sumFig(v.one_short)}`, `Unencumbered cash ≥ ${sumFig(v.floor, 0, "", "% of NAV")}`];
 
 export const STARTS: Record<StartId, StartDef> = {
   "ar-ls-jp": {
@@ -298,7 +305,7 @@ export const STARTS: Record<StartId, StartDef> = {
       cannot: ["JGB, Bund and Gilt futures: not in the free feed the Monitor reads (Yahoo Finance carries none).", "Osaka's contracts: JPX's files are not used in this Monitor.", "So duration outside the US only through funds.", "Contract months beyond the next: too thin in the feed.", "Futures of Eurex, ICE Europe, Montréal and ASX: none in the feed.", "Cash Treasuries and repo: later, once their prices are read."],
       bold: 3,
     },
-    summary: (v) => [`Adjusted gross ≤ ${v.adj_gross}% · VaR ≤ ${Number(v.var).toFixed(1)}% · floor ${v.floor}%`],
+    summary: (v) => [`Adjusted gross ≤ ${sumFig(v.adj_gross)} · VaR ≤ ${sumFig(v.var, 1)} · floor ${sumFig(v.floor)}`],
   },
   // The two relative-return starts: named, not offered from P-1. Their forms come with their benchmark limits (P-4b,
   // P-4c); what is kept here is what the plan's settlement amended (C-27, C-28) and PF-1's muted lines.

@@ -26,7 +26,7 @@ const two = `insert into accounts (email, pw_hash, pw_salt, pw_iter, status) val
 const refused = async (db, q, v = []) => { try { await db.query(q, v); return null; } catch (e) { return e.message; } };
 const as = async (db, role, f) => { await db.exec(`set role ${role}`); try { return await f(); } finally { await db.exec("reset role"); } };
 /** The database's functions as the server calls them (supabase-js's rpc): named arguments, json where the function takes it. */
-const JSONB = new Set(["p_book", "p_settings", "p_value"]), CAST = { p_id: "uuid", p_today: "date", p_effective: "date", p_x: "numeric", p_vol: "numeric", p_version: "int", p_note: "bigint" };
+const JSONB = new Set(["p_book", "p_settings", "p_value"]), CAST = { p_id: "uuid", p_today: "date", p_effective: "date", p_x: "numeric", p_vol: "numeric", p_version: "int", p_note: "int" };
 const rpcOf = (db) => async (fn, args) => {
   const keys = Object.keys(args), vals = keys.map((k) => (JSONB.has(k) ? JSON.stringify(args[k]) : args[k]));
   try { const r = await db.query(`select ${fn}(${keys.map((k, i) => `${k} => $${i + 1}::${JSONB.has(k) ? "jsonb" : CAST[k] ?? "text"}`).join(", ")}) as r`, vals); return { data: r.rows[0].r, error: null }; }
@@ -40,6 +40,49 @@ const rpcOf = (db) => async (fn, args) => {
   await db.exec(HOSTED); await db.exec(accounts);
   let twice = true; try { await db.exec(SQL); await db.exec(SQL); } catch (e) { twice = e.message; }
   ck("the change applies, and applies again without an error", twice === true, twice);
+
+  // ---- the file statement by statement, each committed on its own (a deploy that does not wrap a file in one
+  // transaction): at no moment may a role but the server's hold EXECUTE on a pf_ function, and none at all a privilege
+  // on a table or a sequence of the store. Split as a runner splits a file: at each ";" outside quotes, comments and
+  // dollar quotes. Looked at after every statement. ----
+  console.log("\n[the file statement by statement, each committed on its own]");
+  { const statements = (sql) => { const out = []; let i = 0, start = 0; const n = sql.length;
+      const bare = (t) => t.replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "").trim();
+      while (i < n) {
+        const c = sql[i];
+        if (c === "-" && sql[i + 1] === "-") { const e = sql.indexOf("\n", i); i = e < 0 ? n : e + 1; continue; }
+        if (c === "/" && sql[i + 1] === "*") { const e = sql.indexOf("*/", i + 2); i = e < 0 ? n : e + 2; continue; }
+        if (c === "'") { i++; while (i < n && !(sql[i] === "'" && sql[i + 1] !== "'")) i += sql[i] === "'" ? 2 : 1; i++; continue; }
+        if (c === '"') { const e = sql.indexOf('"', i + 1); i = e < 0 ? n : e + 1; continue; }
+        if (c === "$") { const m = /^\$([A-Za-z_][A-Za-z0-9_]*)?\$/.exec(sql.slice(i)); if (m) { const e = sql.indexOf(m[0], i + m[0].length); i = e < 0 ? n : e + m[0].length; continue; } }
+        if (c === ";") { const t = sql.slice(start, i); if (bare(t)) out.push(t); start = i + 1; }
+        i++;
+      }
+      if (bare(sql.slice(start))) out.push(sql.slice(start));
+      return out; };
+    /** What the API's roles hold on the store at this moment (a list of "role privilege object"; empty when nothing). */
+    const held = async (d) => {
+      const q = async (sql) => (await d.query(sql)).rows.map((r) => r.x);
+      return [
+        ...(await q(`select r || ' execute ' || p.oid::regprocedure::text as x from pg_proc p join pg_namespace n on n.oid = p.pronamespace, unnest(array['public','anon','authenticated']) r
+          where n.nspname = 'public' and p.proname like 'pf\\_%' and has_function_privilege(r, p.oid, 'execute')`)),
+        ...(await q(`select r || ' ' || pv || ' ' || c.relname as x from pg_class c join pg_namespace n on n.oid = c.relnamespace, unnest(array['public','anon','authenticated','service_role']) r, unnest(array['select','insert','update','delete','truncate','references','trigger']) pv
+          where n.nspname = 'public' and c.relkind in ('r','p') and (c.relname like 'pf\\_%' or c.relname in ('consent_statements','account_consents')) and has_table_privilege(r, c.oid, pv)`)),
+        ...(await q(`select r || ' ' || pv || ' ' || c.relname as x from pg_class c join pg_namespace n on n.oid = c.relnamespace, unnest(array['public','anon','authenticated','service_role']) r, unnest(array['usage','select','update']) pv
+          where n.nspname = 'public' and c.relkind = 'S' and c.relname like 'pf\\_%' and has_sequence_privilege(r, c.oid, pv)`)),
+      ]; };
+    const stepwise = async (sql) => { const d = new PGlite(); await d.exec(HOSTED); await d.exec(accounts); const st = statements(sql), seen = [];
+      for (let k = 0; k < st.length; k++) { let err = null; try { await d.exec(st[k]); } catch (e) { err = e.message; } seen.push({ k, err, held: await held(d) }); }
+      await d.close(); return { n: st.length, seen }; };
+    const real = await stepwise(SQL), bad = real.seen.filter((x) => x.err || x.held.length);
+    ck(`the migration is one statement (a single DO block: applied whole or not at all, in a transaction of its own or not), and after it no API role holds anything on the store, the server's role only EXECUTE`, real.n === 1 && /^\s*do \$pf_store\$/m.test(statements(SQL)[0].replace(/^(\s*--[^\n]*\n)*/, "")) && bad.length === 0, { n: real.n, bad: bad.slice(0, 2) });
+    // the look itself, tried on a file of separate statements that makes a table and a function and then takes the
+    // grants back: it must see the moment in between, and nothing once the grants are gone
+    const ctl = await stepwise("create table pf_ctl_t (a int); revoke all on pf_ctl_t from public, anon, authenticated, service_role; create function pf_ctl_f() returns int language sql as $$ select 1 $$; revoke all on function pf_ctl_f() from public, anon, authenticated;");
+    ck(`the look after each statement catches the moment a file of separate statements leaves open (${ctl.seen.map((x) => x.held.length).join(", ")} privileges held after its four statements)`, ctl.n === 4 && ctl.seen[0].held.some((x) => /^anon select pf_ctl_t$/.test(x)) && ctl.seen[1].held.length === 0 && ctl.seen[2].held.some((x) => /^anon execute pf_ctl_f\(\)$/.test(x)) && ctl.seen[3].held.length === 0, ctl.seen.map((x) => x.held.slice(0, 3)));
+    const twiceStep = await (async () => { const d = new PGlite(); await d.exec(HOSTED); await d.exec(accounts); for (const st of [...statements(SQL), ...statements(SQL)]) await d.exec(st); const h = await held(d); await d.close(); return h; })();
+    ck("applied statement by statement twice over, it leaves the same: nothing held", twiceStep.length === 0, twiceStep); }
+
   await db.exec(two);
   const one = async (q, v = []) => (await db.query(q, v)).rows[0];
   const all = async (q, v = []) => (await db.query(q, v)).rows;
@@ -52,7 +95,7 @@ const rpcOf = (db) => async (fn, args) => {
     const denied = {};
     for (const role of ["anon", "authenticated", "service_role"]) { denied[role] = 0; for (const tb of TABLES) { const m = await as(db, role, () => refused(db, `select count(*) from ${tb}`)); if (/permission denied/.test(m ?? "")) denied[role]++; } }
     ck("anon, authenticated and the server's own role are each refused a read of all six tables (Supabase's default grants taken back)", denied.anon === 6 && denied.authenticated === 6 && denied.service_role === 6, denied);
-    const writes = []; for (const role of ["anon", "authenticated", "service_role"]) writes.push(await as(db, role, () => refused(db, `insert into pf_notes (portfolio_id, account, body) values (gen_random_uuid(), '${X}', 'n')`)));
+    const writes = []; for (const role of ["anon", "authenticated", "service_role"]) writes.push(await as(db, role, () => refused(db, `insert into pf_notes (portfolio_id, n, account, body) values (gen_random_uuid(), 1, '${X}', 'n')`)));
     ck("and a write", writes.every((m) => /permission denied/.test(m ?? "")), writes);
     const fns = (await all("select p.oid::regprocedure::text as f from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like 'pf\\_%' and p.prosecdef")).map((r) => r.f);
     const open = []; for (const role of ["anon", "authenticated"]) for (const f of fns) if ((await one("select has_function_privilege($1, $2, 'execute') as ok", [role, f])).ok) open.push(`${role}:${f}`);
@@ -127,6 +170,10 @@ const rpcOf = (db) => async (fn, args) => {
     await call(X, "pf_get", {}, { id });
     await call(X, "pf_delete", { id, name: "tokyo long/short" }); await call(X, "pf_delete", { id, name: "Tokyo long/short" });
     await call(X, "pf_get", {}, { id }); await call(X, "pf_list"); await call(X, "consent");
+    // a form pressed again with its request id after it was changed (its first answer lost): nothing new (RT-4)
+    await call(X, "pf_create", { requestId: "request-0006", start: "ar-macro", name: "Macro, changed", values: { ...values("ar-macro"), blend: "70", ladder_base: "yearly" } });
+    await call(X, "pf_create", { requestId: "request-0006", start: "ar-macro", name: "Macro", values: { ...values("ar-macro"), blend: "40", ladder_base: "yearly" } });
+    await call(X, "pf_create", { requestId: "request-0006", start: "ar-macro", name: "Macro", values: { ...values("ar-macro"), blend: "70", ladder_base: "yearly" } });
     return { out, id };
   }
   // ids and moments differ between the two stores; everything else must not
@@ -170,6 +217,9 @@ const rpcOf = (db) => async (fn, args) => {
     ck(`the history holds both rows: the default ("${h0.by}", no reason) and the change (10% → 8%, "${h8.by}", its reason whole, ${h8.state})`, h0.by === "default (PM advice: A)" && h0.reason === null && h0.from === "–" && h8.from === "10%" && h8.to === "8%" && h8.by === "set by the account" && h8.reason === "tighter into results season" && h8.state === "pending");
     const tn = view.targetsNow(book, "2026-12-15");
     ck(`the targets in force stay cash + ${tn.x}% and ${tn.vol}%, with ${view.targetsWords(tn.pending.x, tn.pending.vol)} pending for ${tn.pending.forYear}`, tn.x === 5 && tn.vol === 5 && tn.pending.x === 6 && tn.pending.vol === 5.5 && tn.pending.forYear === 2027 && tn.window.open);
+    const rt4 = [11, 12, 13].map((k) => by("pf_create", X, k)), macroId = macro.id;
+    ck(`a known request id with a changed form makes nothing and names what it made: "${rt4[0].body.error}"; the blend changed: the same; the same form again: its book (RT-4)`, rt4[0].status === 400 && rt4[0].body.made?.name === "Macro" && rt4[0].body.made?.id === macroId && rt4[0].body.error === words.madeBefore("Macro") && rt4[1].status === 400 && rt4[1].body.made?.id === macroId && rt4[2].status === 200 && rt4[2].body.id === macroId, rt4.map(s));
+    ck(`the Reference a book keeps is the one it has (EN-5): the macro book on a 70/30 blend keeps "${macro.reference}", the global book on yen "${yen.reference}"`, macro.reference === "70/30 blend" && yen.reference === "MSCI ACWI", { macro: macro.reference, yen: yen.reference });
     ck(`deletion: "${by("pf_delete", X, 0).body.error}" for the name in other letters; with the name typed exactly it is gone, and its address then says "${by("pf_get", X, 4).body.error}"`, by("pf_delete", X, 0).body.error === words.NOT_ITS_NAME && by("pf_delete", X, 1).status === 200 && by("pf_get", X, 4).status === 404 && by("pf_list", X, 1).body.rows.length === 4);
   }
 
@@ -196,8 +246,8 @@ const rpcOf = (db) => async (fn, args) => {
     const seen = await as(db, "monitor_account", async () => {
       const none = await count("pf_portfolios");
       await db.query("select set_config('monitor.account', $1, false)", [X]); const x = await all("select distinct account from pf_portfolios"); const xs = await count("pf_settings", "account <> $1", [X]);
-      const into = await refused(db, "insert into pf_notes (portfolio_id, account, body) values ($1, $2, 'planted')", [yid, Y]);
-      const forged = await refused(db, "insert into pf_notes (portfolio_id, account, body) values ($1, $2, 'planted')", [yid, X]);
+      const into = await refused(db, "insert into pf_notes (portfolio_id, n, account, body) values ($1, 99, $2, 'planted')", [yid, Y]);
+      const forged = await refused(db, "insert into pf_notes (portfolio_id, n, account, body) values ($1, 99, $2, 'planted')", [yid, X]);
       await db.query("select set_config('monitor.account', $1, false)", [Y]); const y = await all("select distinct account from pf_portfolios");
       await db.query("select set_config('monitor.account', '', false)");
       return { none, x: x.map((r) => r.account), xs, into, forged, y: y.map((r) => r.account) };
@@ -214,12 +264,12 @@ const rpcOf = (db) => async (fn, args) => {
     let t = await read(Y, yid, "2027-01-04");
     ck(`before the reset the pair is pending for 2027 (${view.targetsWords(t.pending.x, t.pending.vol)}, the later entry) and the targets in force are unchanged`, t.x === 5 && t.vol === 5 && t.pending.x === 7 && t.pending.vol === 6 && t.pending.forYear === 2027 && t.window.open);
     // the daily NAV (P-3) will record the January line; here the row is written as that job will write it
-    await db.query("insert into pf_ladder_events (portfolio_id, account, d, kind) values ($1, $2, '2027-01-04', 'year reset')", [yid, Y]);
+    await db.query("insert into pf_ladder_events (portfolio_id, n, account, d, kind) values ($1, 1, $2, '2027-01-04', 'year reset')", [yid, Y]);
     t = await read(Y, yid, "2027-01-05");
     ck(`after a reset that is made the pair is in force (cash + ${t.x}% · ${t.vol}%, since ${t.since}), nothing is pending, and an entry on 5 Jan is refused: "${await set(Y, yid, 8, 6, "2027-01-05")}"`, t.x === 7 && t.vol === 6 && t.since === "2027-01-04" && t.pending === null && !t.window.open && (await set(Y, yid, 8, 6, "2027-01-05")) === words.WINDOW_CLOSED);
     const guarded = (await one("select id from pf_portfolios where name = 'Four'")).id;
     await set(X, guarded, 6, 5.5, "2026-12-15");
-    await db.query("insert into pf_ladder_events (portfolio_id, account, d, kind) values ($1, $2, '2027-01-04', 'year reset withheld')", [guarded, X]);
+    await db.query("insert into pf_ladder_events (portfolio_id, n, account, d, kind) values ($1, 1, $2, '2027-01-04', 'year reset withheld')", [guarded, X]);
     t = await read(X, guarded, "2027-01-05");
     ck("after a reset that is withheld (a losing year) or held (a cut in force) the pair lapses: the targets stay as created", t.x === 5 && t.vol === 5 && t.pending === null && t.lapsed === 2027 && t.since === null, t);
     ck("a line of the ladder is append-only too", /never changed/.test((await refused(db, "update pf_ladder_events set kind = 'year reset' where portfolio_id = $1", [guarded])) ?? ""));
@@ -259,6 +309,65 @@ const rpcOf = (db) => async (fn, args) => {
     ck("and no API role reads a table", denied.every((m) => /permission denied/.test(m ?? "")), denied);
     await d2.close();
   }
+
+  // ---- what an account is handed, what a book may hold, the walls' own look (the second review of P-1) ----
+  { const d = new PGlite(); await d.exec(HOSTED); await d.exec(accounts); await d.exec(SQL); await d.exec(two);
+    const q1 = async (q, v = []) => (await d.query(q, v)).rows[0], rf = (q, v = []) => refused(d, q, v);
+    for (const a of [X, Y]) await d.query("select pf_consent_agree($1, 1)", [a]);
+    const mk = async (a, req, name, startedOn = "2026-11-21", extra = {}) => (await q1("select pf_create($1, $2::jsonb, $3::jsonb) as r", [a, JSON.stringify({ requestId: req, name, kind: "AR", start: "ar-macro", base: "USD", startingNav: 10000000000, fx: null, targetX: 5, targetVol: 5, reference: "60/40 blend", blend: 60, ladderBase: "yearly", ladder: { cut1: 4, cap1: 50, cut2: 2, cap2: 30, out: 2, cooling: 20, deadline: 1 }, houseMultiple: 1, valuation: "17:00 New York", startedOn, ...extra }),
+      JSON.stringify([{ key: "target_x", value: 5, cls: "window", basis: "default" }, { key: "target_vol", value: 5, cls: "window", basis: "default" }, { key: "var", value: 1, cls: "limit", basis: "default" }, { key: "one_long", value: 5, cls: "limit", basis: "default" }])])).r.id;
+    const ids = async (a, id) => { const b = (await q1("select pf_get($1, $2) as r", [a, id])).r; return { notes: b.notes.map((x) => x.id).sort((p, q) => p - q), settings: b.settings.map((x) => x.id) }; };
+
+    console.log("\n[what an account is handed counts no other account's rows (SQ-1, RT-6)]");
+    const bx = await mk(X, "req-x-000001", "X's book");
+    await d.query("select pf_note_add($1, $2, 'first')", [X, bx]);
+    const before = await ids(X, bx);
+    const by = await mk(Y, "req-y-000001", "Y's book");
+    for (let k = 0; k < 3; k++) await d.query("select pf_note_add($1, $2, 'elsewhere')", [Y, by]);
+    await d.query("select pf_rename($1, $2, 'Y renamed', '2026-11-21')", [Y, by]);
+    await mk(Y, "req-y-000002", "Y's second");
+    await d.query("select pf_note_add($1, $2, 'second')", [X, bx]); await d.query("select pf_rename($1, $2, 'X renamed', '2026-11-21')", [X, bx]);
+    const after = await ids(X, bx);
+    ck(`a note and a setting's row are numbered inside their own book: X's notes ${JSON.stringify(after.notes)} and its rows 1 to ${after.settings.length}, whatever Y wrote in between (3 notes, a renaming, a book)`, JSON.stringify(before.notes) === "[1]" && JSON.stringify(after.notes) === "[1,2]" && after.settings.join() === Array.from({ length: after.settings.length }, (_, i) => i + 1).join() && after.settings.length === before.settings.length + 1, { before, after });
+    ck("and a note is removed by its number in its book: X's note 2 goes, Y's notes 1 to 3 stay", (await rf("select pf_note_remove($1, $2, 2)", [X, bx])) === null && (await q1("select pf_get($1, $2) as r", [Y, by])).r.notes.every((x) => x.body === "elsewhere") && (await rf("select pf_note_remove($1, $2, 3)", [X, bx])) === words.NO_NOTE);
+
+    console.log("\n[no counter to grant, read or reset (SQ-2)]");
+    const seqs = Number((await q1("select count(*) as n from pg_class c join pg_namespace n on n.oid = c.relnamespace left join pg_depend dp on dp.objid = c.oid and dp.deptype in ('a','i') left join pg_class o on o.oid = dp.refobjid where n.nspname = 'public' and c.relkind = 'S' and (c.relname like 'pf\\_%' or o.relname like 'pf\\_%' or o.relname in ('consent_statements','account_consents'))")).n);
+    const t0 = (await q1("select pf_selftest() as r")).r;
+    ck(`no table of the store has a sequence (${seqs}); pf_selftest counts ${t0.sequenceGrants} privileges on one`, seqs === 0 && t0.sequenceGrants === 0 && t0.ok === true, t0);
+
+    console.log("\n[pf_selftest: its 'ok' leaves nothing out (SQ-3, PV-5)]");
+    const tried = [];
+    for (const [grant, take] of [["grant select on pf_portfolios to service_role", "revoke select on pf_portfolios from service_role"], ["grant all on pf_notes to service_role", "revoke all on pf_notes from service_role"], ["grant truncate on pf_notes to anon", "revoke truncate on pf_notes from anon"], ["grant references on pf_settings to authenticated", "revoke references on pf_settings from authenticated"], ["grant execute on function pf_get(text, uuid) to anon", "revoke execute on function pf_get(text, uuid) from anon"]]) {
+      await d.exec(grant); const t = (await q1("select pf_selftest() as r")).r; await d.exec(take); const back = (await q1("select pf_selftest() as r")).r;
+      tried.push({ grant, ok: t.ok, svc: t.serviceRoleGrants, open: t.openGrants, fns: t.openFunctions, back: back.ok });
+    }
+    ck(`a privilege handed back to the server's own role, or a TRUNCATE, REFERENCES or EXECUTE to an API role, makes pf_selftest say not ok; taken away again, ok (${tried.map((x) => `${x.grant.split(" on ")[0]}: ${x.ok}`).join("; ")})`, tried.every((x) => x.ok === false && x.back === true) && tried[0].svc === 1 && tried[1].svc === 7, tried);
+
+    console.log("\n[what a book may hold: every row kept, the next one refused in words (SQ-4, RT-7)]");
+    await d.exec("begin");
+    for (let k = 0; k < 498; k++) await d.query("select pf_note_add($1, $2, $3)", [X, bx, "n".repeat(2000)]);
+    await d.exec("commit");
+    const full = await rf("select pf_note_add($1, $2, 'one more')", [X, bx]), nn = Number((await q1("select count(*) as n from pf_notes where portfolio_id = $1", [bx])).n);
+    const size = JSON.stringify((await q1("select pf_get($1, $2) as r", [X, bx])).r).length;
+    ck(`500 notes (a removed one counts), then: "${full}"; none dropped (${nn} lines); the book's whole answer at its most notes is ${(size / 1e6).toFixed(2)} million characters`, full === words.NOTES_FULL && nn === 500 && words.NOTES_MAX === 500 && size < 1.2e6, { full, nn, size });
+    await d.exec("begin");
+    for (let k = 0; k < 500; k++) await d.query("select pf_setting_set($1, $2, 'one_long', $3::jsonb, 'a reason that is long enough', '2026-11-24', '2026-11-21')", [X, bx, String(3 + (k % 20))]);
+    await d.exec("commit");
+    const ch = await rf("select pf_setting_set($1, $2, 'one_long', '9'::jsonb, 'a reason that is long enough', '2026-11-24', '2026-11-21')", [X, bx]), nc = Number((await q1("select count(*) as n from pf_settings where portfolio_id = $1 and origin = 'change' and key = 'one_long'", [bx])).n);
+    ck(`500 changes of the limits and assumptions, then: "${ch}"; all 500 kept`, ch === words.CHANGES_FULL && nc === 500 && words.CHANGES_MAX === 500, { ch, nc });
+    for (let k = 1; k < 50; k++) await d.query("select pf_rename($1, $2, $3, '2026-11-21')", [X, bx, `X renamed ${k}`]);
+    const rn = await rf("select pf_rename($1, $2, 'one name too many', '2026-11-21')", [X, bx]), nameNow = (await q1("select name from pf_portfolios where id = $1", [bx])).name;
+    ck(`50 renamings, then: "${rn}"; the book keeps "${nameNow}"`, rn === words.RENAMES_FULL && nameNow === "X renamed 49" && words.RENAMES_MAX === 50, { rn, nameNow });
+    for (let k = 0; k < 20; k++) await d.query("select pf_targets_set($1, $2, 6, $3, '2026-12-15')", [X, bx, 5 + (k % 3) * 0.5]);
+    const tr = await rf("select pf_targets_set($1, $2, 6, 5, '2026-12-15')", [X, bx]), nt = Number((await q1("select count(*) as n from pf_settings where portfolio_id = $1 and for_year = 2027", [bx])).n);
+    ck(`20 entries of next year's targets, then: "${tr}"; all 40 rows kept`, tr === words.resetsFull(2027) && nt === 40 && words.RESETS_MAX === 20, { tr, nt });
+    ck("the other account's book is untouched by the first's full history", (await rf("select pf_note_add($1, $2, 'still room')", [Y, by])) === null);
+
+    console.log("\n[the targets' window in a book's first January (EN-10)]");
+    const jan = await mk(X, "req-x-000002", "Made in January", "2027-01-12");
+    ck(`a book started on 12 Jan 2027 has no January reset that year: an entry on 15 Jan is refused ("${await rf("select pf_targets_set($1, $2, 6, 5, '2027-01-15')", [X, jan])}"); in December the window opens for 2028`, (await rf("select pf_targets_set($1, $2, 6, 5, '2027-01-15')", [X, jan])) === words.WINDOW_CLOSED && (await q1("select pf_targets_set($1, $2, 6, 5, '2027-12-01') as r", [X, jan])).r.forYear === 2028);
+    await d.close(); }
 
   await db.close();
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");
