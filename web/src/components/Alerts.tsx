@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { zoomNow } from "../lib/prefs";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { refuseTerm, termMode, zoomNow } from "../lib/prefs";
 import { useApi } from "../lib/useApi";
 import type { Alert } from "../lib/types";
 import { fmtStamp, fmtWhen } from "../lib/time";
@@ -20,12 +20,88 @@ const isNews = (r: Alert) => r.kind === "buyback" || r.kind === "revision" || r.
 const isSigma = (r: Alert) => r.kind === "sigma";
 const hasPage = (r: Alert) => !!r.symbol && !r.symbol.startsWith("news:");
 
+// ---- the line's fit (the designer's notes of 22 Nov 2026, A.2 point 5; SF-2 of the checks of 22 Nov) ----
+// The line promises whole parts: the label, the kind, the figure with its word, the time, and at least the first
+// characters of the name with "…" (8 in the one-screen header, 1 on a phone). Where a drawing wider than the one the
+// layout was measured for cannot hold that, whole parts leave in a fixed order, never a cut figure:
+//   the one-screen header: the label (a lit line still says "new" by its colour and pulse), then all but the label and
+//     the time ("NEW ALERT 07:07"); if even that cannot stand whole, the one-screen layout is refused for that window
+//     (lib/prefs.ts refuseTerm) and COMPACT gives the scrolling layout;
+//   a phone: the label's "NEW", then the time's day ("23 Nov"); only then is the name cut below one letter.
+// The whole message is the line's tooltip and the list a click or a tap opens. Classes on #alerts (tokens.css).
+/** The width the name needs to show its first `n` characters and "…", or the whole name when it is no longer: a hidden
+ *  copy of its box with that text, so the face, the size and any spacing are its own. */
+function keepWidth(nm: HTMLElement, n: number): number {
+  const t = nm.textContent ?? "";
+  if (!t || !nm.parentElement) return 0;
+  const probe = nm.cloneNode(false) as HTMLElement;
+  probe.textContent = t.length > n ? `${t.slice(0, n)}…` : t;
+  probe.style.cssText = "position:absolute;visibility:hidden;left:0;top:0;width:auto;min-width:0;max-width:none;flex:none;overflow:visible";
+  nm.parentElement.appendChild(probe);
+  const w = probe.getBoundingClientRect().width;
+  probe.remove();
+  return w;
+}
+/** Whether a part stands past the right edge of the box that hides it (its content box: the line's padding included). */
+function past(box: Element, parts: Array<Element | null>): boolean {
+  const r = box.getBoundingClientRect(), cs = getComputedStyle(box), z = zoomNow();
+  const edge = r.right - (parseFloat(cs.borderRightWidth) + parseFloat(cs.paddingRight)) * z + 0.5;
+  return parts.some((e) => { if (!e) return false; const q = e.getBoundingClientRect(); return q.width > 0 && q.right > edge; });
+}
+function fitDesk(holder: HTMLElement): void {
+  holder.classList.remove("a-nolabel", "a-min");
+  const al = holder.querySelector<HTMLElement>(".alrt");
+  if (!al || al.classList.contains("none") || !termMode()) return;
+  const core = al.querySelector(".core"), nm = al.querySelector<HTMLElement>(".nm"), k = al.querySelector(":scope > .k"), t = al.querySelector(":scope > .t");
+  const need = nm ? keepWidth(nm, 8) : 0;
+  const cut = () => past(al, [k, al.querySelector(":scope > .one"), t]) || (!!core && past(core, [...core.children])) || (!!nm && nm.getBoundingClientRect().width + 0.5 < need);
+  if (!cut()) return;
+  holder.classList.add("a-nolabel");
+  if (!cut()) return;
+  holder.classList.add("a-min");
+  // the last step, in a drawing about 60% wider than the Monitor's: not even the label and the time stand whole.
+  // Only once the page's own faces are in, so a fallback face drawn for a moment cannot refuse the layout.
+  if (past(al, [k, t]) && document.fonts?.status === "loaded") refuseTerm();
+}
+function fitPhone(holder: HTMLElement): void {
+  holder.classList.remove("a-nonew", "a-noday");
+  const al = holder.querySelector<HTMLElement>(".alrt"), one = al?.querySelector(".one");
+  if (!al || !one || al.classList.contains("none")) return;
+  const nm = one.querySelector<HTMLElement>(".nm"), k = al.querySelector(":scope > .k"), t = al.querySelector(":scope > .t");
+  const need = nm ? keepWidth(nm, 1) : 0;
+  const cut = () => past(one, [...one.querySelectorAll(".kd,.nm,.fig")]) || past(al, [k, one, t]) || (!!nm && nm.getBoundingClientRect().width + 0.5 < need);
+  if (!cut()) return;
+  if (al.querySelector(".k .kn")) { holder.classList.add("a-nonew"); if (!cut()) return; }
+  if (al.querySelector(".t .td")) holder.classList.add("a-noday");
+}
+/** Runs the fit when the line's width changes (a ResizeObserver on #alerts), when its words or their drawing change (a
+ *  MutationObserver: the alert, its lit state, its time, a style), when the layout changes, and once the page's faces
+ *  are in. */
+function useFit(box: RefObject<HTMLDivElement | null>, phone: boolean, term: boolean, key: string): void {
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const mo = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => run());
+    const run = () => {
+      mo?.disconnect();   // the fit's own probe of the name's width is not a change of the line
+      if (phone) { el.classList.remove("a-nolabel", "a-min"); fitPhone(el); } else { el.classList.remove("a-nonew", "a-noday"); fitDesk(el); }
+      mo?.takeRecords(); mo?.observe(el, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["class", "style"] });
+    };
+    run();
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => run());
+    ro?.observe(el);
+    let live = true;
+    void document.fonts?.ready.then(() => { if (live) run(); });
+    return () => { live = false; ro?.disconnect(); mo?.disconnect(); };
+  }, [box, phone, term, key]);
+}
+
 /** Alerts: the latest one as a single line next to the tabs, refreshed with every load; click for the last
  *  twenty. Excessive moves (a single stock beyond ±5% intraday if it is a large company, ±7% otherwise; an index beyond ±3%) and news alerts: buybacks
  *  and guidance revisions at companies worth USD 5bn or more, M&A with a stated size of USD 1bn or more.
  *  A new alert lights the line up (bright, pulsing) until it is opened or half an hour has passed (Shota, 15 Nov). */
 /** `phone`: the phone layout is on. Its list is rows, not a table (the designer's D-63, 21 Nov 2026). */
-export function Alerts({ tick, phone = false }: { tick: number; phone?: boolean }) {
+export function Alerts({ tick, phone = false, term = false }: { tick: number; phone?: boolean; term?: boolean }) {
   const a = useApi<{ rows: Alert[] }>("alerts", { n: 20 }, tick);
   const [open, setOpen] = useState(false);
   const [seen, setSeen] = useState<number>(readSeen);
@@ -71,22 +147,28 @@ export function Alerts({ tick, phone = false }: { tick: number; phone?: boolean 
   // word after the figure and without a publisher (the stylesheet's: tokens.css, body.pv2), and with no line at all
   // when there is no alert (a new server, or none raised yet): "no excessive moves" took the height of a list row.
   // While the answer is on its way the line says so, and "unavailable" when it does not come.
+  const when = latest ? fmtWhen(latest.at) : "", cut = when.lastIndexOf(" "), day = cut > 0 ? when.slice(0, cut + 1) : "";
+  useFit(box, phone, term, latest ? `${latest.id}|${lit}|${latest.name}|${latest.msg}|${when}` : a.error ? "error" : "none");
   if (phone && a.data && !rows.length) return null;
   return (
     <div id="alerts" ref={box}>
       <span className={`alrt${latest ? (lit ? " new" : fresh ? " fresh" : "") : " none"}`} onClick={toggle} title={latest ? `${latest.msg}${isNews(latest) && latest.market ? ` (${latest.market})` : ""}${isSigma(latest) && latest.note ? ` · ${latest.note}` : ""} · ${fmtStamp(latest.at)}\n\n${RULES}` : RULES}>
-        <span className="k">{lit ? "NEW ALERT" : "ALERT"}</span>
+        <span className="k">{lit ? <><span className="kn">NEW </span>ALERT</> : "ALERT"}</span>
         {latest ? <>
           <span className={`msg ${signCls(isSigma(latest) ? latest.sigma : latest.pct, 1)}`}>{latest.msg}</span>
           <span className="one">
-            {(isNews(latest) || isSigma(latest)) && <span className="kd"><Sig>{KIND_LABEL[latest.kind]}</Sig></span>}
-            <span className="nm">{orphan ? alertHeadline(latest.msg) : latest.name}</span>
-            {isSigma(latest) && latest.sigma != null && <span className={`fig ${signCls(latest.sigma, 1)}`}>{fmtSigma(latest.sigma)}</span>}
-            {!isNews(latest) && !isSigma(latest) && latest.pct != null && <span className={`fig ${signCls(latest.pct, 1)}`}>{fmtPct(latest.pct, 1)}</span>}
-            {!isNews(latest) && !isSigma(latest) && latest.pct != null && word && <span className="q">{word}</span>}
+            {/* the kind, the name, the figure and its word in one box, so that in the one-screen header the name is
+                what gives way and "via <publisher>" stands only beside a whole name (outside it the box is not drawn) */}
+            <span className="core">
+              {(isNews(latest) || isSigma(latest)) && <span className="kd"><Sig>{KIND_LABEL[latest.kind]}</Sig></span>}
+              <span className="nm">{orphan ? alertHeadline(latest.msg) : latest.name}</span>
+              {isSigma(latest) && latest.sigma != null && <span className={`fig ${signCls(latest.sigma, 1)}`}>{fmtSigma(latest.sigma)}</span>}
+              {!isNews(latest) && !isSigma(latest) && latest.pct != null && <span className={`fig ${signCls(latest.pct, 1)}`}>{fmtPct(latest.pct, 1)}</span>}
+              {!isNews(latest) && !isSigma(latest) && latest.pct != null && word && <span className="q">{word}</span>}
+            </span>
             {orphan && latest.market && <span className="src">via {latest.market}</span>}
           </span>
-          <span className="t">{fmtWhen(latest.at)}</span>
+          <span className="t">{day && <span className="td">{day}</span>}{when.slice(day.length)}</span>
         </> : <span className="mut">{phone ? (a.error ? "· unavailable" : "· loading…") : a.error ? "unavailable" : "no excessive moves"}</span>}
       </span>
       {/* The list (the designer's D-63, 21 Nov 2026; B-34). It was a table whose cells did not wrap in a box that scrolled

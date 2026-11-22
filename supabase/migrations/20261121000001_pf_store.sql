@@ -178,7 +178,10 @@ begin
   end if;
   return new;
 end $$;
-create or replace trigger pf_portfolios_guard before update or delete on pf_portfolios for each row execute function pf_guard_portfolio();
+-- (drop and create, not "create or replace trigger": that needs Postgres 14, and the live database's version is
+-- stated nowhere; the review of part 2a, 22 Nov 2026)
+drop trigger if exists pf_portfolios_guard on pf_portfolios;
+create trigger pf_portfolios_guard before update or delete on pf_portfolios for each row execute function pf_guard_portfolio();
 
 create or replace function pf_guard_append() returns trigger language plpgsql set search_path = public, pg_temp as $$
 begin
@@ -196,9 +199,12 @@ begin
   end if;
   raise exception 'append-only: a row of % is never changed', tg_table_name;
 end $$;
-create or replace trigger pf_settings_guard before update or delete on pf_settings for each row execute function pf_guard_append();
-create or replace trigger pf_notes_guard before update or delete on pf_notes for each row execute function pf_guard_append();
-create or replace trigger pf_ladder_events_guard before update or delete on pf_ladder_events for each row execute function pf_guard_append();
+drop trigger if exists pf_settings_guard on pf_settings;
+create trigger pf_settings_guard before update or delete on pf_settings for each row execute function pf_guard_append();
+drop trigger if exists pf_notes_guard on pf_notes;
+create trigger pf_notes_guard before update or delete on pf_notes for each row execute function pf_guard_append();
+drop trigger if exists pf_ladder_events_guard on pf_ladder_events;
+create trigger pf_ladder_events_guard before update or delete on pf_ladder_events for each row execute function pf_guard_append();
 
 -- ---------- the only door: pf_*(p_account, …) ----------
 -- A portfolio as the page reads it (no account, no request id).

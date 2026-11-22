@@ -10,7 +10,10 @@
 --
 -- So every stored false becomes "not said". The page writes a dash for that, and each list's next quote run (flow,
 -- mflow, stats) writes Yahoo's own flag again: false where Yahoo marks the date confirmed. Until that run, a date
--- Yahoo did mark confirmed reads a dash as well: less than Yahoo said, never more.
+-- Yahoo did mark confirmed reads a dash as well: less than Yahoo said, and never a mark Yahoo did not give; but such a
+-- dash is not one the source withholds, so the page says what a dash is there (the source gives none, or the Monitor
+-- has not read it again since 22 Nov 2026), and a Tokyo company's date, which reads est. whatever is stored, changes
+-- only its tooltip's words (the checks of 22 Nov 2026, RK-1).
 -- (This runs in the deploy's database step, minutes before the new functions are in place. A quote run in those
 -- minutes still writes by the old rule; that list's next run, ten to twenty minutes later in its session, puts it
 -- right.)

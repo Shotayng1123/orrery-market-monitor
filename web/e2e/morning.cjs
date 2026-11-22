@@ -14,9 +14,11 @@
 //   - nothing cut at the designer's sizes and at each layout's smallest window, with a margin in px, in the machine's
 //     fonts and drawn wider (GitHub's machines draw the same faces wider; e2e/room.cjs says how both are measured);
 //   - a name cell that carries a day has room for the name, its PROXY mark and the day in every layout the table is
-//     drawn in: the scrolling layout down to its least width, the one-screen layout down to its 1100 x 540 window
-//     (GitHub's run of 21 Nov 2026 found TOPIX's cell a pixel short at 1280 x 720), and the classic phone layout,
-//     where the day stands under its name;
+//     drawn in: the scrolling layout down to its least width, the one-screen layout down to its smallest window at
+//     AUTO, 1170 x 540, and at text L and XL in theirs, 1495 x 900 and 1755 x 1000 (GitHub's run of 21 Nov 2026 found
+//     TOPIX's cell a pixel short at 1280 x 720; the review of 22 Nov, SF-1, its day cut at L and XL in layouts under
+//     1,150 px, which the one-screen layout no longer offers), and the classic phone layout, where the day stands
+//     under its name;
 //   - Tue 24 Nov 2026, 17:00 SGT: USD/JPY's cell and card show one reading, no "last session" line;
 //   - Mon 23 Nov 2026, 08:10 SGT: the week's first hours count as a young day too (the checks of round 3b: LS-3): the
 //     1D runs from Friday's close, and USD/JPY's cell and card show Friday's session under today's σ; at 09:10 SGT not;
@@ -36,14 +38,16 @@ const ROOM_OWN = 3, ROOM_WIDER = 0.5, NAME_OWN = 6, NAME_WIDER = 2;
 const SIZES = {   // the designer's sizes (plan review §3.7), and each layout's smallest window
   C1: { vp: [1440, 900], prefs: { size: "AUTO", compact: false } }, C2: { vp: [1280, 720], prefs: { size: "AUTO", compact: false } }, C3: { vp: [1440, 900], prefs: { size: "XL", compact: false } },
   C4: { vp: [1440, 900], prefs: { size: "AUTO", compact: true } }, C4b: { vp: [1280, 720], prefs: { size: "AUTO", compact: true } }, CL: { vp: [1440, 900], prefs: { size: "L", compact: false } },
-  // the one-screen layout is offered from a window of 1100 x 540 (lib/prefs.ts); the scrolling layout's table keeps a
-  // least width under which its panel scrolls sideways, so a window of 760 px draws its name column at its narrowest
-  C4c: { vp: [1100, 540], prefs: { size: "AUTO", compact: true } }, C0: { vp: [760, 800], prefs: { size: "AUTO", compact: false } },
+  // the one-screen layout is offered where its layout is at least 1,300 CSS px wide (lib/prefs.ts): from a window of
+  // 1170 x 540 at AUTO, 1495 at L and 1755 at XL; the scrolling layout's table keeps a least width under which its
+  // panel scrolls sideways, so a window of 760 px draws its name column at its narrowest
+  C4c: { vp: [1170, 540], prefs: { size: "AUTO", compact: true } }, C4L: { vp: [1495, 900], prefs: { size: "L", compact: true } }, C4X: { vp: [1755, 1000], prefs: { size: "XL", compact: true } },
+  C0: { vp: [760, 800], prefs: { size: "AUTO", compact: false } },
   P1: { dev: "iPhone SE (3rd gen)" }, P2: { dev: "iPhone 13" },
   // the classic phone layout (CLASSIC LAYOUT in the menu): the computer's table in a 104-px name column
   K1: { dev: "iPhone SE (3rd gen)", classic: true }, K1c: { dev: "iPhone SE (3rd gen)", classic: true, prefs: { size: "AUTO", compact: true } }, K2: { dev: "iPhone 13", classic: true },
 };
-const sizeWords = (code) => { const z = SIZES[code]; return `${code}, ${z.dev ? `${z.dev}, the classic phone layout${z.prefs?.compact ? " with COMPACT on" : ""}` : `${z.vp.join("x")}${z.prefs.compact ? ", the one-screen layout" : z.prefs.size !== "AUTO" ? `, text ${z.prefs.size}` : ""}`}`; };
+const sizeWords = (code) => { const z = SIZES[code]; return `${code}, ${z.dev ? `${z.dev}, the classic phone layout${z.prefs?.compact ? " with COMPACT on" : ""}` : `${z.vp.join("x")}${z.prefs.compact ? `, the one-screen layout${z.prefs.size !== "AUTO" ? ` at text ${z.prefs.size}` : ""}` : z.prefs.size !== "AUTO" ? `, text ${z.prefs.size}` : ""}`}`; };
 async function page(b, code, clock) {
   const z = SIZES[code], opts = z.dev ? { ...devices[z.dev] } : { viewport: { width: z.vp[0], height: z.vp[1] } };
   const ctx = await b.newContext({ ...opts, deviceScaleFactor: 1 });
@@ -155,9 +159,10 @@ const without = async (p) => { const st = await p.addStyleTag({ content: "#mk-sg
   // than this one, and the generic monospace this suite used to force is no wider than the Monitor's own face). The
   // strip's cells under both readings, and the table's name cells that carry a day.
   console.log("\n[nothing cut, with a margin: the strip's cells and the name cells that carry a day, in the machine's fonts and drawn wider]");
-  for (const code of ["C1", "C2", "C3", "CL", "C0", "C4", "C4b", "C4c"]) {
+  for (const code of ["C1", "C2", "C3", "CL", "C0", "C4", "C4b", "C4c", "C4L", "C4X"]) {
     const { ctx, p, errs } = await page(b, code, MORNING);
     await go(p, MOCK, "#market", ".sgcell");
+    if (SIZES[code].prefs.compact) ck(`${sizeWords(code)}: the one-screen layout is drawn`, await p.evaluate(() => document.body.classList.contains("term")));
     for (const font of ["the machine's fonts", "drawn wider"]) {
       const wider = font !== "the machine's fonts", need = wider ? ROOM_WIDER : ROOM_OWN, needName = wider ? NAME_WIDER : NAME_OWN;
       for (const mode of ["today", "last"]) {

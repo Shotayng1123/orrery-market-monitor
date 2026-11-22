@@ -63,9 +63,10 @@ workflow says "Not set up yet" and does nothing.
 
 What a deploy does, in order: the logic checks (`sim/logic.test.ts`; a failure stops it); a list of what is waiting;
 a guard; `supabase db push`; the notification key, made on the runner and stored on the server if the server has
-none (never shown, never in git); `supabase functions deploy tick daily api`; the paper portfolio's walls as the
-database sees them (`pf_selftest`, the live check's part `pf`: a wall down fails the run, "The paper portfolio"
-below); and, if `NOTE_DISPATCH_TOKEN` is set, storing it in the database with `monitor_set_github_token`.
+none (never shown, never in git); `supabase functions deploy tick daily api`; if `NOTE_DISPATCH_TOKEN` is set,
+storing it in the database with `monitor_set_github_token`; the page's reads against the live tables (a warning only);
+and last the paper portfolio's walls as the database sees them (`pf_selftest`, the live check's part `pf`: a wall down
+fails the run, "The paper portfolio" below; last, so that a red step there skips nothing of the rest).
 
 The Supabase CLI is pinned to one version in the workflow (3.2.0). Version 3 changed which database a command
 talks to (a local one unless `--remote` is given) and what it prints, and taking "latest" brought that in
@@ -157,9 +158,13 @@ is kept).
   follow at once; an index member's stored mark (`constituent_stats.earnings_est`) is rewritten by that list's next
   quote run (`daily?job=flow`, `mflow` or `stats`: on weekdays, in each market's hours) and by nothing else, and a
   stored "confirmed" of the old rule cannot be told from one of Yahoo's. So the migration
-  `20261121000002_results_mark_as_given.sql` sets every stored false to null ("not said": the page writes a dash), and
-  each list's next run writes Yahoo's own flag again. Until that run a date Yahoo did mark confirmed reads a dash as
-  well: less than Yahoo said, never more (`sim/sql/results-mark.test.cjs`).
+  `20261121000002_results_mark_as_given.sql` sets every stored false to null ("not said": the page writes a dash, and a
+  Tokyo company's date, est. whatever is stored, changes only its tooltip's words), and each list's next run writes
+  Yahoo's own flag again. Until that run a date Yahoo did mark confirmed reads a dash as well: less than Yahoo said,
+  and never a mark Yahoo did not give (`sim/sql/results-mark.test.cjs`). Such a dash is not one the source withholds,
+  so the page says what a dash is: the source gives none, or the Monitor has not read it again since 22 Nov 2026
+  (Help, MY NAMES' header, the date's tooltip: `NO_MARK_HELD` in `web/src/lib/results.ts`; the checks of 22 Nov, RK-1).
+  For a US member that lasts until Monday's run at 14:00 UTC.
 - **σ alerts** (`alerts.kind` 'sigma', with `sigma` and `note`): the tick scans the table every minute
   (`scanSigmaAlerts`) for every currency, yield, commodity, volatility index, future and coin at 2σ or beyond; one row
   per instrument and session (a currency pair's FX day; a future's CME trade date, so an evening's move from 18:00 New
@@ -512,7 +517,7 @@ shows no entry while `PAPER_ON_LIVE_SITE` (`web/src/lib/paper.ts`) is `false`. B
 - **Looking.** `pf_selftest()` prints `pf_selftest ok` with counts only (tables, policies, grants that should not
   exist on a table, a sequence or a function, the server's own role included, functions, whether the second wall is in
   force): no row, no name, no account. Its `ok` is true only when every wall stands. `deploy-server` runs it after each
-  deploy, after the functions (step "The paper portfolio's walls", `jobs/live_check.ts` part `pf`): a wall that is down,
+  deploy, as the job's last step (step "The paper portfolio's walls", `jobs/live_check.ts` part `pf`): a wall that is down,
   or a look that cannot be made, fails that step and the run is red. Actions › live-check with `only` = `pf` runs the
   same look by hand.
 - **Checks.** `sim/sql/pf.test.cjs` applies the migration on PGlite (twice; statement by statement; as a superuser, as
@@ -570,9 +575,17 @@ What the Monitor does about it:
   market is open, and has been for half an hour, it takes the one that printed most recently, allowing each
   market its feed's own delay; if even that one is more than twenty minutes behind, the feed has stopped. In the
   week's first hours a currency's or a future's print from before the weekend is not counted: the session table
-  opens currencies on Sunday at 17:00 New York, and the source's own bars for them begin on Monday at 00:00 UTC
-  (the probe `sessions_check`, 21 Nov 2026, four weekends), so until half an hour after that hour Friday's prints
-  say nothing about the feed; one that has printed since the week began is judged as at any hour. The
+  opens currencies on Sunday at 17:00 New York, and the source's own bars for them begin on Monday at 00:00 UTC, so
+  until half an hour after that hour Friday's prints say nothing about the feed; one that has printed since the week
+  began is judged as at any hour. What that rests on: the probe `sessions_check` of 21 Nov 2026 read two pairs only,
+  USD/JPY and EUR/USD, on four weekends, and both began the week at 00:00 UTC. The minute job's own log of the two
+  Sunday evenings on record (8 and 15 Nov 2026, both in New York's winter; the live check's part `sundays`, read on
+  22 Nov) shows more: from 21:00 to 23:00 UTC, the hour after Sunday's bell included, every pair then due (21)
+  answered with Friday's bar and none added a bar; the CME futures, due from 23:00 UTC, answered with no priced bar
+  until 23:14 to 23:23 UTC and then printed (15 of 16). From 23:00 to 00:00 UTC the counts cannot tell whether a pair
+  added a bar, and New York's summer is in no log. A pair that printed once after the bell and then stood still
+  would bring the alarm back for the rest of those hours, as the rule of 19 Nov raised it; no Sunday on record shows
+  one. The
   page then shows DATA ✕ with the reason, and a red bar at the foot of every screen: "No new prices since … The
   source has stopped sending them; the figures on screen are as of then." Both go when prices arrive again. The
   prices already on screen stay, with their own times. While the feed is stopped no move can be seen, so no alert

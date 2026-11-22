@@ -200,7 +200,7 @@ body.term #topbar .chip{padding:1px 6px;font-size:9.5px}
 body.term #topbar .chip-sm{padding:0 5px;margin-left:2px}
 body.term #topbar #nxt{min-width:40px}
 body.term #nav{gap:1px;margin-left:2px}
-body.term #nav a{padding:2px 6px;font-size:9.5px;letter-spacing:.04em}
+body.term #nav a{padding:2px 5px;font-size:9.5px;letter-spacing:.04em}   /* 5 px a side with six tabs and with seven (the header's rule, below) */
 body.term #upd{font-size:9.5px!important}
 body.term #fs-ctl{display:inline-block}
 body.full #topbar{display:none}
@@ -561,9 +561,11 @@ body.term table.mkt tr.cls td{height:1%}
    1,500 CSS px wide, which is every window from 1100 px up at the AUTO text size unless it is wider than about 15:8,
    the column is 120 px whatever the window, and the figures share the rest evenly. From 1,500 it is what the
    figures' shares leave, 19.6% (143 px and more: a wide window keeps its wider name column). Under 1,150 CSS px,
-   which only a fixed text size in a small window reaches, the table does not fit at all (its figures are cut, as
-   before): the shares stand there too. The layout's width is the page's own, read on #wrap (the text size works by
-   zoom, so a window media query would not see it). */
+   which only a fixed text size in a small window reached, the table did not fit at all (its figures were cut): since
+   22 Nov 2026 the one-screen layout is offered only from a layout of 1,300 CSS px (lib/prefs.ts; the review's SF-1
+   found TOPIX's day cut at text M, L and XL there), so the column is 120 px at every size it is drawn at under 1,500.
+   The layout's width is the page's own, read on #wrap (the text size works by zoom, so a window media query would
+   not see it). */
 body.term table.mkt col.lv{width:9.2%} body.term table.mkt col.n{width:7.12%}
 @container wrap (min-width:1150px) and (max-width:1499.98px){body.term table.mkt col.nm{width:120px} body.term table.mkt col.n{width:auto}}
 body.term table.mkt td:first-child .badge{margin-left:4px;padding:0 3px}
@@ -597,14 +599,13 @@ body.term .curvechart .krow .v{font-size:10.5px}
 /* policy rates: chart and table side by side; the source links stay on hover in the head */
 body.term .panel[data-k="policy"] table th:last-child,body.term .panel[data-k="policy"] table td:last-child{display:none}
 body.term .panel[data-k="policy"] .pbody>.chartwrap{flex:1 1 0;min-width:220px}
-/* top bar on one row: the alert line takes whatever is left between the tabs and the search box */
-body.term #alerts{flex:1 1 0;min-width:90px}
+/* top bar on one row: the alert line takes whatever is left between the tabs and the search box (the header's rule
+   at the end of this file) */
+body.term #alerts{flex:1 1 0;min-width:0}
 body.term #alerts .alrt{max-width:100%}
 body.term #search{margin-left:0;flex:0 0 auto}
-body.term #search input{width:150px}
 body.term #topbar .bmq{margin-left:0;flex:0 0 auto;flex-wrap:nowrap}
 body.term #userchip .so{display:none}                 /* the chip's tooltip says "click to sign out" */
-body.term #search input{width:124px}
 /* sector tables in the narrow panels: long sector names give way to the figures (full name on hover) */
 body.term table.secT td.l{max-width:112px;overflow:hidden;text-overflow:ellipsis}
 body.term table.brT td.l{min-width:0}
@@ -1985,14 +1986,9 @@ table#in-key td.l{min-width:9.5em}
    Only while the entry is drawn: #topbar carries .t7 with its seventh tab, #pnav .n7 with its seventh item (the
    published page has six of each until the paper book's switch is turned, lib/paper.ts). The screens' own rules are
    in styles/pf.css, loaded with the screens. */
-/* one-screen layout: with a seventh tab the header's row was full and took a second one (23.6 to 47 CSS px at
-   1440x900 and 1280x720). While the tab is there the search box is 64 px wide (it is 124), 200 px with the focus or
-   with text in it, laid over what follows so the row does not move, and each tab has 5 px of side padding (it has 6) */
-body.term #topbar.t7 #nav a{padding:2px 5px}
-body.term #topbar.t7 #search{flex:0 0 64px;width:64px}
-body.term #topbar.t7 #search input{width:64px}
-body.term #topbar.t7 #search input:focus,body.term #topbar.t7 #search input:not(:placeholder-shown){width:200px;position:relative;z-index:3}
-body.term #topbar.t7 #search:focus-within .skey{display:none}
+/* one-screen layout: the seventh tab takes nothing from the header's row: its rule (below, "the one-screen header")
+   gives every item its width whatever the number of tabs (until 22 Nov 2026 the search box was 64 px with seven tabs,
+   200 px with the focus and laid over what followed, and the row still took two lines in GitHub's letter placement) */
 /* the phone's bar with seven items: a label never leaves its item (in a font wider than any phone uses it is cut with
    an ellipsis and does not run into its neighbour), and under 360 px of width the bar shows each icon and the label
    of the current tab only (every link keeps its aria-label) */
@@ -2015,3 +2011,69 @@ body.term #grid[data-view="portfolio"]{display:block;overflow:auto;overscroll-be
 .psrc:focus{outline:none}
 .psrc:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 .psrc-p{margin:4px 0 12px;font-size:15px;line-height:1.5}
+
+/* ===== the one-screen header: one row by rule (the designer's notes of 22 Nov 2026, Part A; D/r3b-fix/header-proto.css)
+   For body.term only. The layout is offered where its own width is at least 1,300 CSS px (lib/prefs.ts); body.tight:
+   under 1,420, where the Monitor's name shows its mark only. Every item has its width by rule, the same in every state
+   (the focus, typing, the results list open, a lit alert, the menu open); only the alert line's holder takes what is
+   left, at least 101 px more than the line's longest promise in both letter placements. The scrolling layout and the
+   phone layout are as before. */
+/* 1 · one row, always. Nothing wraps; only the alert line gives way */
+body.term #topbar{flex-wrap:nowrap}
+body.term #topbar .brand,body.term #nav,body.term #search,body.term #topbar .bmq{flex:0 0 auto}
+body.term #nav{flex-wrap:nowrap}
+body.term #alerts{flex:1 1 0;min-width:0}
+/* 2 · the tabs: 5 px of side padding, six tabs or seven (body.term #nav a, above) */
+/* 3 · the search box: 96 px, the same with the focus, empty or typed in. Its words "Search" (components/Search.tsx);
+   the "/" key cap until something is typed */
+body.term #search{flex:0 0 auto;width:auto}
+body.term #search input{width:96px;position:static}
+/* 4 · the clock: Singapore's hour and minute. The seconds, Tokyo's and New York's time are in its tooltip and on the
+   menu's first line */
+body.term #clock .ss,body.term #clock .zz{display:none}
+/* 5 · the Monitor's name: the mark always; its words from 1,420 CSS px of layout (the mark's tooltip says them) */
+body.term.tight #topbar .brand .bw{display:none}
+body.term.tight #topbar .brand{gap:0}
+/* 6 · the menu: text size, COMPACT, FULL and the account leave the row for a list under one button (22 px).
+   Outside the one-screen layout the button is not drawn and the span is not a box: nothing changes there */
+#more-btn{display:none}
+#more{display:contents}
+#more .mclock{display:none}
+body.term #more-btn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:15px;padding:0;margin-left:2px;border:1px solid var(--bord2);border-radius:2px;background:none;color:var(--txt2);cursor:pointer}
+body.term #more-btn:hover,body.term #topbar.more #more-btn{border-color:var(--amber);color:var(--amber)}
+body.term #more-btn:focus{outline:none}
+body.term #more-btn:focus-visible{outline:1px solid var(--amber);outline-offset:1px}
+body.term #more-btn svg{width:11px;height:11px;display:block}
+body.term #more{display:none}
+body.term #topbar{position:relative}
+body.term #topbar.more #more{display:flex;flex-direction:column;align-items:flex-start;gap:7px;position:absolute;right:8px;top:calc(100% + 3px);z-index:60;min-width:200px;padding:8px 10px;background:var(--panel2);border:1px solid var(--bord2);border-radius:4px;box-shadow:0 10px 28px rgba(0,0,0,.6)}
+body.term #topbar.more #more .mclock{display:block;align-self:stretch;padding-bottom:6px;border-bottom:1px solid var(--bord);color:var(--txt2);font-size:10.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+body.term #topbar.more #more .chip-sm,body.term #topbar.more #more .chip,body.term #topbar.more #more .pick{margin:0}
+body.term #topbar.more #more #userchip .so{display:inline}
+/* COMPACT on where its one-screen layout is not offered (a layout under 1,300 CSS px): the chip is muted and says why */
+#cmp-ctl.off{opacity:.55}
+/* 7 · the alert line. Never cut: the label, the kind, the figure with its word ("intraday", "at close", "1D"), the
+   time. The name is the only part that is cut, with an ellipsis, and never below its first 8 characters (the fit in
+   components/Alerts.tsx holds that). "via <publisher>" shows only beside a whole name: `.one` is one line high and
+   wraps, so what does not fit beside `.core` stands on a second line that is not drawn */
+#alerts .alrt .one .core{display:contents}                                 /* outside the one-screen layout (scrolling layout, phone) the line is as before */
+body.term #alerts .alrt{display:flex;width:fit-content;max-width:100%}
+body.term #alerts .alrt .one{flex:1 1 auto;display:flex;flex-wrap:wrap;align-content:flex-start;align-items:baseline;column-gap:6px;row-gap:6px;height:1.28em;line-height:1.28;min-width:0;overflow:hidden}
+body.term #alerts .alrt .one .core{display:flex;align-items:baseline;gap:6px;flex:0 1 auto;min-width:0;max-width:100%;overflow:hidden}
+body.term #alerts .alrt .one .core .nm{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.term #alerts .alrt .one .core .kd,body.term #alerts .alrt .one .core .fig,body.term #alerts .alrt .one .core .q{flex:none}
+body.term #alerts .alrt .one .src{flex:none}
+/* 8 · what gives way in a drawing wider than the row was measured for, by rule and never a cut figure: the fit finds the
+   line cannot hold its promise (label, kind, 8 characters of the name, figure and word, time) and drops whole parts:
+   first the label (a lit line still says "new" by its colour and pulse); then, if still short, everything but the label
+   and the time ("NEW ALERT 07:07", all of it one hover or click away); if even that cannot stand whole, the one-screen
+   layout is refused for that window (lib/prefs.ts) */
+body.term #alerts.a-nolabel .alrt:not(.none)>.k{display:none}
+body.term #alerts.a-min .alrt:not(.none)>.k{display:inline}
+body.term #alerts.a-min .alrt .one{display:none}
+/* A phone's line (body.pv2), in the same order (SF-2 of the checks of 22 Nov 2026): where the line has too little room
+   for the label, the kind, the name's first letter and "…", the figure and the time, the label's "NEW" leaves first (a
+   lit line keeps its colour and pulse), then the time's day ("23 Nov"); only then is the name cut below one letter.
+   The whole time is in the line's tooltip and in the list a tap opens */
+body.pv2 #alerts.a-nonew .alrt .k .kn{display:none}
+body.pv2 #alerts.a-noday .alrt .t .td{display:none}

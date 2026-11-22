@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Logo } from "./Logo";
 import { Alerts } from "./Alerts";
 import { Help } from "./Help";
@@ -12,7 +12,7 @@ import { marketSession } from "../lib/opens";
 import { fmtClock, fmtWhen, SGT, TZ_ABBR } from "../lib/time";
 import { PORTFOLIO, TAB } from "../lib/labels";
 import { PAPER } from "../lib/paper";
-import { SIZES, type Prefs, type SizeKey } from "../lib/prefs";
+import { SIZES, termFits, type Prefs, type SizeKey } from "../lib/prefs";
 
 export type ViewId = "market" | "news" | "research" | "equities" | "rates" | "watch" | "asset" | "portfolio";
 /** The tabs, in the glossary's words (lib/labels.ts): MARKETS · NEWS · RESEARCH · EQUITIES · RATES & FX · WATCHLIST,
@@ -41,7 +41,11 @@ export interface TopbarProps {
   onFull: (f: boolean) => void;
   pv2?: boolean;                  // the phone layout is on: slim header, the rest opens as a menu, tabs move to the bottom bar
   canPreview?: boolean;           // show the switch to the phone layout (a phone that was put back on the classic layout)
+  term?: boolean;                 // the one-screen layout is drawn (lib/prefs.ts applyPrefs)
 }
+
+const MENU_LABEL = "Menu: Tokyo and New York time, text size, compact, full screen, account";
+const COMPACT_OFF = "COMPACT is on. One screen per tab needs a layout 1,300 px wide: a window of 1,170 px at AUTO, 1,105 at S, 1,300 at M, 1,495 at L, 1,755 at XL. This window scrolls. Click to turn COMPACT off.";
 
 export function Topbar(p: TopbarProps) {
   const [now, setNow] = useState(() => new Date());
@@ -54,10 +58,30 @@ export function Topbar(p: TopbarProps) {
   const [menu, setMenu] = useState(false);
   const inst = useInstall();
   useEffect(() => { setMenu(false); }, [p.view, p.pv2]);
+  // The one-screen layout's menu (≡, the row's last item): Tokyo's and New York's time, text size, COMPACT, FULL and
+  // the account, in a list under it (the designer's notes of 22 Nov 2026, A.2 point 3). Outside that layout the span
+  // that holds them is not a box and the row is as before. It closes on a second press, Escape, a click outside, and
+  // once one of its items is used; Escape and a click outside give the focus back to the button.
+  const [more, setMore] = useState(false);
+  const moreBtn = useRef<HTMLButtonElement>(null), moreBox = useRef<HTMLSpanElement>(null);
+  useEffect(() => { if (!p.term) setMore(false); }, [p.term]);
+  useEffect(() => {
+    if (!more) return;
+    // after a click outside, once the browser has moved the focus: back to the button, unless the click focused a field
+    const back = () => setTimeout(() => { const a = document.activeElement; if (!a || a === document.body || moreBox.current?.contains(a)) moreBtn.current?.focus({ preventScroll: true }); }, 0);
+    const off = (e: MouseEvent) => { const t = e.target as Node; if (moreBox.current?.contains(t) || moreBtn.current?.contains(t)) return; setMore(false); back(); };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { setMore(false); moreBtn.current?.focus(); } };
+    document.addEventListener("mousedown", off); document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("mousedown", off); document.removeEventListener("keydown", key); };
+  }, [more]);
+  const used = () => setMore(false);
+  const clocks = `${fmtClock(now, SGT, true)} SGT · ${fmtClock(now, "Asia/Tokyo")} JST · ${fmtClock(now, "America/New_York")} ET`;
+  const sgt = fmtClock(now, SGT, true);
+  const cmpOff = !!p.prefs.compact && !p.pv2 && !p.term && termFits();   // COMPACT on, its one-screen layout not offered here
   const ico = (d: string) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>;
   return (
-    <div id="topbar" className={[p.pv2 && menu ? "open" : "", VIEWS.length > 6 ? "t7" : ""].filter(Boolean).join(" ") || undefined}>
-      <span className="brand"><Logo />Orrery Monitor</span>
+    <div id="topbar" className={[p.pv2 && menu ? "open" : "", VIEWS.length > 6 ? "t7" : "", more && p.term ? "more" : ""].filter(Boolean).join(" ") || undefined}>
+      <span className="brand" title="Orrery Monitor"><Logo /><span className="bw">Orrery Monitor</span></span>
       {p.pv2 && (
         <span id="pv2-btns">
           <button type="button" aria-label="Search stocks, bonds, currencies" onClick={() => { setMenu(true); setTimeout(() => document.querySelector<HTMLInputElement>("#search input")?.focus(), 30); }}>{ico("M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13ZM20 20l-4.6-4.6")}</button>
@@ -67,7 +91,7 @@ export function Topbar(p: TopbarProps) {
       <nav id="nav">
         {VIEWS.map((v) => <a key={v.id} href={`#${v.id}`} className={v.id === p.view ? "on" : ""} onClick={(e) => { e.preventDefault(); p.onNav(v.id); }}>{v.label}</a>)}
       </nav>
-      <Alerts tick={p.tick} phone={!!p.pv2} />
+      <Alerts tick={p.tick} phone={!!p.pv2} term={!!p.term} />
       <Search />
       <span className="bmq">
         <span id="mktstat" title={`Regular sessions, each in its exchange's local time${hol}`}>
@@ -81,21 +105,28 @@ export function Topbar(p: TopbarProps) {
             );
           })}
         </span>
-        <span id="clock" title="Singapore time (default), Tokyo, New York"><b>{fmtClock(now, SGT, true)}</b> SGT · {fmtClock(now, "Asia/Tokyo")} JST · {fmtClock(now, "America/New_York")} ET</span>
+        {/* in the one-screen layout "07:10 SGT": the seconds and the other two clocks are in the tooltip and the menu */}
+        <span id="clock" title={`${clocks} · Singapore time (default), Tokyo, New York`}><b>{sgt.slice(0, 5)}<span className="ss">{sgt.slice(5)}</span></b> SGT<span className="zz"> · {fmtClock(now, "Asia/Tokyo")} JST · {fmtClock(now, "America/New_York")} ET</span></span>
         <span id="upd" className="mut" title="When the last payload landed, Singapore time">{p.updatedAt ? `UPD ${fmtWhen(p.updatedAt)} SGT` : ""}</span>
         <span id="nxt" className={`chip-sm${p.hit ? " hit" : nextIn == null ? " stale" : ""}`} title="Time to the next automatic refresh. Click to refresh now" onClick={p.onRefresh}>
           &#8635; {nextIn == null ? "–:––" : `${Math.floor(nextIn / 60)}:${String(nextIn % 60).padStart(2, "0")}`}
         </span>
         <span id="hlth" className={`chip-sm hl hl-${p.health}`} title={p.healthTitle}>DATA {p.health === "ok" ? "OK" : p.health === "warn" ? "!" : p.health === "bad" ? "✕" : "?"}</span>
         <Help />
-        {p.canPreview && !p.pv2 && <span id="pv2-on" className="chip-sm" title="The layout made for phones. Only this browser changes; switch back from its menu" onClick={() => setPhoneV2(true)}>NEW LAYOUT</span>}
         {p.pv2 && <span id="ntf-ctl" className="chip-sm" title="Alerts as notifications on this phone" onClick={() => { setMenu(false); openNotify(); }}>NOTIFICATIONS</span>}
         {p.pv2 && !inst.installed && <span id="a2hs" className="chip-sm" title="How to put the Monitor on this phone's home screen, where it opens full screen like an app" onClick={() => { setMenu(false); askInstallHint(); }}>ADD TO HOME SCREEN</span>}
         {p.pv2 && <span id="pv2-off" className="chip-sm" title="Back to the earlier layout, on this browser only; NEW LAYOUT in its header returns" onClick={() => setPhoneV2(false)}>CLASSIC LAYOUT</span>}
-        <Pick<SizeKey> id="sz-ctl" label="Text size" value={p.prefs.size} options={SIZES.map((s) => s.k)} onChange={(k) => p.onPrefs({ ...p.prefs, size: k })} title="Text size. AUTO scales the text and layout to this window; S, M, L and XL fix the size" />
-        <span id="cmp-ctl" className={`chip-sm${p.prefs.compact ? " on" : ""}`} title="Terminal layout: one screen per tab, sized to the window" onClick={() => p.onPrefs({ ...p.prefs, compact: !p.prefs.compact })}>COMPACT</span>
-        <span id="fs-ctl" className="chip-sm" title={`Full screen: no browser tabs or address bar, header hidden (Esc or the corner strip to leave; keys 1 to ${VIEWS.length} switch tabs)`} onClick={() => p.onFull(true)}>&#9974; FULL</span>
-        {p.userId && <span className="chip" id="userchip" title={`Signed in as ${p.userId}. Click for your account: change password, sign out`} onClick={p.onSignOut}>{p.userId.split("@")[0].slice(0, 14).toUpperCase()}<span className="so"> · ACCOUNT</span></span>}
+        {/* drawn in the one-screen layout only: elsewhere the row is as before (and a phone's own menu button stays the
+            only one in its header) */}
+        {p.term && !p.pv2 && <button id="more-btn" ref={moreBtn} type="button" aria-label={MENU_LABEL} aria-expanded={more} aria-controls="more" title="Tokyo and New York time · text size · COMPACT · FULL · account" onClick={() => setMore((m) => !m)}>{ico("M4 7h16M4 12h16M4 17h16")}</button>}
+        <span id="more" ref={moreBox}>
+          <span className="mclock">{clocks}</span>
+          {p.canPreview && !p.pv2 && <span id="pv2-on" className="chip-sm" title="The layout made for phones. Only this browser changes; switch back from its menu" onClick={() => setPhoneV2(true)}>NEW LAYOUT</span>}
+          <Pick<SizeKey> id="sz-ctl" label="Text size" value={p.prefs.size} options={SIZES.map((s) => s.k)} onChange={(k) => { used(); p.onPrefs({ ...p.prefs, size: k }); }} title="Text size. AUTO scales the text and layout to this window; S, M, L and XL fix the size" />
+          <span id="cmp-ctl" className={`chip-sm${p.prefs.compact ? " on" : ""}${cmpOff ? " off" : ""}`} title={cmpOff ? COMPACT_OFF : "Terminal layout: one screen per tab, sized to the window"} onClick={() => { used(); p.onPrefs({ ...p.prefs, compact: !p.prefs.compact }); }}>COMPACT</span>
+          <span id="fs-ctl" className="chip-sm" title={`Full screen: no browser tabs or address bar, header hidden (Esc or the corner strip to leave; keys 1 to ${VIEWS.length} switch tabs)`} onClick={() => { used(); p.onFull(true); }}>&#9974; FULL</span>
+          {p.userId && <span className="chip" id="userchip" title={`Signed in as ${p.userId}. Click for your account: change password, sign out`} onClick={() => { used(); p.onSignOut(); }}>{p.userId.split("@")[0].slice(0, 14).toUpperCase()}<span className="so"> · ACCOUNT</span></span>}
+        </span>
       </span>
     </div>
   );

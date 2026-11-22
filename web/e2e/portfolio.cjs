@@ -4,8 +4,9 @@
 // Nothing here reads the machine's clock: every page sets `om_mock_now` (17:00 SGT on Sat 21 Nov 2026 for the forms
 // and the books, so the next session is Mon 23 Nov 2026; 15 Dec 2026 for the targets' window; 07:10 SGT on Tue 24 Nov
 // for the header), and what must have room is measured in the machine's fonts and with a wide font forced.
-//   [1] the entry: the seventh tab, the header's height with seven tabs and with six at six sizes (in both fonts), the
-//       one-screen header with no row added, key 7, Help; with the page's switch off (om_paper = "0") nothing of it
+//   [1] the entry: the seventh tab, the header's height with seven tabs and with six at six sizes (in both fonts), key 7
+//       (in full screen too), Help; with the page's switch off (om_paper = "0") nothing of it. The one-screen header with
+//       seven tabs and with six is e2e/header.cjs (the designer's rule of 22 Nov 2026)
 //   [2] with no book: the three starts as cards, two muted lines, nothing drawn as a disabled button
 //   [3] the list, the cap, and what `#portfolio` opens
 //   [4] the statement once, and the three starts created with their defaults
@@ -77,31 +78,19 @@ const header = (p) => p.evaluate(() => { const z = Number(document.body.style.zo
         && Math.abs(aw.h - cw.h) <= 1 && aw.name != null && Math.abs(aw.name - cw.name) <= 1 && aw.sideways <= 0 && seven.errs.length === 0, { a, c, aw, cw, errs: seven.errs });
       await seven.ctx.close(); await six.ctx.close();
     }
-    for (const [vw, vh] of [[1440, 900], [1280, 720]]) for (const wide of [false, true]) {
-      const seven = await open(b, { clock: MORNING, compact: true, vw, vh }), six = await open(b, { clock: MORNING, compact: true, vw, vh, ls: { om_paper: "0" } });
-      await go(seven.p, "market", "table.mkt"); await go(six.p, "market", "table.mkt");
-      if (wide) { await seven.p.addStyleTag({ content: WIDE }); await six.p.addStyleTag({ content: WIDE }); await settle(seven.p, 400); await settle(six.p, 400); }
-      await seven.p.waitForSelector("#alerts .alrt .nm");
-      const term = await seven.p.evaluate(() => document.body.classList.contains("term")), a = await header(seven.p), c = await header(six.p);
-      const ph = await seven.p.evaluate(() => document.querySelector("#search input").placeholder);
-      // The rule holds in any font: the seventh tab adds no row to the header and takes nothing from the alert line.
-      // How many rows the header takes is the font's business: one (23.6 px) in this machine's fonts, as the designer
-      // measured; two already with six tabs in the wide font forced here (47 px), which is not the tab's doing.
-      ck(`one-screen layout at ${vw}x${vh}${wide ? ", a wide font forced" : ""}: the seventh tab adds no row (the header is ${a.h} px with seven tabs, ${c.h} with six: ${a.h <= 25 ? "one row" : "the rows it has with six"}), the search box is ${a.search} px wide ("${ph}"), and the alert line ${a.alert} px against ${c.alert} with six tabs`, term && a.tabs.length === 7 && a.h <= c.h + 0.5 && Math.abs(a.search - 64) <= 1 && ph === "Search" && a.alert >= c.alert - 0.5 && a.sideways <= 0, { a, c, term });
-      if (!wide) {
-        const before = await seven.p.evaluate(() => [...document.querySelectorAll("#topbar .bmq > *")].map((e) => Math.round(e.getBoundingClientRect().left)));
-        await seven.p.focus("#search input"); await seven.p.waitForTimeout(150);
-        const z = await seven.p.evaluate(() => Number(document.body.style.zoom) || 1), w = await seven.p.evaluate(() => document.querySelector("#search input").getBoundingClientRect().width), after = await seven.p.evaluate(() => [...document.querySelectorAll("#topbar .bmq > *")].map((e) => Math.round(e.getBoundingClientRect().left)));
-        ck(`with the focus the search box is ${Math.round(w / z)} px wide, laid over what follows it: nothing in the row moves, and the header is as tall as before`, Math.abs(w / z - 200) <= 1 && before.join() === after.join() && Math.abs((await header(seven.p)).h - a.h) <= 0.5, { before, after });
-        if (vw === 1440) {   // full screen: the header gone, the corner strip says the keys, and key 7 opens the tab
-          await seven.p.evaluate(() => document.activeElement?.blur()); await seven.p.click("#fs-ctl"); await seven.p.waitForFunction(() => document.body.classList.contains("full"));
-          const strip = await seven.p.evaluate(() => document.querySelector("#fsx").textContent);
-          await seven.p.keyboard.press("7"); await seven.p.waitForSelector("#pf-list");
-          const fs7 = await seven.p.evaluate(() => ({ hash: location.hash, full: document.body.classList.contains("full"), view: document.querySelector("#grid").dataset.view }));
-          ck(`in full screen the corner strip reads "${strip.replace(/\s+/g, " ").trim().slice(0, 14)}" and key 7 opens #portfolio`, /^1–7 TABS · ESC/.test(strip) && fs7.hash === "#portfolio" && fs7.full && fs7.view === "portfolio", { strip, fs7 });
-        }
-      }
-      await seven.ctx.close(); await six.ctx.close();
+    // The one-screen header with seven tabs and with six, one row by rule, is e2e/header.cjs (the designer's notes of
+    // 22 Nov 2026, Part A, its check A.7): it replaced this suite's two checks of 21 Nov, which failed in GitHub's letter
+    // placement. Here: full screen, where the header is gone, the corner strip says the keys, and key 7 opens the tab.
+    {
+      const seven = await open(b, { clock: MORNING, compact: true, vw: 1440, vh: 900 });
+      await go(seven.p, "market", "table.mkt");
+      const term = await seven.p.evaluate(() => document.body.classList.contains("term"));
+      await seven.p.click("#more-btn"); await seven.p.click("#fs-ctl"); await seven.p.waitForFunction(() => document.body.classList.contains("full"));
+      const strip = await seven.p.evaluate(() => document.querySelector("#fsx").textContent);
+      await seven.p.keyboard.press("7"); await seven.p.waitForSelector("#pf-list");
+      const fs7 = await seven.p.evaluate(() => ({ hash: location.hash, full: document.body.classList.contains("full"), view: document.querySelector("#grid").dataset.view }));
+      ck(`one-screen layout at 1440x900: FULL, under the header's menu (≡), hides the header; the corner strip reads "${strip.replace(/\s+/g, " ").trim().slice(0, 14)}" and key 7 opens #portfolio`, term && /^1–7 TABS · ESC/.test(strip) && fs7.hash === "#portfolio" && fs7.full && fs7.view === "portfolio" && seven.errs.length === 0, { strip, fs7, term, errs: seven.errs });
+      await seven.ctx.close();
     }
     const { ctx, p, errs } = await open(b, { clock: MORNING });
     await go(p, "market", "table.mkt");

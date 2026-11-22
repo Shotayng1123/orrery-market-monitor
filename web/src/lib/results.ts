@@ -94,11 +94,15 @@ export const resultsStatus = (est: boolean | null | undefined, symbol?: string, 
 export const resultsStatusShort = (est: boolean | null | undefined, symbol?: string, indices?: readonly string[] | null): string => resultsStatus(est, symbol, indices)?.replace("confirmed", "conf.") ?? "–";
 /** What follows the date in KEY DATA: "est. (Yahoo Finance)", "confirmed (Yahoo Finance)", or the source alone. */
 export const resultsWords = (est: boolean | null | undefined, symbol?: string, indices?: readonly string[] | null, source = RESULTS_SOURCE): string => { const s = resultsStatus(est, symbol, indices); return s ? `${s} (${source})` : source; };
+/** What a missing mark is (the checks of 22 Nov 2026, RK-1): the source gives none, or the Monitor has not read it again
+ *  since the deploy of 22 Nov 2026 cleared the marks it had kept by a rule of its own (an index member's mark is read
+ *  again by its list's next weekday quote run; a stock's own page reads Yahoo's at once). */
+export const NO_MARK_HELD = "the source gives none, or the Monitor has not read it again since 22 Nov 2026";
 /** The tooltip of a results date: whose day it is, from whom, its mark and why, and why it has no time of day. */
 export function resultsTip(symbol: string, est: boolean | null | undefined, indices?: readonly string[] | null, source = RESULTS_SOURCE): string {
-  const yahoo = est === true ? "Yahoo marks it estimated" : est === false ? "Yahoo marks it confirmed" : "Yahoo gives no mark";
+  const yahoo = est === true ? "Yahoo marks it estimated" : est === false ? "Yahoo marks it confirmed" : `no mark of Yahoo's held: ${NO_MARK_HELD.replace("the source gives", "it gives")}`;
   const status = jpxDated(symbol, indices) ? `; marked est.: a Tokyo company's date is confirmed by JPX's results calendar (決算発表予定日), which the Monitor does not read yet (${yahoo})`
-    : est === true ? "; estimated by Yahoo, not confirmed by the company" : est === false ? "; confirmed, as Yahoo marks it" : "";
+    : est === true ? "; estimated by Yahoo, not confirmed by the company" : est === false ? "; confirmed, as Yahoo marks it" : `; no mark held: ${NO_MARK_HELD}`;
   return `The next results as ${source} gives them: the day in ${listingCity(symbol, indices)}, where the company is listed${status}. No time of day: the source gives a time with the date but does not say that it is the company's release time.`;
 }
 /** What a list of marks says under it (both layouts): whose mark each is. */

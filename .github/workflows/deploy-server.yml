@@ -191,18 +191,6 @@ jobs:
           done
           if [ -n "$failed" ]; then echo "::error title=Functions not deployed::$failed"; exit 1; fi
 
-      # The paper portfolio's walls, as the database itself sees them (pf_selftest, the migration
-      # 20261121000001_pf_store.sql; jobs/live_check.ts, part "pf"): counts and one verdict, never a row. A wall that
-      # is down, or a look that cannot be made, fails this step and turns the run red (the second review of P-1, PV-5).
-      # It runs after the functions so that a fault of the store, whose routes are switched off, never keeps the rest
-      # of the server back.
-      - name: The paper portfolio's walls
-        if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy'
-        working-directory: jobs
-        env:
-          LIVE_CHECK_ONLY: pf
-        run: npx tsx live_check.ts
-
       # optional: hands the database the token with which it asks GitHub for the Morning Note at 22:15 UTC
       - name: Morning Note token
         if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy' && env.NOTE_DISPATCH_TOKEN != ''
@@ -223,4 +211,17 @@ jobs:
         working-directory: jobs
         env:
           LIVE_CHECK_ONLY: stock
+        run: npx tsx live_check.ts
+
+      # The paper portfolio's walls, as the database itself sees them (pf_selftest, the migration
+      # 20261121000001_pf_store.sql; jobs/live_check.ts, part "pf"): counts and one verdict, never a row. A wall that
+      # is down, or a look that cannot be made, fails this step and turns the run red (the second review of P-1, PV-5).
+      # It is the job's last step, after the functions, the Morning Note's token and the page reads, so that a fault of
+      # the store, whose routes are switched off, never keeps the rest of the server back: a red step skips the steps
+      # after it (the review of part 2a, 22 Nov 2026: ML-1, DC-3).
+      - name: The paper portfolio's walls
+        if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy'
+        working-directory: jobs
+        env:
+          LIVE_CHECK_ONLY: pf
         run: npx tsx live_check.ts

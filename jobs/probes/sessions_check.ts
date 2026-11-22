@@ -1,11 +1,17 @@
 // What the session table rests on, read from the source itself (the reviewer's check of "when a closed market
 // opens", 21 Nov 2026: findings O-1 and O-2). Read-only, no key, nothing written. Yahoo Finance only.
-//   0. Right now (added after the checks of round 3b, PR-11): the quote's own time and the newest one-minute bar of
-//      USDJPY=X and ES=F, by the request the server's minute job makes (range=1d, interval=1m). The run of 21 Nov 2026
-//      showed the feed's first bar of the FX week at Monday 00:00 UTC on four weekends, two hours after the session
-//      table opens the week (Sunday 17:00 New York; three hours in New York's summer time). Whether the quote's own
-//      time moves in those hours is in no log, and the server's feed-health rule expects prints in them. RUN BETWEEN
-//      SUNDAY 22:30 AND 23:59 UTC this section answers it; at any other hour it only says how old the quote is.
+//   0. Right now (added after the checks of round 3b, PR-11; PX-9 of 22 Nov 2026): for USDJPY=X and ES=F, by the request
+//      the server's minute job makes (range=1d, interval=1m), the count of one-minute bars with a price in the answer,
+//      the first of them after the last gap of two hours or more (the first bar of the new week, or of the new session,
+//      when the answer still holds the bars before the weekend), and the newest. The server's feed health reads BAR
+//      TIMES, the newest one-minute bar's (tick.ts printsOf), not the quote's own time, which is printed beside them for
+//      comparison (regularMarketTime). The run of 21 Nov 2026 showed the feed's first bar of the FX week at Monday 00:00
+//      UTC on four weekends for these two pairs, two hours after the session table opens the week (Sunday 17:00 New York;
+//      three hours in New York's summer time); the minute job's own log of 8 and 15 Nov 2026 had the CME futures' first
+//      bars at 23:14 to 23:23 UTC. RUN BETWEEN SUNDAY 22:30 AND 23:59 UTC, best from 23:45 (Globex opens at 23:00 UTC
+//      in New York's winter, and the table gives CME a ten-minute delay): this section then shows whether a pair has
+//      printed after Sunday's bell and when the future's first bar came; at any other hour it shows the same for the
+//      session in hand.
 //   1. O-1, the FX week. Since 21 Nov 2026 both session tables keep it by New York's clock, Sunday 17:00 to Friday 17:00
 //      there (the server's fxTrading); before, Monday 05:00 to Saturday 06:00 SGT all year. Which of the two the feed
 //      follows was in no log. Here: Yahoo's five-minute bars of USDJPY=X and EURUSD=X over a month, and for each weekend
@@ -53,7 +59,7 @@ const session = (m: J): string => {
   return reg?.start && reg.end ? `${inZone(NY, reg.start)} to ${inZone(NY, reg.end)} New York (${utc(reg.start)} to ${utc(reg.end)})` : "not given";
 };
 
-head("0. Right now: the quote's own time and the newest one-minute bar of a currency and a Globex future (the minute job's own request)");
+head("0. Right now: a currency's and a Globex future's one-minute bars by the minute job's own request: the first after the last gap of two hours or more, the newest, the count (the server reads bar times)");
 {
   const now = Math.floor(Date.now() / 1000);
   console.log(`  now ${three(now)}. The session table opens the FX week at Sunday 17:00 New York and Globex at 18:00; the log of 21 Nov 2026 has the feed's first FX bar of the week at Monday 00:00 UTC`);
@@ -61,7 +67,14 @@ head("0. Right now: the quote's own time and the newest one-minute bar of a curr
     const c = await chart(sym, "1d", "1m");
     if (!c) continue;
     const t = priced(c), qt = Number(c.meta.regularMarketTime), at = Math.floor(Date.now() / 1000);
-    console.log(`  ${sym}: the quote's own time (regularMarketTime) ${Number.isFinite(qt) && qt > 0 ? `${three(qt)}, ${((at - qt) / 60).toFixed(1)} minutes before this reading` : "not given"}; ${t.length} one-minute bars with a price in the answer${t.length ? `, the newest ${three(t[t.length - 1])}, ${((at - t[t.length - 1]) / 60).toFixed(1)} minutes before this reading` : ""}; regular session declared for today: ${session(c.meta)}`);
+    let k = t.length - 1; while (k > 0 && t[k] - t[k - 1] < 2 * 3600) k--;
+    const gap = k > 0 ? t[k] - t[k - 1] : null;
+    console.log(`  ${sym}: ${t.length} one-minute bars with a price in the answer${t.length ? `, the first ${three(t[0])}` : ""}`);
+    if (t.length) {
+      console.log(`    the first bar after the last gap of two hours or more: ${gap != null ? `${three(t[k])} (the gap ${(gap / 3600).toFixed(1)} h, from the bar of ${three(t[k - 1])}); ${t.length - k} bars since` : "no such gap in the answer: its first bar above"}`);
+      console.log(`    the newest bar (the time the server reads): ${three(t[t.length - 1])}, ${((at - t[t.length - 1]) / 60).toFixed(1)} minutes before this reading`);
+    }
+    console.log(`    the quote's own time (regularMarketTime, not read by the feed health): ${Number.isFinite(qt) && qt > 0 ? `${three(qt)}, ${((at - qt) / 60).toFixed(1)} minutes before this reading` : "not given"}; regular session declared for today: ${session(c.meta)}`);
   }
 }
 

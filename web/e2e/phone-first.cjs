@@ -28,7 +28,7 @@ const MOCK = "http://localhost:5179/orrery-market-monitor/", STANDIN = "http://l
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d)}`); };
 const SAT = "2026-11-21T06:12:00Z";       // Sat 21 Nov 14:12 SGT: every market but the coins' shut, each line with a date in it
 const MORNING = "2026-11-23T23:10:00Z";   // Tue 24 Nov 07:10 SGT
-const PHONES = { P1: "iPhone SE (3rd gen)", P2: "iPhone 13", PX7: "Pixel 7" };
+const PHONES = { P1: "iPhone SE (3rd gen)", P2: "iPhone 13", PX7: "Pixel 7", P0: "Galaxy S24" };   // P0: a 360-px phone
 const ROWS4 = 203;   // four rows of 50 px with the three 1-px rules between them
 // the margins, in CSS px (e2e/room.cjs): what a text that may not be cut keeps before the edge that would cut it, in
 // the machine's fonts and in the two wider drawings; and the least an alert's name keeps of its own width (it is the
@@ -174,30 +174,38 @@ const near = (v, want, tol = 0.5) => v != null && Math.abs(v - want) <= tol;
     }
   }
 
-  // The line with the least room (the checks of round 3b: PF-1, CK-3). A σ move is the one kind with both a kind and a
-  // figure; lit, its label is "NEW ALERT" in its pill; raised before midnight and read after it, its time carries its
-  // day. In a 375-px window the name's box is then 129 px for "σ MOVE", the name and the figure. The name had a floor
-  // of three letters' width: the figure, last in the box, lost its "σ" behind the box's edge ("+2." for +2.7σ), with
-  // no ellipsis, and no check drew the state. The name now gives way to nothing first. Clock: Tue 24 Nov 2026,
-  // 00:10 SGT; the alert of 23 Nov 23:50 SGT, twenty minutes old. A figure of five characters and one of six.
-  console.log("\n[the alert line with the least room: lit, a σ move, its time with its day, in a 375-px window]");
-  for (const [sig, fig] of [[2.7, "+2.7σ"], [-12.3, "-12.3σ"]]) {
+  // The line with the least room (the checks of round 3b: PF-1, CK-3; of 22 Nov: SF-2). A σ move is the one kind with
+  // both a kind and a figure; lit, its label is "NEW ALERT" in its pill; raised before midnight and read after it, its
+  // time carries its day. In a 375-px window the name's box was then 129 px for "σ MOVE", the name and the figure, and
+  // in a 360-px one it kept no letter of the name at all (0 to 12.7 px: the line named no instrument) and, in GitHub's
+  // letter placement, still hid part of a -12.3σ. The line's fit (components/Alerts.tsx) now gives way in the designer's
+  // order: the label's "NEW" leaves first (the line stays lit: its colour and its pulse), then the time's day, before
+  // the name is cut below one letter and "…". Clock: Tue 24 Nov 2026, 00:10 SGT; the alert of 23 Nov 23:50 SGT, twenty
+  // minutes old. A figure of five characters and one of six, at 360 and 375 px, in the machine's fonts, drawn 2% wider
+  // and with a wide font forced; the floor for the name is its first letter and "…", measured in the drawing itself.
+  console.log("\n[the alert line with the least room: lit, a σ move, its time with its day, in a 360-px and a 375-px window]");
+  for (const code of ["P0", "P1"]) for (const [sig, fig] of [[2.7, "+2.7σ"], [-12.3, "-12.3σ"]]) {
     const NIGHT = "2026-11-23T16:10:00Z", raised = "2026-11-23T15:50:00Z";
     const row = { id: 950, at: raised, d: "2026-11-23", symbol: "USDJPY=X", name: "USD/JPY", kind: "sigma", pct: sig > 0 ? 1.57 : -7.1, price: 158.4, market: "FX", msg: `USD/JPY ${sig > 0 ? "+1.6" : "-7.1"}% · ${Math.abs(sig)}σ · 158.400`, url: null, sigma: sig, note: "σ of 63 daily changes to 20 Nov 2026 · Yahoo Finance" };
-    const { ctx, p, errs } = await page(b, "P1", null);
+    const { ctx, p, errs } = await page(b, code, null);
     await p.clock.setFixedTime(new Date(NIGHT));
     await routes(p);
     await p.route("**/fakeapi?*", (r) => (new URL(r.request().url()).searchParams.get("action") === "alerts" ? r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ rows: [row] }) }) : r.fallback()));
     await p.goto(STANDIN + "#market", { waitUntil: "networkidle" }); await p.waitForSelector("#alerts .alrt .one .fig"); await p.evaluate(() => document.fonts.ready); await p.waitForTimeout(400);
-    const tight = () => p.evaluate(() => { const al = document.querySelector("#alerts .alrt"), one = al.querySelector(".one"), m = window.__room, R = (e) => e.getBoundingClientRect(), t = (s) => al.querySelector(s)?.textContent ?? null;
-      return { vw: innerWidth, h: R(al).height, lit: al.classList.contains("new"), k: t(".k"), kd: t(".one .kd"), nm: t(".one .nm"), fig: t(".one .fig"), time: t(".t"), box: Math.round(R(one).width * 10) / 10, figIn: m.within(one.querySelector(".fig"), one), kdIn: m.within(one.querySelector(".kd"), one), nameLeft: Math.round(R(one.querySelector(".nm")).width * 10) / 10, lineIn: Math.min(...[...al.querySelectorAll(".k,.t")].map((e) => m.within(e, al))), ox: document.documentElement.scrollWidth - innerWidth }; });
+    const tight = () => p.evaluate(() => { const al = document.querySelector("#alerts .alrt"), one = al.querySelector(".one"), m = window.__room, R = (e) => e.getBoundingClientRect(), t = (s) => al.querySelector(s)?.textContent ?? null, seen = (s) => al.querySelector(s)?.innerText.replace(/\s+/g, " ").trim() ?? null;
+      // the floor: the name's first letter and "…", drawn in the name's own box (its face, size and spacing)
+      const nm = one.querySelector(".nm"), probe = nm.cloneNode(false); probe.textContent = `${nm.textContent.slice(0, 1)}…`; probe.style.cssText = "position:absolute;visibility:hidden;left:0;top:0;width:auto;min-width:0;max-width:none;flex:none"; nm.parentElement.appendChild(probe); const floor = R(probe).width / m.z(); probe.remove();
+      return { vw: innerWidth, h: R(al).height, lit: al.classList.contains("new"), pulse: getComputedStyle(al).animationName, fit: document.querySelector("#alerts").className.trim(), k: t(".k"), kSeen: seen(".k"), kd: t(".one .kd"), nm: t(".one .nm"), fig: t(".one .fig"), time: t(".t"), timeSeen: seen(".t"), box: Math.round(R(one).width * 10) / 10, figIn: m.within(one.querySelector(".fig"), one), kdIn: m.within(one.querySelector(".kd"), one), nameLeft: Math.round(R(nm).width / m.z() * 10) / 10, floor: Math.round(floor * 10) / 10, lineIn: Math.min(...[...al.querySelectorAll(".k,.t")].map((e) => m.within(e, al))), ox: document.documentElement.scrollWidth - innerWidth }; });
     for (const font of ["the machine's fonts", "every letter drawn 2% of its size wider", "a wide font forced"]) {
-      if (font.startsWith("every")) await widen(p);
+      if (font.startsWith("every")) { await widen(p); await p.waitForTimeout(150); }
       if (font.startsWith("a wide")) { await p.reload({ waitUntil: "networkidle" }); await p.waitForSelector("#alerts .alrt .one .fig"); await p.evaluate(() => document.fonts.ready); await p.addStyleTag({ content: MONO }); await p.waitForTimeout(400); }
-      const a = await tight(), needName = font === "the machine's fonts" ? NAME_LEFT : NAME_LEFT_WIDER;
-      ck(`${font}: "${a.k} · ${a.kd} · ${a.nm} · ${a.fig} · ${a.time}" in ${a.vw} px: the figure ${a.fig} is whole (${a.figIn} px inside the box of ${a.box} px it shares with the name), the kind too, and the name, the part that gives way, still has ${a.nameLeft} px (at least ${needName})`, a.lit && a.k === "NEW ALERT" && a.kd === "σ move" && a.fig === fig && a.time === "23 Nov 23:50" && a.vw === 375 && Math.abs(a.h - 40) <= 0.5 && a.figIn >= -0.05 && a.kdIn >= -0.05 && a.nameLeft >= needName && a.lineIn >= -0.05 && a.ox <= 0, a);
+      const a = await tight();
+      // what may have left, in its order: "NEW" first, then the day; never the day while "NEW" stands
+      const steps = a.kSeen === "NEW ALERT" ? (a.timeSeen === "23 Nov 23:50" ? "nothing" : "BAD") : a.kSeen === "ALERT" ? (a.timeSeen === "23 Nov 23:50" ? '"NEW"' : a.timeSeen === "23:50" ? '"NEW" and the day' : "BAD") : "BAD";
+      ck(`${code}, ${font}: "${a.kSeen} · ${a.kd} · ${a.nm} · ${a.fig} · ${a.timeSeen}" in ${a.vw} px, still lit and pulsing (${steps === "nothing" ? "nothing has left" : `${steps} left`}): the figure ${a.fig} is whole (${a.figIn} px inside the box of ${a.box} px it shares with the name), the kind too, and the name, the part that gives way, keeps ${a.nameLeft} px, at least its first letter and "…" (${a.floor} px)`,
+        a.lit && a.pulse === "alrtpulse" && a.k === "NEW ALERT" && a.kd === "σ move" && a.fig === fig && a.time === "23 Nov 23:50" && steps !== "BAD" && a.vw === (code === "P0" ? 360 : 375) && Math.abs(a.h - 40) <= 0.5 && a.figIn >= -0.05 && a.kdIn >= -0.05 && a.nameLeft + 0.05 >= a.floor && a.floor >= 12 && a.lineIn >= -0.05 && a.ox <= 0, a);
     }
-    ck(`${fig}: no page errors`, errs.length === 0, errs); await ctx.close();
+    ck(`${code}, ${fig}: no page errors`, errs.length === 0, errs); await ctx.close();
   }
 
   console.log("\n[the morning note's row and the title row while the table has not come]");

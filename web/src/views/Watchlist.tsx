@@ -11,7 +11,7 @@ import { useWatch } from "../lib/watch";
 import { fallbackDecimals, fmtLevel, fmtPct, fmtSigma, signCls } from "../lib/fmt";
 import { sigmaNoteLine } from "../lib/alertline";
 import { asOfCell, asOfOf, asOfTitle, fmtDate, fmtWhen, type AsOfKind } from "../lib/time";
-import { byResultsDay, fmtResultsDate, MARKS_NOTE, RESULTS_SOURCE, resultsAhead, resultsStatus, resultsStatusShort, resultsTip } from "../lib/results";
+import { byResultsDay, fmtResultsDate, MARKS_NOTE, NO_MARK_HELD, RESULTS_SOURCE, resultsAhead, resultsStatus, resultsStatusShort, resultsTip } from "../lib/results";
 import { classLabel, hitLine, MKT_CAP, NEXT_RESULTS, RESULTS_AHEAD, VS_200D, VS_50D } from "../lib/labels";
 import { cellBp, changeShade, RANGE_52W, RANGE_52W_TIP } from "./Market";
 import { marketSession, panelRowOf, symbolMarket, type PanelRow } from "../lib/opens";
@@ -147,7 +147,7 @@ export function WatchlistView({ tick }: { tick: number }) {
         {rows.length > 0 && <ClosedNow id="wl-opens" rows={rows.map(market)} />}
         {rows.length ? (
           <table className="secT wlT">
-            <thead><tr><th /><th className="l">Name</th><th className="l">Sector / kind</th><th>Last</th><th className="l asof" title="What the row's figures are as of, in SGT: the date of a close or of an official yield's publication, the time of today's last print">As of</th><th>1D</th><th>1W</th><th>1M</th><th>3M</th><th>12M</th><th title="% for prices, bp for yields">{VS_50D}</th><th title="% for prices, bp for yields">{VS_200D}</th><th title={RANGE_52W_TIP}>{RANGE_52W}</th><th>{MKT_CAP}</th><th className="l" title={`The company's next results date as ${RESULTS_SOURCE} gives it: the day in the company's own market (Tokyo, New York …), without a time of day, as the source does not state the release time. After the date its mark: ${MARKS_NOTE}; a dash where the source gives no mark`}>{NEXT_RESULTS}</th></tr></thead>
+            <thead><tr><th /><th className="l">Name</th><th className="l">Sector / kind</th><th>Last</th><th className="l asof" title="What the row's figures are as of, in SGT: the date of a close or of an official yield's publication, the time of today's last print">As of</th><th>1D</th><th>1W</th><th>1M</th><th>3M</th><th>12M</th><th title="% for prices, bp for yields">{VS_50D}</th><th title="% for prices, bp for yields">{VS_200D}</th><th title={RANGE_52W_TIP}>{RANGE_52W}</th><th>{MKT_CAP}</th><th className="l" title={`The company's next results date as ${RESULTS_SOURCE} gives it: the day in the company's own market (Tokyo, New York …), without a time of day, as the source does not state the release time. After the date its mark: ${MARKS_NOTE}; a dash where no mark is held: ${NO_MARK_HELD} (an index member's is read again by its list's next weekday quote run)`}>{NEXT_RESULTS}</th></tr></thead>
             <tbody>{rows.map((r) => {
               const a = asOfOf(r.asOf, r.asOfKind);
               return (
