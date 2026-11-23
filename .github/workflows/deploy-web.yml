@@ -21,16 +21,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # The browser checks (web/e2e: 51 suites) and the logic checks (sim/logic.test.ts). Since 18 Nov 2026 the site is
+  # The browser checks (web/e2e: 53 suites) and the logic checks (sim/logic.test.ts). Since 18 Nov 2026 the site is
   # published only when they pass: until then a publish checked only that the site builds. The limit was 20 minutes
   # when the checks took three. On 21 Nov 2026 the browser run of 2,052 checks in 34 suites took 14.5 minutes on the
   # engineer's machine and 13 here, before the installs; the 49 suites of pull request #50 (3,156 checks) took 28.1 there
   # (1,687 s) and 20.8 here (1,247 s), and with the checks of its final review (3,179) 29.7 there (1,781 s) and, in one
   # job, 25 min 17 s here of the job's 30 (run 45080955695, 22 Nov 2026, 23:01 to 23:27 UTC). So since the fixes after
-  # that review's check the browser checks run as two jobs of about equal time, `test` (web/e2e/run.cjs --part=1, with
-  # the logic checks) and `test-2` (--part=2: every suite not in run.cjs's PART_ONE, the built site's among them), each
-  # with its own 30 minutes, and a publish needs both. One suite is stopped at six minutes (web/e2e/run.cjs) and tried again; the longest, opens, takes
-  # about 3.1 on the engineer's machine.
+  # that review's check the browser checks run in two parts of about equal time, part 1 (web/e2e/run.cjs --part=1) and
+  # part 2 (--part=2: every suite not in run.cjs's PART_ONE, the built site's among them).
+  # Since slice 8 (23 Nov 2026) each part runs in both letter placements (web/e2e/placement.cjs): `test` and `test-2`
+  # in the browser's own, GitHub's (each letter on whole px), and `test-installed` and `test-2-installed` with
+  # E2E_PLACEMENT=installed, as the engineer's machine starts the browser (fractional widths), so that a layout is
+  # checked here both ways and the engineer's whole run as installed is no longer needed. Four jobs, each with its own
+  # 30 minutes; a publish needs all four. The logic checks run once, in `test`. All four draw in the page's own faces
+  # (IBM Plex Mono, IBM Plex Sans JP, Cormorant Garamond), which the runner takes from fonts.googleapis.com
+  # (web/index.html); README.md ("Tests") says how each job is drawn again on the engineer's machine. One suite is
+  # stopped at six minutes (web/e2e/run.cjs) and tried again; the longest, opens, takes about 3.1 on the engineer's
+  # machine.
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -49,6 +56,8 @@ jobs:
         working-directory: web
       - run: node e2e/run.cjs --part=1
         working-directory: web
+        env:
+          E2E_PLACEMENT: github
       - run: npm ci && npx tsx ../sim/logic.test.ts
         working-directory: jobs
       - if: failure()
@@ -75,10 +84,65 @@ jobs:
         working-directory: web
       - run: node e2e/run.cjs --part=2
         working-directory: web
+        env:
+          E2E_PLACEMENT: github
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-output-2
+          path: web/e2e/.out
+          include-hidden-files: true
+          retention-days: 7
+
+  # part 1 and part 2 again, letters placed as on the engineer's machine (web/e2e/placement.cjs); no logic checks here
+  test-installed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+      - run: node e2e/run.cjs --part=1
+        working-directory: web
+        env:
+          E2E_PLACEMENT: installed
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output-1-installed
+          path: web/e2e/.out
+          include-hidden-files: true
+          retention-days: 7
+
+  test-2-installed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+      - run: node e2e/run.cjs --part=2
+        working-directory: web
+        env:
+          E2E_PLACEMENT: installed
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output-2-installed
           path: web/e2e/.out
           include-hidden-files: true
           retention-days: 7
@@ -106,9 +170,11 @@ jobs:
         with:
           path: web/dist
 
+  # the site is published only when the build and all four browser jobs passed (success() of every need): one that
+  # failed, was cancelled or was skipped keeps the published site as it is
   deploy:
-    if: github.event_name != 'pull_request'
-    needs: [build, test, test-2]
+    if: github.event_name != 'pull_request' && success()
+    needs: [build, test, test-2, test-installed, test-2-installed]
     runs-on: ubuntu-latest
     environment:
       name: github-pages
