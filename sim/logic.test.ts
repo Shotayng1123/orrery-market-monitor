@@ -2310,6 +2310,36 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const ETF_LIST = "https://www.jpx.co.jp/equities/products/etfs/issues/01.html";
     const lifted = await withSite({ "https://www.jpx.co.jp/robots.txt": { type: "text/plain", body: "User-agent: *\nDisallow:\n" }, "https://www.jpx.co.jp/english/equities/trading/domestic/01.html": { status: 302, location: RULED_OUT[0] } }, async (asked) => { const before = await probe.page("https://www.jpx.co.jp/robots.txt"); probe.liftJpxHold(); const after = await probe.page("https://www.jpx.co.jp/robots.txt"); const hop = await probe.page("https://www.jpx.co.jp/english/equities/trading/domestic/01.html"); const held = RULED_OUT.filter((u) => probe.heldWhy(u) !== null), etf = probe.heldWhy(ETF_LIST) !== null; probe.liftJpxHold({ etfList: true }); return { before: before.ok, after: after.ok, hop: hop.ok, n: asked.length, asked: asked.map((a) => a.url), held: held.length, etf, etfLifted: probe.heldWhy(ETF_LIST) === null, ruledStill: RULED_OUT.every((u) => probe.heldWhy(u) !== null), stillHeld: probe.heldWhy("https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv") !== null }; });
     ck(`jpx.co.jp is refused to every probe until pf_jpx lifts the hold for its own run; then the files of the owner's first answer and the list of triggered stocks stay held (${lifted.held} of ${RULED_OUT.length} addresses, a redirect to one not followed), and so does JPX's ETF list until its own switch says so (PX-7: once lifted, nothing on jpx.co.jp was held); Cboe's files stay held; the reason printed names the owner's answer of 21 Nov 2026`, lifted.before === false && lifted.after === true && lifted.hop === false && lifted.n === 2 && !lifted.asked.includes(RULED_OUT[0]) && lifted.held === RULED_OUT.length && lifted.etf && lifted.etfLifted && lifted.ruledStill && lifted.stillHeld && probe.heldWhy("https://www.jpx.co.jp/") !== null && /released on 21 Nov 2026/.test(probe.heldWhy("https://www.jpx.co.jp/") ?? "") && !/until the owner answers/.test(probe.heldWhy("https://www.jpx.co.jp/") ?? ""), lifted);
+    // RA-2 of the release audit of pull request #50 (23 Nov 2026): the owner's answer of 23 Nov 2026, 01:42 UTC, on NYSE's
+    // threshold list is "Go without" (no job reads it), and it is held by path like Cboe's and Nomura's files: its page,
+    // the page that one ended at on 21 Nov (/regulation/regulation-sho) and its download, however the address is
+    // written and behind a redirect, are refused before any request; pf_borrow itself, run offline, asks none of them
+    const NYSE_HELD = ["https://www.nyse.com/regulation/threshold-securities", "https://www.nyse.com/regulation/regulation-sho", "https://www.nyse.com/api/regulatory/threshold-securities/download?selectedDate=&market=", "https://www.nyse.com/api/regulatory/threshold-securities/download?selectedDate=2026-11-20&market=NYSE%20Arca", "https://WWW.NYSE.COM./regulation/threshold-securities", "https://www.nyse.com/regulation/%74hreshold-securities", "https://nyse.com//api/regulatory/threshold-securities/download", "https://www.nyse.com/regulation/Threshold_Securities.csv", "no address at all, but it names nyse.com's threshold-securities"];
+    const NYSE_FREE = ["https://www.nyse.com/robots.txt", "https://www.nyse.com/trade/hours-calendars", "https://www.nasdaqtrader.com/dynamic/symdir/regsho/nasdaqth20261120.txt"];
+    const nyse = await withSite({ "https://other.example/sho": { status: 302, location: NYSE_HELD[0] } }, async (asked) => {
+      let answered = 0;
+      for (const u of NYSE_HELD.slice(0, -1)) { const p = await probe.page(u), l = await probe.look(u, { show: 0 }), b = await probe.bytes(u); if (p.ok || p.status !== null || l.error !== "held" || b.data !== null || b.status !== null) answered++; }
+      const direct = asked.length, hop = await probe.page("https://other.example/sho");
+      return { answered, direct, hop: hop.ok, asked: asked.map((a) => a.url) };
+    });
+    const nyseWhy = probe.heldWhy(NYSE_HELD[0]) ?? "";
+    const borrowRun = { out: "", asked: [] as string[] };
+    {
+      const real = globalThis.fetch, lines: string[] = [], log = console.log;
+      // every robots.txt allows all, every other address is a 404: what pf_borrow would ask of nyse.com if nothing held it
+      globalThis.fetch = (async (input: unknown) => { const u = String(input); borrowRun.asked.push(u); const rb = /\/robots\.txt$/.test(new URL(u).pathname); return new Response(rb ? "User-agent: *\nDisallow:\n" : "not found", { status: rb ? 200 : 404, headers: { "content-type": rb ? "text/plain" : "text/html" } }); }) as typeof fetch;
+      (globalThis as { __probeOffline?: boolean }).__probeOffline = true;
+      console.log = (...a: unknown[]) => { lines.push(a.map(String).join(" ")); };
+      try { await import("../jobs/probes/pf_borrow.ts"); }
+      catch (e) { lines.push(`THE PROBE STOPPED: ${e instanceof Error ? e.message : String(e)}`); }
+      finally { console.log = log; globalThis.fetch = real; delete (globalThis as { __probeOffline?: boolean }).__probeOffline; probe.restoreHolds(); }
+      borrowRun.out = lines.join("\n");
+    }
+    const borrowNyse = borrowRun.asked.filter((u) => /nyse\.com/i.test(u));
+    ck(`RA-2: NYSE's threshold list is held by path, as the owner's "Go without" of 23 Nov 2026 says: ${NYSE_HELD.length - 1} addresses of its page, the page it ended at and its download (a capital host with a dot after it, an escaped letter, a doubled slash, another file name) are refused by page(), look() and bytes() before any request (${nyse.direct} asked, ${nyse.answered} answered), a redirect to it is not followed, text that names it is held; NYSE's robots.txt, its hours page and Nasdaq's Reg SHO file are not held; pf_borrow run offline asks nyse.com only its robots.txt (${borrowNyse.length}: ${borrowNyse.join(", ")}) and prints the page as NOT ASKED (held)`,
+      nyse.direct === 0 && nyse.answered === 0 && nyse.hop === false && nyse.asked.join() === "https://other.example/sho" && NYSE_HELD.every((u) => probe.heldWhy(u) !== null) && NYSE_FREE.every((u) => probe.heldWhy(u) === null) && /Go without/.test(nyseWhy) && /23 Nov 2026/.test(nyseWhy)
+        && borrowNyse.length === 1 && borrowNyse[0] === "https://www.nyse.com/robots.txt" && /NOT ASKED \(held\)\s+https:\/\/www\.nyse\.com\/regulation\/threshold-securities/.test(borrowRun.out) && /requests made:/.test(borrowRun.out) && !/THE PROBE STOPPED/.test(borrowRun.out),
+      { nyse, why: nyseWhy, borrowNyse, stopped: borrowRun.out.split("\n").filter((l) => /STOPPED|held/i.test(l)).slice(0, 6) });
 
     // ---- PR-7: robots.txt ----
     const rob = await withSite({ "https://a.example/robots.txt": { type: "text/html", body: "User-agent: *\nDisallow: /\nCrawl-delay: 5\n" }, "https://b.example/robots.txt": { type: "text/html", body: "<!doctype html><html><head><title>Welcome</title></head><body>Home</body></html>" }, "https://c.example/robots.txt": { type: "text/plain", body: "User-agent: *\nDisallow: /private/\n" } }, async () => ({ a: await probe.robots("https://a.example", ["/data.csv"]), b: await probe.robots("https://b.example", ["/data.csv"]), c: await probe.robots("https://c.example", ["/data.csv"]) }));

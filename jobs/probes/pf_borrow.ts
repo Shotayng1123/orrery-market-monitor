@@ -5,6 +5,8 @@
 //   1. NYSE's threshold-securities download, asked with a date and a market (with neither it answered 500, l.22): the
 //      page's own choices of market are read first, then NYSE's terms by the page's own link (they may stand on its
 //      group's site); the date is the last weekday. The download is asked only if the terms were read and do not bar it.
+//      Held since 23 Nov 2026 by the owner's answer, "Go without" (ICE's terms bar robots): lib.ts's hold refuses the
+//      page and the download before any request, so this step asks NYSE's robots.txt alone and prints the page as held.
 //   2. Interactive Brokers' short-securities availability page, once (the first run read it twice, l.94 and l.124):
 //      the links and addresses on it that name its lists of shortable stocks by country (on the web, or by FTP), its
 //      table of countries, and whether it states a login. THIS PROBE SENDS NO LOGIN AND NEVER PRINTS ONE: job logs are

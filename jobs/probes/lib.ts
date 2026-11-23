@@ -67,6 +67,11 @@ const HOLDS: Array<{ name: string; test: (host: string, path: string) => boolean
   { name: "jpx", test: (h) => onSite(h, "jpx.co.jp"), raw: /jpx\.co\.jp/i, why: "jpx.co.jp: refused to every probe but pf_jpx, which reads only what the owner released on 21 Nov 2026 (\"(c) all\": JPX's rule pages, its holiday calendar and two statistics); the files of the owner's first answer (TOPIX weights, 品貸料, margin balances by name, OSE settlement and volume pages, the 決算発表予定日 workbook) and JPX's ETF list stay unread" },
   { name: "cboe-vix-files", test: (h, p) => onSite(h, "cboe.com") && /daily_prices\/|_History\.csv|vixarchive/i.test(p), raw: /cboe\.com.*(daily_prices|_History\.csv|vixarchive)/i, why: "Cboe's VIX-family history files: the owner's answer of 21 Nov 2026 is to do without them (Yahoo's ^VIX family serves)" },
   { name: "nomura-holdings", test: (h, p) => (onSite(h, "nomura-am.co.jp") && /^\/fund\/monthly_holdings/i.test(p)) || (onSite(h, "nextfunds.jp") && /^\/monthly_holdings/i.test(p)), raw: /(nomura-am\.co\.jp|nextfunds\.jp).*monthly_holdings/i, why: "Nomura's holdings files: the owner's answer of 21 Nov 2026 is to do without them" },
+  // NYSE's Reg SHO threshold list: its page (/regulation/threshold-securities, which ended at /regulation/regulation-sho
+  // on 21 Nov 2026) and its download (/api/regulatory/threshold-securities/download), by path (RA-2 of the release audit
+  // of pull request #50). pf_borrow still asks NYSE's robots.txt, and its lines for the page and the download are kept:
+  // this hold refuses them before any request
+  { name: "nyse-threshold", test: (h, p) => onSite(h, "nyse.com") && /threshold|\/regulation\/regulation-sho\b/i.test(p), raw: /nyse\.com.*(threshold|regulation-sho)/i, why: "NYSE's Reg SHO threshold list (its page and its download): the owner's answer of 23 Nov 2026 is \"Go without\" (no job reads it; ICE's terms, which NYSE's page links, prohibit robots unless ICE permits)" },
 ];
 const lifted = new Set<string>();
 /** Why `url` is not asked, or null. Text that cannot be parsed as an address is held when it names a held site at all. */

@@ -420,7 +420,7 @@ TOPIX has no Yahoo ticker: the `1306.T` ETF stands in for TOPIX (badge PROXY); i
 
 **Personal use** (the owner's decision of 20 Nov 2026). Files from JPX, Nikkei, JSF and fund issuers are used on the owner's statement that this Monitor's use is personal and non-commercial (20 Nov 2026). Each is credited where it is used.
 Read today: JPX's list of TSE-listed issues (TOPIX's members and their sectors), its short-selling ratio, short-position reports and margin balances, and Tokyo's holidays from its calendar; Nikkei's file of the Nikkei 225's members and weights. No JSF or fund issuer's file is read yet.
-Not used, by the owner's decision of 21 Nov 2026: JPX's TOPIX weight file, its lending-fee file (品貸料), its margin balances by name, Osaka's settlement and volume pages and its results-date workbook (決算発表予定日); Nomura's holdings files; Cboe's VIX-family files.
+Not used, by the owner's decision of 21 Nov 2026: JPX's TOPIX weight file, its lending-fee file (品貸料), its margin balances by name, Osaka's settlement and volume pages and its results-date workbook (決算発表予定日); Nomura's holdings files; Cboe's VIX-family files. And by the owner's decision of 23 Nov 2026 ("Go without"): NYSE's Reg SHO threshold list.
 On screen, every source line that names one of those files ends "· personal use": EQUITIES' SHORT INTEREST and
 SCREENER (the member lists of TOPIX and the Nikkei 225) and a Tokyo stock's SHORT INTEREST, on both layouts; a
 sentence that names JPX's holiday calendar in passing carries "(personal use)" right after it (an "opens …" line's
@@ -584,9 +584,13 @@ them stay unread. Until 21 Nov 2026 the gate knew a ban only by the wordings it 
 automated reading; "any purpose", "any form", "any means"; JPX's, Nomura's and Cboe's lines): it printed "none matched"
 above iShares UK's sentence that forbids copying and reproducing, and `pf_bench` went on to ask that site's product
 data (the address answered 404; nothing was read). The probes of governments', central banks' and regulators' own pages (`pf_rules`, `pf_holidays`, `pf_rates`) read
-`robots.txt` only. The helper also refuses three kinds of address outright, whichever probe asks, reading each address
+`robots.txt` only. The helper also refuses four kinds of address outright, whichever probe asks, reading each address
 as its request will go (the host without a trailing dot, escapes decoded) and putting every redirect to the same test,
-one hop at a time: `jpx.co.jp`; Cboe's VIX-family history files; Nomura's holdings files. On `jpx.co.jp` the files of
+one hop at a time: `jpx.co.jp`; Cboe's VIX-family history files; Nomura's holdings files; and, since 23 Nov 2026,
+NYSE's Reg SHO threshold list, its page and its download (any path of `nyse.com` that names "threshold", and the
+page `/regulation/regulation-sho` that its page ended at on 21 Nov), by the owner's answer of that day, "Go without"
+(ICE's terms, which NYSE's page links, prohibit robots unless ICE permits): `pf_borrow` still asks NYSE's `robots.txt`,
+and the hold refuses its page and its download before any request. On `jpx.co.jp` the files of
 the owner's first answer below, the list of triggered short-selling stocks and the list of ETFs are held by their paths
 as well, so they stay held while `pf_jpx` reads the site (since 22 Nov 2026; until then lifting the site's hold left
 nothing held there). On JPX the owner's answers of
