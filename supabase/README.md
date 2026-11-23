@@ -526,8 +526,9 @@ shows no entry while `PAPER_ON_LIVE_SITE` (`web/src/lib/paper.ts`) is `false`. B
 
 > "Private notes, levels and paper portfolios are kept for your account only. Do not enter non-public or confidential information, in notes or in positions: nothing material and non-public about a company or a market, and nothing confidential of your firm or its clients. ☐ I agree"
 
-  The "☐" is the checkbox itself. The logic checks compare this line, the migration's seed and the engine's file
-  (`_shared/pf/statement.ts`) character for character. A new wording is a new version, asked again of every account.
+  The "☐" is the checkbox itself. The README checks (`sim/readme.test.ts`) compare this line with the migration's
+  seed, and the logic checks the seed with the engine's file (`_shared/pf/statement.ts`), character for character. A
+  new wording is a new version, asked again of every account.
 - **Looking.** `pf_selftest()` prints `pf_selftest ok` with counts only (tables, policies, grants that should not
   exist on a table, a sequence or a function, the server's own role included, functions, whether the second wall is in
   force): no row, no name, no account. Its `ok` is true only when every wall stands. `deploy-server` runs it after each

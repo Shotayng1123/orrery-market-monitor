@@ -21,7 +21,7 @@ export const ONLY_YOU_TIP = "Visible to your account only";
 
 // ---- "personal use" (the owner's decision P4 of 20 Nov 2026: "go with d. say personal use") ----
 // Every source line that names a JPX, Nikkei, JSF or fund issuer's file ends with these two words; Help's "Data
-// sources" and the README carry the paragraph, word for word (sim/logic.test.ts compares the README with it).
+// sources" and the README carry the paragraph, word for word (sim/readme.test.ts compares the README with it).
 export const PERSONAL_USE = "personal use";
 export const PERSONAL_USE_TEXT = "Files from JPX, Nikkei, JSF and fund issuers are used on the owner's statement that this Monitor's use is personal and non-commercial (20 Nov 2026). Each is credited where it is used.";
 /** The publishers whose files carry "personal use" where a line names them in passing (LV-4 of round 3b: JPX's

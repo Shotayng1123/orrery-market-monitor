@@ -365,8 +365,13 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   therefore lives in a module that imports no package (`lib/pagetop.ts` beside `lib/nav.ts`), and a type from a
   module that does is imported with `import type`. Section [AL] holds `logic-tests`' paths, for a pull request and
   for a push to `main`, to every file the file imports (as [AB] finds them) or reads: each address it and those files
-  build with `new URL("…", import.meta.url)`, and each file and folder the run read (a folder with every file under
-  it and one that may be added there). To run the file exactly as GitHub does:
+  build with `new URL("…", import.meta.url)`, and each file and folder the file itself read in the run, through its
+  own `readText` and `listDir` (a folder with every file under it and one that may be added there); a folder address
+  that is not in the checkout fails the section with its name (until 23 Nov 2026 it stopped the whole file). It does
+  not see a file that an imported module reads by a plain path (`readFileSync("../web/index.html")`, not built from
+  `import.meta.url`): a trace of the run's system calls on 23 Nov 2026 found no such read but Node's own of
+  `web/package.json`, which any change under `web/` puts to the logic checks on a pull request anyway (`deploy-web`).
+  To run the file exactly as GitHub does:
   `git archive HEAD | tar -x -C <an empty folder>`, then `npm ci` and the command above in that folder's `jobs/`.
 - **The README's own checks** (`sim/readme.test.ts`, section [AK]): what this file says of the checks is what the
   repository holds (the number of browser suites in `web/e2e/run.cjs`, the paper portfolio's suites by name, the suites
@@ -400,7 +405,8 @@ checks, on a pull request and on a push to `main`, when any file the logic check
 functions and migrations, `sim/`, the page's `src/`, `jobs/`, the workflows) and when a browser suite, this file or
 `supabase/README.md` does: the logic checks stop both deploys, and their section [AL] fails when a file they import,
 directly or through another, or read is not under `logic-tests`' paths (until 23 Nov 2026 a change to `jobs/lib/`,
-`jobs/live_check.ts` or `deploy-server.yml` alone ran them nowhere before it merged, and stopped the next deploy). The
+`jobs/live_check.ts` or `deploy-server.yml` alone ran them nowhere before it merged, so that a fault in it would have
+merged unchecked and stopped the next deploy: found by experiment, before any deploy stopped so). The
 README's checks are in no deploy's gate.
 
 ## Data sources (v1)

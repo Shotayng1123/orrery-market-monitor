@@ -2813,7 +2813,8 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
 
   // [AK], what the READMEs say, is in sim/readme.test.ts since 23 Nov 2026: this file stops a deploy of the server or the
   // site when it fails, and since the check of fix part 4 it reads neither README, so no sentence of either can stop a
-  // deploy (the check of fix part 3: a README change alone ran no check and then stopped the next deploy; [AL] holds
+  // deploy (the check of fix part 3 found, by experiment, that a README change alone ran no check and would then stop the
+  // next deploy; [AL] holds
   // logic-tests' paths to every file this file does read). logic-tests runs both files.
 
   const reached: string[] = [];   // every file of the repository's own that this file imports, directly or through another ([AB]), for [AL]
@@ -2911,9 +2912,9 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
   console.log("\n[AL] logic-tests runs, on a pull request and on a push to main, on a change to any file this file imports or reads (the deploy trap: the check of fix part 4, 23 Nov 2026)");
   {
     // This file stops a deploy of the server (deploy-server's logic checks) and of the site (deploy-web's test). A file it
-    // imports or reads that changes alone, where no workflow of a pull request runs this file, merged with no check and
-    // stopped the next deploy: jobs/lib/marks.ts, jobs/live_check.ts or deploy-server.yml did, and before 23 Nov 2026 a
-    // sentence of the README. The list is the code's, not a hand's: the files the imports lead to ([AB]'s two looks);
+    // imports or reads that changes alone, where no workflow of a pull request runs this file, would merge with no check
+    // and stop the next deploy: experiments with jobs/lib/marks.ts, jobs/live_check.ts and deploy-server.yml showed it
+    // (the checks of fix parts 3 and 4; no deploy stopped so), and before 23 Nov 2026 a sentence of the README could. The list is the code's, not a hand's: the files the imports lead to ([AB]'s two looks);
     // every address this file and those files build as new URL("…", import.meta.url) (a template's fixed part, or one
     // that ends with "/", is a folder); and every file and folder this run read (readText and listDir record each). A
     // folder counts with every file under it and with one that may be added there. Each must match a path of
@@ -2951,12 +2952,17 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const push = pathsOf("push"), pr = pathsOf("pull_request");
     const globRe = (g: string) => new RegExp(`^${g.split("**").map((x) => x.split("*").map((y) => y.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join("[^/]*")).join(".*")}$`);
     const covers = (ps: string[] | null, f: string) => !!ps && ps.some((g) => !g.startsWith("!") && globRe(g).test(f));
-    const under = (dir: string): string[] => { const out: string[] = []; const walk = (d: string) => { for (const e of readdirSync(resolvePath(root, d), { withFileTypes: true })) { if (e.name === "node_modules") continue; const x = d ? `${d}/${e.name}` : e.name; if (e.isDirectory()) walk(x); else out.push(x); } }; walk(dir); return out; };
+    // a folder address that is not in the checkout (made at run time, or a typo) is named and fails this check; its walk
+    // crashed the whole file with ENOENT (R-6 of the check of fix part 5)
+    const absent: string[] = [];
+    const under = (dir: string): string[] => { const out: string[] = []; if (!isDir(resolvePath(root, dir))) { absent.push(dir); return out; } const walk = (d: string) => { for (const e of readdirSync(resolvePath(root, d), { withFileTypes: true })) { if (e.name === "node_modules") continue; const x = d ? `${d}/${e.name}` : e.name; if (e.isDirectory()) walk(x); else out.push(x); } }; walk(dir); return out; };
     const checked = [...files, ...[...folders].flatMap((d) => [...under(d), `${d}/a-file-added-later.ts`, `${d}/a-folder-added-later/a-file.ts`])];
     const missed = [...new Set(checked.filter((f) => !covers(push, f) || !covers(pr, f)))].sort();
-    const must = ["jobs/lib/marks.ts", "jobs/lib/pfwalls.ts", "jobs/live_check.ts", "jobs/package-lock.json", ".github/workflows/deploy-server.yml", "web/src/components/Help.tsx", "web/src/lib/sessions.ts", "supabase/functions/_shared/sessions.ts", "jobs/probes/lib.ts"];
-    ck(`logic-tests' paths (${push?.length ?? 0} for a push to main, ${pr?.length ?? 0} for a pull request) cover every file this file imports or reads, as the code says (${files.size} files, ${folders.size} folders, ${built} addresses built with import.meta.url, ${readsSeen.size} read in this run; ${checked.length} paths in all, ${missed.length} not covered), among them ${must.join(", ")}; and no README is read here (its checks are sim/readme.test.ts's)`,
-      !!push && !!pr && missed.length === 0 && must.every((f) => files.has(f) || [...folders].some((d) => f.startsWith(`${d}/`))) && !files.has("README.md") && !files.has("supabase/README.md"), { missed: missed.slice(0, 40), push, pr });
+    const must = ["jobs/lib/marks.ts", "jobs/lib/pfwalls.ts", "jobs/live_check.ts", "jobs/package-lock.json", ".github/workflows/deploy-server.yml", "web/src/components/Help.tsx", "web/src/lib/sessions.ts", "supabase/functions/_shared/sessions.ts", "jobs/probes/lib.ts", "jobs/probes/pf_borrow.ts"];
+    const walkNamesAbsent = (() => { const n = absent.length, got = under("a-folder-that-is-not-in-the-checkout"); const named = got.length === 0 && absent.length === n + 1 && absent[n] === "a-folder-that-is-not-in-the-checkout"; absent.length = n; return named; })();
+    ck(`logic-tests' paths (${push?.length ?? 0} for a push to main, ${pr?.length ?? 0} for a pull request) cover every file this file imports or reads, as the code says (${files.size} files, ${folders.size} folders, ${built} addresses built with import.meta.url, ${readsSeen.size} read in this run; ${checked.length} paths in all, ${missed.length} not covered; ${absent.length} folder addresses not in the checkout${absent.length ? `: ${absent.join(", ")}` : ""}), among them ${must.join(", ")}; and no README is read here (its checks are sim/readme.test.ts's)`,
+      !!push && !!pr && missed.length === 0 && absent.length === 0 && must.every((f) => files.has(f) || [...folders].some((d) => f.startsWith(`${d}/`))) && !files.has("README.md") && !files.has("supabase/README.md"), { missed: missed.slice(0, 40), absent, push, pr });
+    ck("R-6: a folder address that is not in the checkout is named by this section and fails it, instead of stopping the whole file", walkNamesAbsent);
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

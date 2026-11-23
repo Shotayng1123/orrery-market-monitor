@@ -5,9 +5,9 @@ name: logic-tests
 # (what README.md and supabase/README.md say, held to the repository) and sim/sql (database functions, run on an
 # in-memory Postgres). sim/logic.test.ts also stops a deploy of the server and of the site, so this runs, on a pull
 # request and on a push to main, on a change to any file it imports, directly or through another, or reads: its
-# section [AL] fails when one is not under these paths (a change to such a file alone merged with no check and stopped
-# the next deploy: jobs/lib/marks.ts, jobs/live_check.ts, deploy-server.yml; the check of fix part 4 of the final review
-# of pull request #50, 23 Nov 2026). The READMEs' checks run here only, in no deploy's gate, on a change to either
+# section [AL] fails when one is not under these paths (a change to such a file alone would merge with no check and
+# stop the next deploy, as experiments with jobs/lib/marks.ts, jobs/live_check.ts and deploy-server.yml showed at the
+# check of fix part 4 of the final review of pull request #50, 23 Nov 2026; no deploy stopped so). The READMEs' checks run here only, in no deploy's gate, on a change to either
 # README, a browser suite or the code they name: no sentence of a README is read by sim/logic.test.ts.
 on:
   push:
