@@ -5,6 +5,7 @@ import { Pick } from "../components/Pick";
 import { Overnight, WeeklyTables, type Pack, type WeeklyPack } from "../components/NoteTables";
 import { useApi } from "../lib/useApi";
 import { usePhone } from "../lib/phone";
+import { pageScroll, scrollToY } from "../lib/scroller";
 import type { Note, Report } from "../lib/types";
 import { fmtDate } from "../lib/time";
 import { fmtStampSafe } from "./shared";
@@ -51,10 +52,10 @@ export function ResearchView({ tick, sub, onSub }: { tick: number; sub?: string;
   const openKey = phone ? (reading ? sub ?? null : null) : open;
   const listY = useRef(0), viaList = useRef(false);   // where the list was left, and whether the piece was opened from it
   const [last, setLast] = useState<string | null>(null);   // the piece read last stays marked in the list
-  const openRow = (key: string) => { if (!phone) { setOpen(key); return; } listY.current = window.scrollY; viaList.current = true; setLast(key); onSub(key); };
+  const openRow = (key: string) => { if (!phone) { setOpen(key); return; } listY.current = pageScroll(); viaList.current = true; setLast(key); onSub(key); };
   const back = () => { if (viaList.current) history.back(); else onSub(""); };
   useEffect(() => { if (reading && sub) setLast(sub); }, [reading, sub]);
-  useLayoutEffect(() => { if (!phone) return; window.scrollTo(0, reading ? 0 : listY.current); if (!reading) viaList.current = false; }, [reading, phone]);
+  useLayoutEffect(() => { if (!phone) return; scrollToY(reading ? 0 : listY.current); if (!reading) viaList.current = false; }, [reading, phone]);
   // the document panel scrolls on its own, so a newly opened piece starts at its top, not where the last one was left
   const docTop = useRef<HTMLDivElement>(null);
   useEffect(() => { const body = docTop.current?.parentElement; if (body) body.scrollTop = 0; }, [openKey]);

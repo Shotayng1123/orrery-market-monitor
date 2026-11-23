@@ -39,6 +39,7 @@ import { WatchlistView } from "./views/Watchlist";
 import { CardLayer } from "./components/CompanyCard";
 import { navChanged, navDrawn, navPopped, navStart } from "./lib/nav";
 import { setServerPreview, usePaper } from "./lib/paper";
+import { setFrame, useFrame } from "./lib/scroller";
 
 // The paper portfolio's screens (P-1) are a file of their own, asked for when the tab is first opened, and only where
 // the page draws the paper book (lib/paper.ts: the switch on, or a preview for this account): for anyone else the
@@ -127,10 +128,14 @@ export default function App() {
   // B-28: a page opened from a list starts at its top, and Back returns the list to where it stood (lib/nav.ts)
   useEffect(() => { const f = () => { const r = parseHash(); navChanged(r); setRoute(r); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
   useEffect(() => { window.addEventListener("popstate", navPopped); return () => window.removeEventListener("popstate", navPopped); }, []);
-  useLayoutEffect(() => { navDrawn(); }, [route]);
-  useEffect(() => { const f = () => setTok(null); window.addEventListener("om:unauth", f); return () => window.removeEventListener("om:unauth", f); }, []);
   // The scale and the one-screen layout follow the window: re-applied on every resize (and on monitor changes).
   const phone = usePhone(), pv2 = usePhoneV2();   // pv2: a phone in the layout made for phones (lib/phone.ts), the default there
+  // the Home Screen app's frame (lib/scroller.ts): on the Monitor's page only, never on the sign-in screens; set before
+  // anything that scrolls the page on the same drawing (navDrawn below)
+  const frame = useFrame(pv2 && signedIn && !me?.mustChange);
+  useLayoutEffect(() => { setFrame(frame); }, [frame]);
+  useLayoutEffect(() => { navDrawn(); }, [route]);
+  useEffect(() => { const f = () => setTok(null); window.addEventListener("om:unauth", f); return () => window.removeEventListener("om:unauth", f); }, []);
   useEffect(() => {
     const apply = () => setTerm(applyPrefs(prefs, full, pv2));
     apply();
@@ -226,7 +231,6 @@ export default function App() {
   const { view, sub } = route;
   return (
     <>
-      {DEV_MOCK && <div id="mockbar">MOCK PREVIEW — synthetic data for layout checks only. Nothing here is real. The live Monitor is at https://shotayng1123.github.io/orrery-market-monitor/{clockSet() && <span id="mockclock"> · {clockIsNow() ? "rows by the session table at the machine's clock" : "clock set"} (om_mock_now): {fmtStamp(new Date())}</span>}</div>}
       <CardLayer />
       {acct && me && <AccountModal me={me} onClose={() => setAcct(false)} onSignOut={signOut} onChanged={() => setTok(getToken())} />}
       {notify && <Notify onClose={() => setNotify(false)} />}
@@ -243,6 +247,9 @@ export default function App() {
           </div>
         </div></div>
       )}
+      {/* what scrolls: the window, or in the Home Screen app's frame this element (lib/scroller.ts); no box otherwise */}
+      <div id="pscroll">
+      {DEV_MOCK && <div id="mockbar">MOCK PREVIEW — synthetic data for layout checks only. Nothing here is real. The live Monitor is at https://shotayng1123.github.io/orrery-market-monitor/{clockSet() && <span id="mockclock"> · {clockIsNow() ? "rows by the session table at the machine's clock" : "clock set"} (om_mock_now): {fmtStamp(new Date())}</span>}</div>}
       <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={me?.email ?? userId} onSignOut={() => (me ? setAcct(true) : signOut())} updatedAt={updatedAt} nextAt={nextAt} polling={polling} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} pv2={pv2} canPreview={phone} term={term} />
       <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–{paper === "off" ? 6 : 7} TABS · ESC</span><span>&#9974;</span></div>
       <div id="wrap">
@@ -260,6 +267,7 @@ export default function App() {
           </TabGuard>
         </div>
         <footer>Orrery Monitor shows market data from third-party feeds (Yahoo Finance; US Treasury; Japan MOF; exchange and central-bank publications) that may be delayed or incomplete; every panel states its source and as-of time. Information only; nothing here is investment advice. Default time zone: Singapore.</footer>
+      </div>
       </div>
       {pv2 && <PhoneNav view={view} onNav={(v) => setHash(v)} />}
       <FootBars />

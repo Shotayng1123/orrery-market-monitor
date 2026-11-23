@@ -1151,6 +1151,21 @@ body.pv2 #topbar .bmq #nxt{min-width:74px}
 #pnav a span{white-space:nowrap}
 #pnav a.on{color:var(--amber)}
 @media print{#pnav{display:none!important}}
+/* the Home Screen app's frame (PNAV-1, 23 Nov 2026; lib/scroller.ts says when it is on and why): the document does not
+   scroll; the page scrolls in #pscroll, and the bar is the column's last item instead of being fixed to the window.
+   Outside the frame #pscroll generates no box, so the page is laid out as it always was. Heights are 100% from html
+   down, not vh: they follow a rotation, and the on-screen keyboard does not resize them on iOS. */
+#pscroll{display:contents}
+html.pframe,html.pframe body{height:100%;overflow:hidden;overscroll-behavior:none}
+html.pframe #root{height:100%;display:flex;flex-direction:column}
+/* (no -webkit-overflow-scrolling: older WebKit made a stacking context of it, which would put a sheet drawn inside the
+   page under the bar) */
+html.pframe #pscroll{display:block;flex:1 1 auto;min-height:0;overflow:hidden auto;overscroll-behavior-y:contain}
+html.pframe #pnav{position:relative;flex:none}
+html.pframe body.pv2 #wrap{padding-bottom:19px}   /* the 59 px kept for the fixed bar go; the 19 px under the footer stay */
+html.pframe .pfp-foot{bottom:0}                    /* it stands on the frame's foot, which is the bar's top */
+/* printing (RESEARCH's PDF): the frame gives way and the page runs over as many sheets of paper as it needs */
+@media print{html.pframe,html.pframe body,html.pframe #root{height:auto;overflow:visible;display:block}html.pframe #pscroll{display:contents}}
 /* drop-downs at a size a finger can hit */
 /* 36px tall to the eye (Shota, 17 Nov: "a bit smaller"; it was 46px), 44px to the finger: the list that takes the tap reaches 4px past the frame above and below */
 body.pv2 .pick{font-size:13px;line-height:1.4;border-radius:8px;margin:3px 8px 3px 0;overflow:visible}

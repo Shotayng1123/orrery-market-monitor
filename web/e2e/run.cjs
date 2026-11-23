@@ -96,6 +96,7 @@ const SUITES = [
   { name: "pf-verdicts-settings", needs: ["mock"] },
   { name: "letter-placement", needs: [] },
   { name: "pf-preview", needs: ["mock"] },
+  { name: "phone-frame", needs: ["mock", "gate"] },
 ];
 // The publish's browser checks run on GitHub in two parts, each with its own 30-minute limit (deploy-web.yml; since
 // slice 8 each part in both letter placements, four jobs): at the fixes after the final review of pull request #50

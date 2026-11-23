@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { ViewId } from "./Topbar";
 import { PORTFOLIO, TAB_BAR } from "../lib/labels";
 import { usePaper } from "../lib/paper";
+import { scrollToY } from "../lib/scroller";
 
 /** The tabs as a bar along the bottom of the screen, where a thumb reaches them (phone preview, lib/phone.ts).
  *  Six short labels with an icon each; the active one in coral. A stock's own page lights none of them. Where the
@@ -25,7 +26,7 @@ export function PhoneNav({ view, onNav }: { view: ViewId; onNav: (v: ViewId) => 
     <nav id="pnav" aria-label="Tabs" className={seven ? "n7" : undefined}>
       {ITEMS.map((i) => (
         <a key={i.id} href={`#${i.id}`} aria-label={seven ? i.label : undefined} className={i.id === view ? "on" : undefined} aria-current={i.id === view ? "page" : undefined}
-          onClick={(e) => { e.preventDefault(); onNav(i.id); window.scrollTo(0, 0); }}>
+          onClick={(e) => { e.preventDefault(); onNav(i.id); scrollToY(0); }}>
           {i.icon}<span>{i.label}</span>
         </a>
       ))}

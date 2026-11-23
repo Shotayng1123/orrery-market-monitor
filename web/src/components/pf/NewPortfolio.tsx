@@ -17,6 +17,7 @@ import { Assumed, ByTag, Chips, go, href, markCreated, Muted, NumInput, setLastB
 import { EquivalentLine, FundingLine, LadderBases, ReferenceLine, TieLine, TradeLists, VolLines } from "./Blocks";
 import { accountId, failureWords, pfCreate, PfError, serverWords, useRead } from "../../lib/pf";
 import { useNet } from "../../lib/net";
+import { pageY, scrollToY } from "../../lib/scroller";
 import { checkForm, cleanName, defaultRaw, freeName, inputText, outOfRange, usdLine, type Checked, type Raw } from "../../lib/pf/form.ts";
 import { fmtFull, NAV_RANGE, parseAmount } from "../../lib/pf/money.ts";
 import { ADJ_GROSS_CARD, AR_STARTS, CAP_LINE, fieldOf, fieldsOf, FIXED_LINE, isStart, leverageHelp, referenceLabel, RR_STARTS, SECTIONS, STARTS } from "../../lib/pf/presets.ts";
@@ -77,7 +78,7 @@ function focusRow(sel: string | string[], rowSel?: string, tries = 30): void {
   if (!el) { if (tries > 0) setTimeout(() => focusRow(sel, rowSel, tries - 1), 40); return; }
   const row = rowSel ? document.querySelector<HTMLElement>(rowSel) : null;
   // the header sticks at the top once the page scrolls: the row goes to its height (not to where it stands now)
-  if (row) { const head = document.querySelector<HTMLElement>(".pfp > .mp-head")?.getBoundingClientRect().height ?? 0; window.scrollTo(0, Math.max(0, row.getBoundingClientRect().top + window.scrollY - head - 8)); }
+  if (row) { const head = document.querySelector<HTMLElement>(".pfp > .mp-head")?.getBoundingClientRect().height ?? 0; scrollToY(Math.max(0, pageY(row) - head - 8)); }
   el.focus({ preventScroll: !!row });
 }
 

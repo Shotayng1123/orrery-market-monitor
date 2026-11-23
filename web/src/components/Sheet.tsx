@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { lockScroll } from "../lib/scroller";
 
 // The bottom sheet of the phone layout (the designer's note of 21 Nov 2026 on the phone's first MARKETS screen, and
 // D/p1-design.md §9: built for the install line's steps, used again by the paper portfolio's statement and pickers).
@@ -78,9 +79,10 @@ export function Sheet({ title, onClose, children, id, modal = false, foot }: { t
   useEffect(() => {
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const el = panel.current;
-    // the page behind does not scroll while the sheet is open
+    // the page behind does not scroll while the sheet is open: the window's, and the Home Screen app's frame (lib/scroller.ts)
     const root = document.documentElement, was = { root: root.style.overflow, body: document.body.style.overflow };
     root.style.overflow = "hidden"; document.body.style.overflow = "hidden";
+    const unlock = lockScroll();
     sheetShown();
     el?.focus({ preventScroll: true });
     const key = (e: KeyboardEvent) => {
@@ -100,6 +102,7 @@ export function Sheet({ title, onClose, children, id, modal = false, foot }: { t
       document.removeEventListener("keydown", key, true);
       window.removeEventListener("popstate", pop);
       root.style.overflow = was.root; document.body.style.overflow = was.body;
+      unlock();
       sheetGone();
       if (opener && document.contains(opener)) opener.focus({ preventScroll: true });
     };

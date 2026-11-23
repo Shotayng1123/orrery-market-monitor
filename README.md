@@ -111,7 +111,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,320 checks in 55 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6) and P-2.1's `pf-ticket` (24)): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,421 checks in 56 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24) and the Home Screen frame's `phone-frame` (101)): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -129,7 +129,13 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   fresh contexts of ten, with the list's answers late, and with the market table a second after the names; MARKETS
   the same when the morning note's answer comes a second after the table's; `nav-hold`: that hold gives way to the
   reader, a wheel or a key while the list is still on its way ending it, and is over once the answers have come, so
-  a later move of the page stays), results
+  a later move of the page stays), the Home Screen app's frame, for an account in the preview list only (`phone-frame`:
+  in an iPhone's Home Screen app the document does not scroll and the tab bar is the last item of a column under the
+  page, so on the nine phone screens the bar stands on the window's foot and the sticky heads at the top, at the top,
+  middle and end, a form's sticky foot on the bar, also with the window turned, and a piece prints in full; a tab
+  opens at its top, Back returns WATCHLIST and RESEARCH where they stood, every kind of sheet holds the page still and
+  closes three ways, and the preview flag arriving after the page is drawn moves nothing on the screen; Chromium only,
+  which cannot draw the iOS fault the frame is for), results
   dates (`results-dates`: the day in each company's own market and no time of day, in KEY DATA, on WATCHLIST and in
   NEWS › Results calendar, both layouts; the mark after each date as its source gives it, "conf.", "est." or a dash
   in WATCHLIST's MY NAMES as in RESULTS AHEAD; a stored date more than a day past reading a dash there, as RESULTS
@@ -311,7 +317,8 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   no line, or no tab and no screens' file, in the other two states.
   `cd web && npm run e2e` starts the test servers it needs and runs them all, up to three suites at a time (two of
   the dev servers' and one of the built site's, whose suites queue behind each other): about
-  28 minutes on the engineer's machine (the whole run for the 55 suites and 3,319 checks of P-2.1, `pf-ticket` then 23,
+  28 minutes on the engineer's machine (the whole run for the 56 suites and 3,421 checks of P-2.1 and the Home Screen
+  frame together is not yet timed in one run, `phone-frame` 121 s; P-2.1's 55 suites and 3,319 checks, `pf-ticket` then 23,
   took 2,421 s with the browser's own letter placement and other work on the machine, before three suites' lines
   were brought to the ticket's door, `pf-ticket` 30 s; slice 9's 53 suites and 3,290 checks took 2,061 s as installed,
   its new suite, `pf-preview`, 40 to 50 s; slice 8's 53 suites and 3,277 checks 1,987 s, its new suite, `letter-placement`, 5 to
