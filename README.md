@@ -543,20 +543,41 @@ names does not free the other, where a semicolon parts them ("…; you may not r
 …"), or ", nor", or "and", "but", "while" or "whereas" before a second ban that has its own subject, a pronoun or a
 noun before its own "may not", "is prohibited", "requires our consent" or the like ("…, and redistribution of the
 data is prohibited"), or its own "may not", "must not", "cannot" or the like ("…, and may not use it for commercial
-purposes"), and in Japanese 「し、」 or 「、また」 (商用目的での転載を禁止し、また再配布も禁止します。); a list after a
-lead-in that bans ("You agree not to: …; …; …") is read item by item with its lead-in. A second ban that says
-"otherwise" or "any other" after a grant of personal, private, non-commercial or internal use is read with that grant
-("You may store the data for your personal, non-commercial use, but must not otherwise copy it." holds nothing), and
-"publication" is an act of re-use only when it is done to a site's data ("Publication of the data in any medium
-requires our consent." holds the files; "This publication does not constitute investment advice." does not; both
-since the check of fix part 4, 23 Nov 2026). Still read as none, so that such a line does not hold the files: a
-purpose named for one of the acts a single ban lists is read as the whole ban's ("You may not copy or redistribute the
-data or use it for commercial purposes.", "Copying and redistribution of the data, and their use for commercial
-purposes, are prohibited."), and so is a ban named only by "as is" ("Copying the data for commercial purposes is
-prohibited, as is its redistribution.") or joined by "nor" without a comma ("You may not copy the data nor use it for
-commercial purposes."). The gate errs the other way elsewhere: it holds the files for some lines that bar nothing of
-a site's data ("We will never sell your personal information.", "Information published here does not constitute
-advice."); a page reached by a "legal" link counts as the terms only when its title or first
+purposes"), and in Japanese 「し、」 or 「、また」 after a ban verb (商用目的での転載を禁止し、また再配布も禁止します。); after an
+act, 「し、」 and 「、また」 join the acts of one ban, and 「、または」 is "or" (商用目的で、本データを複製し、または再配布することを禁止します。
+holds nothing; since the check of fix part 5, 23 Nov 2026, before which it held the files); a list after a lead-in that
+bans ("You agree not to: …; …; …") is read item by item with its lead-in. A second ban whose "otherwise" or "any
+other" refers back to a grant of personal, private, non-commercial or internal use in the same sentence is read with
+that grant ("You may store the data for your personal, non-commercial use, but must not otherwise copy it." holds
+nothing, nor does "…; any other copying is prohibited"); one whose "otherwise" or "any other" names another object or
+party is read on its own ("You may use the data for personal use, but you may not distribute it to any other party."
+holds the files, and so do "unless otherwise agreed", "except as otherwise permitted" and "in any other system"; from
+the check of fix part 4 until that of fix part 5, 23 Nov 2026, such a line held nothing), and "publication" is an act
+of re-use only when it is done to a site's data ("Publication of the data in any medium requires our consent." holds
+the files; "This publication does not constitute investment advice." does not; both since the check of fix part 4,
+23 Nov 2026). Still read as none, so that such a line does not hold the files: a purpose named for one of the acts a
+single ban lists is read as the whole ban's ("You may not copy or redistribute the data or use it for commercial
+purposes.", "Copying and redistribution of the data, and their use for commercial purposes, are prohibited."), and so
+is a ban named only by "as is" ("Copying the data for commercial purposes is prohibited, as is its redistribution.")
+or joined by "nor" without a comma ("You may not copy the data nor use it for commercial purposes."); a second ban in
+words the clause split does not know ("You may not copy the data for commercial purposes, and redistribution is also
+strictly prohibited.", "You may not copy the data for commercial purposes, and any redistribution shall be
+prohibited.", "You may not copy the data for commercial purposes, but redistribution of the content is never
+permitted.", "You may not copy the data for commercial purposes, and redistribution requires a separate licence."); in
+Japanese, a second ban joined otherwise than by 「し、」 after a ban verb or by 「、また」
+(商用目的での転載は禁止されており、再配布も禁止されています。, 商用目的の転載は禁止、再配布も禁止します。,
+商用目的での転載を禁止するとともに、再配布も禁止します。);
+and a publication that is not "publication of" the site's data with "the", "any", "its", "our", "their", "all" or no
+word between ("Publication of this content is prohibited without our prior written consent.", "Any publication of
+these figures requires our prior written consent.", "Publication of such data without our consent is prohibited.",
+"Publication of the Nikkei Stock Average requires a licence from Nikkei Inc.", "Publication in any form is prohibited
+without our consent.", "Publication or broadcast of this information is prohibited."). The gate errs the other way
+elsewhere: it holds the files for some lines that bar nothing of a site's data ("We will never sell your personal
+information.", "Information published here does not constitute advice."), for a grant in words it does not know, whose
+second ban is then read on its own ("You may view and print pages for your personal use, but may not otherwise
+reproduce them.", "You are welcome to download the data for your personal use, but must not otherwise copy it."), and
+where 「、また」 joins two things of one ban that ends in no act (商用目的での当サイトの情報、また掲載画像の転載を禁止します。); a page
+reached by a "legal" link counts as the terms only when its title or first
 heading names them and its lines cover two of the subjects the gate reads or carry a ban (since 22 Nov 2026: by its
 name alone, or by two stray lines, a page counted as the terms read), and where no terms are found the files that need
 them stay unread. Until 21 Nov 2026 the gate knew a ban only by the wordings it was modelled on (a word of

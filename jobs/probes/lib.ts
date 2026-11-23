@@ -369,12 +369,31 @@ const TOPICS: Array<[string, RegExp]> = [
 // private, non-commercial or internal use is read with that grant ("…, but must not otherwise copy it": none); a
 // semicolon, a clause with a ban of its own whatever its subject ("…, and redistribution is also prohibited"), 「し、」
 // and 「、また」 part two bans, and a list after a lead-in that bans is read item by item with the lead-in (CLAUSE,
-// termsBar). What is still read as "none": a limit named after a plain "or" inside one ban ("may not copy or
-// redistribute the data or use it for commercial purposes"), which the gate takes as the whole sentence's; a purpose
-// named once for acts joined by "and" ("Copying and redistribution of the data, and their use for commercial purposes,
-// are prohibited"); a ban named only by "as is" ("…, as is its redistribution"); "nor" without a comma ("may not copy
-// the data nor use it for commercial purposes"). And the gate errs the other way where a sentence that bans nothing of
-// the data holds a word of re-use and a bare "does not" ("Information published here does not constitute advice").
+// termsBar). Since the check of fix part 5 (23 Nov 2026), both ways again: only an "otherwise" or "any other" that
+// refers back to the grant frees its clause (BACK: "must not otherwise copy it", "any other copying is prohibited");
+// one that names another object or party is a bar again, as at dfd0970 ("…, but you may not distribute it to any other
+// party", "unless otherwise agreed", "except as otherwise permitted", "in any other system", "or otherwise exploit it");
+// and 「し、」 parts two bans only where it does not follow an act (複製し、, 転載し、, 販売し、 …: the acts of one ban,
+// "商用目的で、本データを複製し、または再配布することを禁止します" is none), nor 「、また」 after an act or as "、または" ("or").
+// What is still read as "none", so that such a line does not hold the files: a limit named after a plain "or" inside
+// one ban ("may not copy or redistribute the data or use it for commercial purposes"), which the gate takes as the whole
+// sentence's; a purpose named once for acts joined by "and" ("Copying and redistribution of the data, and their use for
+// commercial purposes, are prohibited"); a ban named only by "as is" ("…, as is its redistribution"); "nor" without a
+// comma ("may not copy the data nor use it for commercial purposes"); a second ban in words the clause split does not
+// know ("…, and redistribution is also strictly prohibited", two words before "prohibited"; "…, and any redistribution
+// shall be prohibited"; "…, but redistribution of the content is never permitted"; "…, and redistribution requires a
+// separate licence"); in Japanese, a second ban joined otherwise than by 「し、」 after a ban verb or by 「、また」
+// (商用目的での転載は禁止されており、再配布も禁止されています; 商用目的の転載は禁止、再配布も禁止します;
+// 商用目的での転載を禁止するとともに、再配布も禁止します); and a "publication" that is not "publication of" the site's
+// data with "the", "any", "its", "our", "their", "all" or no word between ("Publication of this content is prohibited
+// without our prior written consent", "Any publication of these figures requires our prior written consent",
+// "Publication of such data …", "Publication of the Nikkei Stock Average requires a licence …", "Publication in any
+// form is prohibited …", "Publication or broadcast of this information is prohibited"). And the gate errs the other
+// way where a sentence that bans nothing of the data holds a word of re-use and a bare "does not" ("Information
+// published here does not constitute advice"), where a grant is in words GRANT does not know ("may view and print",
+// "are welcome to download", "can download", "Personal, non-commercial use is permitted, but …"), so that its second
+// ban is read alone, and where 「、また」 joins two objects of one ban that ends in no act (商用目的での当サイトの情報、
+// また掲載画像の転載を禁止します).
 const BAN_EN = /\b(?:may not|must not|shall not|should not|will not|cannot|can not|do not|does not|agree(?:s|d)? not to|undertake(?:s)? not to|not (?:be )?(?:permitted|allowed|authori[sz]ed)|(?:is|are) not to be|prohibit(?:ed|s|ion)?|forbidden|forbids?|refrain(?:s|ing)? from|you (?:will|shall|do) not)\b|\bno\b[^.]{0,400}\b(?:may|can|shall) be\b|\bno\b[^.]{0,400}\b(?:is|are) (?:allowed|permitted|authori[sz]ed)\b|\bneither\b[^.]{0,400}\b(?:may|can|shall) be\b|\bonly with (?:the |our |its |their |prior |express |written |explicit )*(?:permission|consent|authori[sz]ation|approval)|without (?:the |our |its |any )?(?:prior |express |written |explicit |specific )+(?:permission|consent|authori[sz]ation|approval|agreement)|\b(?:nothing|none)\b[^.]{0,400}\b(?:may|can|shall|must) be\b|\b(?:must|may|shall|should|can|will) never\b|\b(?:requires?|required|subject to|conditional (?:up)?on)\s+(?:the |our |its |their |a |an )?(?:prior |express |written |explicit |specific |formal )*(?:permission|consent|authori[sz]ation|approval|licen[cs]e)\b|\bonly\b[^.]{0,60}\bwith (?:the |our |its |their |prior |express |written |explicit )*(?:permission|consent|authori[sz]ation|approval)|\bwithout (?:the |our |its |their |any )?(?:permission|consent|authori[sz]ation|approval)\b/i;
 const BAN_JA = /禁止|禁じ|禁ず|禁無断|できません|できない|出来ません|出来ない|お断り|ご遠慮|認められません|認めておりません|一切認め|してはなりません|してはならない|行ってはなりません|行わないで|しないでください|しないで下さい|固くお断り|(?:許可|許諾|承諾|同意|承認)(?:を得る)?(?:こと)?が必要/;
 /** A clause that declines liability or a warranty: its "shall not" forbids the reader nothing. It is set aside only up
@@ -404,17 +423,28 @@ const sentencesOf = (line: string): string[] => line.split(/(?<=[.!?。！？])\
  *  them for commercial gain". Since the check of fix part 4: a semicolon parts two clauses ("…; you may not redistribute
  *  it", "…; nor may you …"), so does "and", "but", "while" or "whereas" before a clause with a ban of its own whatever
  *  its subject ("…, and the data may not be redistributed", "…, and redistribution is also prohibited"), and in
- *  Japanese 「し、」 or 「、また」 (商用目的での転載を禁止し、また再配布も禁止します). A limit after a plain "or" inside one
- *  ban ("may not copy or redistribute the data or use it for commercial purposes") is still read as the whole
- *  sentence's: the gate cannot tell which act it limits. */
-const CLAUSE = /\s*[;；]\s*|,?\s+(?:and|but|while|nor)\s+(?=(?:you|users?|the user|no|neither|nothing|none|it|we|they|visitors?)\b)|,?\s+(?:and|but|or)\s+(?=(?:may|must|shall|should|will|can|do|does)\s+not\b|cannot\b|(?:may|must|shall|should|will|can) never\b)|,\s*nor\s+|,?\s+(?:and|but|while|whereas)\s+(?=[^,;.]{0,100}?\b(?:(?:may|must|shall|should|will|can)\s+(?:also\s+)?(?:not|never)\b|cannot\b|(?:is|are)\s+(?:also\s+|strictly\s+|expressly\s+)?(?:not\s+(?:permitted|allowed|authori[sz]ed)\b|prohibited\b|forbidden\b)|(?:requires?|(?:is|are) subject to)\s+(?:the |our |its |their |a |an )?(?:prior |express |written |explicit |specific |formal )*(?:permission|consent|authori[sz]ation|approval|licen[cs]e)\b))|(?<=し)、|、(?=また|さらに|かつ|なお)/i;
+ *  Japanese 「し、」 or 「、また」 (商用目的での転載を禁止し、また再配布も禁止します). Since the check of fix part 5 (R-2):
+ *  not 「し、」 after an act, which joins the acts of one ban (商用目的で、本データを複製し、または再配布することを禁止
+ *  します: one ban, limited to commercial use), nor 「、また」 after an act (複製、また転載を禁止します) or as "、または"
+ *  ("or"). A limit after a plain "or" inside one ban ("may not copy or redistribute the data or use it for commercial
+ *  purposes") is still read as the whole sentence's: the gate cannot tell which act it limits. */
+const CLAUSE = /\s*[;；]\s*|,?\s+(?:and|but|while|nor)\s+(?=(?:you|users?|the user|no|neither|nothing|none|it|we|they|visitors?)\b)|,?\s+(?:and|but|or)\s+(?=(?:may|must|shall|should|will|can|do|does)\s+not\b|cannot\b|(?:may|must|shall|should|will|can) never\b)|,\s*nor\s+|,?\s+(?:and|but|while|whereas)\s+(?=[^,;.]{0,100}?\b(?:(?:may|must|shall|should|will|can)\s+(?:also\s+)?(?:not|never)\b|cannot\b|(?:is|are)\s+(?:also\s+|strictly\s+|expressly\s+)?(?:not\s+(?:permitted|allowed|authori[sz]ed)\b|prohibited\b|forbidden\b)|(?:requires?|(?:is|are) subject to)\s+(?:the |our |its |their |a |an )?(?:prior |express |written |explicit |specific |formal )*(?:permission|consent|authori[sz]ation|approval|licen[cs]e)\b))|(?<=し)(?<!(?:複製|複写|転載|配信|配布|頒布|転送|送信|利用|使用|引用|蓄積|保存|販売|提供|公開|掲載|改変|改ざん|加工|編集|翻案|翻訳|出版|放送|譲渡|貸与|印刷|抽出|収集|変更|修正|ダウンロード|アップロード)し)、|(?<!(?:複製|複写|転載|配信|配布|頒布|転送|送信|利用|使用|引用|蓄積|保存|販売|提供|公開|掲載|改変|改ざん|加工|編集|翻案|翻訳|出版|放送|譲渡|貸与|印刷|抽出|収集|変更|修正|ダウンロード|アップロード))、(?=また(?!は)|さらに|かつ|なお)/i;
 /** A use the sentence grants (personal, private, non-commercial, internal): "You may store the data for your personal
  *  use", "Copying is permitted for personal use only". */
 const GRANT = /\b(?:permitted|allowed|authori[sz]ed|may (?:be )?(?:use|used|copy|copied|download|downloaded|print|printed|reproduce|reproduced|store|stored))\b[^.]{0,40}?\b(?:solely |only )?for (?:your |their |its )?(?:own )?(?:personal|private|non-?commercial|internal)\b/i;
-/** A second ban that refers back to that grant ("…, but must not otherwise copy it", "…; any other copying is
- *  prohibited"): limited by it, so it is read with the sentence and not on its own (N-1 of the check of fix part 4:
- *  read alone, such a grant was a bar). */
+/** A second ban that refers back to that grant, and so is limited by it: "otherwise" right after its "not" ("…, but
+ *  must not otherwise copy it", "…, and may not be otherwise reproduced"), "otherwise" that opens the clause ("…;
+ *  otherwise, you may not copy it"), "any other" before a use or an act ("…; any other copying is prohibited", "…, but
+ *  any other reproduction is prohibited"), or "in/by any other form, manner, way, means or medium". Such a clause is
+ *  read with the sentence and not on its own (N-1 of the check of fix part 4: read alone, such a grant was a bar). An
+ *  "otherwise" or "any other" that names another object or party does not refer back ("to any other party", "in any
+ *  other system", "unless otherwise agreed", "except as otherwise permitted", "or otherwise exploit it"): a clause that
+ *  holds one is read on its own as well, as at dfd0970 (R-1 of the check of fix part 5, 23 Nov 2026: read with the
+ *  grant, such an unlimited ban was none). */
+const BACK = /\b(?:(?:may|must|shall|should|will|can|could|do|does|is|are)\s+not|cannot|never)\s+(?:be\s+)?otherwise\b|^\s*otherwise\b(?!\s+(?:agreed|permitted|stated|provided|specified|noted|indicated|authori[sz]ed|allowed|expressly|set out|required))|\bany other (?:(?:form|kind|type|manner) of )?(?:use|uses|usage|purposes?|copying|cop(?:y|ies)|reproductions?|re-?distributions?|distributions?|exploitation|re-?use)\b|\b(?:in|by) any other (?:form|manner|way|means|medium)\b/gi;
 const OTHER = /\botherwise\b|\bany other\b/i;
+/** Whether a clause says "otherwise" or "any other" and every one of them refers back to a grant (BACK). */
+const refersBack = (c: string): boolean => OTHER.test(c) && !OTHER.test(c.replace(BACK, " "));
 export function termsBar(line: string): { kind: "automated" | "re-use"; sentence: string } | null {
   for (const raw of sentencesOf(line)) {
     const whole = raw.replace(LIABILITY, " ");   // what is left once a clause that only declines liability is taken out
@@ -422,7 +452,7 @@ export function termsBar(line: string): { kind: "automated" | "re-use"; sentence
     // gate): each item is read with its lead-in, so the purpose one item names does not free the others
     const lead = /^([^:]{3,200}):\s+([\s\S]+)$/.exec(whole);
     const items = lead && (BAN_EN.test(`${lead[1]} x`) || BAN_JA.test(lead[1])) ? lead[2].split(/\s*[;；]\s*/).filter((x) => x.trim()).map((x) => `${lead[1]} ${x}`) : [];
-    const grant = GRANT.test(whole), alone = (c: string) => !(grant && OTHER.test(c));
+    const grant = GRANT.test(whole), alone = (c: string) => !(grant && refersBack(c));
     for (const s of [whole, ...items.filter(alone), ...whole.split(CLAUSE).filter((c) => c.trim() && c !== whole && alone(c))]) {
       const ban = BAN_EN.test(s) || BAN_JA.test(s);
       if (!ban) continue;

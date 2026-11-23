@@ -49,8 +49,12 @@ console.log("\n[AK] what the README says of the checks is what the repository ho
   // says are still read as none, or hold nothing, read none; those it says hold the files read as bars
   const flat = readme.replace(/\s+/g, " "), from = flat.indexOf("A sentence of two bans is read ban by ban"), gate = from >= 0 ? flat.slice(from, flat.indexOf("a page reached by a \"legal\" link", from)) : "";
   const quoted = (t: string): string[] => [...t.matchAll(/"([A-Z][^"]*?\.)"/g)].map((m) => m[1]);
-  const none = [...quoted(gate.slice(gate.indexOf("Still read as none"), gate.indexOf("The gate errs the other way"))), ...[...gate.matchAll(/"([A-Z][^"]*?\.)" (?:holds nothing|does not)\b/g)].map((m) => m[1])];
-  const bars = [...quoted(gate.slice(gate.indexOf("The gate errs the other way"))), ...[...gate.matchAll(/"([A-Z][^"]*?\.)" holds the files/g)].map((m) => m[1]), ...[...gate.matchAll(/(商用目的[^）)]*?。)/g)].map((m) => m[1])];
+  // a Japanese example is a sentence from 商用目的 to its 。: none where the README says it is still read as none or that
+  // it holds nothing (since the check of fix part 5, 23 Nov 2026), else a bar
+  const noneSpan = gate.slice(gate.indexOf("Still read as none"), gate.indexOf("The gate errs the other way"));
+  const ja = [...gate.matchAll(/(商用目的[^）)\s]*?。)( holds nothing\b)?/g)], jaNone = new Set([...[...noneSpan.matchAll(/(商用目的[^）)\s]*?。)/g)].map((m) => m[1]), ...ja.filter((m) => m[2]).map((m) => m[1])]);
+  const none = [...quoted(noneSpan), ...[...gate.matchAll(/"([A-Z][^"]*?\.)" (?:holds nothing|does not)\b/g)].map((m) => m[1]), ...jaNone];
+  const bars = [...quoted(gate.slice(gate.indexOf("The gate errs the other way"))), ...[...gate.matchAll(/"([A-Z][^"]*?\.)" holds the files/g)].map((m) => m[1]), ...ja.map((m) => m[1]).filter((l) => !jaNone.has(l))];
   const misread = [...none.filter((l) => gateBar(l) !== null).map((l) => `none: ${l}`), ...bars.filter((l) => gateBar(l) === null).map((l) => `bar: ${l}`)];
   ck(`the README's examples of what the terms gate reads are what it reads: ${none.length} it quotes as none or holding nothing, ${bars.length} as holding the files (${misread.length} read otherwise)`, none.length >= 6 && bars.length >= 4 && misread.length === 0, { misread, none, bars });
 }
