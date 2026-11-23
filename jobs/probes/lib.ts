@@ -378,8 +378,10 @@ const TOPICS: Array<[string, RegExp]> = [
 // refers back to the grant frees its clause (BACK: "must not otherwise copy it", "any other copying is prohibited");
 // one that names another object or party is a bar again, as at dfd0970 ("…, but you may not distribute it to any other
 // party", "unless otherwise agreed", "except as otherwise permitted", "in any other system", "or otherwise exploit it");
-// and 「し、」 parts two bans only where it does not follow an act (複製し、, 転載し、, 販売し、 …: the acts of one ban,
-// "商用目的で、本データを複製し、または再配布することを禁止します" is none), nor 「、また」 after an act or as "、または" ("or").
+// and 「し、」 parts two bans only where it does not follow one of CLAUSE's acts (複製し、, 転載し、, 販売し、 …: the acts of
+// one ban, "商用目的で、本データを複製し、または再配布することを禁止します" is none), nor 「、また」 right after one of them
+// (複製、また) or as "、または" ("or"); 「、また」 after an act's 〜し and 「し、」 after an act the list lacks (転用し、) still part
+// a single ban, which then holds the files (V7-1 and V7-2 of the check of batch 7b, 23 Nov 2026).
 // What is still read as "none", so that such a line does not hold the files: a limit named after a plain "or" inside
 // one ban ("may not copy or redistribute the data or use it for commercial purposes"), which the gate takes as the whole
 // sentence's; a purpose named once for acts joined by "and" ("Copying and redistribution of the data, and their use for
@@ -429,7 +431,7 @@ const sentencesOf = (line: string): string[] => line.split(/(?<=[.!?。！？])\
  *  it", "…; nor may you …"), so does "and", "but", "while" or "whereas" before a clause with a ban of its own whatever
  *  its subject ("…, and the data may not be redistributed", "…, and redistribution is also prohibited"), and in
  *  Japanese 「し、」 or 「、また」 (商用目的での転載を禁止し、また再配布も禁止します). Since the check of fix part 5 (R-2):
- *  not 「し、」 after an act, which joins the acts of one ban (商用目的で、本データを複製し、または再配布することを禁止
+ *  not 「し、」 after one of the acts listed here, which joins the acts of one ban (商用目的で、本データを複製し、または再配布することを禁止
  *  します: one ban, limited to commercial use), nor 「、また」 after an act (複製、また転載を禁止します) or as "、または"
  *  ("or"). A limit after a plain "or" inside one ban ("may not copy or redistribute the data or use it for commercial
  *  purposes") is still read as the whole sentence's: the gate cannot tell which act it limits. */

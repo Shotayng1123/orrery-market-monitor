@@ -549,10 +549,15 @@ names does not free the other, where a semicolon parts them ("…; you may not r
 …"), or ", nor", or "and", "but", "while" or "whereas" before a second ban that has its own subject, a pronoun or a
 noun before its own "may not", "is prohibited", "requires our consent" or the like ("…, and redistribution of the
 data is prohibited"), or its own "may not", "must not", "cannot" or the like ("…, and may not use it for commercial
-purposes"), and in Japanese 「し、」 or 「、また」 after a ban verb (商用目的での転載を禁止し、また再配布も禁止します。); after an
-act, 「し、」 and 「、また」 join the acts of one ban, and 「、または」 is "or" (商用目的で、本データを複製し、または再配布することを禁止します。
-holds nothing; since the check of fix part 5, 23 Nov 2026, before which it held the files); a list after a lead-in that
-bans ("You agree not to: …; …; …") is read item by item with its lead-in. A second ban whose "otherwise" or "any
+purposes"), and in Japanese 「し、」 or 「、また」 after a ban verb (商用目的での転載を禁止し、また再配布も禁止します。); 「し、」
+joins the acts of one ban only after one of the 34 acts the gate lists (複製し、, 転載し、, 配布し、, 利用し、 …), 「、また」 only
+right after one of them (複製、また転載), and 「、または」 is "or" where no 「し、」 parts the sentence
+(商用目的で、本データを複製し、または再配布することを禁止します。 holds nothing; since the check of fix part 5, 23 Nov 2026, before
+which it held the files); elsewhere they part it as they part two bans, 「、また」 after an act's 〜し and 「し、」 after an act
+the list lacks (転用し、, 改編し、, 取得し、) among them, so that a single ban limited to commercial use is read as two, its
+second act without the limit, and holds the files (商用目的で、本データを複製し、また再配布することを禁止します。,
+商用目的で、本データを転用し、または再配布することを禁止します。; 「、さらに」, 「、かつ」 and 「、なお」 part it as 「、また」 does);
+a list after a lead-in that bans ("You agree not to: …; …; …") is read item by item with its lead-in. A second ban whose "otherwise" or "any
 other" refers back to a grant of personal, private, non-commercial or internal use in the same sentence is read with
 that grant ("You may store the data for your personal, non-commercial use, but must not otherwise copy it." holds
 nothing, nor does "…; any other copying is prohibited"); one whose "otherwise" or "any other" names another object or
@@ -570,7 +575,7 @@ words the clause split does not know ("You may not copy the data for commercial 
 strictly prohibited.", "You may not copy the data for commercial purposes, and any redistribution shall be
 prohibited.", "You may not copy the data for commercial purposes, but redistribution of the content is never
 permitted.", "You may not copy the data for commercial purposes, and redistribution requires a separate licence."); in
-Japanese, a second ban joined otherwise than by 「し、」 after a ban verb or by 「、また」
+Japanese, a second ban joined otherwise than by a 「し、」, 「、また」, 「、さらに」, 「、かつ」 or 「、なお」 that parts the sentence
 (商用目的での転載は禁止されており、再配布も禁止されています。, 商用目的の転載は禁止、再配布も禁止します。,
 商用目的での転載を禁止するとともに、再配布も禁止します。);
 and a publication that is not "publication of" the site's data with "the", "any", "its", "our", "their", "all" or no
