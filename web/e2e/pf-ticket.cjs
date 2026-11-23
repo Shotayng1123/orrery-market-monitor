@@ -10,6 +10,8 @@
 //       with no money beside them); a future refused in words; a server of before
 //   [3] a phone: Buy / Sell in the book's head (44 px), the ticket as a page of the book, the preview line first, 16-px
 //       inputs and 44-px taps, nothing cut and no sideways scroll, on a weekend's dated print, once with a wide font
+//   [4] the way a figure is sized is the way the menu shows (N1-1 of the night review of 23 Nov 2026: on the yen book,
+//       after "Amount in USD" for NVDA, a Tokyo name showed "% of capital" and sized "2" as JPY 2): a computer and a phone
 // Run from web/:  node e2e/run.cjs pf-ticket   (the runner starts the server this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
 const fs = require("fs"), path = require("path");
@@ -132,6 +134,26 @@ const fit = (p) => p.evaluate(() => {
     const label = `${ph}${wide ? " (wide font)" : ""}${now === SATURDAY ? ", Saturday" : ""}`;
     ck(`${label}: Buy / Sell in the book's head is ${bs?.h} px tall; the ticket takes Overview's place under the preview line, neither of the book's two views lit; inputs at 16 px, the sides ${m.sides} px and Look up ${m.look} px tall`, !!bs && bs.h >= 44 && bs.text === "Buy / Sell" && !m.overview && m.lit === 0 && f.first && m.input === 16 && m.value === 16 && m.by === 16 && m.sides >= 44 && m.look >= 44, { bs, m, f });
     ck(`${label}: the print ("${pr}") and the size ("${q}") whole: nothing cut, no sideways scroll (${f.sideways})`, (now === SATURDAY ? /^last 2,987\.0 JPY · 20 Nov 14:30 SGT · 20 h 30 min old · Yahoo Finance, unofficial$/ : /21 min old/).test(pr ?? "") && q === "→ Buy 1,000 shares (100-share lots)" && f.cut.length === 0 && f.sideways <= 0 && f.inside && errs.length === 0, { pr, q, f, errs });
+    await ctx.close();
+  }
+
+  console.log("\n[4] the way a figure is sized is the way the menu shows: the yen book, NVDA by an amount in dollars, then a Tokyo name");
+  // the stand-in yen book (ID 2) has a capital of JPY 10bn: 2% is JPY 200,000,000, which at 2,987.0 a share in lots of
+  // 100 is 669 lots, 66,900 shares; read as yen ("2"), it would be no share at all
+  const menu = (p) => p.evaluate(() => { const s = document.querySelector("#pf-t-by"), t = (q) => document.querySelector(q)?.innerText.replace(/\s+/g, " ").trim() ?? null;
+    return { value: s.value, shown: s.options[s.selectedIndex]?.textContent ?? null, ways: [...s.options].map((o) => o.value).join(), unit: document.querySelector(".pf-t-size .u")?.textContent ?? null, conv: t("#pf-t-conv"), qty: t("#pf-t-qty"), why: t("#pf-t-why") }; });
+  for (const ph of [null, "P2"]) {
+    const { ctx, p, errs } = await open(b, { phone: ph });
+    const label = ph ? "P2" : "C1";
+    await go(p, `portfolio/${ID(2)}/ticket?s=NVDA&side=buy`, "#pf-ticket");
+    await p.waitForSelector(`.pf-ticket-form[data-asked="NVDA"]`, { timeout: 15000 }); await settle(p);
+    await size(p, "local", "1000"); const usd = await menu(p);
+    await look(p, "7203.T"); await p.fill("#pf-t-value", "2"); await settle(p, 150); const jp = await menu(p);
+    ck(`${label}: NVDA by "Amount in USD" 1000 is "${usd.qty}"; then 7203.T, whose currency is the book's, offers no amount in dollars (${jp.ways}): the menu shows "${jp.shown}" and "2" is sized as that: "${jp.conv}" → "${jp.qty}", the unit "${jp.unit}"`,
+      usd.shown === "Amount in USD" && usd.unit === "USD" && usd.qty === "→ Buy 5 shares" && jp.ways === "pct,bps,base,shares" && jp.value === "pct" && jp.shown === "% of capital" && jp.unit === "%" && /^= JPY 200,000,000$/.test(jp.conv ?? "") && jp.qty === "→ Buy 66,900 shares (100-share lots)", { usd, jp });
+    // back to a name that offers the dollar amount again: the menu keeps the way it last showed, and sizes by it
+    await look(p, "NVDA"); const back = await menu(p);
+    ck(`${label}: NVDA again: the menu keeps "${back.shown}" (it showed that last) and sizes "2" by it: "${back.conv}" → "${back.qty}"`, back.value === "pct" && back.shown === "% of capital" && back.unit === "%" && /^= JPY 200,000,000 = USD 1,262,626\.26 at USD\/JPY 158\.400/.test(back.conv ?? "") && /^→ Buy [1-9][\d,]* shares$/.test(back.qty ?? "") && errs.length === 0, { back, errs });
     await ctx.close();
   }
 

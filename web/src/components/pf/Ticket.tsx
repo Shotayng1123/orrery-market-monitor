@@ -33,7 +33,9 @@ export function Ticket({ book, phone, init }: { book: BookFull; phone: boolean; 
     if (!sym) { setA(null); setErr(null); return; }
     let alive = true;
     setBusy(true);
-    pfTicket(book.id, sym).then((r) => { if (alive) { setA(r); setErr(null); setSide((x) => (r.sides.includes(x) ? x : r.sides[0])); } })
+    // a way to size that the new name's menu does not offer (an amount in the currency of the name before) goes back to
+    // the menu's first, in the same step as the answer, so that the menu never shows one way while the size is read another
+    pfTicket(book.id, sym).then((r) => { if (alive) { setA(r); setErr(null); setSide((x) => (r.sides.includes(x) ? x : r.sides[0])); setBy((x) => (x !== "local" || (r.instrument != null && r.instrument.ccy !== book.base) ? x : "pct")); } })
       .catch((e: unknown) => { if (alive) { setErr(noTicketRoute(e) ? TICKET_NOT_ON_SERVER : failureWords(e, { offline: "Offline: the ticket's price needs the server.", signedOut: "Signed out: sign in again.", refused: (w) => `The price could not be read: ${w}.` })); } })
       .finally(() => { if (alive) setBusy(false); });
     return () => { alive = false; };
@@ -43,13 +45,19 @@ export function Ticket({ book, phone, init }: { book: BookFull; phone: boolean; 
   // the answer of the name now looked up only; none while a read fails
   const a = got && got.symbol === sym && !err ? got : null;
   const inst = a?.instrument ?? null, print = a?.print ?? null, cap = book.kind === "AR" ? "capital" : "NAV";
+  // an amount in the name's own currency is offered when it is not the book's; while the next name's price is being read,
+  // the menu keeps the currency of the name before it (nothing is sized meanwhile), so a way both offer stays shown
+  const menuCcy = inst?.ccy ?? (busy && !err ? got?.instrument?.ccy : undefined);
   const ways: Array<[SizeBy, string, string]> = [["pct", `% of ${cap}`, "%"], ["bps", `bp of ${cap}`, "bp"], ["base", `Amount in ${book.base}`, book.base]];
-  if (inst && inst.ccy !== book.base) ways.push(["local", `Amount in ${inst.ccy}`, inst.ccy]);
+  if (menuCcy && menuCcy !== book.base) ways.push(["local", `Amount in ${menuCcy}`, menuCcy]);
   ways.push(["shares", "Shares", "shares"]);
-  const unit = ways.find((w) => w[0] === by)?.[2] ?? "";
+  // the way the figure is read is always the one the menu shows: the way chosen while the menu offers it, else its first
+  // (N1-1 of the night review of 23 Nov 2026: the menu fell back to "% of capital" while "2" was still read as yen)
+  const way: SizeBy = ways.some((w) => w[0] === by) ? by : ways[0][0];
+  const unit = ways.find((w) => w[0] === way)![2];
   // an amount reads as the creation form reads one ("1m", "1.5bn", "1,000,000"), or as a plain figure; the rest as a figure
-  const num = (by === "base" || by === "local" ? parseAmount(value) : null) ?? Number(value.replace(/,/g, ""));
-  const sized = inst && print && value.trim() !== "" ? sizeOrder({ side, by, value: num, position: a!.position, lot: inst.lot, price: print.tooOld ? null : print.price, ccy: inst.ccy, base: book.base, usdjpy: a!.fx?.rate ?? null, kind: book.kind, capital: a!.book.capital }) : null;
+  const num = (way === "base" || way === "local" ? parseAmount(value) : null) ?? Number(value.replace(/,/g, ""));
+  const sized = inst && print && value.trim() !== "" ? sizeOrder({ side, by: way, value: num, position: a!.position, lot: inst.lot, price: print.tooOld ? null : print.price, ccy: inst.ccy, base: book.base, usdjpy: a!.fx?.rate ?? null, kind: book.kind, capital: a!.book.capital }) : null;
   // the print's age now: the server's figure at its read, plus the minutes since (the read is asked again each minute)
   const age = print && a ? print.ageMin + Math.max(0, Math.round((Date.now() - Date.parse(a.asked)) / 60e3)) : null;
 
@@ -88,7 +96,7 @@ export function Ticket({ book, phone, init }: { book: BookFull; phone: boolean; 
         })}</span>
       </div>
       <div className="pf-t-row"><span className="k">Size</span>
-        <span className="pf-t-size"><select id="pf-t-by" aria-label="Size by" value={by} onChange={(e) => setBy(e.target.value as SizeBy)}>{ways.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+        <span className="pf-t-size"><select id="pf-t-by" aria-label="Size by" value={way} onChange={(e) => setBy(e.target.value as SizeBy)}>{ways.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
           <input id="pf-t-value" inputMode="decimal" aria-label="Size" value={value} onChange={(e) => setValue(e.target.value)} /><span className="u">{unit}</span></span>
       </div>
       {result}

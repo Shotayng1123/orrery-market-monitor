@@ -151,7 +151,7 @@ correction of the accepted cut that a check requires, with the owner told what c
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,539 checks in 57 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24), the Home Screen frame's `phone-frame` (111), and slice 11's new suite `tour` (101) and 7 more in `offline`): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,543 checks in 57 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24), the Home Screen frame's `phone-frame` (111), slice 11's new suite `tour` (101) and 7 more in `offline`, and the night review's fixes of 23 Nov (4 more in `pf-ticket`)): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -340,6 +340,9 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   to size an amount on; a future refused in words; a server of before the ticket; and on an iPhone 13 and an SE the
   ticket as a page of the book, 16-px inputs and 44-px taps, on a weekend's dated print and with a wide font, nothing
   of the ticket off the screen. (On a 320-px phone a long figure typed in the size box scrolls inside it: a later fix.)
+  Since the night review of 23 Nov 2026: the way a figure is sized is the way the menu shows, on a computer and an
+  iPhone 13 (N1-1: on the yen book, after "Amount in USD" for NVDA, 7203.T shows "% of capital" and sizes 2 as 2% of
+  capital, 66,900 shares, not as JPY 2; NVDA again keeps "% of capital").
   `source-lines` (round 3b, the designer's B.0.3 and B.1): every panel head's source line drawn whole or in its short
   form, never cut, at six windows and in a wider face, also as the window is resized; "personal use" whole, opening
   Help at its paragraph (in FULL too), and on a phone a space on each side of its dot; JPX's calendar named with
