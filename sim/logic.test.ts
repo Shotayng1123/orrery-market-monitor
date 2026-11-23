@@ -2340,6 +2340,13 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
       nyse.direct === 0 && nyse.answered === 0 && nyse.hop === false && nyse.asked.join() === "https://other.example/sho" && NYSE_HELD.every((u) => probe.heldWhy(u) !== null) && NYSE_FREE.every((u) => probe.heldWhy(u) === null) && /Go without/.test(nyseWhy) && /23 Nov 2026/.test(nyseWhy)
         && borrowNyse.length === 1 && borrowNyse[0] === "https://www.nyse.com/robots.txt" && /NOT ASKED \(held\)\s+https:\/\/www\.nyse\.com\/regulation\/threshold-securities/.test(borrowRun.out) && /requests made:/.test(borrowRun.out) && !/THE PROBE STOPPED/.test(borrowRun.out),
       { nyse, why: nyseWhy, borrowNyse, stopped: borrowRun.out.split("\n").filter((l) => /STOPPED|held/i.test(l)).slice(0, 6) });
+    // V7-4 of the check of batch 7b (23 Nov 2026): after the held page, step 1 still printed "\"NYSE\" is asked, a
+    // candidate" and put the download to the owner ("FOR THE OWNER"), who had answered "Go without" (23 Nov 2026, 01:42
+    // UTC). Step 1 now ends with a line that says the list is held by that answer
+    const step1 = borrowRun.out.slice(borrowRun.out.indexOf("== 1. NYSE"), borrowRun.out.indexOf("== 2. "));
+    ck(`V7-4: pf_borrow's step 1, run offline, says NYSE's threshold list is held by the owner's answer of 23 Nov 2026 ("Go without") and prints no market as a candidate to ask and nothing FOR THE OWNER (${step1.split("\n").filter((l) => l.trim()).length} lines)`,
+      borrowRun.out.indexOf("== 1. NYSE") >= 0 && borrowRun.out.indexOf("== 2. ") > borrowRun.out.indexOf("== 1. NYSE") && /held by the owner's answer of 23 Nov 2026, "Go without"/.test(step1) && !/candidate/i.test(step1) && !/FOR THE OWNER/.test(step1) && !/"NYSE" is asked|the download is NOT asked/.test(step1),
+      { step1: step1.split("\n").filter((l) => l.trim()) });
 
     // ---- PR-7: robots.txt ----
     const rob = await withSite({ "https://a.example/robots.txt": { type: "text/html", body: "User-agent: *\nDisallow: /\nCrawl-delay: 5\n" }, "https://b.example/robots.txt": { type: "text/html", body: "<!doctype html><html><head><title>Welcome</title></head><body>Home</body></html>" }, "https://c.example/robots.txt": { type: "text/plain", body: "User-agent: *\nDisallow: /private/\n" } }, async () => ({ a: await probe.robots("https://a.example", ["/data.csv"]), b: await probe.robots("https://b.example", ["/data.csv"]), c: await probe.robots("https://c.example", ["/data.csv"]) }));
