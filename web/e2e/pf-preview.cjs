@@ -9,6 +9,10 @@
 //   [3] Help says it, first in its Portfolio part; the classic phone layout's one-line page carries the line too
 //   [4] the other states draw no line: the switch on (the local copy's default) has the tab without it; an account
 //       outside the list (`om_paper = "0"`) has six tabs, #portfolio opens MARKETS, and the screens' file is not asked
+//   [5] a computer, the scrolling layout: the preview's header, seven tabs, as tall as everyone's, six, with the tabs and
+//       the search box on the one row they share (L2-2 of the night review of 23 Nov 2026: the seventh tab sent the box to
+//       a row of its own, two whole MARKETS rows fewer at 1280x720), from 1280 px wide and at each text size, with the
+//       stand-in's alert and with the alert line at its longest; every tab name whole, the box and its words as everyone's
 // The site as published, with the server's own answer, is checked by local-copy.cjs.
 // Run from web/:  node e2e/run.cjs pf-preview   (the runner starts the server this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
@@ -137,6 +141,41 @@ const line = (p) => p.evaluate(() => {
     const asked = files.filter((u) => /\/views\/Portfolio|\/components\/pf\//.test(u));
     ck(`${phone ? PHONES[phone] : "a computer"}, an account outside the list: ${v.tabs} ${phone ? "items" : "tabs"}, #portfolio/new shows MARKETS${phone ? "" : ", key 7 does nothing"}, no "Portfolio" on the page, and the screens' files are not asked for (${asked.length})`, v.tabs === 6 && v.view === "market" && v.hash === "#portfolio/new" && !v.line && !v.word && asked.length === 0 && errs.length === 0, { v, asked, errs });
     await ctx.close();
+  }
+
+  console.log("\n[5] a computer, the scrolling layout: the preview's header as tall as everyone's, the tabs and the search box on one row");
+  {
+    // the night review's clock (Tue 24 Nov 2026, 10:30 JST): Tokyo open and the stand-in's alert lit, a long line; then the
+    // line at its longest (its name written long, the line at its 420-px cap), as a long name would draw it
+    const LIT = "2026-11-24T01:30:00Z", LONG = "Mitsubishi UFJ Financial Group, Inc.";
+    const head = (p) => p.evaluate(() => {
+      const z = Number(document.body.style.zoom) || 1, R = (e) => e.getBoundingClientRect(), px = (x) => Math.round((x / z) * 10) / 10;
+      const tb = document.querySelector("#topbar"), kids = [...tb.children].filter((e) => getComputedStyle(e).display !== "none" && e.getClientRects().length);
+      const tops = [...new Set(kids.map((e) => Math.round(R(e).top / z)))].sort((x, y) => x - y), rows = [];
+      for (const t of tops) if (!rows.length || t - rows[rows.length - 1] > 8) rows.push(t);
+      const tabs = [...document.querySelectorAll("#nav a")], input = document.querySelector("#search input");
+      return { h: px(R(tb).height), rows: rows.length, n: tabs.length, cut: tabs.filter((a) => a.scrollWidth > a.clientWidth + 0.5 || R(a).right > innerWidth + 0.5).map((a) => a.textContent),
+        searchRow: Math.round(R(document.querySelector("#search")).top / z) - Math.round(R(document.querySelector("#nav")).top / z), box: px(R(input).width), words: input.placeholder,
+        past: [...tb.querySelectorAll("*")].filter((e) => e.getClientRects().length && getComputedStyle(e).position !== "absolute" && R(e).right > innerWidth + 0.5).length, sideways: document.documentElement.scrollWidth - innerWidth };
+    });
+    const longLine = (p, name) => p.evaluate((name) => { document.querySelector("#alerts .alrt .nm").textContent = name; }, name);
+    for (const [w, h, size] of [[1280, 720, "AUTO"], [1366, 768, "AUTO"], [1440, 900, "AUTO"], [1536, 864, "AUTO"], [1920, 1080, "AUTO"], [1440, 900, "S"], [1440, 900, "M"], [1440, 900, "L"], [1440, 900, "XL"]]) {
+      const pages = [];
+      for (const paper of ["preview", "0"]) {
+        const ctx = await b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
+        await ctx.addInitScript(([at, paper, size]) => { try { localStorage.setItem("om_mock_now", at); localStorage.setItem("om_a2hs_hide", "1"); localStorage.setItem("om_paper", paper); localStorage.setItem("om_prefs", JSON.stringify({ size, compact: false, v: 2 })); } catch {} }, [LIT, paper, size]);
+        const p = await ctx.newPage(), errs = []; p.on("pageerror", (e) => errs.push(e.message));
+        await go(p, "market", "table.mkt"); await p.waitForSelector("#alerts .alrt .nm", { timeout: 15000 }); await settle(p, 300);
+        pages.push({ ctx, p, errs });
+      }
+      const [seven, six] = [await head(pages[0].p), await head(pages[1].p)];
+      await longLine(pages[0].p, LONG); await longLine(pages[1].p, LONG); await settle(pages[0].p, 150); await settle(pages[1].p, 150);
+      const [sevenL, sixL] = [await head(pages[0].p), await head(pages[1].p)];
+      const same = (a, c) => a.n === 7 && c.n === 6 && a.rows === c.rows && Math.abs(a.h - c.h) <= 1 && a.cut.length === 0 && Math.abs(a.box - c.box) <= 0.5 && a.words === c.words && Math.abs(a.searchRow - c.searchRow) <= 2 && a.past === 0 && a.sideways <= 0;
+      ck(`${w}x${h}${size === "AUTO" ? "" : `, text ${size}`}: the preview's header is ${seven.h} px in ${seven.rows} rows, everyone's ${six.h} in ${six.rows} (with the alert line at its longest ${sevenL.h} and ${sixL.h}); every tab name whole, the search box ${seven.box} px with "${seven.words}", ${Math.abs(seven.searchRow) <= 2 ? "on the tabs' row" : "a row below the tabs"}, as everyone's`,
+        same(seven, six) && same(sevenL, sixL) && pages.every((x) => x.errs.length === 0), { seven, six, sevenL, sixL, errs: pages.map((x) => x.errs) });
+      for (const x of pages) await x.ctx.close();
+    }
   }
 
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0);

@@ -2076,6 +2076,17 @@ table#in-key td.l{min-width:9.5em}
    Only while the entry is drawn: #topbar carries .t7 with its seventh tab, #pnav .n7 with its seventh item (the
    published page has six of each until the paper book's switch is turned, lib/paper.ts). The screens' own rules are
    in styles/pf.css, loaded with the screens. */
+/* scrolling layout on a computer: the seventh tab takes nothing from the header's row either (L2-2 of the night review
+   of 23 Nov 2026: at 1280 px, and at 1440 in GitHub's letter placement, it sent the search box to a row of its own, a
+   row taller than six tabs and two whole MARKETS rows fewer). Its width comes back from the tabs' own side padding,
+   11 px to 6, and from the row's gaps, 14 px to 10 between its items and none before the tabs and the alert line: about
+   the seventh tab's width, so the row holds what it holds with six tabs, the search box and its words as they are.
+   Six tabs are drawn as before; the one-screen layout and the phones keep their own rules */
+@media (min-width:721px){
+  body:not(.term):not(.pv2) #topbar.t7{column-gap:10px}
+  body:not(.term):not(.pv2) #topbar.t7 #nav,body:not(.term):not(.pv2) #topbar.t7 #alerts{margin-left:0}
+  body:not(.term):not(.pv2) #topbar.t7 #nav a{padding:4px 6px}
+}
 /* one-screen layout: the seventh tab takes nothing from the header's row: its rule (below, "the one-screen header")
    gives every item its width whatever the number of tabs (until 22 Nov 2026 the search box was 64 px with seven tabs,
    200 px with the focus and laid over what followed, and the row still took two lines in GitHub's letter placement) */

@@ -151,7 +151,7 @@ correction of the accepted cut that a check requires, with the owner told what c
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,547 checks in 57 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24), the Home Screen frame's `phone-frame` (111), slice 11's new suite `tour` (101) and 7 more in `offline`, and the night review's fixes of 23 Nov (8 more in `pf-ticket`)): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,556 checks in 57 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24), the Home Screen frame's `phone-frame` (111), slice 11's new suite `tour` (101) and 7 more in `offline`, and the night review's fixes of 23 Nov (8 more in `pf-ticket` and 9 in `pf-preview`)): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -376,7 +376,10 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   local copy (`om_paper = "preview"`): the line first on every screen of the tab, the whole sentence on a computer, one
   line in a 44-px tap on an iPhone 13 and an iPhone SE (and whole, in its tap, with a wide font forced) that opens the
   sentence in a sheet, the statement still asked at the first CREATE, Help's Preview row, the classic phone layout, and
-  no line, or no tab and no screens' file, in the other two states.
+  no line, or no tab and no screens' file, in the other two states; and on a computer in the scrolling
+  layout, the preview's seven-tab header as tall as everyone's six-tab one, the search box on the row it has with six
+  tabs, at 1280x720, 1366x768, 1440x900, 1536x864 and 1920x1080 and at text S, M, L and XL, with the stand-in's alert
+  and with the alert line at its longest, every tab name whole and the box and its words as everyone's (L2-2).
   `cd web && npm run e2e` starts the test servers it needs and runs them all, up to three suites at a time (two of
   the dev servers' and one of the built site's, whose suites queue behind each other): about
   28 minutes on the engineer's machine (the whole run for the 57 suites and 3,539 checks of P-2.1, the Home Screen
