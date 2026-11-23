@@ -19,7 +19,7 @@ import { feedState } from "../_shared/feedhealth.ts";
 import { beatFresh, type Reading, type RelayNote } from "../_shared/relay.ts";
 import { LISTED_ALERTS } from "../_shared/sigma.ts";
 import { isPfAction, pfRoute, type PfFacts } from "../_shared/pf/route.ts";
-import { PAPER_ON_SERVER } from "../_shared/pf/switch.ts";
+import { PAPER_ON_SERVER, paperOpen, previewFor, previewList } from "../_shared/pf/switch.ts";
 import { sqlStore } from "../_shared/pfstore.ts";
 
 
@@ -39,7 +39,9 @@ Deno.serve(async (req) => {
     const user = await verifyToken(bearer(req));
     const account = user ? await accountFor(user) : null;
     if (!user || !account) return json(req, { error: "unauthorised" }, 401);
-    if (action === "me") return json(req, { email: account.email, role: account.role, mustChange: account.must_change });
+    // `paperPreview` (slice 9, 23 Nov 2026): whether this account is in the paper book's preview list
+    // (_shared/pf/switch.ts); a page of before then reads the first three fields alone
+    if (action === "me") return json(req, { email: account.email, role: account.role, mustChange: account.must_change, paperPreview: previewFor(PAPER_ON_SERVER, previewList(Deno.env.get("PF_PREVIEW_EMAILS")), account.email) });
     if (action === "change_password") return await changePassword(req, account);
     // a password set by the manager opens nothing until its owner has replaced it
     if (account.must_change) return json(req, { error: "Change your password first" }, 403);
@@ -47,11 +49,13 @@ Deno.serve(async (req) => {
       if (account.role !== "manager") return json(req, { error: "forbidden" }, 403);
       return action === "admin_users" ? await adminUsers(req) : action === "mail_test" ? await mailTest(req, account) : await adminSet(req, account);
     }
-    // The paper portfolio (P-1): its routes, through the database's functions only. While the server's switch is off
-    // (_shared/pf/switch.ts) each refuses before anything is read or written, the request's own body included.
+    // The paper portfolio (P-1): its routes, through the database's functions only. They admit an account while the
+    // server's switch is on, or while the account is in the preview list (_shared/pf/switch.ts, PF_PREVIEW_EMAILS);
+    // for any other each refuses as before, before anything is read or written, the request's own body included.
     if (isPfAction(action)) {
-      const body = PAPER_ON_SERVER && req.method === "POST" ? ((await req.json().catch(() => ({}))) as Record<string, unknown>) : {};
-      const r = await pfRoute({ on: PAPER_ON_SERVER, store: sqlStore((fn, args) => db.rpc(fn, args)), now: () => new Date(), facts: paperFacts }, action, account.email, req.method, q, body);
+      const open = paperOpen(PAPER_ON_SERVER, previewList(Deno.env.get("PF_PREVIEW_EMAILS")), account.email);
+      const body = open && req.method === "POST" ? ((await req.json().catch(() => ({}))) as Record<string, unknown>) : {};
+      const r = await pfRoute({ on: open, store: sqlStore((fn, args) => db.rpc(fn, args)), now: () => new Date(), facts: paperFacts }, action, account.email, req.method, q, body);
       return json(req, r.body, r.status);
     }
     switch (action) {
