@@ -45,10 +45,13 @@ intraday prices, yield curves, calendar, news, notes, reports and sign-ins; pg_c
 ## Deploying the server (since 2026-11-18: from GitHub)
 
 The database changes and the three functions are deployed by the `deploy-server` workflow, the way `deploy-web` publishes
-the site: a push to `main` that touches `supabase/` deploys it. Nobody needs the Supabase CLI or a key on their own
-machine, so a change can come from any session. Deploying by hand (`npx supabase db push --remote` and `npx supabase
-functions deploy tick daily api --use-api`, the commands of CLI 3: below) still works, but then deploy only what is
-already on `main`, or the next automatic deploy will put `main`'s code back.
+the site: a push to `main` deploys it when it changes a file under `supabase/migrations/` or `supabase/functions/`,
+`supabase/config.toml`, `jobs/tools/deploy_guard.jq` or `.github/workflows/deploy-server.yml` (the workflow's
+`on.push.paths`); a push that changes only other files, this README or `cron.sql` among them, deploys nothing. Nobody
+needs the Supabase CLI or a key on their own machine, so a change can come from any session. Deploying by hand
+(`npx supabase db push --remote` and `npx supabase functions deploy tick daily api --use-api`, the commands of CLI 3:
+below) still works, but then deploy only what is already on `main`, or the next automatic deploy will put `main`'s code
+back.
 
 Set up once, in the repository's Settings › Secrets and variables › Actions › Secrets:
 

@@ -113,8 +113,12 @@ Monitor's.
 2. Repository variable `VITE_API_URL` = the Monitor API URL.
 3. Push to `main` (or run the `deploy-web` workflow). The site is served at `https://shotayng1123.github.io/orrery-market-monitor/`.
 
-The server (database changes and the functions) is deployed by the `deploy-server` workflow on a push to `main` that
-touches `supabase/`, once its two secrets exist; the set-up and the first-time steps are in `supabase/README.md`.
+The server (database changes and the functions) is deployed by the `deploy-server` workflow, once its two secrets exist,
+on a push to `main` that changes a file under `supabase/migrations/` or `supabase/functions/`, `supabase/config.toml`,
+`jobs/tools/deploy_guard.jq` or the workflow itself (`.github/workflows/deploy-server.yml`): its `on.push.paths`. A push
+that changes only other files, `supabase/README.md` or `supabase/cron.sql` among them, deploys nothing. Run by hand, the
+workflow shows what a deploy would change (mode `check`) or deploys (mode `deploy`). The set-up and the first-time steps
+are in `supabase/README.md`.
 
 ## The tour (since 2026-11-23)
 
