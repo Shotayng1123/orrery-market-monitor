@@ -74,6 +74,7 @@ const SUITES = [
   { name: "portfolio-accounts", needs: ["mock", "gate"] },
   { name: "source-lines", needs: ["mock"] },
   { name: "source-lines-fit", needs: ["mock"] },
+  { name: "source-lines-min", needs: ["mock"] },
   { name: "stock-line", needs: ["mock"] },
   { name: "portfolio-fixes", needs: ["mock"] },
   { name: "pf-verdicts-forms", needs: ["mock"] },

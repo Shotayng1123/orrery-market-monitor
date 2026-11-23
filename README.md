@@ -110,7 +110,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,230 checks in 51 suites on 23 Nov 2026): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,271 checks in 52 suites on 23 Nov 2026): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -277,19 +277,29 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   2026, split off and widened, each suite under three minutes): on EQUITIES in the one-screen layout, every head on
   one line, taking no whole table row and no chart height from the live site's (the market open and closed, TOPIX and
   the three indices whose names are a STAND-IN, KOSPI, NASDAQ COMP and SHANGHAI COMP, at 1280×720, 1179×800, 1114×800
-  S and 1769×1000 XL, and in DejaVu Sans), with every badge of its whole line whole in it; and a Tokyo stock's index
-  memberships credited on the line itself, and for fifteen names, real-world ones and far longer ones, at the least
-  window of each text size, the line never cut, its symbol, sources, credit and "personal use" never left out (its
-  industry, then its sector, then its exchange go first), and in the scrolling and the classic phone layouts the
-  credit adding at most one line to the head.
+  S and 1769×1000 XL, and in DejaVu Sans), with every badge of its whole line whole in it (`source-lines-min`, split
+  off from `source-lines-fit` in batch 7a to keep each under three minutes: at the least window of each text size, in
+  session and on a weekend whose turnover time carries its day, every minimal form keeping what each short form keeps,
+  FLOW BY SECTOR its currency, the heads whose panels draw the 1W to 12M columns their close, a net flow from another
+  pull its date, each head's tooltip with a badge's word apart from its neighbours and the INTRADAY badge apart from
+  the word after it); and a Tokyo stock's index memberships credited on the line itself, and for
+  fifteen names, real-world ones and far longer ones, at the least window of each text size, the line never cut, its
+  symbol, sources, credit and "personal use" never left out (its industry, then its sector, then its exchange go
+  first; on the head's second line it takes back what fits there), in the scrolling and the classic phone layouts the
+  credit adding at most one line to the head, and in the classic phone layout, for names of 37 to 51 characters at
+  320 and 390 px, the line on a row of its own under the name with every part that is never left out whole inside the
+  window and the panel, no part split over two lines, and a name wider than its row ending with an ellipsis inside the
+  panel, its tooltip whole.
   `portfolio`, `phone-portfolio` and `source-lines` also check the "personal use" lines, which are live on the published
   page, and `local-copy` opens the built site on both layouts to check the state the page's switch says: with it off,
   six tabs, no "PORTFOLIO" or "Portfolio" anywhere, `#portfolio/new` showing MARKETS, no portfolio route asked, and
   no file of the portfolio's screens or of its stand-in books among the published files.
   `cd web && npm run e2e` starts the test servers it needs and runs them all, up to three suites at a time (two of
   the dev servers' and one of the built site's, whose suites queue behind each other): about
-  28 minutes on the engineer's machine (1,631 s as installed and 1,677 s with GitHub's letter placement on 23 Nov
-  2026 for the 51 suites and 3,230 checks, after the check of fix part 4; 1,666 s and 1,659 s for the 49 suites and
+  28 minutes on the engineer's machine (the whole run for the 52 suites and 3,271 checks of batch 7a, 23 Nov 2026, is
+  not timed there yet: its new suite, `source-lines-min`, took 101 to 107 s beside the others; 1,631 s as installed
+  and 1,677 s with GitHub's letter placement on 23 Nov 2026 for 51 suites and 3,230 checks, after the check of fix
+  part 4; 1,666 s and 1,659 s for the 49 suites and
   3,195 checks after the check of fix part 3; 1,781 s and 1,721 s on 22 Nov for the 49
   suites and 3,179 checks after the final review of pull request #50; 1,687 s and 1,601 s for the
   49 suites and 3,156 checks before it, which took 1,247 s on GitHub; 1,206 s for the 43 suites, with `header`; 1,204 s
@@ -418,9 +428,11 @@ tooltip, a phone's opened Tokyo row on a holiday, Help's "Holidays · scheduled"
 its index memberships, "NK225, TOPIX (Nikkei, JPX · personal use)". In the one-screen layout a source line too long
 for its head is drawn in a short form that keeps the publisher, every as-of, a state (INTRADAY, STAND-IN) and
 "personal use": "JPX · personal use" on SHORT INTEREST, with the whole line as the head's tooltip; then in a compact
-form, the same parts written as a cell writes them; then in a minimal one, the state's badges and the time of the
-figures alone ("INTRADAY 1D 10:12 SGT STAND-IN", "turnover 10:12 SGT STAND-IN": since the check of fix part 4, where a
-STAND-IN badge made even the compact form too wide on KOSPI, NASDAQ COMP and SHANGHAI COMP). A stock's line leaves
+form, the same parts written as a cell writes them; then in a minimal one, the state's badges, the unit and the times
+of the figures alone ("INTRADAY 10:12 SGT · close 24 Nov STAND-IN" where the panel draws the 1W to 12M columns,
+"INTRADAY 1D 10:12 SGT STAND-IN" on HEAT MAP, "KRW · turnover 10:12 SGT STAND-IN" on FLOW BY SECTOR, whose net flow is
+read from the same quotes in the same pull: since the check of fix part 4, where a STAND-IN badge made even the
+compact form too wide on KOSPI, NASDAQ COMP and SHANGHAI COMP; the unit and the close since batch 7a). A stock's line leaves
 out its industry, then its sector, then its exchange, never its symbol, its memberships with their credit, or Yahoo
 Finance. A line is never cut. Where even the last form takes the lines under the title, the panel takes that height
 from the chart beside it, never from its table: on EQUITIES, MARKET BREADTH and FLOW BY SECTOR from the heat map under
