@@ -277,7 +277,7 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   refused in words, with no size beside it; the sides a book with no position allows; a stopped feed's print too old
   to size an amount on; a future refused in words; a server of before the ticket; and on an iPhone 13 and an SE the
   ticket as a page of the book, 16-px inputs and 44-px taps, on a weekend's dated print and with a wide font, nothing
-  cut.
+  of the ticket off the screen. (On a 320-px phone a long figure typed in the size box scrolls inside it: a later fix.)
   `source-lines` (round 3b, the designer's B.0.3 and B.1): every panel head's source line drawn whole or in its short
   form, never cut, at six windows and in a wider face, also as the window is resized; "personal use" whole, opening
   Help at its paragraph (in FULL too), and on a phone a space on each side of its dot; JPX's calendar named with
