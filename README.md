@@ -110,7 +110,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,271 checks in 52 suites on 23 Nov 2026): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,277 checks in 53 suites on 23 Nov 2026): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -296,8 +296,10 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   no file of the portfolio's screens or of its stand-in books among the published files.
   `cd web && npm run e2e` starts the test servers it needs and runs them all, up to three suites at a time (two of
   the dev servers' and one of the built site's, whose suites queue behind each other): about
-  28 minutes on the engineer's machine (the whole run for the 52 suites and 3,271 checks of batch 7a, 23 Nov 2026, is
-  not timed there yet: its new suite, `source-lines-min`, took 101 to 107 s beside the others; 1,631 s as installed
+  28 minutes on the engineer's machine (the whole run for the 53 suites and 3,277 checks of slice 8, 23 Nov 2026, took
+  1,987 s there as installed, with other work loading the machine to a one-minute load of 6 to 10, and is not timed
+  GitHub's way: its new suite, `letter-placement`, takes 5 to 11 s, and batch 7a's, `source-lines-min`, took 101 to
+  107 s beside the others; 1,631 s as installed
   and 1,677 s with GitHub's letter placement on 23 Nov 2026 for 51 suites and 3,230 checks, after the check of fix
   part 4; 1,666 s and 1,659 s for the 49 suites and
   3,195 checks after the check of fix part 3; 1,781 s and 1,721 s on 22 Nov for the 49
@@ -308,11 +310,40 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   drawings of the fixes after that day's checks; 1,136 s for the 40 suites with the paper portfolio's three; 1,029 s
   for the 37 suites and 2,337 checks before them, which took 977 s on GitHub; the 34 suites and 2,052 checks before
   that day's first three new suites took 14.5 minutes there and 13 on GitHub). `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
-  On GitHub the publish runs them as two jobs of about equal time, each with its own 30-minute limit and both needed
-  for a publish (`deploy-web`'s `test`, `node e2e/run.cjs --part=1`, two suites at a time, and `test-2`, `--part=2`:
-  every suite not in the runner's `PART_ONE`, the built site's among them); in one job they took 25 min 17 s of its 30
-  (run 45080955695, 22 Nov 2026, 23:01 to 23:27 UTC). On the engineer's machine with GitHub's letter placement part 1
-  took 951 s and part 2 817 s (23 Nov 2026, after the check of fix part 4).
+  On GitHub the publish runs them in two parts of about equal time (`node e2e/run.cjs --part=1`, two suites at a time,
+  and `--part=2`: every suite not in the runner's `PART_ONE`, the built site's among them), and since slice 8 (23 Nov
+  2026) each part in both letter placements: four jobs of `deploy-web`, each with its own 30-minute limit and all four
+  needed for a publish. `test` and `test-2` run in the browser's own placement, GitHub's (`E2E_PLACEMENT=github`);
+  `test-installed` and `test-2-installed` with `E2E_PLACEMENT=installed`. In one job the two parts took 25 min 17 s of
+  its 30 (run 45080955695, 22 Nov 2026, 23:01 to 23:27 UTC). On the engineer's machine with GitHub's letter placement
+  part 1 took 951 s and part 2 817 s (23 Nov 2026, after the check of fix part 4).
+  **The two letter placements.** A line of text is not as wide in every browser: the engineer's machine starts
+  Playwright's Chromium through a launcher that adds `--font-render-hinting=none` and `--disable-lcd-text`, and each
+  letter keeps its fractional width there; GitHub's runner starts it without them, and a letter takes a whole number
+  of px (IBM Plex Mono at 13 px: 8 px a letter, not 7.8), so a line comes out a few px wider or narrower (a cell with
+  less than that to spare fits in one and not in the other: TOPIX's name cell and two header checks of the paper
+  portfolio, 21 Nov 2026). Readers' browsers differ in the same way, so
+  a layout has to pass both ways. `web/e2e/placement.cjs`, which `run.cjs` loads into every suite, adds those two
+  switches to every browser a suite starts when `E2E_PLACEMENT=installed`, and nothing with `github` or none (any
+  other value stops the run); `letter-placement` (part 2, so in `test-2` and `test-2-installed`) checks that, and
+  prints the width of one line both ways (on the engineer's machine 234.813 px as installed and 240 px on whole px, in
+  DejaVu Sans Mono loaded by the page at 13 px). A slice is checked in both placements on GitHub, so once these four jobs pass the engineer's whole run as
+  installed is no longer required of it.
+  **What each of GitHub's jobs draws in, and how to draw it again on the engineer's machine.** All four draw in the
+  page's own faces, IBM Plex Mono, IBM Plex Sans JP and Cormorant Garamond, which the runner takes from
+  fonts.googleapis.com (`web/index.html`); the engineer's machine takes them from there too, through its own network
+  (checked on 23 Nov 2026: every face file asked was answered, and the page drew in IBM Plex Mono and Cormorant
+  Garamond). `test-installed` and `test-2-installed`: `cd web && node e2e/run.cjs [suite …]` as installed draws the
+  same way (`E2E_PLACEMENT=installed` adds the switches the launcher already adds). `test` and `test-2`: the same
+  command with the browser started with `--font-render-hinting=full`, by a preload loaded with
+  `NODE_OPTIONS="--require <its absolute path>"` that adds it to every `chromium.launch()` (the engineer keeps one
+  outside the repository; `letter-placement` writes a small one of its own); measured there, every line is then on
+  whole px. With `E2E_PLACEMENT=installed` such a preload has to come after `placement.cjs` in `NODE_OPTIONS`, or
+  `placement.cjs` stops the run: the switch given last is the one the browser keeps. One difference no switch
+  removes: a letter drawn in a font of the machine itself (one the page's faces lack, such as σ, or a check that
+  forces `monospace`) follows that machine's own font settings in both placements, and the engineer's machine has
+  every system font set unhinted. Should that machine stop reaching fonts.googleapis.com, its runs draw in fallback
+  faces and are no longer GitHub's: the faces then have to be served to its browser from copies.
   A suite that fails once is tried again; when the second try passes, the lines that failed the first time are
   printed all the same, so a check that fails only now and then can be found from the publish job's log.
   Needs Playwright's browser once: `npx playwright install chromium`.

@@ -5,8 +5,15 @@
 //   node e2e/run.cjs offline notifications    only these (names as in SUITES below)
 //   node e2e/run.cjs --serial                 one suite at a time (default: up to three at once, two of the dev
 //                                             servers' suites and one of the built site's; part 1 has none of those)
-//   node e2e/run.cjs --part=1                 the first of the two halves GitHub runs as two jobs (deploy-web.yml),
-//   node e2e/run.cjs --part=2                 and the second: every suite not in PART_ONE below
+//   node e2e/run.cjs --part=1                 the first of the two halves GitHub runs as jobs of their own
+//   node e2e/run.cjs --part=2                 (deploy-web.yml), and the second: every suite not in PART_ONE below
+//   E2E_PLACEMENT=installed node e2e/run.cjs  the same with letters placed as on the engineer's machine (fractional
+//                                             widths): e2e/placement.cjs, which this runner loads into every suite;
+//                                             E2E_PLACEMENT=github, or none, leaves the browser's own placement
+//
+// GitHub runs each part in both letter placements, four jobs that a publish needs all of (deploy-web.yml, since slice
+// 8 of 23 Nov 2026): a slice is checked both ways there, and the engineer's whole run as installed is no longer
+// needed for it. README.md ("Tests") says what each of GitHub's jobs draws in and how each is drawn again here.
 //
 // The runner starts the servers the chosen suites need, runs the suites, tries a failed one once more, prints
 // one line per suite (with the failed lines of a first try that the second try passed) and exits with 1 if any
@@ -18,6 +25,11 @@
 //                  worker, version.json. Suites that rewrite its files run one after another.
 // A dev server already answering on its port is used as it is. Logs and screenshots go to e2e/.out (git-ignored).
 const { spawn, spawnSync } = require("child_process"), fs = require("fs"), http = require("http"), path = require("path");
+// the letter placement: read and held to "installed", "github" or none here, before any server starts, and loaded
+// into every suite below (a misspelt E2E_PLACEMENT stops the run at once)
+const PLACEMENT = path.join(__dirname, "placement.cjs");
+require(PLACEMENT);
+const placed = globalThis[Symbol.for("orrery.e2e.placement")];
 const WEB = path.join(__dirname, ".."), OUT = path.join(__dirname, ".out"), DIST = path.join(__dirname, ".dist"), VITE = path.join(WEB, "node_modules", "vite", "bin", "vite.js");
 const BASE = "/orrery-market-monitor/";
 const SERVERS = {
@@ -79,10 +91,12 @@ const SUITES = [
   { name: "portfolio-fixes", needs: ["mock"] },
   { name: "pf-verdicts-forms", needs: ["mock"] },
   { name: "pf-verdicts-settings", needs: ["mock"] },
+  { name: "letter-placement", needs: [] },
 ];
-// The publish's browser checks run on GitHub as two jobs, each with its own 30-minute limit (deploy-web.yml): at the
-// fixes after the final review of pull request #50 the one job took 25 min 17 s of its 30 (run 45080955695, 22 Nov
-// 2026, 23:01 to 23:27 UTC). PART_ONE is about half of the suites' time (the per-suite seconds of the whole run of 22
+// The publish's browser checks run on GitHub in two parts, each with its own 30-minute limit (deploy-web.yml; since
+// slice 8 each part in both letter placements, four jobs): at the fixes after the final review of pull request #50
+// the one job took 25 min 17 s of its 30 (run 45080955695, 22 Nov 2026, 23:01 to 23:27 UTC). PART_ONE is about half
+// of the suites' time (the per-suite seconds of the whole run of 22
 // Nov, GitHub's letter placement, 3,573 s in all; on d549a59 GitHub's two browser steps took 12 min 2 s and 12 min 37 s),
 // and part 2 every other suite, so a new suite is never left out: it joins part 2 until it is placed here. The suites of
 // the built site stay together in part 2 (the build is made once there). source-lines-fit joined part 1 and stock-line
@@ -124,7 +138,7 @@ process.on("SIGINT", () => { stopAll(); process.exit(130); });
 function runOnce(suite, attempt) {
   return new Promise((res) => {
     const t0 = Date.now(), file = path.join(OUT, `${suite.name}${attempt > 1 ? `.try${attempt}` : ""}.log`), out = fs.openSync(file, "w");
-    const c = spawn(process.execPath, [path.join(__dirname, `${suite.name}.cjs`)], { cwd: OUT, env: process.env, stdio: ["ignore", out, out] });
+    const c = spawn(process.execPath, ["--require", PLACEMENT, path.join(__dirname, `${suite.name}.cjs`)], { cwd: OUT, env: process.env, stdio: ["ignore", out, out] });
     const timer = setTimeout(() => { try { c.kill("SIGKILL"); } catch { /* gone */ } }, 6 * 60e3);
     c.on("exit", (code) => { clearTimeout(timer); fs.closeSync(out); const text = fs.readFileSync(file, "utf8"); res({ ok: code === 0, secs: Math.round((Date.now() - t0) / 1000), passed: (text.match(/^\s*✓ (?!all checks)/gm) || []).length, failed: (text.match(/^\s*✗ (?!\d+ check)/gm) || []), text }); });
   });
@@ -150,6 +164,7 @@ async function run(suite) {
   fs.mkdirSync(OUT, { recursive: true });
   const t0 = Date.now(); let results = [];
   try {
+    console.log(`letter placement: ${placed.mode === "installed" ? `installed (every browser a suite starts gets ${placed.switches.join(" ")}: e2e/placement.cjs)` : "the browser's own (E2E_PLACEMENT is github or unset)"}\n`);
     console.log("servers:");
     for (const id of Object.keys(SERVERS)) if (chosen.some((s) => s.needs.includes(id))) await start(id);   // one after another: they share vite's dependency cache
     // suites of the built site rewrite its files, so they queue behind each other; the rest run alongside, two at a time
