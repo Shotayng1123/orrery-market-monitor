@@ -4,11 +4,14 @@
 // characters, every state of a calendar event, every kind of watchlist name, one alert of each kind, a policy rate
 // for every bank. The star and the add box work there, nothing says the API is not configured, `?mock=empty` draws
 // every tab with no rows, and the site as published carries none of these rows.
-// The site as published also has nothing of the paper portfolio while the page's switch is off (P-1, 21 Nov 2026:
-// PAPER_ON_LIVE_SITE in src/lib/paper.ts; P-1 to P-4a go live together): the built site is opened on both layouts
-// and has six tabs, no "PORTFOLIO" and no "Portfolio" anywhere, #portfolio/new showing MARKETS, key 7 doing nothing,
-// no call to a portfolio route, and its files hold neither the portfolio's screens nor the local copy's stand-in
-// books. When the switch is turned the same block checks the other state: the seventh tab and its screens' file.
+// The site as published shows nothing of the paper portfolio while the page's switch is off (P-1, 21 Nov 2026:
+// PAPER_ON_LIVE_SITE in src/lib/paper.ts; P-1 to P-4a go live together), but to an account the server names in its
+// preview list (slice 9, 23 Nov 2026). Its files hold the portfolio's screens as a file of their own, and never the
+// local copy's stand-in books. The built site is opened on both layouts for an account outside the list, a server of
+// before the preview and nobody signed in: six tabs, no "PORTFOLIO" and no "Portfolio" anywhere, #portfolio/new
+// showing MARKETS, key 7 doing nothing, no call to a portfolio route, the screens' file never fetched; and for an
+// account in the list: the seventh tab, its screens' file, the preview line. When the switch is turned the same block
+// checks every account for the seventh tab, without the line.
 // Run from web/:  node e2e/run.cjs local-copy   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright"); const fs = require("fs"), path = require("path");
 const { S } = require("./standin.cjs"); const { routes } = require("./harness.cjs");
@@ -173,34 +176,50 @@ const calRows = (p, phone) => p.evaluate((phone) => phone
     // and the paper portfolio's stand-in books (lib/mockPf.ts), which no build carries, with the page's switch on or off;
     // and since RA-3 of the release audit of pull request #50 (23 Nov 2026): every "Nippon Stand-in" name (9990.T's long
     // one in lib/mockStock.ts among them), the local copy's names key, its preview account (App.tsx) and the stand-in
-    // alert's KIOXIA (lib/standin.json)
+    // alert's KIOXIA (lib/standin.json); and since slice 9 the local copy's key for the paper book's state (lib/paper.ts)
     const marks = [H120, T110, LONG, JP, ZEW, "om_mock_watch", "Nippon Stand-in Heavy Industries", "σ of 63 daily changes to the last close", "GCG27.CMX", "GCZ26.CMX", "NKDZ26.CME", "om_mock_now", "2027-03-22",
       "Tokyo L/S", "Global long/short on a yen base", "Autos into results", "Short side trimmed ahead", "stand-in failure", "second@mock.local", "om_mock_pf",
-      "Nippon Stand-in", "om_mock_names", "preview@mock.local", "KIOXIA"].filter((s) => js.includes(s));
+      "Nippon Stand-in", "om_mock_names", "preview@mock.local", "KIOXIA", "om_paper"].filter((s) => js.includes(s));
     ck(`the site as published (a production build) carries none of the stand-in rows (${js.length} characters of script searched)`, js.length > 100000 && marks.length === 0, marks);
-    // ---- the paper portfolio and the page's switch ----
-    const files = fs.readdirSync(DIST), all = files.filter((f) => /\.(js|css)$/.test(f)).map((f) => fs.readFileSync(path.join(DIST, f), "utf8")).join("\n") + fs.readFileSync(path.join(DIST, "..", "index.html"), "utf8");
-    const screens = files.filter((f) => /^Portfolio-/.test(f)), words = ["PORTFOLIO", "Portfolio", "aper portfolio", "pf_create", "pf_list"].filter((w) => all.includes(w));
-    console.log(`\n[the paper portfolio on the site as published: the page's switch is ${PAPER_ON_LIVE_SITE ? "ON" : "off"} (PAPER_ON_LIVE_SITE, src/lib/paper.ts)]`);
-    if (!PAPER_ON_LIVE_SITE) ck(`the published files hold nothing of it: no file of the portfolio's screens among ${files.length}, and neither "PORTFOLIO", "Portfolio", "paper portfolio" nor a portfolio route's name in any script, stylesheet or the page itself`, screens.length === 0 && words.length === 0, { screens, words });
-    else ck("the published files hold the portfolio's screens as a file of their own", screens.some((f) => f.endsWith(".js")) && screens.some((f) => f.endsWith(".css")), files);
+    // ---- the paper portfolio: the page's switch, and the preview the server grants an account (slice 9) ----
+    // Every build carries the screens as a file of their own, asked for only where the page draws the paper book: the
+    // switch on, or the server's `me` saying `paperPreview` for the account signed in (lib/paper.ts). Each account is
+    // opened at #portfolio/new with the server's answer: one in the preview list, one outside it, a server of before
+    // the preview (no such field), and nobody signed in.
+    const files = fs.readdirSync(DIST), page = fs.readFileSync(path.join(DIST, "..", "index.html"), "utf8");
+    const screens = files.filter((f) => /^Portfolio-.*\.(js|css)$/.test(f));
+    console.log(`\n[the paper portfolio on the site as published: the page's switch is ${PAPER_ON_LIVE_SITE ? "ON" : "off"} (PAPER_ON_LIVE_SITE, src/lib/paper.ts), and the preview by the server's word]`);
+    ck(`the published files hold the portfolio's screens as a file of their own (${screens.join(", ")}), which the page itself does not name: it is asked for only when the tab is opened`, screens.some((f) => f.endsWith(".js")) && screens.some((f) => f.endsWith(".css")) && !screens.some((f) => page.includes(f)), files);
     const token = Buffer.from(JSON.stringify({ id: "reader@example.com" })).toString("base64") + ".sig";
+    const ok = (body) => ({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(body) });
+    // the tab's own routes, answered as the server answers an account it admits (no book, the statement not agreed): the
+    // harness's default answer is no form's, and the tab would fail on it (PC-7)
+    const FORM = { today: "2026-11-21", nextSession: "2026-11-23", valuationDay: "2026-11-20", nyDate: "2026-11-21", rates: { USD: null, JPY: null }, usdjpy: null, cap: 5, open: 0, names: [], consent: { version: 1, text: "Private notes, levels and paper portfolios are kept for your account only.", label: "I will not enter non-public or confidential information.", agreedAt: null } };
+    const ACCOUNTS = [["outside the list", { paperPreview: false }], ["of a server of before the preview (no paperPreview)", {}], ["in the preview list", { paperPreview: true }], ["signed out", null]];
     for (const [name, opts, phone] of [["computer 1440x900", { viewport: { width: 1440, height: 900 } }, false], ["iPhone 13", { ...devices["iPhone 13"] }, true]]) {
-      const ctx = await b.newContext(opts); await ctx.addInitScript((t) => { try { localStorage.setItem("om_token", t); } catch {} }, token);
-      const p = await ctx.newPage(); const errs = [], asked = []; p.on("pageerror", (e) => errs.push(e.message));
-      await routes(p);
-      // with the page's switch on, the tab's own routes are answered as the server would (an account with no book that
-      // has not agreed to the statement): the harness's default answer is no form's, and the tab would fail on it (PC-7)
-      const ok = (body) => ({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(body) });
-      const FORM = { today: "2026-11-21", nextSession: "2026-11-23", valuationDay: "2026-11-20", nyDate: "2026-11-21", rates: { USD: null, JPY: null }, usdjpy: null, cap: 5, open: 0, names: [], consent: { version: 1, text: "Private notes, levels and paper portfolios are kept for your account only.", label: "I will not enter non-public or confidential information.", agreedAt: null } };
-      await p.route("**/fakeapi?*", (r) => { const a = new URL(r.request().url()).searchParams.get("action"); asked.push(a); if (a === "me") return r.fulfill(ok({ email: "reader@example.com", role: "user", mustChange: false })); if (PAPER_ON_LIVE_SITE && a === "pf_form") return r.fulfill(ok(FORM)); if (PAPER_ON_LIVE_SITE && a === "pf_list") return r.fulfill(ok({ rows: [], cap: 5, open: 0 })); return r.fallback(); });
-      await p.goto(PREVIEW + "#portfolio/new", { waitUntil: "networkidle" }); await p.waitForSelector(phone ? "#pnav" : "#nav", { timeout: 20000 }); await p.waitForSelector("#grid", { timeout: 20000 }); await p.waitForTimeout(1500);
-      if (!phone) { await p.keyboard.press("7"); await p.waitForTimeout(300); }
-      const seen = await p.evaluate((phone) => { const text = [document.documentElement.innerText, document.title, ...[...document.querySelectorAll("*")].flatMap((e) => [e.getAttribute("title") ?? "", e.getAttribute("aria-label") ?? "", e.getAttribute("placeholder") ?? "", e.getAttribute("alt") ?? ""])].join("\n");
-        return { view: document.querySelector("#grid")?.dataset.view ?? null, hash: location.hash, tabs: [...document.querySelectorAll(phone ? "#pnav a" : "#nav a")].map((a) => a.textContent), word: /portfolio/i.exec(text)?.[0] ?? null, marks: !!document.querySelector("#topbar.t7, #pnav.n7"), dev: !!document.querySelector("#mockbar"), form: !!document.querySelector("#pf-create, #pf-review, #pf-cards"), crash: !!document.querySelector("#tab-crash") }; }, phone);
-      const routesAsked = asked.filter((a) => /^(pf_|consent)/.test(a ?? ""));
-      if (!PAPER_ON_LIVE_SITE) ck(`the built site on a ${name}: ${seen.tabs.length} ${phone ? "items in the bar" : "tabs"} (${seen.tabs.join(" · ")}), #portfolio/new shows MARKETS${phone ? "" : ", key 7 does nothing"}, no "PORTFOLIO" and no "Portfolio" on the page, in a tooltip or in a label, and the page has asked no portfolio route (${asked.length} calls)`, seen.tabs.length === 6 && seen.view === "market" && seen.hash === "#portfolio/new" && seen.word === null && !seen.marks && !seen.dev && routesAsked.length === 0 && asked.length > 0 && errs.length === 0, { seen, routesAsked, errs });
-      else ck(`the built site on a ${name}: the seventh ${phone ? "item" : "tab"} is there and #portfolio/new opens the tab's own screen (the form, not the crash notice)`, seen.tabs.length === 7 && seen.view === "portfolio" && seen.marks && seen.form && !seen.crash && errs.length === 0, { seen, errs });
-      await ctx.close(); } }
+      for (const [who, me] of ACCOUNTS) {
+        const listed = !!me?.paperPreview, shown = PAPER_ON_LIVE_SITE || listed;
+        const ctx = await b.newContext(opts); if (me) await ctx.addInitScript((t) => { try { localStorage.setItem("om_token", t); } catch {} }, token);
+        const p = await ctx.newPage(); const errs = [], asked = [], fetched = []; p.on("pageerror", (e) => errs.push(e.message)); p.on("request", (r) => { if (/\/assets\/Portfolio-/.test(r.url())) fetched.push(r.url().split("/").pop()); });
+        await routes(p);
+        await p.route("**/fakeapi?*", (r) => { const a = new URL(r.request().url()).searchParams.get("action"); asked.push(a); if (a === "me") return r.fulfill(ok({ email: "reader@example.com", role: "user", mustChange: false, ...me })); if (shown && a === "pf_form") return r.fulfill(ok(FORM)); if (shown && a === "pf_list") return r.fulfill(ok({ rows: [], cap: 5, open: 0 })); return r.fallback(); });
+        await p.goto(PREVIEW + "#portfolio/new", { waitUntil: "networkidle" });
+        if (me) { await p.waitForSelector(phone ? "#pnav" : "#nav", { timeout: 20000 }); await p.waitForSelector("#grid", { timeout: 20000 }); }
+        else await p.waitForSelector("input[type=password]", { timeout: 20000 });
+        if (shown && me) await p.waitForSelector("#pf-create, #pf-review, #pf-cards", { timeout: 20000 }).catch(() => undefined);
+        await p.waitForTimeout(1500);
+        if (!phone && me && !shown) { await p.keyboard.press("7"); await p.waitForTimeout(300); }
+        const seen = await p.evaluate((phone) => { const text = [document.documentElement.innerText, document.title, ...[...document.querySelectorAll("*")].flatMap((e) => [e.getAttribute("title") ?? "", e.getAttribute("aria-label") ?? "", e.getAttribute("placeholder") ?? "", e.getAttribute("alt") ?? ""])].join("\n");
+          const l = document.querySelector("#pf-preview"), tx = l?.querySelector(".tx"), rg = document.createRange(); if (tx) rg.selectNodeContents(tx);
+          return { view: document.querySelector("#grid")?.dataset.view ?? null, hash: location.hash, tabs: [...document.querySelectorAll(phone ? "#pnav a" : "#nav a")].map((a) => a.textContent), word: /portfolio/i.exec(text)?.[0] ?? null, marks: !!document.querySelector("#topbar.t7, #pnav.n7"), dev: !!document.querySelector("#mockbar"), form: !!document.querySelector("#pf-create, #pf-review, #pf-cards"), crash: !!document.querySelector("#tab-crash"),
+            line: l ? { text: l.innerText.replace(/\s+/g, " ").trim(), first: document.querySelector("#grid").firstElementChild === l, h: Math.round(l.getBoundingClientRect().height), lines: tx ? new Set([...rg.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top))).size : null } : null }; }, phone);
+        const routesAsked = asked.filter((a) => /^(pf_|consent)/.test(a ?? ""));
+        if (!me) ck(`the built site on a ${name}, nobody signed in: the sign-in screen, no "Portfolio" on it, no portfolio route asked and the screens' file never fetched (${asked.length} calls)`, seen.word === null && routesAsked.length === 0 && fetched.length === 0 && !seen.dev && errs.length === 0, { seen, routesAsked, fetched, errs });
+        else if (!shown) ck(`the built site on a ${name}, an account ${who}: ${seen.tabs.length} ${phone ? "items in the bar" : "tabs"} (${seen.tabs.join(" · ")}), #portfolio/new shows MARKETS${phone ? "" : ", key 7 does nothing"}, no "PORTFOLIO" and no "Portfolio" on the page, in a tooltip or in a label, no portfolio route asked and the screens' file never fetched (${asked.length} calls)`, seen.tabs.length === 6 && seen.view === "market" && seen.hash === "#portfolio/new" && seen.word === null && !seen.marks && !seen.dev && !seen.line && routesAsked.length === 0 && fetched.length === 0 && asked.length > 0 && errs.length === 0, { seen, routesAsked, fetched, errs });
+        else ck(`the built site on a ${name}, an account ${who}: the seventh ${phone ? "item" : "tab"}, #portfolio/new opens the tab's own screen (the form, not the crash notice) from its own file (${fetched.join(", ")})${PAPER_ON_LIVE_SITE ? "" : `, its first line the preview's ("${seen.line?.text.slice(0, 40)}…"${phone ? `, one line in ${seen.line?.h} px` : ""})`}`, seen.tabs.length === 7 && seen.view === "portfolio" && seen.marks && seen.form && !seen.crash && fetched.some((f) => f.endsWith(".js")) && errs.length === 0
+          && (PAPER_ON_LIVE_SITE ? !seen.line : !!seen.line && seen.line.first && /^PREVIEW Only you/.test(seen.line.text) && (!phone || (seen.line.lines === 1 && seen.line.h === 44))), { seen, fetched, errs });
+        await ctx.close();
+      }
+    } }
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

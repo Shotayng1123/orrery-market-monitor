@@ -8,7 +8,7 @@
 //   the device is offline: the second, with RELOAD;
 //   otherwise (online; the check names this page's build or does not answer): the third, with RELOAD.
 // Nothing is said of what the other version holds, nor whether it is newer. The console keeps the error.
-// Only a build that carries the paper book reaches this file (App.tsx asks for it behind __PAPER_BUILD__).
+// Reached only where the page draws the paper book (lib/paper.ts: the switch on, or a preview for this account).
 import { useEffect, useState } from "react";
 import { BUILD_ID, latestBuild, loadBuild } from "../lib/update";
 

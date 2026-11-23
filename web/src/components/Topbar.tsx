@@ -11,16 +11,18 @@ import { allStatuses, haveHolidays, type MarketId } from "../lib/sessions";
 import { marketSession } from "../lib/opens";
 import { fmtClock, fmtWhen, SGT, TZ_ABBR } from "../lib/time";
 import { PORTFOLIO, TAB } from "../lib/labels";
-import { PAPER } from "../lib/paper";
+import { paperShown, usePaper } from "../lib/paper";
 import { SIZES, termWhy, type Prefs, type SizeKey } from "../lib/prefs";
 
 export type ViewId = "market" | "news" | "research" | "equities" | "rates" | "watch" | "asset" | "portfolio";
 /** The tabs, in the glossary's words (lib/labels.ts): MARKETS · NEWS · RESEARCH · EQUITIES · RATES & FX · WATCHLIST,
- *  and PORTFOLIO as the seventh where the paper book is on (lib/paper.ts). Keys 1 to 6, or 1 to 7, follow this list. */
-export const VIEWS: Array<{ id: ViewId; label: string }> = [
-  ...(["market", "news", "research", "equities", "rates", "watch"] as const).map((id) => ({ id, label: TAB[id].toUpperCase() })),
-  ...(__PAPER_BUILD__ && PAPER ? [{ id: "portfolio" as const, label: PORTFOLIO.toUpperCase() }] : []),
-];
+ *  and PORTFOLIO as the seventh where the paper book is drawn (lib/paper.ts: on, or a preview for this account). Keys
+ *  1 to 6, or 1 to 7, follow this list. */
+const SIX: Array<{ id: ViewId; label: string }> = (["market", "news", "research", "equities", "rates", "watch"] as const).map((id) => ({ id, label: TAB[id].toUpperCase() }));
+const SEVEN: Array<{ id: ViewId; label: string }> = [...SIX, { id: "portfolio", label: PORTFOLIO.toUpperCase() }];
+export const tabsFor = (shown: boolean): Array<{ id: ViewId; label: string }> => (shown ? SEVEN : SIX);
+/** The tabs as the page draws them now (read at the moment: an address, a key). */
+export const views = (): Array<{ id: ViewId; label: string }> => tabsFor(paperShown());
 const CHIP_MARKETS: MarketId[] = ["TSE", "HKEX", "SSE", "KRX", "SGX", "LSE", "NYSE"];
 
 export interface TopbarProps {
@@ -51,6 +53,7 @@ const COMPACT_OFF = {
 } as const;
 
 export function Topbar(p: TopbarProps) {
+  const VIEWS = tabsFor(usePaper() !== "off");
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const t = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(t); }, []);
   // seconds to the next refresh, from the clock this bar already keeps; null when the loop is off or not yet timed

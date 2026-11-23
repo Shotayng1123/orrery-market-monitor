@@ -45,7 +45,8 @@ web/        Vite + React + TypeScript. src/styles/tokens.css is the design syste
             there and the tab under it stays (since the final review of pull request #50).
             "Add Orrery to your Home Screen" opens in it, from its line on MARKETS or from the menu.
             src/views/Portfolio.tsx, src/components/pf/, src/styles/pf.css: the paper portfolio's screens (P-1), a
-            file of their own that only a build carrying the paper book makes (src/lib/paper.ts: the page's switch).
+            file of their own in every build, fetched only where the page draws the paper book (src/lib/paper.ts:
+            the page's switch, or the preview the server grants an account).
             src/lib/pf/ is a copy of the server's engine (supabase/functions/_shared/pf/), written by
             `node tools/sync-pf.cjs` from web/ and never edited by hand; the logic checks fail when the two differ.
 supabase/   migrations/ and functions/ (tick, daily, api), cron.sql.
@@ -110,7 +111,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,277 checks in 53 suites on 23 Nov 2026): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,296 checks in 54 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290) and slice 8's `letter-placement` (6)): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -207,9 +208,9 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   wider, 3.3% more width in the monospaced figures, about three times what GitHub's machines add; on a phone also
   with every face swapped for the generic monospace). A forced monospace alone widens next to nothing on a
   computer: IBM Plex Mono's letters are 0.600 of their size wide, DejaVu Sans Mono's 0.602, Liberation Mono's 0.600.
-  The **paper portfolio** (P-1, on the development servers, where its switch is always on) has seven suites
-  (`portfolio`, `phone-portfolio`, `layout-guard-portfolio`, `portfolio-accounts`, `portfolio-fixes`,
-  `pf-verdicts-forms` and `pf-verdicts-settings`), and the one-screen header's three (`header`, `header-sizes`,
+  The **paper portfolio** (P-1, on the development servers, where it is drawn switched on unless `om_paper` says
+  otherwise) has eight suites (`portfolio`, `phone-portfolio`, `layout-guard-portfolio`, `portfolio-accounts`,
+  `portfolio-fixes`, `pf-verdicts-forms`, `pf-verdicts-settings` and `pf-preview`), and the one-screen header's three (`header`, `header-sizes`,
   `header-wide`) count six tabs and seven.
   `portfolio` (a computer): the seventh tab at six sizes with the header as tall as with six tabs, in the machine's
   fonts and in a wide one; key 7; with no book,
@@ -292,15 +293,21 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   panel, its tooltip whole.
   `portfolio`, `phone-portfolio` and `source-lines` also check the "personal use" lines, which are live on the published
   page, and `local-copy` opens the built site on both layouts to check the state the page's switch says: with it off,
-  six tabs, no "PORTFOLIO" or "Portfolio" anywhere, `#portfolio/new` showing MARKETS, no portfolio route asked, and
-  no file of the portfolio's screens or of its stand-in books among the published files.
+  for an account outside the preview list, a server of before the preview and nobody signed in, six tabs, no
+  "PORTFOLIO" or "Portfolio" anywhere, `#portfolio/new` showing MARKETS, no portfolio route asked and the screens' file
+  never fetched; for an account in the list, the seventh tab, the form from the screens' own file, and the preview
+  line; and no file of the portfolio's stand-in books among the published files. `pf-preview` draws the preview on the
+  local copy (`om_paper = "preview"`): the line first on every screen of the tab, the whole sentence on a computer, one
+  line in a 44-px tap on an iPhone 13 and an iPhone SE (and whole, in its tap, with a wide font forced) that opens the
+  sentence in a sheet, the statement still asked at the first CREATE, Help's Preview row, the classic phone layout, and
+  no line, or no tab and no screens' file, in the other two states.
   `cd web && npm run e2e` starts the test servers it needs and runs them all, up to three suites at a time (two of
   the dev servers' and one of the built site's, whose suites queue behind each other): about
-  28 minutes on the engineer's machine (the whole run for the 53 suites and 3,277 checks of slice 8, 23 Nov 2026, took
-  1,987 s there as installed, with other work loading the machine to a one-minute load of 6 to 10, and is not timed
-  GitHub's way: its new suite, `letter-placement`, takes 5 to 11 s, and batch 7a's, `source-lines-min`, took 101 to
-  107 s beside the others; 1,631 s as installed
-  and 1,677 s with GitHub's letter placement on 23 Nov 2026 for 51 suites and 3,230 checks, after the check of fix
+  28 minutes on the engineer's machine (the whole run for the 54 suites and 3,296 checks of slices 8 and 9 together
+  is not yet timed in one run; slice 9's 53 suites and 3,290 checks took 2,061 s as installed, its new suite,
+  `pf-preview`, 40 to 50 s; slice 8's 53 suites and 3,277 checks 1,987 s, its new suite, `letter-placement`, 5 to
+  11 s; both with other work on the machine; batch 7a's `source-lines-min` took 101 to 107 s beside the others;
+  1,631 s as installed and 1,677 s with GitHub's letter placement on 23 Nov 2026 for 51 suites and 3,230 checks, after the check of fix
   part 4; 1,666 s and 1,659 s for the 49 suites and
   3,195 checks after the check of fix part 3; 1,781 s and 1,721 s on 22 Nov for the 49
   suites and 3,179 checks after the final review of pull request #50; 1,687 s and 1,601 s for the
@@ -408,7 +415,8 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   repository holds (the number of browser suites in `web/e2e/run.cjs`, the paper portfolio's suites by name, the suites
   described here by name, which suites check the "personal use" lines, the windows of the morning check, what `pf_jpx`
   asks, the terms gate's examples put to the gate itself), and the sentences of the two READMEs that name the code
-  (the "personal use" paragraph word for word, the paper portfolio's two switches, the account statement as
+  (the "personal use" paragraph word for word, the paper portfolio's two switches and how its preview is given and
+  taken back, with the page's three states as `web/src/lib/paper.ts` names them, the account statement as
   `supabase/README.md` quotes it). The logic checks stop a deploy of the server and of the site; until 23 Nov 2026 they
   held all of these, a change to either README alone ran no check at all, and a rewording could merge unchecked and
   stop the next deploy. Since then the logic checks read neither README (the checks of the checks left them first, the
@@ -770,27 +778,61 @@ name. There are no orders, no NAV and no limits at work yet: the book's page say
   `om_mock_pf_delay` = `400` (every write answered after that many milliseconds), `om_mock_pf_off` = `1` (the stand-in
   server's paper switch off: every route answers "Paper portfolios are not available yet."). With
   `om_mock_now` = `2026-12-15T02:00:00Z` the targets' window is open. `om_paper = "0"` shows the local copy as the
-  published page is today, with six tabs.
+  published page is today for an account outside the preview list, with six tabs; `om_paper = "preview"` as it is for
+  an account in it, with the preview line on every screen of the tab.
 
 ### The paper portfolio's two switches
 
 P-1 to P-4a go live together: a book whose limits and ladder are not yet enforced would start a record under rules
-that change midway. Until P-4a is accepted both switches are **off**:
+that change midway. Until P-4a is accepted both switches are **off**, with one exception, the **preview** (the owner,
+23 Nov 2026: "Yeah just turn on for me for now and you can keep refining them"):
 
 | Switch | File | Off (today) | On |
 |---|---|---|---|
-| the page's | `web/src/lib/paper.ts`, `PAPER_ON_LIVE_SITE` | the published page has six tabs and six bar items, keys 1 to 6, and `#portfolio` opens MARKETS as any unknown address does; the portfolio's screens are not in the published files (a build with the switch off does not make their file) | the seventh tab PORTFOLIO, the seventh bar item, key 7, the route |
-| the server's | `supabase/functions/_shared/pf/switch.ts`, `PAPER_ON_SERVER` | every portfolio route of the API answers 404 "Paper portfolios are not available yet." before it reads or writes anything; the tables are deployed and stay empty | the routes answer for the signed-in account |
+| the page's | `web/src/lib/paper.ts`, `PAPER_ON_LIVE_SITE` | the published page has six tabs and six bar items, keys 1 to 6, and `#portfolio` opens MARKETS as any unknown address does; the file of the portfolio's screens is in the published files but never fetched | the seventh tab PORTFOLIO, the seventh bar item, key 7, the route |
+| the server's | `supabase/functions/_shared/pf/switch.ts`, `PAPER_ON_SERVER` | every portfolio route of the API answers 404 "Paper portfolios are not available yet." before it reads or writes anything | the routes answer for the signed-in account |
 
-Development servers (the local copy, the checks' stand-in servers) always show the paper book. To turn it on for
-users, set both constants to `true` in one pull request, when P-4a is accepted; the site and the server are published
-minutes apart, and in between a page that asks a server still off shows the server's sentence and nothing else
-breaks. `web/e2e/local-copy.cjs` checks the built site for the state the page's constant says (with it off: no
-"PORTFOLIO" and no "Portfolio" anywhere on the page, `#portfolio/new` showing MARKETS; on: the seventh tab and the
-form, not the crash notice), `web/e2e/offline.cjs` counts the bar's items the constant says (six or seven), and the
-logic checks that the two constants are the same and that a refused route reaches neither the store nor the server's
-facts. So the pull request that turns the book on changes the two constants and nothing else; no check has to be
-rewritten for it (since 22 Nov 2026: the logic file asserted both off, and the offline check six items).
+**The preview.** With both switches off, the accounts whose sign-in email is in the server's secret
+`PF_PREVIEW_EMAILS` see the paper book, and nobody else does. The page is then in one of three states
+(`web/src/lib/paper.ts`): **off** (every other account, and anyone signed out: the page as above, its screens' file
+never fetched), **preview** (an account in the list: the seventh tab, its screens, and on every one of them a first
+line that says it is a preview only this account sees, that its rules are still being built (orders and fills, the
+daily NAV, and the limits and the ladder at work come next), and that a book made now may be reset when they change;
+on a phone one line whose tap opens that sentence), and **on** (the switches turned: every account, without the line).
+The server decides alone: each portfolio route admits an account when `PAPER_ON_SERVER` is true or the account's email
+is in the list, and refuses every other, and a request with no account, as above, before it reads anything. The API's
+`me` tells the signed-in page `paperPreview: true` for an account in the list, and `false` for every other; a page of
+before the preview reads only the answer's first three fields, and a server of before it sends no such field, so the
+page then shows nothing of the paper book. The list is kept only in the repository's secret: one or more addresses,
+separated by commas, compared without spaces at either end and without regard to case. No address is written in the
+repository. The statement is still asked once, before an account's first portfolio or note, and the database's walls
+(row level security, `pf_selftest`) are the same. A book made in the preview may be reset when the rules change.
+
+- **To add an account** (the owner's): on GitHub, the repository's **Settings › Secrets and variables › Actions ›
+  New repository secret**, name `PF_PREVIEW_EMAILS`, value the account's sign-in email (several: separated by commas).
+  The next server deploy stores it on the server (deploy-server runs on a push to main that changes the server's
+  files, or by hand: **Actions › deploy-server › Run workflow** with mode `deploy`). Then sign in again, or reload
+  the page: the tab appears once the page has the server's answer.
+- **To change the list**: edit the same secret (**Update secret**), then the next server deploy.
+- **To remove it**: delete the repository secret `PF_PREVIEW_EMAILS`; the next server deploy (or deploy-server run by
+  hand in mode `deploy`) removes it from the server too, and the paper book is shown to nobody, as before. The books
+  made in the preview stay in the database, under their account.
+
+Development servers (the local copy, the checks' stand-in servers) show the paper book switched on, or as an
+account outside the list (`om_paper = "0"`) or in it (`om_paper = "preview"`) sees it. To turn it on for users, set
+both constants to `true` in one pull request, when P-4a is accepted; the site and the server are published minutes
+apart, and in between a page that asks a server still off shows the server's sentence and nothing else breaks (the
+server goes first: its `paperPreview` is then false for everyone, and a page still off draws the tab for nobody until
+the new page is published). `web/e2e/local-copy.cjs` checks the built site for every account against the state the
+page's constant says (with it off: for an account outside the list, a server of before the preview and nobody signed
+in no "PORTFOLIO" and no "Portfolio" anywhere on the page, `#portfolio/new` showing MARKETS, the screens' file never
+fetched; for an account in the list the seventh tab, the form and the preview line; on: the seventh tab and the form,
+not the crash notice, for every account), `web/e2e/pf-preview.cjs` the preview on every screen of the tab on the
+local copy, `web/e2e/offline.cjs` counts the bar's items the constant says (six or seven), and the logic checks that
+the two constants are the same, the preview list's rules, that the API decides per account before any route and reads
+no body for an account it does not admit, and that a refused route reaches neither the store nor the server's facts.
+So the pull request that turns the book on changes the two constants and nothing else; no check has to be rewritten
+for it (since 22 Nov 2026: the logic file asserted both off, and the offline check six items).
 
 ## Morning Notes
 

@@ -1,6 +1,6 @@
 import { pageHash } from "./lib/indices";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Topbar, VIEWS, type ViewId } from "./components/Topbar";
+import { Topbar, views, type ViewId } from "./components/Topbar";
 import { CrashSwitch, TabGuard } from "./components/TabGuard";
 import { unloadedTab } from "./components/PortfolioUnloaded";
 import { Gate } from "./auth/Gate";
@@ -38,12 +38,14 @@ import { AssetView } from "./views/Asset";
 import { WatchlistView } from "./views/Watchlist";
 import { CardLayer } from "./components/CompanyCard";
 import { navChanged, navDrawn, navPopped, navStart } from "./lib/nav";
+import { setServerPreview, usePaper } from "./lib/paper";
 
 // The paper portfolio's screens (P-1) are a file of their own, asked for when the tab is first opened, and only where
-// the build carries the paper book (lib/paper.ts): a build with the switch off does not make that file. A file that
-// cannot be loaded in this page (a later publish replaced it; the device is offline and never opened the tab) gives a
-// tab that says so and offers UPDATE or RELOAD (DC-4: components/PortfolioUnloaded.tsx), never the crash notice.
-const PortfolioView = __PAPER_BUILD__ ? lazy(() => import("./views/Portfolio").catch((e: unknown) => ({ default: unloadedTab(e) }))) : null;
+// the page draws the paper book (lib/paper.ts: the switch on, or a preview for this account): for anyone else the
+// file is never asked for. A file that cannot be loaded in this page (a later publish replaced it; the device is
+// offline and never opened the tab) gives a tab that says so and offers UPDATE or RELOAD (DC-4:
+// components/PortfolioUnloaded.tsx), never the crash notice.
+const PortfolioView = lazy(() => import("./views/Portfolio").catch((e: unknown) => ({ default: unloadedTab(e) })));
 
 interface Route { view: ViewId; sub: string }
 function parseHash(): Route {
@@ -55,7 +57,7 @@ function parseHash(): Route {
     if (to === "equities") { history.replaceState(history.state, "", `#equities/${id}`); return { view: "equities", sub: id }; }   // the entry keeps its key (lib/nav.ts)
     return { view: "asset", sub };
   }
-  return { view: VIEWS.some((x) => x.id === v) ? (v as ViewId) : "market", sub };
+  return { view: views().some((x) => x.id === v) ? (v as ViewId) : "market", sub };
 }
 const setHash = (view: ViewId, sub = "") => { location.hash = sub ? `${view}/${sub}` : view; };
 
@@ -96,13 +98,31 @@ export default function App() {
   useEffect(() => { if (verify && userId && userId === verify.email) setVerify(null); }, [verify, userId]);
   const [notify, setNotify] = useState(false);
   useEffect(() => { const f = () => setNotify(true); window.addEventListener(NOTIFY_EVENT, f); return () => window.removeEventListener(NOTIFY_EVENT, f); }, []);
+  // `me` also carries the server's word on the paper book's preview for this account (lib/paper.ts): until it has
+  // answered, and for another account, the page draws none of it (a new sign-in of the same account, after a change of
+  // password, keeps it until the answer comes). Asked again when the connection comes back, if a start without one
+  // left it unanswered.
+  const previewOf = useRef<string | null>(null);
   useEffect(() => {
+    const who = token && !DEV_BYPASS ? tokenId(token) : null;
+    if (who !== previewOf.current) { previewOf.current = who; setServerPreview(false); }
     if (!token || DEV_BYPASS) { setMe(null); return; }
     if (DEV_MOCK) { setMe({ email: "preview@mock.local", role: "manager", mustChange: false }); return; }
-    let live = true;
-    api<Me>("me").then((m) => { if (live) setMe(m); }).catch(() => { /* a 401 signs out through om:unauth */ });
-    return () => { live = false; };
+    let live = true, answered = false;
+    const ask = () => { api<Me>("me").then((m) => { if (!live) return; answered = true; setMe(m); setServerPreview(m.paperPreview); }).catch(() => { /* a 401 signs out through om:unauth */ }); };
+    const again = () => { if (!answered) ask(); };
+    ask();
+    window.addEventListener("online", again);
+    return () => { live = false; window.removeEventListener("online", again); };
   }, [token]);
+  // an address of the paper book opened before that word came (a bookmark of #portfolio) is read again once it has;
+  // one of an account without it opens MARKETS, as any unknown address does
+  const paper = usePaper(), paperRead = useRef(paper);
+  useEffect(() => {
+    if (paperRead.current === paper) return;
+    paperRead.current = paper;
+    const r = parseHash(); navStart(r); setRoute(r);
+  }, [paper]);
 
   // B-28: a page opened from a list starts at its top, and Back returns the list to where it stood (lib/nav.ts)
   useEffect(() => { const f = () => { const r = parseHash(); navChanged(r); setRoute(r); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
@@ -135,7 +155,8 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if (["INPUT", "SELECT", "TEXTAREA"].includes((e.target as HTMLElement | null)?.tagName ?? "")) return;   // typing in a field or a drop-down (its list jumps to the typed character) is not a shortcut
       if (e.key === "Escape") goFull(false);
-      if (e.key.length === 1 && e.key >= "1" && e.key <= String(VIEWS.length)) { const v = VIEWS[Number(e.key) - 1]; if (v) setHash(v.id); }   // 1 to 6; 1 to 7 where the paper portfolio's tab is drawn
+      const tabs = views();
+      if (e.key.length === 1 && e.key >= "1" && e.key <= String(tabs.length)) { const v = tabs[Number(e.key) - 1]; if (v) setHash(v.id); }   // 1 to 6; 1 to 7 where the paper portfolio's tab is drawn
     };
     window.addEventListener("keydown", onKey); return () => window.removeEventListener("keydown", onKey);
   }, []);
@@ -223,7 +244,7 @@ export default function App() {
         </div></div>
       )}
       <Topbar view={view} tick={tick} onNav={(v) => setHash(v)} userId={me?.email ?? userId} onSignOut={() => (me ? setAcct(true) : signOut())} updatedAt={updatedAt} nextAt={nextAt} polling={polling} hit={hit} health={healthState} healthTitle={healthTitle} onRefresh={() => void refresh()} prefs={prefs} onPrefs={setPrefs} onFull={goFull} pv2={pv2} canPreview={phone} term={term} />
-      <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–{VIEWS.length} TABS · ESC</span><span>&#9974;</span></div>
+      <div id="fsx" onClick={() => goFull(false)} title="Leave fullscreen (Esc)"><span className="mut">1–{paper === "off" ? 6 : 7} TABS · ESC</span><span>&#9974;</span></div>
       <div id="wrap">
         <div id="grid" data-view={view}>
           <TabGuard key={`${view}/${pv2 ? "p" : "d"}`} resetKey={sub ?? ""}>
@@ -235,7 +256,7 @@ export default function App() {
           {view === "equities" && (pv2 ? <EquitiesPhone sub={sub} onSub={(s) => setHash("equities", s)} tick={tick} /> : <EquitiesView sub={sub} onSub={(s) => setHash("equities", s)} tick={tick} />)}
           {view === "rates" && (pv2 ? <RatesPhone tick={tick} /> : <RatesFxView sub={sub} onSub={(s) => setHash("rates", s)} tick={tick} />)}
           {view === "asset" && (pv2 ? <AssetPhone symbol={sub} tick={tick} /> : <AssetView symbol={sub} tick={tick} />)}
-          {view === "portfolio" && PortfolioView && <Suspense fallback={<div className="c12 mut" id="pf-wait">loading…</div>}><PortfolioView sub={sub} tick={tick} phone={pv2} classic={phone && !pv2} /></Suspense>}
+          {view === "portfolio" && paper !== "off" && <Suspense fallback={<div className="c12 mut" id="pf-wait">loading…</div>}><PortfolioView sub={sub} tick={tick} phone={pv2} classic={phone && !pv2} /></Suspense>}
           </TabGuard>
         </div>
         <footer>Orrery Monitor shows market data from third-party feeds (Yahoo Finance; US Treasury; Japan MOF; exchange and central-bank publications) that may be delayed or incomplete; every panel states its source and as-of time. Information only; nothing here is investment advice. Default time zone: Singapore.</footer>

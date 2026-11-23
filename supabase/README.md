@@ -257,7 +257,8 @@ Only port 465 (encrypted from the first byte) is spoken: Supabase does not let a
 
 Where to put them: as repository secrets with the same names (Settings › Secrets and variables › Actions), then run
 `deploy-server` by hand with **deploy**; its "Email sender" step stores on the server whichever of them are set and
-removes nothing. Or set them directly: Supabase dashboard › Edge Functions › Secrets (they apply at once).
+removes none of them (the one secret that step removes is the paper book's preview list, "The paper portfolio"). Or set
+them directly: Supabase dashboard › Edge Functions › Secrets (they apply at once).
 
 Then check it: sign in as the manager, Account › Accounts › **SEND A TEST EMAIL**. It sends one message to the
 manager's address and, if the mail server refuses, shows the server's own words (a wrong app password reads
@@ -481,10 +482,22 @@ the reasons can be there before the page is opened: Actions › move-causes › 
 ## The paper portfolio (added 2026-11-21; migration `20261121000001_pf_store.sql`)
 
 P-1 of the paper portfolio: the statement an account agrees to, its portfolios, their settings with the history, and
-its notes. No orders, no prices and no NAV yet. **Nothing of it is usable on the live Monitor until P-4a is accepted**:
-the API's portfolio routes refuse while `PAPER_ON_SERVER` (`functions/_shared/pf/switch.ts`) is `false`, and the page
-shows no entry while `PAPER_ON_LIVE_SITE` (`web/src/lib/paper.ts`) is `false`. Both are turned in one pull request
-(`README.md`, "The paper portfolio's two switches"). The migration deploys now: six tables, empty.
+its notes. No orders, no prices and no NAV yet. **Nothing of it is usable on the live Monitor until P-4a is accepted**,
+but for the preview: the API's portfolio routes refuse while `PAPER_ON_SERVER` (`functions/_shared/pf/switch.ts`) is
+`false`, and the page shows no entry while `PAPER_ON_LIVE_SITE` (`web/src/lib/paper.ts`) is `false`. Both are turned in
+one pull request (`README.md`, "The paper portfolio's two switches"). The migration deploys now: six tables.
+
+- **The preview** (the owner, 23 Nov 2026: "Yeah just turn on for me for now and you can keep refining them"). With
+  both switches off, the routes admit an account whose sign-in email is in the server's secret `PF_PREVIEW_EMAILS`
+  (one or more addresses separated by commas, compared without spaces at either end and without regard to case), and
+  `me` answers `paperPreview: true` for it, so the page draws the tab marked as a preview; every other account, and a
+  request with no account, is refused as before, before anything is read or written. The list is read from the secret
+  at each request. It is kept only in the repository secret of the same name, which deploy-server's step "Email sender
+  and data keys" stores on the server when it is there, and removes from the server when it is not (no value is
+  printed). To add the owner: GitHub › the repository's Settings › Secrets and variables › Actions › New repository
+  secret, name `PF_PREVIEW_EMAILS`, value the sign-in email; then the next server deploy (or deploy-server run by hand
+  in mode `deploy`). To remove it: delete that secret, then the same. Row level security, the functions' walls and
+  `pf_selftest` are unchanged: the preview opens the API's door for the listed accounts and nothing else.
 
 - **Tables**: `consent_statements` (version 1 seeded), `account_consents`, `pf_portfolios`, `pf_settings` (append-only:
   a change is a new row, in force from the next session), `pf_notes` (never edited; a removed note keeps a line with

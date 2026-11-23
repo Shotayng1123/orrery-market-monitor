@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { PAPER } from "../lib/paper";
+import { usePaper, type PaperState } from "../lib/paper";
 import { NOT_USED_TEXT, PERSONAL_USE_READ, PERSONAL_USE_TEXT } from "../lib/labels";
 import { HELP_EVENT, HELP_PERSONAL_USE } from "./PersonalUse";
 import { backEntry } from "./Sheet";
@@ -9,9 +9,11 @@ import { backEntry } from "./Sheet";
  *  place and readable on a phone (the same explanations otherwise sit in hover tooltips, which a phone lacks). */
 /** A row: what it is about, the explanation, and for a row another screen opens Help at, its id. */
 type Row = [string, string] | [string, string, string];
-// The paper portfolio's part (P-1), in Help only where the tab is drawn (lib/paper.ts): what its screens show today.
-// The paragraphs on tracking error and on risk-adjusted figures come with the screens that show those figures.
-const PORTFOLIO_ROWS: Row[] = !__PAPER_BUILD__ ? [] : [
+// The paper portfolio's part (P-1), in Help only where the tab is drawn (lib/paper.ts): what its screens show today;
+// in the preview (slice 9) with the preview's own row first. The paragraphs on tracking error and on risk-adjusted
+// figures come with the screens that show those figures.
+const PREVIEW_ROW: Row = ["Preview", "The paper portfolio is a preview here: only your account sees it, while its rules are still being built. Orders and fills, the daily NAV, and the limits and the ladder at work come next, and a book made now may be reset when they change. Every screen of the tab says so on its first line. The statement is still asked once, before your first portfolio or note."];
+const PORTFOLIO_ROWS: Row[] = [
   ["Paper, and only you", "A paper portfolio places no real order, has no broker and holds no money. It belongs to the account that made it: the book, its settings and its notes are reached through that account's sign-in, and the Monitor has no screen that shows one account's book to another. The manager can reset an account's password: that ends the account's sessions and its old password, and whoever then signs in with the new one is in that account. Before the first one the Monitor asks you to agree to one statement, once."],
   ["Target return · Target volatility", "A book aims at no index. Its target return is cash plus a margin a year (cash + 5% to start): cash is the overnight rate of the book's base currency, EFFR for a dollar book and TONA for a yen book. Its target volatility is a share of capital a year. Neither is a limit. The form prints what they mean together: the implied Sharpe ratio (the margin ÷ the target volatility), the one-day VaR the volatility implies against the VaR limit, and the ladder's first step in target volatilities."],
   ["Cash + x% as one figure", "Under the target return: the same target as one percentage, at the latest stored rate, named with its date and source (= 9.21% a year at EFFR 3.88% for 18 Nov 2026). Cash compounds at each weekday's strike, a weekend counting three days, on actual days over 360 for a dollar rate and over 365 for a yen rate; the margin compounds on top: (1 + cash) × (1 + x) − 1. The figure moves with the rate; the target itself is cash + x%."],
@@ -129,13 +131,18 @@ const SECTIONS: Array<{ title: string; rows: Row[] }> = [
     ["\u2020", "Worked out by the Monitor from figures a source gives, not given by the source itself: on an instrument's page the 52-week high and low with their dates, realised volatility and its percentile, the largest rise and fall. The line under the panel says from which figures and over which dates."],
     ["Zero", "A change that rounds to zero at the precision shown is written without a sign and in grey (0.0%, 0.0bp), never as −0.0%."],
     ["Data sources · personal use", `${PERSONAL_USE_TEXT} ${PERSONAL_USE_READ} ${NOT_USED_TEXT}`, HELP_PERSONAL_USE],
-    ["Keys", `1 to ${PAPER ? 7 : 6} switch tabs; / jumps to search; Esc leaves full screen.`],
   ] },
-  ...(__PAPER_BUILD__ && PAPER ? [{ title: "Portfolio", rows: PORTFOLIO_ROWS }] : []),
+];
+/** Help as drawn in the paper book's state (lib/paper.ts): the keys row, the last of "Data and timing", counts its
+ *  tab, and its part follows. */
+const sectionsFor = (paper: PaperState): Array<{ title: string; rows: Row[] }> => [
+  ...SECTIONS.slice(0, -1),
+  { ...SECTIONS[SECTIONS.length - 1], rows: [...SECTIONS[SECTIONS.length - 1].rows, ["Keys", `1 to ${paper === "off" ? 6 : 7} switch tabs; / jumps to search; Esc leaves full screen.`]] },
+  ...(paper === "off" ? [] : [{ title: "Portfolio", rows: paper === "preview" ? [PREVIEW_ROW, ...PORTFOLIO_ROWS] : PORTFOLIO_ROWS }]),
 ];
 
 export function Help() {
-  const [open, setOpen] = useState(false), [at, setAt] = useState<string | null>(null);
+  const [open, setOpen] = useState(false), [at, setAt] = useState<string | null>(null), paper = usePaper();
   useEffect(() => {
     if (!open) return;
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
@@ -166,7 +173,7 @@ export function Help() {
             <div className="helphead"><b>HOW TO READ THE MONITOR</b><span className="chip-sm" onClick={() => setOpen(false)}>CLOSE</span></div>
             <div className="helpbody">
               <div className="helpcols">
-                {SECTIONS.map((s) => (
+                {sectionsFor(paper).map((s) => (
                   <div key={s.title} className="helpsec">
                     <h4>{s.title}</h4>
                     <dl>{s.rows.map(([k, v, id]) => <div key={k} id={id ? `help-${id}` : undefined} className={id && id === at ? "at" : undefined}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>

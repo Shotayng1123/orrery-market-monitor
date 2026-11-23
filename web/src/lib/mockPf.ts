@@ -1,5 +1,6 @@
 // Dev-only: the paper portfolios of the local copy (P-1, 21 Nov 2026). Never in a production build (lib/pf.ts reaches
-// this file only where VITE_DEV_MOCK=1, and the paper book's screens are not in a build with the switch off).
+// this file only where VITE_DEV_MOCK=1, a condition every build folds to false; web/e2e/local-copy.cjs looks for its
+// stand-in books in the published files).
 // The API's own routes (lib/pf/route.ts) run here in the page, against a list kept in this browser's storage
 // (`om_mock_pf`) in place of the database: the same rules and the same words as the server's
 // (sim/sql/pf.test.cjs compares the two stores). Everything in it is a stand-in: no portfolio here is anyone's.
