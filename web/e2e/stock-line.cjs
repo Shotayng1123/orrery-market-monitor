@@ -79,6 +79,18 @@ const face = async (p, css) => { if (!css) return; await p.addStyleTag({ content
         return { term: document.body.classList.contains("term"), symbol: document.querySelector(".panel[data-k='st-chart'] .phead .aux .src-long > .sp")?.textContent ?? "", parts, by: by ? by.textContent.replace(/\s+/g, " ").trim() : null, byWhole: inHead(by), puWhole: pu ? inHead(pu) : null, tip: a.title, whole: (long.textContent ?? "").replace(/\s+/g, " ").trim(),
           cut: ((lcs.whiteSpace === "nowrap" || cs.whiteSpace === "nowrap") && !a.classList.contains("wrap") && need > box + 0.01) || a.scrollWidth > a.clientWidth + 0.5, form: ["d1", "d2", "d3"].find((c) => a.classList.contains(c)) ?? "whole", second: a.classList.contains("wrap"),
           titleCut: !!t && t.scrollWidth > t.clientWidth + 0.5, titleTip: t?.title ?? "", title: t?.textContent ?? "", headH: hr.height / z, line: lh, sideways: document.documentElement.scrollWidth - innerWidth,
+          // on the head's second line (one-screen layout), whether the next part left out would still fit that line on
+          // one line: the line takes back what its second line has room for (the designer's verdict on fix part 5)
+          canTakeBack: (() => {
+            const lv = ["d1", "d2", "d3"].find((c) => a.classList.contains(c));
+            if (!document.body.classList.contains("term") || !a.classList.contains("wrap") || !lv) return false;
+            const lower = [...new Set([...long.querySelectorAll("[data-drop]")].map((e) => Number(e.dataset.drop)))].filter((n) => n < Number(lv[1])).sort(), to = lower.length ? lower[lower.length - 1] : 0;
+            a.classList.remove(lv); if (to) a.classList.add(`d${to}`);
+            const ws = [a.style.whiteSpace, long.style.whiteSpace]; a.style.whiteSpace = "nowrap"; long.style.whiteSpace = "nowrap";
+            const r2 = document.createRange(); r2.selectNodeContents(long); const fits = r2.getBoundingClientRect().width <= R(a).width - (parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)) * z;
+            [a.style.whiteSpace, long.style.whiteSpace] = ws; if (to) a.classList.remove(`d${to}`); a.classList.add(lv);
+            return fits;
+          })(),
           // a title may be cut only where it alone is wider than its head's whole line (beside the CSV button, where drawn)
           titleTooWide: !!t && t.clientWidth > 0 && (() => { const hs = getComputedStyle(hd), csv = hd.querySelector(":scope > .csvbtn"), cw = csv && csv.getClientRects().length ? R(csv).width + (parseFloat(hs.columnGap) || 0) * z : 0; return R(t).width * (t.scrollWidth / t.clientWidth) > hr.width - (parseFloat(hs.paddingLeft) + parseFloat(hs.paddingRight)) * z - cw + 0.5; })() };
       });
@@ -97,6 +109,7 @@ const face = async (p, css) => { if (!css) return; await p.addStyleTag({ content
         if (unstar(r.tip) !== unstar(r.whole) || !r.tip.includes(names[sym]?.[1] ?? "") || !r.tip.includes("Yahoo Finance")) w.push(`tooltip is not the whole line: "${r.tip}"`);
         if (r.titleCut && r.titleTip !== name.toUpperCase().trim() && r.titleTip !== name.trim()) w.push("title cut, tooltip not whole");
         if (r.titleCut && !r.titleTooWide) w.push("a title that fits its head's line cut");
+        if (r.canTakeBack) w.push(`on the second line with ${r.form}, though the next part left out fits there`);
         return w;
       };
       const WINDOWS = [[1179, 540, "AUTO"], [1114, 540, "S"], [1310, 560, "M"], [1507, 644, "L"], [1769, 756, "XL"], [1179, 800, "AUTO"], [1114, 800, "S"]];
@@ -188,7 +201,18 @@ const face = async (p, css) => { if (!css) return; await p.addStyleTag({ content
         const keep = [...a.querySelectorAll(":scope > .src-long .sp")].filter((e) => !e.closest("[data-drop]") && !e.parentElement.closest(".sp"));
         const parts = keep.map((e) => ({ text: e.textContent.replace(/\s+/g, " ").trim(), whole: whole(e) }));
         const pu = a.querySelector("#st-members-by .puse"), t = hd.querySelector(":scope > .t");
-        return { parts, pu: whole(pu), form: (["d1", "d2", "d3"].find((c) => a.classList.contains(c)) ?? "whole") + (a.classList.contains("wrap") ? "+own row" : ""), headH: Math.round((hr.height / z) * 10) / 10, title: t?.textContent ?? "", sideways: document.documentElement.scrollWidth - innerWidth };
+        // N6-1 of the check of fix part 6: on its own row the line breaks only between its parts, unless a part alone is
+        // wider than the row; every part on view, the descriptive ones too
+        const lh = parseFloat(getComputedStyle(a).lineHeight) || 14, row = R(a).width;
+        const split = [...a.querySelectorAll(":scope > .src-long .sp")].filter((e) => !e.parentElement.closest(".sp") && e.getClientRects().length).filter((e) => {
+          const rg = document.createRange(); rg.selectNodeContents(e); const rs = [...rg.getClientRects()].filter((r) => r.width > 0.5);
+          if (!rs.length) return false; const t0 = Math.min(...rs.map((r) => r.top));
+          return rs.some((r) => r.top > t0 + lh / 2) && rs.reduce((x, r) => x + r.width, 0) <= row + 0.5;
+        }).map((e) => e.textContent.replace(/\s+/g, " ").trim());
+        // the title: never past the panel's edge or the window's; cut only with an ellipsis, the whole name its tooltip
+        const ts = t ? getComputedStyle(t) : null, tcut = !!t && t.scrollWidth > t.clientWidth + 0.5;
+        const titleOk = !!t && R(t).right <= Math.min(pr.right, innerWidth) + 0.5 && (!tcut || (ts.textOverflow === "ellipsis" && /clip|hidden/.test(ts.overflowX) && t.title === t.textContent.trim()));
+        return { split, titleOk, titleCut: tcut, parts, pu: whole(pu), form: (["d1", "d2", "d3"].find((c) => a.classList.contains(c)) ?? "whole") + (a.classList.contains("wrap") ? "+own row" : ""), headH: Math.round((hr.height / z) * 10) / 10, title: t?.textContent ?? "", sideways: document.documentElement.scrollWidth - innerWidth };
       });
       for (const [w, h, css] of [[320, 568, ""], [390, 844, ""], [320, 568, DEJAVU], [390, 844, DEJAVU]]) {
         const ctx = await b.newContext({ ...devices["iPhone 13"], viewport: { width: w, height: h }, deviceScaleFactor: 1 });
@@ -203,12 +227,12 @@ const face = async (p, css) => { if (!css) return; await p.addStyleTag({ content
           await p.waitForFunction(([s, nm]) => (document.querySelector(".panel[data-k='st-chart'] .phead .aux")?.textContent ?? "").includes(` ${s}`) && (document.querySelector(".panel[data-k='st-chart'] .phead .t")?.textContent ?? "") === nm.toUpperCase(), [sym, name], { timeout: 10000 }).catch(() => {});
           await frames(p); await p.waitForTimeout(60); await frames(p);
           const r = await seen(p);
-          got.push(`${sym} (${name.length}) ${r ? `${r.form} ${r.headH} px` : "?"}`);
+          got.push(`${sym} (${name.length}) ${r ? `${r.form} ${r.headH} px${r.titleCut ? " title cut" : ""}` : "?"}`);
           const miss = r ? r.parts.filter((x) => !x.whole).map((x) => x.text) : ["no line"];
           const need = r ? ["Yahoo Finance", sym, "NK225, TOPIX", "(Nikkei, JPX · personal use)"].filter((x) => !r.parts.some((y) => y.text === x)) : [];
-          if (!r || miss.length || need.length || !r.pu || r.sideways > 0 || r.title !== name.toUpperCase()) bad.push({ sym, miss, need, pu: r?.pu, sideways: r?.sideways, title: r?.title });
+          if (!r || miss.length || need.length || !r.pu || r.sideways > 0 || r.title !== name.toUpperCase() || r.split.length || !r.titleOk) bad.push({ sym, miss, need, pu: r?.pu, sideways: r?.sideways, title: r?.title, split: r?.split, titleOk: r?.titleOk });
         }
-        ck(`the classic phone layout at ${w} px${css ? " in DejaVu Sans" : ""}: ${LONGER.length} Tokyo stocks of 37 to 51 characters (${got.join("; ")}): the symbol, "NK225, TOPIX", "(Nikkei, JPX · personal use)", "personal use" and "Yahoo Finance" each whole inside the window, the panel and the head; no sideways scroll`, bad.length === 0 && errs.length === 0, { bad, got, errs });
+        ck(`the classic phone layout at ${w} px${css ? " in DejaVu Sans" : ""}: ${LONGER.length} Tokyo stocks of 37 to 51 characters (${got.join("; ")}): the symbol, "NK225, TOPIX", "(Nikkei, JPX · personal use)", "personal use" and "Yahoo Finance" each whole inside the window, the panel and the head; no part split over two lines; a title wider than its row ends with an ellipsis inside the panel, its tooltip whole (${got.filter((x) => / title cut/.test(x)).length} cut); no sideways scroll`, bad.length === 0 && errs.length === 0, { bad, got, errs });
         await ctx.close();
       }
     }

@@ -56,13 +56,15 @@ async function go(p, hash, sel, chip, face = "") {
 // scrolling, the "personal use" that shows against the head's box, and the tooltip of a line in its short form.
 const audit = (p) => p.evaluate(() => {
   const z = Number(document.body.style.zoom) || 1, R = (e) => e.getBoundingClientRect(), px = (x) => Math.round((x / z) * 10) / 10;
+  // the whole line as words: no star, and a badge's word apart from the words beside it ("INTRADAY KOSPI200 …")
+  const words = (el) => { const c = el.cloneNode(true); c.querySelectorAll(".badge").forEach((x) => x.replaceWith(` ${x.textContent} `)); return c.textContent.replace(/[☆★]/g, "").replace(/\s+/g, " ").trim(); };
   return [...document.querySelectorAll(".phead .aux")].filter((a) => a.getClientRects().length && a.textContent.trim()).map((a) => {
     const head = a.closest(".phead"), t = head.querySelector(".t"), vis = [...a.querySelectorAll(":scope > .src-long, :scope > .src-short, :scope > .src-compact, :scope > .src-min")].find((e) => getComputedStyle(e).display !== "none") ?? a;
     const rg = document.createRange(); rg.selectNodeContents(vis); const cs = getComputedStyle(a), box = R(a).width - (parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)) * z, need = rg.getBoundingClientRect().width;
     const pu = [...vis.querySelectorAll(".puse")].find((e) => e.getClientRects().length) ?? null, hr = R(head), ar = R(a);
     const puIn = pu ? (() => { const r = R(pu); return r.left >= Math.max(hr.left, ar.left) - 0.5 && r.right <= Math.min(hr.right, ar.right) + 0.5 && r.top >= hr.top - 0.5 && r.bottom <= hr.bottom + 0.5; })() : null;
     const long = a.querySelector(":scope > .src-long"), compact = a.classList.contains("compact") || a.classList.contains("min"), short = a.classList.contains("short") || compact;
-    return { panel: t ? t.textContent.trim() : "?", k: head.parentElement?.dataset.k ?? "", text: vis.textContent.replace(/\s+/g, " ").trim(), need: px(need), box: px(box), spare: px(box - need), over: need > box + 0.01, scrolls: a.scrollWidth > a.clientWidth, pu: !!pu, puIn, short, compact, wrap: a.classList.contains("wrap"), tipWhole: !short || (!!long && a.title === long.textContent.replace(/[☆★]/g, "").replace(/\s+/g, " ").trim()), headH: px(hr.height) };
+    return { panel: t ? t.textContent.trim() : "?", k: head.parentElement?.dataset.k ?? "", text: vis.textContent.replace(/\s+/g, " ").trim(), need: px(need), box: px(box), spare: px(box - need), over: need > box + 0.01, scrolls: a.scrollWidth > a.clientWidth, pu: !!pu, puIn, short, compact, wrap: a.classList.contains("wrap"), tipWhole: !short || (!!long && a.title === words(long)), headH: px(hr.height) };
   });
 });
 const bad = (rows) => rows.filter((r) => r.over || r.scrolls || r.puIn === false || !r.tipWhole);

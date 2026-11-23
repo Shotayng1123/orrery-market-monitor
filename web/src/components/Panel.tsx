@@ -34,13 +34,14 @@ export function tableCsv(table: HTMLTableElement): string {
  *  of pull request #50 and its checks), so it comes last.
  *  A line that is drawn once and leaves out its own descriptive parts instead (`auxDrop`: a stock's line, whose star
  *  and credit must not be drawn twice) marks them `data-drop` 1, 2 and 3, and the fit leaves out 1, then 1 and 2, then
- *  all three, before any second line (N1 of the check of fix part 4: a Tokyo stock's line, longer by its memberships'
- *  credit, was cut with an ellipsis at the least window of each text size). A source's name, a credit, "personal use"
- *  and a badge are never in a part that is left out.
+ *  all three, before any second line, and on that line takes back what fits there (N1 of the check of fix part 4: a
+ *  Tokyo stock's line, longer by its memberships' credit, was cut with an ellipsis at the least window of each text
+ *  size). A source's name, a credit, "personal use" and a badge are never in a part that is left out.
  *  It measures again on every change of the head's width, after each drawing of the panel and once the fonts have
- *  loaded. The whole line is the head's tooltip, and a title longer than its head's whole line (a name far longer than
- *  any listed company's) is cut at its end with the whole title as its own; "personal use" keeps its click in every
- *  form. The scrolling layout wraps a long head and draws the whole line only. */
+ *  loaded. The whole line is the head's tooltip, a badge's word apart from the words beside it, and a title longer than
+ *  its row of the head (a name far longer than any listed company's) is cut at its end with the whole title as its own,
+ *  in every layout; "personal use" keeps its click in every form. The scrolling layout wraps a long head and draws the
+ *  whole line only (a stock's, beside the title or on a row of its own under it). */
 function useSourceFit(ref: RefObject<HTMLSpanElement | null>, on: boolean, drop: boolean) {
   useLayoutEffect(() => {
     const a = ref.current;
@@ -48,8 +49,10 @@ function useSourceFit(ref: RefObject<HTMLSpanElement | null>, on: boolean, drop:
     const long = a.querySelector<HTMLElement>(":scope > .src-long"), short = a.querySelector<HTMLElement>(":scope > .src-short"), compact = a.querySelector<HTMLElement>(":scope > .src-compact"), min = a.querySelector<HTMLElement>(":scope > .src-min"), head = a.closest<HTMLElement>(".phead");
     if (!long || (!short && !drop) || !head) return;
     const title = head.querySelector<HTMLElement>(":scope > .t");
-    // the whole line, as words: a control in it (a stock's watchlist star) is no part of what the line says
-    const words = () => { const c = long.cloneNode(true) as HTMLElement; c.querySelectorAll(".star").forEach((x) => x.remove()); return (c.textContent ?? "").replace(/\s+/g, " ").trim(); };
+    // the whole line, as words: a control in it (a stock's watchlist star) is no part of what the line says, and a
+    // badge's word stands apart from the words beside it (the designer's verdict on fix part 5: "INTRADAYKOSPI200
+    // constituents", "23 Nov 2026STAND-IN")
+    const words = () => { const c = long.cloneNode(true) as HTMLElement; c.querySelectorAll(".star").forEach((x) => x.remove()); c.querySelectorAll(".badge").forEach((x) => x.replaceWith(` ${x.textContent ?? ""} `)); return (c.textContent ?? "").replace(/\s+/g, " ").trim(); };
     a.title = words();
     const drawn = (el: HTMLElement) => { const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect().width; };
     const room = () => { const cs = getComputedStyle(a), z = Number(document.body.style.getPropertyValue("--z")) || 1; return a.getBoundingClientRect().width - (parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)) * z; };
@@ -67,16 +70,27 @@ function useSourceFit(ref: RefObject<HTMLSpanElement | null>, on: boolean, drop:
     // In a layout that wraps the line, a line drawn once beside a title that leaves it less room than its longest part
     // takes a row of its own under the title (`wrap`, tokens.css), the head's whole width, and flows there as text
     // (N5-1 of the check of fix part 5: as a block beside a title that left it next to no room, its text ran off the
-    // panel and the screen, "Yahoo Finance" and "personal use" with it). Each part is measured on one line.
+    // panel and the screen, "Yahoo Finance" and "personal use" with it). Each part is measured on one line. There it
+    // breaks only between its parts (N6-1 of the check of fix part 6: "Yahoo" and "Finance" on two lines), unless a
+    // part alone is wider than the whole row (`brk`: then it breaks inside that part rather than run off the screen).
     const ownRow = () => {
       if (!drop) return;
       a.style.whiteSpace = "nowrap";
       const widest = Math.max(0, ...[...long.querySelectorAll<HTMLElement>(".sp")].filter((e) => e.getClientRects().length > 0).map(drawn)), r = room();
       a.style.whiteSpace = "";
-      if (widest > r + 0.5) a.classList.add("wrap");
+      if (widest > r + 0.5) { a.classList.add("wrap"); if (widest > room() + 0.5 || a.scrollWidth > a.clientWidth + 0.5) a.classList.add("brk"); }
+    };
+    // a line drawn once on its head's second line takes back the parts it left out, the exchange first, then the
+    // sector, then the industry, for as long as it still fits that line on one line (the designer's verdict on fix
+    // part 5: on the second line the three parts stayed out though the line had the head's whole width)
+    const takeBack = () => {
+      const on = (n: number) => { a.classList.remove("d1", "d2", "d3"); if (n) a.classList.add(`d${n}`); };
+      const fits = () => { a.style.whiteSpace = "nowrap"; long.style.whiteSpace = "nowrap"; const ok = drawn(long) <= room(); a.style.whiteSpace = ""; long.style.whiteSpace = ""; return ok; };
+      let at = levels[levels.length - 1] ?? 0;
+      for (const n of [...levels.slice(0, -1).reverse(), 0]) { on(n); if (!fits()) { on(at); return; } at = n; }
     };
     const fit = () => {
-      a.classList.remove("short", "compact", "min", "wrap", "d1", "d2", "d3");
+      a.classList.remove("short", "compact", "min", "wrap", "brk", "d1", "d2", "d3");
       // a title wider than its head's whole line is cut at its end (tokens.css): its tooltip holds it whole
       const cut = () => { if (!title) return; if (title.scrollWidth > title.clientWidth + 0.5) title.title = (title.textContent ?? "").trim(); else title.removeAttribute("title"); };
       if (!document.body.classList.contains("term")) { ownRow(); creditFit(); return cut(); }
@@ -85,6 +99,7 @@ function useSourceFit(ref: RefObject<HTMLSpanElement | null>, on: boolean, drop:
         // one line, drawn once: its descriptive parts left out, the industry first, then the sector, then the exchange
         for (const n of levels) { a.classList.remove("d1", "d2", "d3"); a.classList.add(`d${n}`); if (drawn(long) <= room()) return cut(); }
         a.classList.add("wrap");
+        takeBack();
         return cut();
       }
       a.classList.add("short");
