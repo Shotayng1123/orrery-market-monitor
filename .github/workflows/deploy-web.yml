@@ -37,7 +37,10 @@ jobs:
   # (IBM Plex Mono, IBM Plex Sans JP, Cormorant Garamond), which the runner takes from fonts.googleapis.com
   # (web/index.html); README.md ("Tests") says how each job is drawn again on the engineer's machine. One suite is
   # stopped at six minutes (web/e2e/run.cjs) and tried again; the longest, opens, takes about 3.1 on the engineer's
-  # machine.
+  # machine. Since slice 10 (23 Nov 2026) each of the four prints, after its run and whether it passed or not, the
+  # widths that portfolio (part 1), letter-placement and header (part 2) measured, at most 80 lines with the job's
+  # placement on the first (web/e2e/widths.cjs; the suites run on stand-in data), to be set beside the same block
+  # from a run on the engineer's machine (README.md, "Tests").
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -58,6 +61,11 @@ jobs:
         working-directory: web
         env:
           E2E_PLACEMENT: github
+      # the widths this job's suites measured, in its own log, passed or failed (e2e/widths.cjs); never fails the job
+      - if: always()
+        run: node e2e/widths.cjs
+        working-directory: web
+        continue-on-error: true
       - run: npm ci && npx tsx ../sim/logic.test.ts
         working-directory: jobs
       - if: failure()
@@ -86,6 +94,11 @@ jobs:
         working-directory: web
         env:
           E2E_PLACEMENT: github
+      # the widths this job's suites measured, in its own log, passed or failed (e2e/widths.cjs); never fails the job
+      - if: always()
+        run: node e2e/widths.cjs
+        working-directory: web
+        continue-on-error: true
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -113,6 +126,11 @@ jobs:
         working-directory: web
         env:
           E2E_PLACEMENT: installed
+      # the widths this job's suites measured, in its own log, passed or failed (e2e/widths.cjs); never fails the job
+      - if: always()
+        run: node e2e/widths.cjs
+        working-directory: web
+        continue-on-error: true
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -139,6 +157,11 @@ jobs:
         working-directory: web
         env:
           E2E_PLACEMENT: installed
+      # the widths this job's suites measured, in its own log, passed or failed (e2e/widths.cjs); never fails the job
+      - if: always()
+        run: node e2e/widths.cjs
+        working-directory: web
+        continue-on-error: true
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
