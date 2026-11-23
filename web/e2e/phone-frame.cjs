@@ -18,6 +18,11 @@
 //   [5] search and the watchlist's add box; the connection bar and the paper book's notice stand above the bar
 //   [6] the preview flag arriving after the page is drawn (the sign-in server, `me` answered late): the frame takes
 //       over the reader's place, and the content stays where it was on the screen; signing out gives the window back
+//   [7] the paper book's order ticket (P-2.1), a page of the book on a phone: opened by Buy / Sell at its top, a name
+//       typed and looked up, sized by shares, the boxes taking the typing in view above the bar, the whole ticket above
+//       the bar at the end and nothing of it under the bar; closed by Overview, then Back twice: the ticket's page,
+//       then Overview where it stood; on an iPhone SE's screen the size box, below the fold, typed into above the bar.
+//       (On an iPhone the on-screen keyboard then covers the bar: not drawn here.)
 // Run from web/:  node e2e/run.cjs phone-frame   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
 const { routes } = require("./harness.cjs");
@@ -299,6 +304,56 @@ const scrollFrame = (p, y) => p.evaluate((y) => { const s = document.getElementB
     ck(`signing out: the sign-in screen without the frame (pframe ${out.on}, html overflow ${out.ov})`, !out.on && out.ov === "visible", out);
     ck("no error on the page", !errs.length, errs);
     await ctx.close();
+  }
+
+  console.log("\n[7] the order ticket, a page of the book: opened, typed into, sized by shares, closed, Back");
+  {
+    // the bar on the foot, the frame's foot on the bar's top, the document still (as in [2])
+    const framed = (s) => s.on && near(s.bar.bottom, s.ih, 0.5) && near(s.bar.bottom - s.bar.top, 59, 0.5) && near(s.sBottom, s.bar.top, 0.5) && s.winY === 0 && s.docH <= s.ih;
+    // the ticket's section, the box with the focus, and what is drawn at the bar's place (each point's element inside the bar)
+    const tk = (p) => p.evaluate(() => {
+      const t = document.getElementById("pf-ticket"), sec = t?.closest(".mp-sec"), r = sec?.getBoundingClientRect(), a = document.activeElement, ar = a && a !== document.body ? a.getBoundingClientRect() : null, n = document.getElementById("pnav").getBoundingClientRect();
+      const under = []; for (const x of [8, innerWidth / 4, innerWidth / 2, innerWidth * 3 / 4, innerWidth - 8]) for (const y of [n.top + 2, n.top + 30, n.bottom - 2]) { const e = document.elementFromPoint(x, y); if (!e || !e.closest("#pnav")) under.push(`${x},${Math.round(y)}:${e ? e.tagName + (e.id ? "#" + e.id : "") : "none"}`); }
+      return { open: !!t, sec: r ? { top: r.top, bottom: r.bottom } : null, focus: a?.id ?? "", fbox: ar ? { top: ar.top, bottom: ar.bottom } : null, under, hash: location.hash, overview: !!document.getElementById("pf-overview"), qty: document.getElementById("pf-t-qty")?.innerText ?? null };
+    });
+    const { ctx, p, errs } = await open(b, { hash: `portfolio/${ID(1)}`, sel: "#pf-overview #pf-book" });
+    // Overview a little scrolled, Buy / Sell still in view: Back must find it there
+    await scrollFrame(p, 150); await frames(p); const o0 = await state(p);
+    await p.locator("#pf-buysell").click(); await p.waitForSelector("#pf-ticket", { timeout: 15000 }); await p.waitForTimeout(400);
+    const s1 = await state(p), t1 = await tk(p);
+    ck(`Overview at ${Math.round(o0.top)} › Buy / Sell: the ticket opens as a page of the book at the frame's top (${s1.top}; ${t1.hash}), Overview gone, the bar ${Math.round(s1.bar.top)}-${Math.round(s1.bar.bottom)} on the foot`, o0.top === 150 && t1.open && !t1.overview && t1.hash === `#portfolio/${ID(1)}/ticket` && s1.top === 0 && framed(s1), { o0, s1, t1 });
+    await p.locator("#pf-t-symbol").click(); await p.keyboard.type("7203.T"); await p.keyboard.press("Enter");
+    await p.waitForSelector('.pf-ticket-form[data-asked="7203.T"]', { timeout: 15000 }); await p.waitForTimeout(250);
+    const s2 = await state(p), t2 = await tk(p);
+    await p.selectOption("#pf-t-by", "shares"); await p.locator("#pf-t-value").click(); await p.keyboard.type("1050"); await p.waitForTimeout(300);
+    const s3 = await state(p), t3 = await tk(p);
+    ck(`the name typed into its box and looked up (focus ${t2.focus}, the box ${Math.round(t2.fbox?.top)}-${Math.round(t2.fbox?.bottom)}), then sized by shares in the size box (focus ${t3.focus}, ${Math.round(t3.fbox?.top)}-${Math.round(t3.fbox?.bottom)}): "${t3.qty}"; each box in view above the bar, the document at ${s3.winY}`,
+      t2.focus === "pf-t-symbol" && t2.fbox.top >= s2.sTop && t2.fbox.bottom <= s2.bar.top && t3.focus === "pf-t-value" && t3.fbox.top >= s3.sTop && t3.fbox.bottom <= s3.bar.top && t3.qty === "→ Buy 1,000 shares (100-share lots)" && framed(s2) && framed(s3), { s2, t2, s3, t3 });
+    ck(`with the ticket longer than the frame (its section ${Math.round(t3.sec.top)}-${Math.round(t3.sec.bottom)}): nothing of it is drawn under the bar (${t3.under.length} of 15 points at the bar's place outside it)`, t3.sec.bottom > s3.bar.top && t3.under.length === 0, t3.under);
+    await scrollFrame(p, "end"); await frames(p); const s4 = await state(p), t4 = await tk(p);
+    ck(`the frame at its end (${Math.round(s4.top)} of ${s4.max}): the whole ticket ${Math.round(t4.sec.top)}-${Math.round(t4.sec.bottom)} above the bar's top ${Math.round(s4.bar.top)}, the footer ${Math.round(s4.foot.top)}-${Math.round(s4.foot.bottom)} under it, the bar on the foot`, near(s4.top, s4.max, 1) && t4.sec.top >= s4.sTop - 0.5 && t4.sec.bottom <= s4.bar.top && s4.foot.bottom <= s4.bar.top + 0.5 && t4.under.length === 0 && framed(s4), { s4, t4 });
+    // closed: on a phone the ticket takes Overview's place, so Overview in the view row (sticky at the frame's top) closes it
+    await p.locator('.pfp-views a[href$="' + ID(1) + '"]').click(); await p.waitForSelector("#pf-overview", { timeout: 15000 }); await p.waitForTimeout(500);
+    const s5 = await state(p), t5 = await tk(p);
+    ck(`closed by Overview: Overview at its top (${s5.top}; ${t5.hash}), no ticket, the bar on the foot`, !t5.open && t5.overview && t5.hash === `#portfolio/${ID(1)}` && s5.top === 0 && framed(s5), { s5, t5 });
+    await p.goBack(); await p.waitForSelector("#pf-ticket", { timeout: 15000 }); await p.waitForTimeout(900);
+    await scrollFrame(p, "end"); await frames(p); const s6 = await state(p), t6 = await tk(p);
+    ck(`Back: the ticket's page again (${t6.hash}), whole above the bar at the frame's end (${Math.round(t6.sec.top)}-${Math.round(t6.sec.bottom)}, the bar's top ${Math.round(s6.bar.top)})`, t6.open && t6.hash === `#portfolio/${ID(1)}/ticket` && t6.sec.bottom <= s6.bar.top && t6.under.length === 0 && framed(s6), { s6, t6 });
+    await p.goBack(); await p.waitForSelector("#pf-overview", { timeout: 15000 }); await p.waitForTimeout(1200);
+    const s7 = await state(p), t7 = await tk(p);
+    ck(`Back again: Overview where it stood when Buy / Sell was tapped (${Math.round(s7.top)} against ${Math.round(o0.top)}), the bar on the foot`, !t7.open && t7.overview && t7.hash === `#portfolio/${ID(1)}` && near(s7.top, o0.top, 2) && framed(s7), { s7, t7 });
+    ck("no error on the page", !errs.length, errs);
+    await ctx.close();
+    // an iPhone SE's screen (375 x 667): the size box below the fold once the name is looked up; the frame brings it up
+    // above the bar to be typed into
+    const se = await open(b, { hash: `portfolio/${ID(1)}/ticket?s=7203.T&side=buy`, sel: '.pf-ticket-form[data-asked="7203.T"]' });
+    await se.p.setViewportSize({ width: 375, height: 667 }); await se.p.waitForTimeout(400);
+    const below = await se.p.evaluate(() => { const v = document.getElementById("pf-t-value").getBoundingClientRect(), n = document.getElementById("pnav").getBoundingClientRect(); return { top: v.top, bar: n.top }; });
+    await se.p.selectOption("#pf-t-by", "shares"); await se.p.locator("#pf-t-value").click(); await se.p.keyboard.type("250"); await se.p.waitForTimeout(300);
+    const e1 = await state(se.p), f1 = await tk(se.p);
+    ck(`an iPhone SE's screen: the size box first below the bar's top (${Math.round(below.top)} against ${Math.round(below.bar)}), then typed into in view above it (${Math.round(f1.fbox?.top)}-${Math.round(f1.fbox?.bottom)}, the bar ${Math.round(e1.bar.top)}-${Math.round(e1.bar.bottom)}): "${f1.qty}"`,
+      below.top > below.bar && f1.focus === "pf-t-value" && f1.fbox.top >= e1.sTop && f1.fbox.bottom <= e1.bar.top && f1.qty === "→ Buy 200 shares (100-share lots)" && f1.under.length === 0 && framed(e1) && !se.errs.length, { below, e1, f1, errs: se.errs });
+    await se.ctx.close();
   }
 
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0);

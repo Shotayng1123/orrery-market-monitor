@@ -39,6 +39,12 @@ web/        Vite + React + TypeScript. src/styles/tokens.css is the design syste
             and finds a phone list's open line still open (each history entry carries a key in history.state). Which pages
             open at their top is the rule in src/lib/pagetop.ts, a file with no imports, so that the logic checks
             can read it where React is not installed.
+            src/lib/scroller.ts: the Home Screen app's frame, for the accounts in the preview list first: in the app
+            added to an iPhone's Home Screen the document does not scroll, the page scrolls in #pscroll and the tab bar
+            stands under it at the screen's foot. Where the phone layout reads or moves the page's scroll, it does so
+            through this file (a scrollIntoView finds the frame by itself). While a box is typed into in the frame
+            (search, the watchlist's add box, the order ticket), the on-screen keyboard covers the tab bar (on an
+            iPhone; not checked there: the browser checks draw no keyboard).
             src/components/Sheet.tsx: a phone's sheet from the bottom edge (a dialog: focus stays inside it, the
             page behind does not scroll, and ✕, Esc, a tap on the dimmed page or the browser's Back closes it).
             Help, drawn at the page's root, takes the same one history entry in the phone layout, so Back closes it
@@ -111,7 +117,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,421 checks in 56 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24) and the Home Screen frame's `phone-frame` (101)): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,430 checks in 56 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24) and the Home Screen frame's `phone-frame` (110)): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -134,8 +140,11 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   page, so on the nine phone screens the bar stands on the window's foot and the sticky heads at the top, at the top,
   middle and end, a form's sticky foot on the bar, also with the window turned, and a piece prints in full; a tab
   opens at its top, Back returns WATCHLIST and RESEARCH where they stood, every kind of sheet holds the page still and
-  closes three ways, and the preview flag arriving after the page is drawn moves nothing on the screen; Chromium only,
-  which cannot draw the iOS fault the frame is for), results
+  closes three ways, the paper book's order ticket, opened from a book, typed into and sized by shares (on an iPhone
+  SE's screen too, its size box below the fold typed into above the bar), stands whole above the bar at the end with
+  nothing of it under the bar, and closes by Overview and by Back, and the preview flag arriving after the page is
+  drawn moves nothing on the screen; Chromium only, which cannot draw the iOS fault the frame is for, nor the
+  on-screen keyboard, which on an iPhone covers the tab bar while a box is typed into in the frame), results
   dates (`results-dates`: the day in each company's own market and no time of day, in KEY DATA, on WATCHLIST and in
   NEWS › Results calendar, both layouts; the mark after each date as its source gives it, "conf.", "est." or a dash
   in WATCHLIST's MY NAMES as in RESULTS AHEAD; a stored date more than a day past reading a dash there, as RESULTS
@@ -317,8 +326,8 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   no line, or no tab and no screens' file, in the other two states.
   `cd web && npm run e2e` starts the test servers it needs and runs them all, up to three suites at a time (two of
   the dev servers' and one of the built site's, whose suites queue behind each other): about
-  28 minutes on the engineer's machine (the whole run for the 56 suites and 3,421 checks of P-2.1 and the Home Screen
-  frame together is not yet timed in one run, `phone-frame` 121 s; P-2.1's 55 suites and 3,319 checks, `pf-ticket` then 23,
+  28 minutes on the engineer's machine (the whole run for the 56 suites and 3,430 checks of P-2.1 and the Home Screen
+  frame together is not yet timed in one run, `phone-frame` 120 to 125 s; P-2.1's 55 suites and 3,319 checks, `pf-ticket` then 23,
   took 2,421 s with the browser's own letter placement and other work on the machine, before three suites' lines
   were brought to the ticket's door, `pf-ticket` 30 s; slice 9's 53 suites and 3,290 checks took 2,061 s as installed,
   its new suite, `pf-preview`, 40 to 50 s; slice 8's 53 suites and 3,277 checks 1,987 s, its new suite, `letter-placement`, 5 to
