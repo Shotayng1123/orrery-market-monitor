@@ -381,7 +381,8 @@ const TOPICS: Array<[string, RegExp]> = [
 // and 「し、」 parts two bans only where it does not follow one of CLAUSE's acts (複製し、, 転載し、, 販売し、 …: the acts of
 // one ban, "商用目的で、本データを複製し、または再配布することを禁止します" is none), nor 「、また」 right after one of them
 // (複製、また) or as "、または" ("or"); 「、また」 after an act's 〜し and 「し、」 after an act the list lacks (転用し、) still part
-// a single ban, which then holds the files (V7-1 and V7-2 of the check of batch 7b, 23 Nov 2026).
+// a single ban, which then holds the files where its limit is named before that mark (V7-1 and V7-2 of the check of
+// batch 7b, 23 Nov 2026).
 // What is still read as "none", so that such a line does not hold the files: a limit named after a plain "or" inside
 // one ban ("may not copy or redistribute the data or use it for commercial purposes"), which the gate takes as the whole
 // sentence's; a purpose named once for acts joined by "and" ("Copying and redistribution of the data, and their use for

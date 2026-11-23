@@ -554,8 +554,8 @@ joins the acts of one ban only after one of the 34 acts the gate lists (複製�
 right after one of them (複製、また転載), and 「、または」 is "or" where no 「し、」 parts the sentence
 (商用目的で、本データを複製し、または再配布することを禁止します。 holds nothing; since the check of fix part 5, 23 Nov 2026, before
 which it held the files); elsewhere they part it as they part two bans, 「、また」 after an act's 〜し and 「し、」 after an act
-the list lacks (転用し、, 改編し、, 取得し、) among them, so that a single ban limited to commercial use is read as two, its
-second act without the limit, and holds the files (商用目的で、本データを複製し、また再配布することを禁止します。,
+the list lacks (転用し、, 改編し、, 取得し、) among them, so that a single ban whose limit to commercial use is named before
+that mark is read as two, its second act without the limit, and holds the files (商用目的で、本データを複製し、また再配布することを禁止します。,
 商用目的で、本データを転用し、または再配布することを禁止します。; 「、さらに」, 「、かつ」 and 「、なお」 part it as 「、また」 does);
 a list after a lead-in that bans ("You agree not to: …; …; …") is read item by item with its lead-in. A second ban whose "otherwise" or "any
 other" refers back to a grant of personal, private, non-commercial or internal use in the same sentence is read with
