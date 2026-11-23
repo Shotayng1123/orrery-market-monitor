@@ -44,11 +44,13 @@ export const sentenceLike = (s: string): boolean => {
 // resumes at 12:30 pm" as a cell, "The afternoon session ends at 3:30 pm" as the label before a table, 取引は9時に始まる.
 // So a piece is printed only when it is made of figures, dates, clock times and the words of a closed list: the labels,
 // units and joining words JPX's tables of figures carry (the logs of 20 and 21 Nov 2026 and the checks' pages). A piece
-// without a figure must be one of the labels whole; one with figures may hold, beside them, only words of the list.
-// Anything else is counted, not printed. A new label JPX adds is held until it is put here. Some of the list's words
-// are verbs as well as nouns (changes, limits, limit, order, note, quote, issues, shares, prices): a run of those and
-// figures alone passes as it stands ("TOPIX changes from 2027", "Order 100 shares"; the check of fix part 3); no
-// other verb does.
+// without a figure must be one of the labels whole in English; in Japanese it may be the list's labels joined by の,
+// から and まで ("構成銘柄以外の銘柄"); one with figures may hold, beside them, only words of the list. Anything else is
+// counted, not printed. A new label JPX adds is held until it is put here. Many of the list's words can be read as
+// verbs as well as nouns (changes, limits, limit, order, note, quote, issues, issue, shares, share, prices, price,
+// groups, spread, rules, market and others): a piece made of the list's words and figures alone passes as it stands,
+// whatever it says ("TOPIX changes from 2027", "Order 100 shares", "TOPIX groups issues from 2027", "Short selling
+// rules 10% of prices"; the checks of fix parts 3 and 4); only a word outside the list, a verb among them, holds it.
 const LABELS = new Set(["price per share (yen)", "tick size (yen)", "tick size", "tick sizes", "up to", "over", "less than", "more than", "or more", "or less", "previous day's closing price/special quote (yen)", "previous day's closing price", "special quote", "daily price limits (yen)", "daily price limits", "daily price limit (yen)", "daily price limit", "base price (yen)", "base price", "morning session", "afternoon session", "auction trading", "order acceptance", "note", "notes", "other issues", "topix500 constituents", "trading rules of domestic stocks", "trading hours", "trading unit", "date", "code", "name"]);
 const LABEL_WORDS = new Set(("yen million billion thousand units unit shares share am pm a.m p.m % to and or up over under less than more from until till through per of no " +
   "price prices tick size sizes previous day's day days closing special quote daily limits limit base morning afternoon session sessions auction trading order acceptance note other issues issue " +

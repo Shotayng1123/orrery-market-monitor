@@ -44,9 +44,29 @@ export function membersCredit(indices: string[]): string | undefined {
  *  read on hover only, and on a touch screen not at all, where the line read as Yahoo Finance's (WD-6, the check of fix
  *  part 3). "personal use" opens Help's paragraph, as on every line that names those files. Nothing for a membership
  *  from another list (the S&P 500's and the Nasdaq-100's are not theirs). */
-export function MembersBy({ indices }: { indices: string[] }) {
+export function MembersBy({ indices, part = false }: { indices: string[]; part?: boolean /* a part of a line that breaks only between its parts (StockLine) */ }) {
   const who = indices.map((x) => MEMBERS_SOURCE[x]?.short.replace(/^members: /, "")).filter((x): x is string => !!x);
-  return who.length ? <span id="st-members-by" title={membersCredit(indices)}> ({who.join(", ")} · <PersonalUse />)</span> : null;
+  return who.length ? <span id="st-members-by" className={part ? "sp" : undefined} data-credit={part ? "" : undefined} title={membersCredit(indices)}> ({who.join(", ")} · <PersonalUse />)</span> : null;
+}
+/** A stock's line on its chart's head: the star, the symbol, the exchange, the sector and the industry, the index
+ *  memberships with their publishers' credit, and Yahoo Finance, whose prices the chart draws. Drawn once, its parts
+ *  in spans that break only between them. Where the one-screen layout's head has no room for it (N1 of the check of fix
+ *  part 4: with the credit it was cut with an ellipsis at the least window of each text size, at worst "… (Nikkei, JPX
+ *  · …" with "personal use" and "Yahoo Finance" gone), the descriptive parts are left out (Panel `auxDrop`): the
+ *  industry first, then the sector, then the exchange. In a layout that wraps the line they are left out only where
+ *  the credit would cost the head more than one line (on a phone in the classic layout it took two). The symbol, the
+ *  memberships with their credit and "personal use", and Yahoo Finance are never left out, and the whole line is the
+ *  head's tooltip (Help: Single-name page). */
+export function StockLine({ d }: { d: StockPage }) {
+  const part = (x: ReactNode, drop?: 1 | 2 | 3) => <span data-drop={drop}><span className="sd"> · </span><span className="sp">{x}</span></span>;
+  return (
+    <>
+      <Star symbol={d.symbol} name={d.name} /> <span className="sp">{d.symbol}</span>
+      {d.exchange && part(d.exchange, 3)}{d.sector && part(d.sector, 2)}{d.industry && part(d.industry, 1)}
+      {d.indices.length > 0 && <><span className="sd"> · </span><span className="sp" id="st-members" title={membersCredit(d.indices)}>{d.indices.join(", ")}</span><MembersBy indices={d.indices} part /></>}
+      {part("Yahoo Finance")}
+    </>
+  );
 }
 /** What the short figure is, in a few words, by its source. */
 export function shortLine(d: StockPage): { label: string; value: string; title: string } {
@@ -146,7 +166,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
       <div className="c12"><PeriodBar periods={ASSET_PERIODS} period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} extra={term ? <ScreenChips sections={sections} screen={scr} onScreen={setScreen} /> : undefined} /></div>
       <div className="pcols" data-even={even && feed ? "" : undefined} data-page="stock" data-screen={term ? scr : undefined}>
         <div className="pcol w8">
-          {on("chart") && <Panel no={no("chart")} k="st-chart" title={d.name.toUpperCase()} span={8} aux={<><Star symbol={d.symbol} name={d.name} /> {d.symbol}{d.exchange ? ` · ${d.exchange}` : ""}{d.sector ? ` · ${d.sector}` : ""}{d.industry ? ` · ${d.industry}` : ""}{d.indices.length ? <> · <span id="st-members" title={membersCredit(d.indices)}>{d.indices.join(", ")}</span><MembersBy indices={d.indices} /></> : ""} · Yahoo Finance</>}>
+          {on("chart") && <Panel no={no("chart")} k="st-chart" title={d.name.toUpperCase()} span={8} aux={<StockLine d={d} />} auxDrop>
             <div className="bigwrap"><ChartPanel row={row} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes volume marks={marks} /></div>
           </Panel>}
           {on("perf") && <Panel no={no("perf")} k="st-perf" title={bms.length ? `PERFORMANCE VS ${title.toUpperCase()}` : "PERFORMANCE"} span={8} aux="price change, dividends not included">

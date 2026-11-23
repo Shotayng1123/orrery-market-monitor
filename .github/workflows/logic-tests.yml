@@ -2,19 +2,19 @@ name: logic-tests
 
 # The checks that need no browser and no live database: sim/logic.test.ts (exchange sessions, rolling bands, alert
 # measures, the push-notification encryption, accounts by email, the gates of the source probes), sim/readme.test.ts
-# (what README.md says of the checks, held to the repository) and sim/sql (database functions, run on an in-memory
-# Postgres). Run when the code they cover changes, and when README.md, supabase/README.md or a browser suite does: the
-# README's checks of the checks run here only, not in the deploys' gates (a sentence of the README cannot break the
-# server or the site), and the logic file still holds a few of the READMEs' sentences to the code (the "personal use"
-# paragraph, the paper book's switches, the statement's words), so a change to a README alone is checked before it
-# merges and cannot stop the next deploy unseen (the check of fix part 3 of the final review of pull request #50, 23 Nov
-# 2026).
+# (what README.md and supabase/README.md say, held to the repository) and sim/sql (database functions, run on an
+# in-memory Postgres). sim/logic.test.ts also stops a deploy of the server and of the site, so this runs, on a pull
+# request and on a push to main, on a change to any file it imports, directly or through another, or reads: its
+# section [AL] fails when one is not under these paths (a change to such a file alone merged with no check and stopped
+# the next deploy: jobs/lib/marks.ts, jobs/live_check.ts, deploy-server.yml; the check of fix part 4 of the final review
+# of pull request #50, 23 Nov 2026). The READMEs' checks run here only, in no deploy's gate, on a change to either
+# README, a browser suite or the code they name: no sentence of a README is read by sim/logic.test.ts.
 on:
   push:
     branches: [main]
-    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/lib/**", "web/e2e/**", "jobs/tools/**", "jobs/probes/**", "README.md", "supabase/README.md", ".github/workflows/logic-tests.yml"]
+    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/**", "web/e2e/**", "jobs/**", ".github/workflows/**", "README.md", "supabase/README.md"]
   pull_request:
-    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/lib/**", "web/e2e/**", "jobs/tools/**", "jobs/probes/**", "README.md", "supabase/README.md", ".github/workflows/logic-tests.yml"]
+    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/**", "web/e2e/**", "jobs/**", ".github/workflows/**", "README.md", "supabase/README.md"]
   workflow_dispatch:
 
 permissions:

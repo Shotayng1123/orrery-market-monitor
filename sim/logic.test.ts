@@ -77,11 +77,19 @@ import { PAPER_ON_SERVER } from "../supabase/functions/_shared/pf/switch.ts";
 import type { BookFull as PfBook, PfStore, StartId as PfStart } from "../supabase/functions/_shared/pf/types.ts";
 import { opensAtTop as pfOpensAtTop, portfolioPage } from "../web/src/lib/pagetop.ts";
 import { MEMBERS_SOURCE, PERSONAL_USE, PERSONAL_USE_READ, PERSONAL_USE_TEXT, PORTFOLIO as PORTFOLIO_WORD } from "../web/src/lib/labels.ts";
-import { readFileSync as readText, readdirSync as listDir, statSync as fileStat } from "node:fs";
+import { readFileSync, readdirSync, statSync as fileStat } from "node:fs";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 import { builtinModules, createRequire } from "node:module";
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// Every file and folder this file reads as it runs, so that [AL] can hold logic-tests' paths to them: this file stops a
+// deploy of the server and of the site, and a file it reads that no pull request's check reads with it merges unseen
+// and stops the next deploy (the deploy trap of the check of fix part 4, 23 Nov 2026).
+const readsSeen = new Set<string>();
+const seenRead = (p: unknown): void => { try { if (p instanceof URL) readsSeen.add(fileURLToPath(p)); else if (typeof p === "string") readsSeen.add(resolvePath(p)); } catch { /* not a path of this machine */ } };
+const readText = ((p: Parameters<typeof readFileSync>[0], ...rest: unknown[]) => { seenRead(p); return (readFileSync as (...a: unknown[]) => unknown)(p, ...rest); }) as typeof readFileSync;
+const listDir = ((p: Parameters<typeof readdirSync>[0], ...rest: unknown[]) => { seenRead(p); return (readdirSync as (...a: unknown[]) => unknown)(p, ...rest); }) as typeof readdirSync;
 
 let pass = 0, fail = 0;
 const ck = (name: string, cond: boolean, detail?: unknown) => { if (cond) { pass++; console.log("  ✓ " + name); } else { fail++; console.log("  ✗ " + name + (detail !== undefined ? "  ->  " + JSON.stringify(detail) : "")); } };
@@ -2091,15 +2099,17 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     }
     // ---- the statement, word for word ----
     {
-      const sql = readText(new URL("../supabase/migrations/20261121000001_pf_store.sql", import.meta.url), "utf8"), readme = readText(new URL("../supabase/README.md", import.meta.url), "utf8");
-      const seeded = /insert into consent_statements[^;]*?values\s*\(\s*1\s*,\s*'((?:[^']|'')*)'\s*,\s*'((?:[^']|'')*)'/i.exec(sql), quoted = /^> "(Private notes, levels[^\n]*)"$/m.exec(readme)?.[1] ?? null;
+      // supabase/README.md's quote of the owner's record is held to the migration's seed by sim/readme.test.ts since the
+      // check of fix part 4 (23 Nov 2026): this file stops both deploys, and no sentence of a README may (the deploy trap)
+      const sql = readText(new URL("../supabase/migrations/20261121000001_pf_store.sql", import.meta.url), "utf8");
+      const seeded = /insert into consent_statements[^;]*?values\s*\(\s*1\s*,\s*'((?:[^']|'')*)'\s*,\s*'((?:[^']|'')*)'/i.exec(sql);
       const record = `${pfStatement.STATEMENT_TEXT} ☐ ${pfStatement.STATEMENT_LABEL}`;
-      ck(`the statement is version 1, the owner's wording (b) (${[...pfStatement.STATEMENT_TEXT].length} characters), the same character for character in the engine's file, in the migration's seed and in the owner's record as supabase/README.md quotes it, with "☐ I agree" after it`, pfStatement.STATEMENT_VERSION === 1 && pfStatement.STATEMENT_LABEL === "I agree" && pfStatement.STATEMENT_RECORD === record && !!seeded && seeded[1].replace(/''/g, "'") === pfStatement.STATEMENT_TEXT && seeded[2] === pfStatement.STATEMENT_LABEL && quoted === record
-        && pfStatement.STATEMENT_TEXT === "Private notes, levels and paper portfolios are kept for your account only. Do not enter non-public or confidential information, in notes or in positions: nothing material and non-public about a company or a market, and nothing confidential of your firm or its clients.", { seeded: seeded?.[1], quoted });
+      ck(`the statement is version 1, the owner's wording (b) (${[...pfStatement.STATEMENT_TEXT].length} characters), the same character for character in the engine's file and in the migration's seed, with "☐ I agree" after it (supabase/README.md's quote of the owner's record: sim/readme.test.ts)`, pfStatement.STATEMENT_VERSION === 1 && pfStatement.STATEMENT_LABEL === "I agree" && pfStatement.STATEMENT_RECORD === record && !!seeded && seeded[1].replace(/''/g, "'") === pfStatement.STATEMENT_TEXT && seeded[2] === pfStatement.STATEMENT_LABEL
+        && pfStatement.STATEMENT_TEXT === "Private notes, levels and paper portfolios are kept for your account only. Do not enter non-public or confidential information, in notes or in positions: nothing material and non-public about a company or a market, and nothing confidential of your firm or its clients.", { seeded: seeded?.[1] });
       // the owner's record itself is not a file of the repository; where OWNER_DECISIONS names it (the engineer's run), it is compared too
       const own = process.env.OWNER_DECISIONS;
       if (own) { const row = readText(own, "utf8").split("\n").find((l) => l.startsWith("| P2 |")) ?? "", said = /"(Private notes, levels[^"]*)"/.exec(row)?.[1] ?? null; ck("and the same as row P2 of the owner's decisions (the file OWNER_DECISIONS names)", said === record, { said }); }
-      else console.log("    · the owner's decisions are not a file of the repository: set OWNER_DECISIONS to its path to compare row P2 with the engine's words as well (the quote in supabase/README.md is compared above)");
+      else console.log("    · the owner's decisions are not a file of the repository: set OWNER_DECISIONS to its path to compare row P2 with the engine's words as well (the quote in supabase/README.md is compared by sim/readme.test.ts)");
       ck("under a note, always, the statement's gist; a refused create says why", pfStatement.NOTE_GIST === "Notes are for your own reasoning. Do not enter non-public or confidential information." && pfStatement.NOT_AGREED === "Not created: the statement was not agreed." && pfStatement.STATEMENT_TITLE.portfolio === "Before your first paper portfolio" && pfStatement.STATEMENT_TITLE.note === "Before your first note");
     }
     // ---- the page's copy of the engine, and what may never name a private table ----
@@ -2189,12 +2199,10 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck("a page of the tab opens at its top: a book from the list, Settings from Overview, the form's next step; a section of Settings places itself, and the tab itself does what tabs do", pfOpensAtTop({ view: "portfolio", sub: "all" }, { view: "portfolio", sub: "b1" }) && pfOpensAtTop({ view: "portfolio", sub: "b1" }, { view: "portfolio", sub: "b1/settings" }) && !pfOpensAtTop({ view: "portfolio", sub: "b1/settings" }, { view: "portfolio", sub: "b1/settings/limits" })
       && !pfOpensAtTop({ view: "portfolio", sub: "b1/settings/limits" }, { view: "portfolio", sub: "b1/settings/delete" }) && pfOpensAtTop({ view: "portfolio", sub: "new/ar-ls-jp" }, { view: "portfolio", sub: "new/ar-ls-jp/review" }) && !pfOpensAtTop({ view: "market", sub: "" }, { view: "portfolio", sub: "" }) && pfOpensAtTop({ view: "market", sub: "" }, { view: "portfolio", sub: "new" }) && portfolioPage("b1/settings/limits") === "b1/settings" && portfolioPage("b1") === "b1"
       && opensAtTop({ view: "market", sub: "" }, { view: "asset", sub: "NVDA" }) && !opensAtTop({ view: "market", sub: "" }, { view: "news", sub: "" }));
-    {
-      const readme = readText(new URL("../README.md", import.meta.url), "utf8"), sources = readme.slice(readme.indexOf("## Data sources"), readme.indexOf("\n## ", readme.indexOf("## Data sources") + 5)).replace(/\s+/g, " ");
-      ck(`"personal use" (the owner's decision P4): the paragraph is in README.md's "Data sources" word for word ("${PERSONAL_USE_TEXT.slice(0, 60)}…"), with what is read today beside it, and the tab's word is "${PORTFOLIO_WORD}"`, PERSONAL_USE === "personal use" && PERSONAL_USE_TEXT === "Files from JPX, Nikkei, JSF and fund issuers are used on the owner's statement that this Monitor's use is personal and non-commercial (20 Nov 2026). Each is credited where it is used."
-        && sources.includes(PERSONAL_USE_TEXT) && sources.includes(PERSONAL_USE_READ) && Object.keys(MEMBERS_SOURCE).sort().join() === "NK225,TOPIX" && /^members: JPX, /.test(MEMBERS_SOURCE.TOPIX.line) && /Nikkei Inc\./.test(MEMBERS_SOURCE.NK225.line) && PORTFOLIO_WORD === "Portfolio", { has: sources.includes(PERSONAL_USE_TEXT) });
-      ck("README.md and supabase/README.md name the two switches and say they are off until P-4a is accepted", /The paper portfolio's two switches/.test(readme) && /PAPER_ON_LIVE_SITE/.test(readme) && /PAPER_ON_SERVER/.test(readme) && /PAPER_ON_SERVER/.test(readText(new URL("../supabase/README.md", import.meta.url), "utf8")) && /PAPER_ON_LIVE_SITE/.test(readText(new URL("../supabase/README.md", import.meta.url), "utf8")));
-    }
+    // the "personal use" paragraph as README.md's "Data sources" holds it, and the two switches as both READMEs name them,
+    // are held by sim/readme.test.ts since the check of fix part 4 (23 Nov 2026): no sentence of a README stops a deploy
+    ck(`"personal use" (the owner's decision P4): the paragraph's words ("${PERSONAL_USE_TEXT.slice(0, 60)}…") and the publishers it credits, what is read today beside it, and the tab's word "${PORTFOLIO_WORD}"`, PERSONAL_USE === "personal use" && PERSONAL_USE_TEXT === "Files from JPX, Nikkei, JSF and fund issuers are used on the owner's statement that this Monitor's use is personal and non-commercial (20 Nov 2026). Each is credited where it is used."
+      && /^Read today: /.test(PERSONAL_USE_READ) && Object.keys(MEMBERS_SOURCE).sort().join() === "NK225,TOPIX" && /^members: JPX, /.test(MEMBERS_SOURCE.TOPIX.line) && /Nikkei Inc\./.test(MEMBERS_SOURCE.NK225.line) && PORTFOLIO_WORD === "Portfolio");
   }
 
   console.log("\n[AG] fixes after the checks of round 3b (21 Nov 2026): which closes the table's last session takes, a table read long after its answer, the week's first hours, a results date that is past");
@@ -2462,8 +2470,23 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const STILL_FREE = ["You may not copy or reproduce the data on this site for commercial purposes.", "You may not reproduce the content except for your own personal, non-commercial use.", "Commercial use of the data is prohibited.", "You may print or download extracts for your personal use only; any other copying is prohibited.", "商用目的での転載を禁止します。", "We shall not be liable for any loss arising from the use of the data.", "You may not copy the data for commercial purposes, and may not redistribute it for commercial purposes either.", "You may not copy the data for commercial purposes, nor redistribute it for commercial gain."];
     const notBar = UNLIMITED.filter((l) => kind(l) === null), wrongBar = STILL_FREE.filter((l) => kind(l) !== null);
     ck(`PL-2: ${UNLIMITED.length} unlimited bans are bars (commercial use named as one of the banned acts, two bans in one sentence, with or without a subject of its own for the second since the check of fix part 3, "Nothing … may be", "must never", "requires … consent", "may only be … with … permission", "without our permission", 許可が必要, "publication" and "republication": ${notBar.length} read as none), and ${STILL_FREE.length} lines that limit a ban or leave a use free are still none (${wrongBar.length} read as bars)`, notBar.length === 0 && wrongBar.length === 0, { notBar, wrongBar });
-    // what the README says the gate still reads as none (the check of fix part 3): a limit after a plain "or" inside one ban
-    ck("PL-2: a limit named after a plain \"or\" inside one ban is still read as the whole sentence's (none), as the README and lib.ts say", kind("You may not copy or redistribute the data or use it for commercial purposes.") === null);
+    // the check of fix part 4 (fix4-verify-5420, N-1 and PL-2's rest; 23 Nov 2026). Both ways:
+    //   false bars: "publication" read as an act of re-use made a document's own disclaimers bars, and a grant of personal
+    //   use followed by "but must not otherwise copy it" was read clause by clause as an unlimited ban; both read none
+    //   again, as at dfd0970 ("publication" is re-use only when it is done to a site's data, "publication of the data";
+    //   a second ban that says "otherwise" or "any other" after a grant is read with that grant);
+    //   misses: an unlimited ban after a semicolon, after a noun for its subject, or in Japanese after 「し、」 read none
+    //   at all three commits, and a list after a lead-in that bans freed every item when one named a purpose
+    const NOT_BARS = ["This publication does not constitute investment advice.", "The information in this publication should not be relied upon as a forecast.", "Any opinions expressed in this publication may not reflect the views of the issuer.", "This publication does not constitute an offer or a solicitation of an offer to buy shares.", "The publication date of this factsheet does not change the fund's dealing days.", "Past performance shown in this publication is not a reliable indicator and cannot be guaranteed.", "You may store the data for your personal, non-commercial use, but must not otherwise copy it.", "You may download and print one copy for your personal use, but may not otherwise reproduce the material."];
+    const MISSES = ["You may not copy the data for commercial purposes; you may not redistribute it.", "You may not copy the data for commercial purposes, and the data may not be redistributed.", "You may not copy the data for commercial purposes, and redistribution is also prohibited.", "You may not copy the data; nor may you use it for commercial purposes.", "You may download extracts for your personal use only, and redistribution of the data is prohibited.", "商用目的での転載を禁止し、また再配布も禁止します。"];
+    const SAME_KIND = ["You may not copy the data for commercial purposes; redistribution is prohibited.", "You may not copy the data for commercial purposes, and redistribution of the data is not permitted.", "You may not copy the content for commercial purposes, but the content must not be redistributed in any case.", "Users may copy the data for internal use, while redistribution requires our prior written consent.", "You agree not to: use the data for any commercial purpose; redistribute the data; frame or mirror any part of this site."];
+    const STILL_LIMITED = ["You may print pages for your personal use; you may not otherwise reproduce them.", "当サイトの情報は個人的な利用に限り複製を許可し、商用目的での利用を禁止します。", "You agree not to: use the data for any commercial purpose; resell the data for profit.", "The publication of this information does not constitute an offer."];
+    const falseBars = NOT_BARS.filter((l) => kind(l) !== null), missed = [...MISSES, ...SAME_KIND].filter((l) => kind(l) === null), wrongLimited = STILL_LIMITED.filter((l) => kind(l) !== null);
+    ck(`the gate both ways: ${NOT_BARS.length} lines that bar nothing of a site's data (six disclaimers that call the document a publication, two grants of personal use with "but must not otherwise copy it") are none (${falseBars.length} read as bars), and ${MISSES.length + SAME_KIND.length} unlimited bans after a semicolon, a noun for a subject, 「し、」 or a list's lead-in are bars (${missed.length} read as none); ${STILL_LIMITED.length} limited ones stay none`, falseBars.length === 0 && missed.length === 0 && wrongLimited.length === 0, { falseBars, missed, wrongLimited });
+    // what the README says the gate still reads as none: a limit after a plain "or" inside one ban (the check of fix part
+    // 3), a purpose named for the acts of a list joined by "and", a ban named only by "as is", and "nor" with no comma
+    const STILL_NONE = ["You may not copy or redistribute the data or use it for commercial purposes.", "Copying and redistribution of the data, and their use for commercial purposes, are prohibited.", "Copying the data for commercial purposes is prohibited, as is its redistribution.", "You may not copy the data nor use it for commercial purposes."];
+    ck("PL-2: what the README and lib.ts say the gate still reads as none is none: a limit named after a plain \"or\" inside one ban, a purpose named once for acts joined by \"and\", a ban named only by \"as is\", \"nor\" without a comma", STILL_NONE.every((l) => kind(l) === null), STILL_NONE.map(kind));
     ck("a redirect off jpx.co.jp is not followed (R: nothing asked elsewhere); PX-7: a redirect from a released page to TOPIX's weight file on jpx.co.jp is not followed either (G), while the lift is on", !runs.R.asked.some((u) => /elsewhere/.test(u)) && /NOT ASKED \(held\)/.test(runs.R.out) && !runs.G.asked.some((u) => /topixweight/.test(u)) && /NOT ASKED \(held\)[^\n]*topixweight/.test(runs.G.out), { R: runs.R.asked.slice(-3), G: runs.G.asked });
   }
 
@@ -2736,10 +2759,12 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     }
   }
 
-  // [AK], what the README says of the checks, is in sim/readme.test.ts since 23 Nov 2026: this file stops a deploy of the
-  // server or the site when it fails, and a sentence of README.md cannot break either (the check of fix part 3: a README
-  // change alone ran no check and then stopped the next deploy). logic-tests runs both files.
+  // [AK], what the READMEs say, is in sim/readme.test.ts since 23 Nov 2026: this file stops a deploy of the server or the
+  // site when it fails, and since the check of fix part 4 it reads neither README, so no sentence of either can stop a
+  // deploy (the check of fix part 3: a README change alone ran no check and then stopped the next deploy; [AL] holds
+  // logic-tests' paths to every file this file does read). logic-tests runs both files.
 
+  const reached: string[] = [];   // every file of the repository's own that this file imports, directly or through another ([AB]), for [AL]
   console.log("\n[AB] this file reaches nothing that GitHub's logic job lacks: only jobs/ is installed there (the failed check of pull request #48, 21 Nov 2026)");
   {
     // GitHub runs this file after `npm ci` in jobs/ and nowhere else (.github/workflows/logic-tests.yml, and the logic
@@ -2828,6 +2853,58 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const noList = "this file was not loaded through require, so Node kept no list of what it loaded: the second look has to be written anew for the way the file is run now";
     ck(`what this run really loaded can be listed (${loaded.length} files of the repository's own, this one first), and following the imports as written missed none of them`, loaded[0] === me && loaded.includes(`${root}web/src/lib/sessions.ts`) && missed.length === 0, self ? missed : noList);
     ck(`none of those files loaded one from web/node_modules or from anywhere else on this machine (${fromJobs} from jobs/node_modules, of packages that jobs/package-lock.json installs)`, self !== null && lacking.length === 0, self ? lacking : noList);
+    reached.push(...written.keys(), ...loaded);
+  }
+
+  console.log("\n[AL] logic-tests runs, on a pull request and on a push to main, on a change to any file this file imports or reads (the deploy trap: the check of fix part 4, 23 Nov 2026)");
+  {
+    // This file stops a deploy of the server (deploy-server's logic checks) and of the site (deploy-web's test). A file it
+    // imports or reads that changes alone, where no workflow of a pull request runs this file, merged with no check and
+    // stopped the next deploy: jobs/lib/marks.ts, jobs/live_check.ts or deploy-server.yml did, and before 23 Nov 2026 a
+    // sentence of the README. The list is the code's, not a hand's: the files the imports lead to ([AB]'s two looks);
+    // every address this file and those files build as new URL("…", import.meta.url) (a template's fixed part, or one
+    // that ends with "/", is a folder); and every file and folder this run read (readText and listDir record each). A
+    // folder counts with every file under it and with one that may be added there. Each must match a path of
+    // logic-tests.yml, for a pull request and for a push to main, by GitHub's rule (* any characters but /, ** any).
+    type TsNode = import("typescript").Node;
+    const ts = createRequire(new URL("../jobs/package.json", import.meta.url))("typescript") as typeof import("typescript");
+    const slash = (f: string) => f.replace(/\\/g, "/"), root = slash(fileURLToPath(new URL("../", import.meta.url)));
+    const inRepo = (f: string) => slash(f).startsWith(root) && !/(^|\/)node_modules(\/|$)/.test(slash(f).slice(root.length));
+    const rel = (f: string) => slash(f).slice(root.length).replace(/\/$/, "");
+    const files = new Set<string>(), folders = new Set<string>();
+    const isDir = (f: string) => fileStat(f, { throwIfNoEntry: false })?.isDirectory() === true;
+    const add = (abs: string, folder = false) => { if (!inRepo(abs)) return; if (folder || isDir(abs)) folders.add(rel(abs)); else files.add(rel(abs)); };
+    for (const f of reached) add(f);
+    // every new URL("…", import.meta.url) in this file and the files it imports
+    const urlsOf = (file: string): Array<{ at: string; folder: boolean }> => {
+      const sf = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest), out: Array<{ at: string; folder: boolean }> = [];
+      const meta = (n: TsNode | undefined) => !!n && ts.isPropertyAccessExpression(n) && n.name.text === "url" && ts.isMetaProperty(n.expression);
+      const visit = (n: TsNode): void => {
+        if (ts.isNewExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === "URL" && n.arguments?.length === 2 && meta(n.arguments[1])) {
+          const a = n.arguments[0];
+          if (ts.isStringLiteralLike(a)) out.push({ at: resolvePath(dirname(file), a.text), folder: a.text.endsWith("/") });
+          else if (ts.isTemplateExpression(a)) out.push({ at: resolvePath(dirname(file), a.head.text.replace(/[^/]*$/, "")), folder: true });
+        }
+        ts.forEachChild(n, visit);
+      };
+      visit(sf);
+      return out;
+    };
+    let built = 0;
+    for (const f of reached.filter((x) => /\.[cm]?[jt]sx?$/.test(x) && inRepo(x))) for (const u of urlsOf(f)) { built++; add(u.at, u.folder); }
+    for (const r of readsSeen) add(r);
+    // the workflow's paths, for a push to main and for a pull request
+    const wf = readText(new URL("../.github/workflows/logic-tests.yml", import.meta.url), "utf8");
+    const pathsOf = (ev: string): string[] | null => { const m = new RegExp(`\\n  ${ev}:\\n(?:    .*\\n)*?    paths: \\[([^\\]]*)\\]`).exec(wf); return m ? [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]) : null; };
+    const push = pathsOf("push"), pr = pathsOf("pull_request");
+    const globRe = (g: string) => new RegExp(`^${g.split("**").map((x) => x.split("*").map((y) => y.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join("[^/]*")).join(".*")}$`);
+    const covers = (ps: string[] | null, f: string) => !!ps && ps.some((g) => !g.startsWith("!") && globRe(g).test(f));
+    const under = (dir: string): string[] => { const out: string[] = []; const walk = (d: string) => { for (const e of readdirSync(resolvePath(root, d), { withFileTypes: true })) { if (e.name === "node_modules") continue; const x = d ? `${d}/${e.name}` : e.name; if (e.isDirectory()) walk(x); else out.push(x); } }; walk(dir); return out; };
+    const checked = [...files, ...[...folders].flatMap((d) => [...under(d), `${d}/a-file-added-later.ts`, `${d}/a-folder-added-later/a-file.ts`])];
+    const missed = [...new Set(checked.filter((f) => !covers(push, f) || !covers(pr, f)))].sort();
+    const must = ["jobs/lib/marks.ts", "jobs/lib/pfwalls.ts", "jobs/live_check.ts", "jobs/package-lock.json", ".github/workflows/deploy-server.yml", "web/src/components/Help.tsx", "web/src/lib/sessions.ts", "supabase/functions/_shared/sessions.ts", "jobs/probes/lib.ts"];
+    ck(`logic-tests' paths (${push?.length ?? 0} for a push to main, ${pr?.length ?? 0} for a pull request) cover every file this file imports or reads, as the code says (${files.size} files, ${folders.size} folders, ${built} addresses built with import.meta.url, ${readsSeen.size} read in this run; ${checked.length} paths in all, ${missed.length} not covered), among them ${must.join(", ")}; and no README is read here (its checks are sim/readme.test.ts's)`,
+      !!push && !!pr && missed.length === 0 && must.every((f) => files.has(f) || [...folders].some((d) => f.startsWith(`${d}/`))) && !files.has("README.md") && !files.has("supabase/README.md"), { missed: missed.slice(0, 40), push, pr });
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

@@ -538,22 +538,34 @@ body.term .phead .aux{display:block;flex:1 1 0;text-align:right;white-space:nowr
 body.term .phead .aux:has(.chips){display:inline-flex;flex-wrap:wrap;white-space:normal;overflow:visible}
 /* a source line is drawn whole or in its short form, never cut (the designer's B.0.3, 22 Nov 2026; Panel.tsx
    useSourceFit picks the form): the whole line beside the title; .short, the short form beside it; .compact, the same
-   parts written shorter beside it (R2 of the check of fix part 3, 23 Nov 2026); .wrap, the shortest form there is on
-   a second line of the head, right-aligned, broken only between its parts. The scrolling layout keeps the whole line,
-   wrapped as before. */
+   parts written shorter beside it (R2 of the check of fix part 3, 23 Nov 2026); .min, the state's badge and the time
+   of the figures alone (R2 of the check of fix part 4); .wrap, the shortest form there is on a second line of the
+   head, right-aligned, broken only between its parts. A line drawn once (.src-drop, a stock's) leaves out its parts
+   marked data-drop instead: .d1 the first, .d2 the first two, .d3 all three. The scrolling layout keeps the whole
+   line, wrapped as before; a stock's line flows there as text (N1's nit: as flex items its parts took a line each),
+   and leaves out its descriptive parts only where its credit would cost its head more than one line. */
 .phead .aux.src-fit>.src-long{display:contents}
-.phead .aux.src-fit>.src-short,.phead .aux.src-fit>.src-compact{display:none}
+.phead .aux.src-fit>.src-short,.phead .aux.src-fit>.src-compact,.phead .aux.src-fit>.src-min{display:none}
+.phead .aux.src-fit.src-drop{display:block;text-align:right}
 body.term .phead .aux.src-fit{display:block;flex:1 1 0;min-width:0;text-align:right;overflow:visible;text-overflow:clip}
 body.term .phead .aux.src-fit>.src-long{display:inline;white-space:nowrap}
 body.term .phead .aux.src-fit.short>.src-long{display:none}
 body.term .phead .aux.src-fit.short>.src-short{display:inline;white-space:nowrap}
 body.term .phead .aux.src-fit.compact>.src-long{display:none}
 body.term .phead .aux.src-fit.compact>.src-compact{display:inline;white-space:nowrap}
+body.term .phead .aux.src-fit.min>.src-long{display:none}
+body.term .phead .aux.src-fit.min>.src-min{display:inline;white-space:nowrap}
+.phead .aux.src-fit.d1 [data-drop="1"],.phead .aux.src-fit.d2 :is([data-drop="1"],[data-drop="2"]),.phead .aux.src-fit.d3 [data-drop]{display:none}
 body.term .phead .aux.src-fit .sp{white-space:nowrap}
 body.term .phead:has(>.aux.src-fit.wrap){flex-wrap:wrap;row-gap:1px}
 body.term .phead .aux.src-fit.wrap{flex:1 1 100%;order:2}
-body.term .phead .aux.src-fit.wrap>.src-short,body.term .phead .aux.src-fit.wrap>.src-compact{white-space:normal}
+body.term .phead .aux.src-fit.wrap>.src-short,body.term .phead .aux.src-fit.wrap>.src-compact,body.term .phead .aux.src-fit.wrap>.src-min,body.term .phead .aux.src-fit.src-drop.wrap>.src-long{white-space:normal}
 body.term .phead:has(>.aux.src-fit.wrap)>.csvbtn{order:1;margin-left:auto}
+/* a title wider than its head's whole line (a name far longer than any listed company's) is cut at its end, its
+   tooltip whole (Panel.tsx), and never pushes the CSV button or the source line off the head; with the line on its
+   second line the title has the first line beside the button */
+body.term .phead>.t{flex:0 1 auto;min-width:0;overflow-x:clip;text-overflow:ellipsis}
+body.term .phead:has(>.aux.src-fit.wrap)>.t{flex:1 1 0}
 
 /* the selector strip (index toggle, period, σ window) is the first row and only as tall as its chips */
 body.term #grid:has(>.c12:not(.panel)){grid-template-rows:auto}

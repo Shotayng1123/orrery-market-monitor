@@ -110,7 +110,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,195 checks in 49 suites on 23 Nov 2026): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,230 checks in 51 suites on 23 Nov 2026): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -272,19 +272,25 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   `source-lines` (round 3b, the designer's B.0.3 and B.1): every panel head's source line drawn whole or in its short
   form, never cut, at six windows and in a wider face, also as the window is resized; "personal use" whole, opening
   Help at its paragraph (in FULL too), and on a phone a space on each side of its dot; JPX's calendar named with
-  "(personal use)" on Tokyo's holiday; TOPIX's PROXY badges and Help's rows saying what is read; and since the final
-  review of pull request #50, on EQUITIES in the one-screen layout, a source line under its title taking no whole
-  table row (the market open and closed, TOPIX and KOSPI, at 1280×720, 1179×800 and 1769×1000 XL, and in DejaVu Sans),
-  and since its check (23 Nov 2026) no chart height either where the compact form fits beside the title (TOPIX's heads
-  on one line, its heat map, index chart and drivers as tall as the live site's; a head on a second line only where its
-  compact form is wider than its room); a Tokyo stock's index memberships credited on the line itself.
+  "(personal use)" on Tokyo's holiday; TOPIX's PROXY badges and Help's rows saying what is read.
+  `source-lines-fit` and `stock-line` (sections [9] and [10] of `source-lines` until the check of fix part 4, 23 Nov
+  2026, split off and widened, each suite under three minutes): on EQUITIES in the one-screen layout, every head on
+  one line, taking no whole table row and no chart height from the live site's (the market open and closed, TOPIX and
+  the three indices whose names are a STAND-IN, KOSPI, NASDAQ COMP and SHANGHAI COMP, at 1280×720, 1179×800, 1114×800
+  S and 1769×1000 XL, and in DejaVu Sans), with every badge of its whole line whole in it; and a Tokyo stock's index
+  memberships credited on the line itself, and for fifteen names, real-world ones and far longer ones, at the least
+  window of each text size, the line never cut, its symbol, sources, credit and "personal use" never left out (its
+  industry, then its sector, then its exchange go first), and in the scrolling and the classic phone layouts the
+  credit adding at most one line to the head.
   `portfolio`, `phone-portfolio` and `source-lines` also check the "personal use" lines, which are live on the published
   page, and `local-copy` opens the built site on both layouts to check the state the page's switch says: with it off,
   six tabs, no "PORTFOLIO" or "Portfolio" anywhere, `#portfolio/new` showing MARKETS, no portfolio route asked, and
   no file of the portfolio's screens or of its stand-in books among the published files.
-  `cd web && npm run e2e` starts the test servers it needs and runs them all, three suites at a time: about
-  28 minutes on the engineer's machine (1,666 s as installed and 1,659 s with GitHub's letter placement on 23 Nov
-  2026 for the 49 suites and 3,195 checks, after the check of fix part 3; 1,781 s and 1,721 s on 22 Nov for the 49
+  `cd web && npm run e2e` starts the test servers it needs and runs them all, up to three suites at a time (two of
+  the dev servers' and one of the built site's, whose suites queue behind each other): about
+  28 minutes on the engineer's machine (1,631 s as installed and 1,677 s with GitHub's letter placement on 23 Nov
+  2026 for the 51 suites and 3,230 checks, after the check of fix part 4; 1,666 s and 1,659 s for the 49 suites and
+  3,195 checks after the check of fix part 3; 1,781 s and 1,721 s on 22 Nov for the 49
   suites and 3,179 checks after the final review of pull request #50; 1,687 s and 1,601 s for the
   49 suites and 3,156 checks before it, which took 1,247 s on GitHub; 1,206 s for the 43 suites, with `header`; 1,204 s
   for 42, with `portfolio-accounts`; 1,169 s
@@ -293,8 +299,10 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   for the 37 suites and 2,337 checks before them, which took 977 s on GitHub; the 34 suites and 2,052 checks before
   that day's first three new suites took 14.5 minutes there and 13 on GitHub). `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
   On GitHub the publish runs them as two jobs of about equal time, each with its own 30-minute limit and both needed
-  for a publish (`deploy-web`'s `test`, `node e2e/run.cjs --part=1`, and `test-2`, `--part=2`: every suite not in the
-  runner's `PART_ONE`); in one job they took 25 min 17 s of its 30 on 22 Nov 2026.
+  for a publish (`deploy-web`'s `test`, `node e2e/run.cjs --part=1`, two suites at a time, and `test-2`, `--part=2`:
+  every suite not in the runner's `PART_ONE`, the built site's among them); in one job they took 25 min 17 s of its 30
+  (run 45080955695, 22 Nov 2026, 23:01 to 23:27 UTC). On the engineer's machine with GitHub's letter placement part 1
+  took 951 s and part 2 817 s (23 Nov 2026, after the check of fix part 4).
   A suite that fails once is tried again; when the second try passes, the lines that failed the first time are
   printed all the same, so a check that fails only now and then can be found from the publish job's log.
   Needs Playwright's browser once: `npx playwright install chromium`.
@@ -318,9 +326,9 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   + x% as one figure at EFFR and at TONA; the target volatility against the VaR limit, clear, warned and refused;
   the ladder's words; the next session and the targets' window; every route over a store kept in memory, with the
   statement first, a second account, the cap, a change's history and delete; with the server's switch off, all twelve
-  routes refusing without reaching the store; the statement's words the same in the engine, the migration's seed and
-  the owner's record; the page's copy of the engine equal to the server's files; no workflow, job or function naming
-  a private table; both switches off; the "personal use" paragraph in this file word for word), the fixes after
+  routes refusing without reaching the store; the statement's words the same in the engine and the migration's seed,
+  and in the owner's record where `OWNER_DECISIONS` names it; the page's copy of the engine equal to the server's files;
+  no workflow, job or function naming a private table; both switches off; the "personal use" paragraph's words), the fixes after
   the checks of round 3b (section [AG]: which closes the table's last session takes, whatever order the stored
   closes come back in and however many rows an answer is cut at; a table kept on a device and read long after its
   answer; the week's first hours on a Monday; a results date that is past), the feed's health in the week's first
@@ -337,23 +345,30 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   a future's roll today with and without the new contract's close and one between its last two closes, which σ window
   a print and a booked close are set against).
   `cd jobs && npx tsx ../sim/logic.test.ts`.
-  The same command checks the file itself, in its last section. GitHub installs `jobs/` alone before it runs the
+  The same command checks the file itself, in its last two sections. GitHub installs `jobs/` alone before it runs the
   logic checks (`logic-tests`, and `deploy-server` before a deploy), so nothing the file imports, directly or through
   another file, may reach a package of the page's (`web/node_modules`: React, uPlot). On a machine that has
   `web/node_modules` such an import loads all the same: on 21 Nov 2026 the file read a rule from `lib/nav.ts`, which
-  imports React, passed here and stopped pull request #48's check on GitHub with "Cannot find module 'react'". The
-  section follows the imports as they are written, from file to file, and walks the files the run really loaded; it
+  imports React, passed here and stopped pull request #48's check on GitHub with "Cannot find module 'react'". Section
+  [AB] follows the imports as they are written, from file to file, and walks the files the run really loaded; it
   fails on any machine, naming the file, the line and the way there. A rule of the page that the logic checks read
   therefore lives in a module that imports no package (`lib/pagetop.ts` beside `lib/nav.ts`), and a type from a
-  module that does is imported with `import type`. To run the file exactly as GitHub does:
+  module that does is imported with `import type`. Section [AL] holds `logic-tests`' paths, for a pull request and
+  for a push to `main`, to every file the file imports (as [AB] finds them) or reads: each address it and those files
+  build with `new URL("…", import.meta.url)`, and each file and folder the run read (a folder with every file under
+  it and one that may be added there). To run the file exactly as GitHub does:
   `git archive HEAD | tar -x -C <an empty folder>`, then `npm ci` and the command above in that folder's `jobs/`.
 - **The README's own checks** (`sim/readme.test.ts`, section [AK]): what this file says of the checks is what the
   repository holds (the number of browser suites in `web/e2e/run.cjs`, the paper portfolio's suites by name, the suites
   described here by name, which suites check the "personal use" lines, the windows of the morning check, what `pf_jpx`
-  asks). They were a section of the logic checks until 23 Nov 2026; the logic checks stop a deploy of the server and of
-  the site, a sentence of this file cannot break either, and a change to this file alone ran no check at all, so a
-  rewording could merge unchecked and stop the next deploy. They run in `logic-tests` only, which runs on a change to
-  this file as well. `cd jobs && npx tsx ../sim/readme.test.ts`.
+  asks, the terms gate's examples put to the gate itself), and the sentences of the two READMEs that name the code
+  (the "personal use" paragraph word for word, the paper portfolio's two switches, the account statement as
+  `supabase/README.md` quotes it). The logic checks stop a deploy of the server and of the site; until 23 Nov 2026 they
+  held all of these, a change to either README alone ran no check at all, and a rewording could merge unchecked and
+  stop the next deploy. Since then the logic checks read neither README (the checks of the checks left them first, the
+  three sentences that name the code at the check of fix part 4), so no sentence of either README can stop a deploy.
+  These run in `logic-tests` only, which runs on a change to either README as well.
+  `cd jobs && npx tsx ../sim/readme.test.ts`.
 - **Database checks** (`sim/sql`): the rules that live in database functions (the limits on verification emails;
   the queue for the reasons of big moves; the request for the second path),
   run with the migration file itself on PGlite, a Postgres inside Node; and the pattern an instrument's headlines are
@@ -371,10 +386,12 @@ Three sets, none of which needs the real API, the live database or a sign-in:
 
 The `deploy-web` workflow runs the browser and logic checks before it publishes: a failing check stops the publish.
 A pull request that touches `web/` runs them without publishing. `logic-tests` runs the logic, README and database
-checks when the server's functions or migrations, the page's `src/lib`, a browser suite, the source probes, this file or
-`supabase/README.md` change: the README's checks are in no deploy's gate, and the few sentences of the two READMEs the
-logic checks hold to the code (the "personal use" paragraph, the paper book's switches, the account statement's words
-as `supabase/README.md` quotes them) are checked before a change to them merges.
+checks, on a pull request and on a push to `main`, when any file the logic checks import or read changes (the server's
+functions and migrations, `sim/`, the page's `src/`, `jobs/`, the workflows) and when a browser suite, this file or
+`supabase/README.md` does: the logic checks stop both deploys, and their section [AL] fails when a file they import,
+directly or through another, or read is not under `logic-tests`' paths (until 23 Nov 2026 a change to `jobs/lib/`,
+`jobs/live_check.ts` or `deploy-server.yml` alone ran them nowhere before it merged, and stopped the next deploy). The
+README's checks are in no deploy's gate.
 
 ## Data sources (v1)
 
@@ -397,16 +414,23 @@ Not used, by the owner's decision of 21 Nov 2026: JPX's TOPIX weight file, its l
 On screen, every source line that names one of those files ends "· personal use": EQUITIES' SHORT INTEREST and
 SCREENER (the member lists of TOPIX and the Nikkei 225) and a Tokyo stock's SHORT INTEREST, on both layouts; a
 sentence that names JPX's holiday calendar in passing carries "(personal use)" right after it (an "opens …" line's
-tooltip, a phone's opened Tokyo row on a holiday, Help's "Holidays · scheduled"). In the one-screen layout a source
-line too long for its head is drawn in a short form that keeps the publisher, every as-of, a state (INTRADAY,
-STAND-IN) and "personal use": "JPX · personal use" on SHORT INTEREST, with the whole line as the head's tooltip; it is
-never cut. Where even the short form takes the lines under the title, the panel takes that height from the chart beside
-it, never from its table: on EQUITIES, MARKET BREADTH and FLOW BY SECTOR from the heat map under them, SECTOR
-PERFORMANCE and SHORT INTEREST from the index and its drivers above them (since the final review of pull request #50:
-two of SECTOR PERFORMANCE's whole rows had gone behind its own scroll with the market open). On a computer the two words open Help at "Data sources · personal use" (in FULL too); on a phone, in the
-layout made for phones, the source line opens a card with the publisher, the file and the same paragraph (in the
-classic layout the words open Help, as on a computer). The words are in `web/src/lib/labels.ts`; the logic checks compare this
-paragraph with them, and `phone-portfolio` and `portfolio` check the lines on both layouts.
+tooltip, a phone's opened Tokyo row on a holiday, Help's "Holidays · scheduled"), and a Tokyo stock's line credits
+its index memberships, "NK225, TOPIX (Nikkei, JPX · personal use)". In the one-screen layout a source line too long
+for its head is drawn in a short form that keeps the publisher, every as-of, a state (INTRADAY, STAND-IN) and
+"personal use": "JPX · personal use" on SHORT INTEREST, with the whole line as the head's tooltip; then in a compact
+form, the same parts written as a cell writes them; then in a minimal one, the state's badges and the time of the
+figures alone ("INTRADAY 1D 10:12 SGT STAND-IN", "turnover 10:12 SGT STAND-IN": since the check of fix part 4, where a
+STAND-IN badge made even the compact form too wide on KOSPI, NASDAQ COMP and SHANGHAI COMP). A stock's line leaves
+out its industry, then its sector, then its exchange, never its symbol, its memberships with their credit, or Yahoo
+Finance. A line is never cut. Where even the last form takes the lines under the title, the panel takes that height
+from the chart beside it, never from its table: on EQUITIES, MARKET BREADTH and FLOW BY SECTOR from the heat map under
+them, SECTOR PERFORMANCE and SHORT INTEREST from the index and its drivers above them (since the final review of pull
+request #50: two of SECTOR PERFORMANCE's whole rows had gone behind its own scroll with the market open). On a
+computer the two words open Help at "Data sources · personal use" (in FULL too); on a phone, in the layout made for
+phones, the source line opens a card with the publisher, the file and the same paragraph (in the classic layout the
+words open Help, as on a computer). The words are in `web/src/lib/labels.ts`; the README's checks
+(`sim/readme.test.ts`) compare this paragraph with them, and `phone-portfolio` and `portfolio` check the lines on both
+layouts.
 
 ### When a closed market opens (since 2026-11-21)
 
@@ -502,13 +526,25 @@ publishers' files (`pf_bench`, `pf_borrow`) also read the site's terms, by its o
 (`readTerms()`, `termsBar()`): a line that forbids automated reading, or that forbids copying, reproducing, storing,
 publishing or redistributing and names no purpose the ban is limited to (commercial use named among the banned acts is
 none: "any copying, redistribution or commercial use … is prohibited"), holds that site's files and is printed for a
-person to read, and that finding goes to the owner. A sentence of two bans is read ban by ban where the second opens
-with its own subject, its own "may not", "must not", "cannot" or the like, or "nor" ("…, and may not use it for
-commercial purposes"), so the purpose one names does not free the other; a purpose named for one of the acts a single ban lists is read as the
-whole ban's ("may not copy or redistribute the data or use it for commercial purposes", "copying and redistribution of
-the data, and their use for commercial purposes, are prohibited"), and such a line does not hold the files. The gate
-errs the other way elsewhere: it holds the files for some lines that bar nothing of a site's data ("we will never sell
-your personal information"); a page reached by a "legal" link counts as the terms only when its title or first
+person to read, and that finding goes to the owner. A sentence of two bans is read ban by ban, so the purpose one
+names does not free the other, where a semicolon parts them ("…; you may not redistribute it", "…; nor may you use it
+…"), or ", nor", or "and", "but", "while" or "whereas" before a second ban that has its own subject, a pronoun or a
+noun before its own "may not", "is prohibited", "requires our consent" or the like ("…, and redistribution of the
+data is prohibited"), or its own "may not", "must not", "cannot" or the like ("…, and may not use it for commercial
+purposes"), and in Japanese 「し、」 or 「、また」 (商用目的での転載を禁止し、また再配布も禁止します。); a list after a
+lead-in that bans ("You agree not to: …; …; …") is read item by item with its lead-in. A second ban that says
+"otherwise" or "any other" after a grant of personal, private, non-commercial or internal use is read with that grant
+("You may store the data for your personal, non-commercial use, but must not otherwise copy it." holds nothing), and
+"publication" is an act of re-use only when it is done to a site's data ("Publication of the data in any medium
+requires our consent." holds the files; "This publication does not constitute investment advice." does not; both
+since the check of fix part 4, 23 Nov 2026). Still read as none, so that such a line does not hold the files: a
+purpose named for one of the acts a single ban lists is read as the whole ban's ("You may not copy or redistribute the
+data or use it for commercial purposes.", "Copying and redistribution of the data, and their use for commercial
+purposes, are prohibited."), and so is a ban named only by "as is" ("Copying the data for commercial purposes is
+prohibited, as is its redistribution.") or joined by "nor" without a comma ("You may not copy the data nor use it for
+commercial purposes."). The gate errs the other way elsewhere: it holds the files for some lines that bar nothing of
+a site's data ("We will never sell your personal information.", "Information published here does not constitute
+advice."); a page reached by a "legal" link counts as the terms only when its title or first
 heading names them and its lines cover two of the subjects the gate reads or carry a ban (since 22 Nov 2026: by its
 name alone, or by two stray lines, a page counted as the terms read), and where no terms are found the files that need
 them stay unread. Until 21 Nov 2026 the gate knew a ban only by the wordings it was modelled on (a word of
@@ -532,10 +568,11 @@ only once the page is asked). It prints only values: a table's cells under its h
 a page's clock times, dates and percentages in order with at most the one joining word between two of them and none
 around them ("9:00 am to 11:30 am"), each page's own title, a holiday as its date; and any piece of a page it prints
 other than a title holds nothing but figures, dates, clock times and the words of a closed list of the labels, units
-and joining words JPX's tables carry (a piece without a figure must be one of its labels whole), so that a sentence with
-any other word is not printed, however short; some words of the list are verbs as well as nouns (changes, limits,
-order, quote, shares, prices, issues, note), and a few words of a page made of those and figures alone are printed as
-they stand ("TOPIX changes from 2027", "Order 100 shares") (`jobs/probes/jpx_read.ts`, `labelOnly`; until 22 Nov 2026 a value came with two words on each side, and the pieces of one
+and joining words JPX's tables carry (a piece without a figure must be one of its labels whole in English, and in
+Japanese labels of the list joined by の, から and まで, "構成銘柄以外の銘柄"), so that a sentence with any other word is
+not printed, however short; some words of the list are verbs as well as nouns (changes, limits, order, quote, shares,
+prices, issues, note), and a few words of a page made of the list's words and figures alone are printed as they stand,
+whatever they say ("TOPIX changes from 2027", "Order 100 shares", "TOPIX groups issues from 2027") (`jobs/probes/jpx_read.ts`, `labelOnly`; until 22 Nov 2026 a value came with two words on each side, and the pieces of one
 paragraph overlapped so that consecutive lines gave its sentences back; until the final review of pull request #50 a
 short sentence with a verb the guard did not list, "Trading resumes at 12:30 pm", passed it;
 its first run, on 21 Nov, printed whole lines of JPX's pages into the public job log and asked one address from memory,

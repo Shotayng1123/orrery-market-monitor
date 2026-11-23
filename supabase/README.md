@@ -16,7 +16,7 @@ intraday prices, yield curves, calendar, news, notes, reports and sign-ins; pg_c
    ```bash
    npx supabase login            # opens the browser
    npx supabase link --project-ref <ref>
-   npx supabase db push          # applies supabase/migrations (schema, seeds, fn_table_anchors)
+   npx supabase db push --remote # applies supabase/migrations (schema, seeds, fn_table_anchors); CLI 3 needs --remote
    ```
 3. Function secrets (never in git):
    ```bash
@@ -46,9 +46,9 @@ intraday prices, yield curves, calendar, news, notes, reports and sign-ins; pg_c
 
 The database changes and the three functions are deployed by the `deploy-server` workflow, the way `deploy-web` publishes
 the site: a push to `main` that touches `supabase/` deploys it. Nobody needs the Supabase CLI or a key on their own
-machine, so a change can come from any session. Deploying by hand (`npx supabase db push`, `npx supabase functions
-deploy tick daily api`; with CLI 3, `db push --remote`) still works, but then deploy only what is already on `main`, or the next automatic deploy
-will put `main`'s code back.
+machine, so a change can come from any session. Deploying by hand (`npx supabase db push --remote` and `npx supabase
+functions deploy tick daily api --use-api`, the commands of CLI 3: below) still works, but then deploy only what is
+already on `main`, or the next automatic deploy will put `main`'s code back.
 
 Set up once, in the repository's Settings › Secrets and variables › Actions › Secrets:
 
@@ -101,7 +101,7 @@ Alerts reach phones and browsers as notifications once the server has a signing 
 With the `deploy-server` workflow set up (above) none of these steps is needed: it applies the migration, makes the
 key if the server has none, and deploys. By hand:
 
-1. `npx supabase db push` (migration `20261118000001_push.sql`: the `push_subs` table and `alerts.pushed_at`).
+1. `npx supabase db push --remote` (migration `20261118000001_push.sql`: the `push_subs` table and `alerts.pushed_at`).
 2. The key pair, made once and never shown:
    ```bash
    node jobs/tools/gen_vapid.mjs                              # writes jobs/.env.vapid (git-ignored)
@@ -208,7 +208,7 @@ The same token serves three things: the note at 07:00 SGT, the look-up of a big 
 queues it ("Big moves and why"), and, since 19 Nov, the start of the second path for prices within a minute of the
 server's own answers stopping ("When the price feed stops"). Without it all three wait for GitHub's schedule.
 
-1. `npx supabase db push` (migration `20261118000002_note_on_time.sql`). This also adds one quote pull after the
+1. `npx supabase db push --remote` (migration `20261118000002_note_on_time.sql`). This also adds one quote pull after the
    Tokyo and Seoul closes, for alerts on closing-auction moves.
 2. A GitHub token that may start this repository's workflows. GitHub › Settings › Developer settings › Personal
    access tokens › Fine-grained tokens › Generate new token: *Repository access* = Only select repositories ›

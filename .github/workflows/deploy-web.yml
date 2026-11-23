@@ -21,15 +21,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # The browser checks (web/e2e: 49 suites) and the logic checks (sim/logic.test.ts). Since 18 Nov 2026 the site is
+  # The browser checks (web/e2e: 51 suites) and the logic checks (sim/logic.test.ts). Since 18 Nov 2026 the site is
   # published only when they pass: until then a publish checked only that the site builds. The limit was 20 minutes
   # when the checks took three. On 21 Nov 2026 the browser run of 2,052 checks in 34 suites took 14.5 minutes on the
   # engineer's machine and 13 here, before the installs; the 49 suites of pull request #50 (3,156 checks) took 28.1 there
   # (1,687 s) and 20.8 here (1,247 s), and with the checks of its final review (3,179) 29.7 there (1,781 s) and, in one
-  # job, 25 min 17 s here of the job's 30 (23 Nov 2026). So since the fixes after that review's check the browser checks
-  # run as two jobs of about equal time, `test` (web/e2e/run.cjs --part=1, with the logic checks) and `test-2`
-  # (--part=2: every suite not in run.cjs's PART_ONE, the built site's among them), each with its own 30 minutes, and a
-  # publish needs both. One suite is stopped at six minutes (web/e2e/run.cjs) and tried again; the longest, opens, takes
+  # job, 25 min 17 s here of the job's 30 (run 45080955695, 22 Nov 2026, 23:01 to 23:27 UTC). So since the fixes after
+  # that review's check the browser checks run as two jobs of about equal time, `test` (web/e2e/run.cjs --part=1, with
+  # the logic checks) and `test-2` (--part=2: every suite not in run.cjs's PART_ONE, the built site's among them), each
+  # with its own 30 minutes, and a publish needs both. One suite is stopped at six minutes (web/e2e/run.cjs) and tried again; the longest, opens, takes
   # about 3.1 on the engineer's machine.
   test:
     runs-on: ubuntu-latest

@@ -362,16 +362,26 @@ const TOPICS: Array<[string, RegExp]> = [
 // limited to is ("for commercial purposes"); a sentence of two bans is read clause by clause too (CLAUSE); and these are
 // bans as well: "Nothing/None … may be", "must/may never", "requires/subject to … consent", "may only be … with …
 // permission", "without our permission", 許可が必要. Since the check of fix part 3 (23 Nov 2026): a second ban with no
-// subject of its own is a clause too ("…, and may not …", "…, nor …"), and "publication" and "republication" are
-// acts of re-use. What is still read as "none": a limit named after a plain "or" inside one ban ("may not copy or
-// redistribute the data or use it for commercial purposes"), which the gate takes as the whole sentence's.
+// subject of its own is a clause too ("…, and may not …", "…, nor …"), and "republication" is an act of re-use. Since
+// the check of fix part 4 (23 Nov 2026), both ways: "publication" is an act of re-use only when it is done to a site's
+// data ("publication of the data"; a document that calls itself a publication, "This publication does not constitute
+// investment advice", bars nothing), and a second ban that says "otherwise" or "any other" after a grant of personal,
+// private, non-commercial or internal use is read with that grant ("…, but must not otherwise copy it": none); a
+// semicolon, a clause with a ban of its own whatever its subject ("…, and redistribution is also prohibited"), 「し、」
+// and 「、また」 part two bans, and a list after a lead-in that bans is read item by item with the lead-in (CLAUSE,
+// termsBar). What is still read as "none": a limit named after a plain "or" inside one ban ("may not copy or
+// redistribute the data or use it for commercial purposes"), which the gate takes as the whole sentence's; a purpose
+// named once for acts joined by "and" ("Copying and redistribution of the data, and their use for commercial purposes,
+// are prohibited"); a ban named only by "as is" ("…, as is its redistribution"); "nor" without a comma ("may not copy
+// the data nor use it for commercial purposes"). And the gate errs the other way where a sentence that bans nothing of
+// the data holds a word of re-use and a bare "does not" ("Information published here does not constitute advice").
 const BAN_EN = /\b(?:may not|must not|shall not|should not|will not|cannot|can not|do not|does not|agree(?:s|d)? not to|undertake(?:s)? not to|not (?:be )?(?:permitted|allowed|authori[sz]ed)|(?:is|are) not to be|prohibit(?:ed|s|ion)?|forbidden|forbids?|refrain(?:s|ing)? from|you (?:will|shall|do) not)\b|\bno\b[^.]{0,400}\b(?:may|can|shall) be\b|\bno\b[^.]{0,400}\b(?:is|are) (?:allowed|permitted|authori[sz]ed)\b|\bneither\b[^.]{0,400}\b(?:may|can|shall) be\b|\bonly with (?:the |our |its |their |prior |express |written |explicit )*(?:permission|consent|authori[sz]ation|approval)|without (?:the |our |its |any )?(?:prior |express |written |explicit |specific )+(?:permission|consent|authori[sz]ation|approval|agreement)|\b(?:nothing|none)\b[^.]{0,400}\b(?:may|can|shall|must) be\b|\b(?:must|may|shall|should|can|will) never\b|\b(?:requires?|required|subject to|conditional (?:up)?on)\s+(?:the |our |its |their |a |an )?(?:prior |express |written |explicit |specific |formal )*(?:permission|consent|authori[sz]ation|approval|licen[cs]e)\b|\bonly\b[^.]{0,60}\bwith (?:the |our |its |their |prior |express |written |explicit )*(?:permission|consent|authori[sz]ation|approval)|\bwithout (?:the |our |its |their |any )?(?:permission|consent|authori[sz]ation|approval)\b/i;
 const BAN_JA = /禁止|禁じ|禁ず|禁無断|できません|できない|出来ません|出来ない|お断り|ご遠慮|認められません|認めておりません|一切認め|してはなりません|してはならない|行ってはなりません|行わないで|しないでください|しないで下さい|固くお断り|(?:許可|許諾|承諾|同意|承認)(?:を得る)?(?:こと)?が必要/;
 /** A clause that declines liability or a warranty: its "shall not" forbids the reader nothing. It is set aside only up
  *  to the next conjunction or the sentence's end, so "… shall not be liable for errors, and you may not copy …" keeps
  *  its ban (PX-3: the clause took the rest of the sentence with it). */
 const LIABILITY = /\b(?:shall|will|does|do|can|may|would)\s*not\s+(?:be\s+(?:held\s+)?(?:liable|responsible)|accept|assume|bear|warrant|guarantee|represent|have any (?:liability|responsibility))\b[^.;]*?(?=,?\s+(?:and|but|nor|or|however|while)\s+(?:you|users?|no|neither|it|we|the)\b|[.;]|$)/gi;
-const REUSE_EN = /\b(?:cop(?:y|ies|ied|ying)|reproduc\w*|re-?distribut\w*|distribut\w*|re-?publish\w*|publish\w*|(?:re-?)?publication\w*|re-?transmi\w*|transmit\w*|re-?deliver\w*|re-?sell\w*|sell|duplicat\w*|stor(?:e|ed|ing)|download\w*|extract\w*|derivative works?|fram(?:e|ing)|mirror\w*|secondary use|re-?use\w*)\b/i;
+const REUSE_EN = /\b(?:cop(?:y|ies|ied|ying)|reproduc\w*|re-?distribut\w*|distribut\w*|re-?publish\w*|publish\w*|re-?publication\w*|publications?\s+of\s+(?:the |any |its |our |their |all )?(?:(?!this\b|these\b|those\b|such\b)[\w-]+\s+){0,3}?(?:data|datasets?|content|contents|information|materials?|values?|figures|prices|quotes|index|indices|constituents?|holdings|files?)|re-?transmi\w*|transmit\w*|re-?deliver\w*|re-?sell\w*|sell|duplicat\w*|stor(?:e|ed|ing)|download\w*|extract\w*|derivative works?|fram(?:e|ing)|mirror\w*|secondary use|re-?use\w*)\b/i;
 const REUSE_JA = /複製|複写|転載|再配信|再配布|配布|頒布|転送|二次利用|再利用|引用|蓄積|データ収集/;
 const AUTO_EN = /\b(?:automat\w*|robots?|scrap\w*|crawl\w*|spiders?|data[- ]?mining|harvest\w*|bots?|screen[- ]scrap\w*|programmatic\w*)\b/i;
 const AUTO_JA = /自動|機械的|クローラ|スクレイピング|ロボット|プログラムによる/;
@@ -391,13 +401,29 @@ const sentencesOf = (line: string): string[] => line.split(/(?<=[.!?。！？])\
 /** Where a sentence joins two bans ("…, and you may not use it for commercial purposes"), each clause is read on its
  *  own as well, so that the limit one of them names does not free the other (PL-2). Since the check of fix part 3
  *  (23 Nov 2026) a second ban needs no subject of its own: "…, and may not use it for commercial purposes", "…, nor use
- *  them for commercial gain". A limit after a plain "or" inside one ban ("may not copy or redistribute the data or use
- *  it for commercial purposes") is still read as the whole sentence's: the gate cannot tell which act it limits. */
-const CLAUSE = /,?\s+(?:and|but|while|nor)\s+(?=(?:you|users?|the user|no|neither|nothing|none|it|we|they|visitors?)\b)|,?\s+(?:and|but|or)\s+(?=(?:may|must|shall|should|will|can|do|does)\s+not\b|cannot\b|(?:may|must|shall|should|will|can) never\b)|,\s*nor\s+/i;
+ *  them for commercial gain". Since the check of fix part 4: a semicolon parts two clauses ("…; you may not redistribute
+ *  it", "…; nor may you …"), so does "and", "but", "while" or "whereas" before a clause with a ban of its own whatever
+ *  its subject ("…, and the data may not be redistributed", "…, and redistribution is also prohibited"), and in
+ *  Japanese 「し、」 or 「、また」 (商用目的での転載を禁止し、また再配布も禁止します). A limit after a plain "or" inside one
+ *  ban ("may not copy or redistribute the data or use it for commercial purposes") is still read as the whole
+ *  sentence's: the gate cannot tell which act it limits. */
+const CLAUSE = /\s*[;；]\s*|,?\s+(?:and|but|while|nor)\s+(?=(?:you|users?|the user|no|neither|nothing|none|it|we|they|visitors?)\b)|,?\s+(?:and|but|or)\s+(?=(?:may|must|shall|should|will|can|do|does)\s+not\b|cannot\b|(?:may|must|shall|should|will|can) never\b)|,\s*nor\s+|,?\s+(?:and|but|while|whereas)\s+(?=[^,;.]{0,100}?\b(?:(?:may|must|shall|should|will|can)\s+(?:also\s+)?(?:not|never)\b|cannot\b|(?:is|are)\s+(?:also\s+|strictly\s+|expressly\s+)?(?:not\s+(?:permitted|allowed|authori[sz]ed)\b|prohibited\b|forbidden\b)|(?:requires?|(?:is|are) subject to)\s+(?:the |our |its |their |a |an )?(?:prior |express |written |explicit |specific |formal )*(?:permission|consent|authori[sz]ation|approval|licen[cs]e)\b))|(?<=し)、|、(?=また|さらに|かつ|なお)/i;
+/** A use the sentence grants (personal, private, non-commercial, internal): "You may store the data for your personal
+ *  use", "Copying is permitted for personal use only". */
+const GRANT = /\b(?:permitted|allowed|authori[sz]ed|may (?:be )?(?:use|used|copy|copied|download|downloaded|print|printed|reproduce|reproduced|store|stored))\b[^.]{0,40}?\b(?:solely |only )?for (?:your |their |its )?(?:own )?(?:personal|private|non-?commercial|internal)\b/i;
+/** A second ban that refers back to that grant ("…, but must not otherwise copy it", "…; any other copying is
+ *  prohibited"): limited by it, so it is read with the sentence and not on its own (N-1 of the check of fix part 4:
+ *  read alone, such a grant was a bar). */
+const OTHER = /\botherwise\b|\bany other\b/i;
 export function termsBar(line: string): { kind: "automated" | "re-use"; sentence: string } | null {
   for (const raw of sentencesOf(line)) {
     const whole = raw.replace(LIABILITY, " ");   // what is left once a clause that only declines liability is taken out
-    for (const s of [whole, ...whole.split(CLAUSE).filter((c) => c.trim() && c !== whole)]) {
+    // a ban written as a list after a lead-in that bans ("You agree not to: …; …; …", as printTerms puts a list to the
+    // gate): each item is read with its lead-in, so the purpose one item names does not free the others
+    const lead = /^([^:]{3,200}):\s+([\s\S]+)$/.exec(whole);
+    const items = lead && (BAN_EN.test(`${lead[1]} x`) || BAN_JA.test(lead[1])) ? lead[2].split(/\s*[;；]\s*/).filter((x) => x.trim()).map((x) => `${lead[1]} ${x}`) : [];
+    const grant = GRANT.test(whole), alone = (c: string) => !(grant && OTHER.test(c));
+    for (const s of [whole, ...items.filter(alone), ...whole.split(CLAUSE).filter((c) => c.trim() && c !== whole && alone(c))]) {
       const ban = BAN_EN.test(s) || BAN_JA.test(s);
       if (!ban) continue;
       if (AUTO_EN.test(s) || AUTO_JA.test(s)) return { kind: "automated", sentence: raw };
