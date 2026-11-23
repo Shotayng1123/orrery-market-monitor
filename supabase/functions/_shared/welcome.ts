@@ -4,9 +4,10 @@
 // sim/logic.test.ts and its picture of the page in web/e2e (welcome-mail).
 //
 // An email is read in programs that drop most of what a web page may use, so: tables for the layout, every style
-// written on its element, no web fonts (the serif is the reader's own Times New Roman or Georgia), and two
-// pictures fetched from the Monitor's own site (web/public/mail). With pictures switched off the email still
-// reads whole: nothing is said by a picture alone.
+// written on its element, no web fonts (the serif is the reader's own Times New Roman or Georgia), and three
+// pictures fetched from the Monitor's own site (web/public/mail): the mark, the orrery and, since slice 11 (23 Nov
+// 2026), the 1-minute tour's, which links to the tour's own page (web/public/tour). With pictures switched off the
+// email still reads whole: nothing is said by a picture alone.
 const esc = (t: string): string => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 export const WELCOME_SUBJECT = "Welcome to Orrery Monitor";
@@ -38,7 +39,11 @@ export const FIRST: string[] = [
   "Read this morning's note in RESEARCH.",
   "On your phone, add the Monitor to the Home Screen and turn on notifications.",
 ];
-export const HELP = "Every column, colour and badge is explained behind the ? in the Monitor's header.";
+export const HELP = "Every column, colour and badge is explained behind the ? in the Monitor's header (on a phone, in its menu).";
+/** The 1-minute tour (the designer's work order, §5.2): the film the owner accepted on 23 Nov 2026, at {site}tour/. */
+export const TOUR = "Start with the 1-minute tour: what each tab shows and what you can set, with captions and no sound.";
+export const TOUR_LINK = "Watch the 1-minute tour";
+export const TOUR_ALT = "Watch the 1-minute tour of Orrery Monitor: what each tab shows and what you can set, in a video with captions and no sound";
 export const SMALL = "Orrery Monitor shows market data from third-party feeds that may be delayed or incomplete. Information only; nothing here is investment advice. This is the only email of its kind: it is sent once, when an account with this address first signs in.";
 
 // colours of the Monitor itself (web/src/styles/tokens.css)
@@ -71,6 +76,8 @@ export function welcomeMail(site: string): { subject: string; text: string; html
     PHONE,
     "",
     "A GOOD FIRST FIVE MINUTES",
+    TOUR,
+    `Watch it: ${site}tour/`,
     ...FIRST.map((s, i) => `${i + 1}. ${s}`),
     "",
     HELP,
@@ -142,10 +149,15 @@ ${block(`${label("On your phone")}
 ${para(PHONE, true)}`)}
 
 ${block(`${label("A good first five minutes")}
+${para(TOUR, true)}`)}
+
+<tr><td style="padding:0;background:${BG};line-height:0;font-size:0"><a href="${esc(site)}tour/" style="display:block;text-decoration:none"><img src="${esc(site)}mail/tour.jpg" width="600" alt="${esc(TOUR_ALT)}" style="display:block;border:0;width:100%;max-width:600px;height:auto;color:${MUT};font-family:${SANS};font-size:14px;line-height:1.4"></a></td></tr>
+
+${block(`<p style="margin:0 0 20px;font-family:${SANS};font-size:15px;line-height:1.6"><a href="${esc(site)}tour/" style="color:${CORAL};font-weight:700;text-decoration:none">${esc(TOUR_LINK)}&nbsp;&rarr;</a></p>
 <table role="presentation" cellpadding="0" cellspacing="0" border="0">
 ${steps}
 </table>
-<p style="margin:20px 0 0;font-family:${SANS};font-size:13.5px;line-height:1.55;color:${MUT}">${esc(HELP)}</p>`)}
+<p style="margin:20px 0 0;font-family:${SANS};font-size:13.5px;line-height:1.55;color:${MUT}">${esc(HELP)}</p>`, false)}
 
 <tr><td class="om-pad" style="padding:22px 36px 26px;border-top:1px solid ${LINE};background:${BG}">
 <p style="margin:0;font-family:${SANS};font-size:12px;line-height:1.6;color:${MUT}">${esc(SMALL)}</p>
