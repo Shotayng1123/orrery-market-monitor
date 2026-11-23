@@ -73,7 +73,7 @@ import * as pfMoney from "../supabase/functions/_shared/pf/money.ts";
 import { parseAmount as pfAmount, fmtFull as pfFull, fmtShort as pfShort } from "../supabase/functions/_shared/pf/money.ts";
 import { PF_ACTIONS, pfRoute, type PfDeps } from "../supabase/functions/_shared/pf/route.ts";
 import { emptyState as pfEmpty, memStore as pfMem, type MemState as PfMemState } from "../supabase/functions/_shared/pf/memstore.ts";
-import { PAPER_ON_SERVER } from "../supabase/functions/_shared/pf/switch.ts";
+import { inPreview, PAPER_ON_SERVER, paperOpen, previewFor, previewList } from "../supabase/functions/_shared/pf/switch.ts";
 import type { BookFull as PfBook, PfStore, StartId as PfStart } from "../supabase/functions/_shared/pf/types.ts";
 import { opensAtTop as pfOpensAtTop, portfolioPage } from "../web/src/lib/pagetop.ts";
 import { MEMBERS_SOURCE, PERSONAL_USE, PERSONAL_USE_READ, PERSONAL_USE_TEXT, PORTFOLIO as PORTFOLIO_WORD } from "../web/src/lib/labels.ts";
@@ -2047,8 +2047,52 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     // the two switches are turned together, in one pull request (README.md): this reads them as they are, so the pull
     // request that turns both on passes (DC-2 of the second review of P-1: it asserted both off)
     const pageSwitch = /^export const PAPER_ON_LIVE_SITE = (true|false);/m.exec(readText(new URL("../web/src/lib/paper.ts", import.meta.url), "utf8"))?.[1];
-    ck(`the two switches are the same (${PAPER_ON_SERVER ? "both on" : "both off"} in this commit): PAPER_ON_SERVER in the server's file and PAPER_ON_LIVE_SITE in the page's; the API hands the server's switch to the routes and reads no body while it is off`, String(PAPER_ON_SERVER) === pageSwitch && new RegExp(`export const PAPER_ON_SERVER = ${PAPER_ON_SERVER};`).test(readText(new URL("../supabase/functions/_shared/pf/switch.ts", import.meta.url), "utf8"))
-      && /on: PAPER_ON_SERVER/.test(readText(new URL("../supabase/functions/api/index.ts", import.meta.url), "utf8")) && /PAPER_ON_SERVER && req\.method === "POST"/.test(readText(new URL("../supabase/functions/api/index.ts", import.meta.url), "utf8")));
+    const apiSrc = readText(new URL("../supabase/functions/api/index.ts", import.meta.url), "utf8");
+    const pfDoor = /if \(isPfAction\(action\)\) \{([\s\S]*?)\n    \}/.exec(apiSrc)?.[1] ?? "";
+    ck(`the two switches are the same (${PAPER_ON_SERVER ? "both on" : "both off"} in this commit): PAPER_ON_SERVER in the server's file and PAPER_ON_LIVE_SITE in the page's; the API decides per account (the switch, or the preview list) before the routes, hands them that decision, and reads no body for an account it does not admit`, String(PAPER_ON_SERVER) === pageSwitch && new RegExp(`export const PAPER_ON_SERVER = ${PAPER_ON_SERVER};`).test(readText(new URL("../supabase/functions/_shared/pf/switch.ts", import.meta.url), "utf8"))
+      && /const open = paperOpen\(PAPER_ON_SERVER, previewList\(Deno\.env\.get\("PF_PREVIEW_EMAILS"\)\), account\.email\);/.test(pfDoor) && /const body = open && req\.method === "POST" \?/.test(pfDoor) && /pfRoute\(\{ on: open,/.test(pfDoor)
+      && pfDoor.indexOf("const open") < pfDoor.indexOf("req.json") && pfDoor.indexOf("req.json") < pfDoor.indexOf("pfRoute(") && (apiSrc.match(/req\.json\(/g) ?? []).length >= 1, { pfDoor: pfDoor.slice(0, 400) });
+    // ---- the preview (slice 9, 23 Nov 2026: the owner's "Yeah just turn on for me for now and you can keep refining
+    // them"): the paper book for the accounts whose sign-in email is in the server's secret PF_PREVIEW_EMAILS ----
+    {
+      const L = (raw: string | null | undefined) => [...previewList(raw)].join("|");
+      ck(`the preview list: absent, empty, blank or commas alone is nobody; one address; several, comma-separated; each trimmed and in lower case (${JSON.stringify(L("  Owner@Example.TEST ,second@x.test,, "))})`, L(undefined) === "" && L(null) === "" && L("") === "" && L("   ") === "" && L(" , ,") === ""
+        && L("owner@example.test") === "owner@example.test" && L("a@x.test,b@x.test") === "a@x.test|b@x.test" && L("  Owner@Example.TEST ,second@x.test,, ") === "owner@example.test|second@x.test");
+      const one = previewList("owner@example.test"), several = previewList(" Owner@Example.test , second@x.test ");
+      ck("an account is in the list by its sign-in email, trimmed and without regard to case; any other account, an account whose email only contains or is contained in a listed one, an empty email and no account are not", inPreview(one, "owner@example.test") && inPreview(one, " OWNER@example.TEST ") && inPreview(several, "second@x.test") && inPreview(several, "owner@EXAMPLE.test")
+        && !inPreview(one, "other@example.test") && !inPreview(one, "owner@example.test.evil") && !inPreview(one, "wner@example.test") && !inPreview(one, "") && !inPreview(one, "   ") && !inPreview(one, null) && !inPreview(one, undefined)
+        && !inPreview(previewList(undefined), "owner@example.test") && !inPreview(previewList(""), "owner@example.test") && !inPreview(previewList(" , "), "") && !inPreview(previewList("*"), "owner@example.test"));
+      ck("the routes admit an account while the switch is on, or while it is in the list; with the switch off and the list absent or empty, nobody (as before the preview); a request with no account, never", !paperOpen(false, previewList(undefined), "owner@example.test") && !paperOpen(false, previewList(""), "owner@example.test")
+        && paperOpen(false, one, "Owner@Example.test") && !paperOpen(false, one, "other@example.test") && !paperOpen(false, one, null) && !paperOpen(false, one, "")
+        && paperOpen(true, previewList(undefined), "anyone@x.test") && !paperOpen(true, one, null) && !paperOpen(true, one, " "));
+      ck("the page is told `paperPreview` true only for an account in the list while the switch is off: false for every other account, for no account, and for everyone once the switch is on (the page then draws the book by its own switch)", previewFor(false, one, "owner@example.test") && !previewFor(false, one, "other@example.test") && !previewFor(false, one, null) && !previewFor(false, previewList(""), "owner@example.test") && !previewFor(true, one, "owner@example.test") && !previewFor(true, one, "other@example.test"));
+      // every route, for an account the API does not admit: the decision is the one api/index.ts makes, with the switch
+      // as it is in this commit and a list that holds another account
+      const listed = previewList("owner@example.test"), notListed = "other@example.test";
+      const seen: string[] = []; let asked = 0;
+      const spy2 = new Proxy({}, { get: (_t, k) => (...a: unknown[]) => { seen.push(`${String(k)}(${a.length})`); return Promise.reject(new Error("the store was reached")); } }) as PfStore;
+      const deps = (who: string | null): PfDeps => ({ on: paperOpen(PAPER_ON_SERVER, listed, who), store: spy2, now: () => at("2026-11-23T12:30:00Z"), facts: () => { asked++; return Promise.reject(new Error("the facts were asked for")); } });
+      const answers: string[] = [];
+      for (const who of [notListed, "", null]) for (const a of PF_ACTIONS) for (const m of ["GET", "POST"]) { const r = await pfRoute(deps(who), a, who ?? "", m, () => "00000000-0000-4000-8000-000000000001", { id: "00000000-0000-4000-8000-000000000001", name: "x", start: "ar-ls-jp", requestId: "request-0001", values: {}, body: "a note", version: 1 }); answers.push(`${r.status}|${(r.body as { error: string }).error}`); }
+      ck(`an account outside the list (and an empty or no account), with the switch ${PAPER_ON_SERVER ? "on" : "off"}: every one of the ${PF_ACTIONS.length} routes, GET and POST, answers as before the preview, 404 "${pfWords.NOT_YET}", and reaches neither the store nor the facts`, PAPER_ON_SERVER || (answers.length === 72 && answers.every((x) => x === `404|${pfWords.NOT_YET}`) && seen.length === 0 && asked === 0), { answers: [...new Set(answers)], seen, asked });
+      // and the account in it is admitted: its list is read from the store (the stand-in store here)
+      let st2: PfMemState = pfEmpty();
+      const mem2 = pfMem({ load: () => st2, save: (x) => { st2 = x; }, now: () => at("2026-11-23T12:30:00Z"), newId: () => "00000000-0000-4000-8000-000000000009" });
+      const admitted = await pfRoute({ on: paperOpen(PAPER_ON_SERVER, listed, " Owner@Example.TEST "), store: mem2, now: () => at("2026-11-23T12:30:00Z"), facts: () => Promise.reject(new Error("not asked")) }, "pf_list", "owner@example.test", "GET", () => null, {});
+      ck(`the account in the list is admitted: pf_list answers ${admitted.status} with its (empty) list`, admitted.status === 200 && (admitted.body as { rows: unknown[] }).rows.length === 0, admitted);
+      // what the old page reads of `me` is unchanged (rule S: the page users have open reads email, role and mustChange),
+      // the new field is the preview's word, and the API reads the list from the server's secret for each request
+      const meLine = /if \(action === "me"\) return json\(req, \{([^}]*)\}\);/.exec(apiSrc)?.[1] ?? "";
+      ck("the API's `me` keeps its three fields as before (email, role, mustChange) and adds `paperPreview`, the preview's word for this account alone, read from PF_PREVIEW_EMAILS at each request", /^ email: account\.email, role: account\.role, mustChange: account\.must_change, paperPreview: previewFor\(PAPER_ON_SERVER, previewList\(Deno\.env\.get\("PF_PREVIEW_EMAILS"\)\), account\.email\) $/.test(meLine) && !/PF_PREVIEW_EMAILS/.test(apiSrc.split("Deno.serve(")[0]), { meLine });
+      // deploy-server hands the repository's secret to the server in the step that stores the others, and to that step
+      // alone; it prints names, never a value; without the repository's secret it takes the list off the server
+      const wf2 = readText(new URL("../.github/workflows/deploy-server.yml", import.meta.url), "utf8"), stepsOf = wf2.split(/\n(?=\s{6}- name: )/), keysStep = stepsOf.find((x) => /- name: Email sender and data keys/.test(x)) ?? "";
+      ck("deploy-server stores PF_PREVIEW_EMAILS with the other optional secrets (set only when the repository has it), gives it to that step alone, never prints its value, and removes it from the server once the repository's secret is gone", /for n in [^;]*\bPF_PREVIEW_EMAILS\b[^;]*; do/.test(keysStep) && /\n\s+env:\n\s+PF_PREVIEW_EMAILS: \$\{\{ secrets\.PF_PREVIEW_EMAILS \}\}\n/.test(keysStep)
+        && (wf2.match(/secrets\.PF_PREVIEW_EMAILS/g) ?? []).length === 1 && !/echo[^\n]*\$\{?(PF_PREVIEW_EMAILS|v|args)\b/.test(keysStep) && /if \[ -z "\$PF_PREVIEW_EMAILS" \] && grep -q "PF_PREVIEW_EMAILS" \/tmp\/secrets\.out; then\n\s+supabase secrets unset PF_PREVIEW_EMAILS --project-ref "\$REF" --yes > \/dev\/null/.test(keysStep), { keysStep: keysStep.slice(0, 300) });
+      // no address in what is committed for it: the list is the secret's alone
+      const files = ["../supabase/functions/_shared/pf/switch.ts", "../supabase/functions/api/index.ts", "../web/src/lib/paper.ts", "../.github/workflows/deploy-server.yml"].map((f) => readText(new URL(f, import.meta.url), "utf8"));
+      ck("no email address is written in the preview's files (the switch, the API, the page's switch, deploy-server): the list is the repository secret's alone", files.every((t) => !/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]{2,}/.test(t)));
+    }
     {
       let state: PfMemState = pfEmpty(), clock = at("2026-11-21T09:00:00Z"), n = 0;
       const store = pfMem({ load: () => state, save: (s2) => { state = s2; }, now: () => clock, newId: () => `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}` });

@@ -10,6 +10,8 @@ name: deploy-server
 #                                                 (also SMTP_HOST, SMTP_PORT; supabase/README.md, "Accounts by email")
 #   EDINETDB_API_KEY                              optional: the EDINET DB key behind Japanese companies' statements on the
 #                                                 stock page (supabase/README.md, "The stock page and its sources")
+#   PF_PREVIEW_EMAILS                             optional: the sign-in emails that see the paper portfolio as a preview
+#                                                 while its switches are off (README.md, "The paper portfolio's two switches")
 # A push to main that touches the server deploys it. Run by hand it only shows what a deploy would do ("check"),
 # unless "deploy" is chosen.
 on:
@@ -161,22 +163,31 @@ jobs:
             echo "a notification key was made and stored on the server"
           fi
 
-      # optional: what the Monitor sends a new account's verification email with, and the EDINET DB key for Japanese
-      # companies' statements. Whichever of these repository secrets are set are stored on the server under the same
-      # names; nothing already there is removed, and no value is printed.
+      # optional: what the Monitor sends a new account's verification email with, the EDINET DB key for Japanese
+      # companies' statements, and the paper portfolio's preview list. Whichever of these repository secrets are set
+      # are stored on the server under the same names, and no value is printed. Nothing already there is removed, but
+      # for the preview list: it is kept only in the repository's secret, so once that secret is deleted the next
+      # deploy removes it from the server too, and the paper book is shown to nobody (README.md, "The paper
+      # portfolio's two switches"). The list is given to this step alone.
       - name: Email sender and data keys
         if: steps.keys.outputs.ready == 'true' && env.MODE == 'deploy'
+        env:
+          PF_PREVIEW_EMAILS: ${{ secrets.PF_PREVIEW_EMAILS }}
         run: |
           args=(); names=""
-          for n in MAIL_FROM RESEND_API_KEY SMTP_USER SMTP_PASS SMTP_HOST SMTP_PORT EDINETDB_API_KEY; do
+          for n in MAIL_FROM RESEND_API_KEY SMTP_USER SMTP_PASS SMTP_HOST SMTP_PORT EDINETDB_API_KEY PF_PREVIEW_EMAILS; do
             v="${!n}"
             if [ -n "$v" ]; then args+=("$n=$v"); names="$names $n"; fi
           done
           if [ "${#args[@]}" -eq 0 ]; then
-            echo "no email-sender or data-key secrets in the repository: nothing stored (the server keeps whatever it already has)"
+            echo "no email-sender, data-key or preview secrets in the repository: nothing stored (the server keeps whatever it already has)"
           else
             supabase secrets set "${args[@]}" --project-ref "$REF" --yes > /dev/null
             echo "stored on the server:$names"
+          fi
+          if [ -z "$PF_PREVIEW_EMAILS" ] && grep -q "PF_PREVIEW_EMAILS" /tmp/secrets.out; then
+            supabase secrets unset PF_PREVIEW_EMAILS --project-ref "$REF" --yes > /dev/null
+            echo "the repository has no PF_PREVIEW_EMAILS: removed from the server, so the paper book's preview is shown to nobody"
           fi
 
       # --use-api: each function is bundled on Supabase's side from its source. Bundled on this machine (with

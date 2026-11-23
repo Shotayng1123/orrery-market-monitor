@@ -21,7 +21,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # The browser checks (web/e2e: 53 suites) and the logic checks (sim/logic.test.ts). Since 18 Nov 2026 the site is
+  # The browser checks (web/e2e: 54 suites) and the logic checks (sim/logic.test.ts). Since 18 Nov 2026 the site is
   # published only when they pass: until then a publish checked only that the site builds. The limit was 20 minutes
   # when the checks took three. On 21 Nov 2026 the browser run of 2,052 checks in 34 suites took 14.5 minutes on the
   # engineer's machine and 13 here, before the installs; the 49 suites of pull request #50 (3,156 checks) took 28.1 there

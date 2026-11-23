@@ -168,7 +168,9 @@ export async function changePassword(current: string, next: string): Promise<Res
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : "Network error" }; }
 }
 
-export interface Me { email: string; role: "manager" | "user"; mustChange: boolean }
+/** `paperPreview`: the server's word that this account is in the paper book's preview list (lib/paper.ts); a server of
+ *  before 23 Nov 2026 sends none. */
+export interface Me { email: string; role: "manager" | "user"; mustChange: boolean; paperPreview?: boolean }
 export interface AccountRow { email: string; role: "manager" | "user"; status: "pending" | "active" | "disabled"; mustChange: boolean; createdAt: string; lastSeen: string | null; logins: number; watch: number; verifiedAt?: string | null }
 /** The manager's list. `signup` and `mail` are missing from a server older than 18 Nov 2026. */
 export interface AdminUsers { rows: AccountRow[]; signup?: "email" | "approval"; mail?: { ready: boolean; from: string | null; via: string | null; problem: string | null } }

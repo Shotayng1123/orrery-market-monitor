@@ -66,6 +66,14 @@ button.pf-by:hover{color:var(--cyan)}
 body.pv2 .pf-flash{bottom:calc(70px + env(safe-area-inset-bottom,0px));width:calc(100% - 24px);box-sizing:border-box;font-family:var(--sans);font-size:14px;border-radius:10px}
 .pf-kept{margin:0}
 .pf-classic{margin:0;font-size:13px;line-height:1.6}
+/* the preview line (slice 9): the first line of every screen of the tab while the book is a preview for this account
+   (components/pf/Preview.tsx); a muted line with PAPER's violet mark; on a phone one line that opens its sentence */
+.pf-preview{grid-column:1 / -1;margin:0;color:var(--mut);font-size:11px;line-height:1.5;overflow-wrap:anywhere}
+.pf-preview .pf-paper{margin-right:4px}
+.pf-preview.ph{display:flex;align-items:center;gap:8px;box-sizing:border-box;width:100%;min-height:44px;padding:0 8px;border:0;background:none;font-family:var(--sans);font-size:12.5px;line-height:1.35;text-align:left;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.pf-preview.ph .pf-paper{flex:none;margin:0;font-size:11px;padding:1px 7px}
+.pf-preview.ph .tx{flex:1 1 auto;min-width:0}
+.pf-preview.ph .go{flex:none;color:var(--cyan);font-size:18px;line-height:1}
 .pf-classic .pf-link{display:inline-flex;align-items:center;min-height:44px;min-width:44px}
 
 /* ---- one typed setting ---- */
