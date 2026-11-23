@@ -365,8 +365,13 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   therefore lives in a module that imports no package (`lib/pagetop.ts` beside `lib/nav.ts`), and a type from a
   module that does is imported with `import type`. Section [AL] holds `logic-tests`' paths, for a pull request and
   for a push to `main`, to every file the file imports (as [AB] finds them) or reads: each address it and those files
-  build with `new URL("…", import.meta.url)`, and each file and folder the run read (a folder with every file under
-  it and one that may be added there). To run the file exactly as GitHub does:
+  build with `new URL("…", import.meta.url)`, and each file and folder the file itself read in the run, through its
+  own `readText` and `listDir` (a folder with every file under it and one that may be added there); a folder address
+  that is not in the checkout fails the section with its name (until 23 Nov 2026 it stopped the whole file). It does
+  not see a file that an imported module reads by a plain path (`readFileSync("../web/index.html")`, not built from
+  `import.meta.url`): a trace of the run's system calls on 23 Nov 2026 found no such read but Node's own of
+  `web/package.json`, which any change under `web/` puts to the logic checks on a pull request anyway (`deploy-web`).
+  To run the file exactly as GitHub does:
   `git archive HEAD | tar -x -C <an empty folder>`, then `npm ci` and the command above in that folder's `jobs/`.
 - **The README's own checks** (`sim/readme.test.ts`, section [AK]): what this file says of the checks is what the
   repository holds (the number of browser suites in `web/e2e/run.cjs`, the paper portfolio's suites by name, the suites
@@ -400,7 +405,8 @@ checks, on a pull request and on a push to `main`, when any file the logic check
 functions and migrations, `sim/`, the page's `src/`, `jobs/`, the workflows) and when a browser suite, this file or
 `supabase/README.md` does: the logic checks stop both deploys, and their section [AL] fails when a file they import,
 directly or through another, or read is not under `logic-tests`' paths (until 23 Nov 2026 a change to `jobs/lib/`,
-`jobs/live_check.ts` or `deploy-server.yml` alone ran them nowhere before it merged, and stopped the next deploy). The
+`jobs/live_check.ts` or `deploy-server.yml` alone ran them nowhere before it merged, so that a fault in it would have
+merged unchecked and stopped the next deploy: found by experiment, before any deploy stopped so). The
 README's checks are in no deploy's gate.
 
 ## Data sources (v1)
@@ -420,7 +426,7 @@ TOPIX has no Yahoo ticker: the `1306.T` ETF stands in for TOPIX (badge PROXY); i
 
 **Personal use** (the owner's decision of 20 Nov 2026). Files from JPX, Nikkei, JSF and fund issuers are used on the owner's statement that this Monitor's use is personal and non-commercial (20 Nov 2026). Each is credited where it is used.
 Read today: JPX's list of TSE-listed issues (TOPIX's members and their sectors), its short-selling ratio, short-position reports and margin balances, and Tokyo's holidays from its calendar; Nikkei's file of the Nikkei 225's members and weights. No JSF or fund issuer's file is read yet.
-Not used, by the owner's decision of 21 Nov 2026: JPX's TOPIX weight file, its lending-fee file (品貸料), its margin balances by name, Osaka's settlement and volume pages and its results-date workbook (決算発表予定日); Nomura's holdings files; Cboe's VIX-family files.
+Not used, by the owner's decision of 21 Nov 2026: JPX's TOPIX weight file, its lending-fee file (品貸料), its margin balances by name, Osaka's settlement and volume pages and its results-date workbook (決算発表予定日); Nomura's holdings files; Cboe's VIX-family files. And by the owner's decision of 23 Nov 2026 ("Go without"): NYSE's Reg SHO threshold list.
 On screen, every source line that names one of those files ends "· personal use": EQUITIES' SHORT INTEREST and
 SCREENER (the member lists of TOPIX and the Nikkei 225) and a Tokyo stock's SHORT INTEREST, on both layouts; a
 sentence that names JPX's holiday calendar in passing carries "(personal use)" right after it (an "opens …" line's
@@ -543,29 +549,59 @@ names does not free the other, where a semicolon parts them ("…; you may not r
 …"), or ", nor", or "and", "but", "while" or "whereas" before a second ban that has its own subject, a pronoun or a
 noun before its own "may not", "is prohibited", "requires our consent" or the like ("…, and redistribution of the
 data is prohibited"), or its own "may not", "must not", "cannot" or the like ("…, and may not use it for commercial
-purposes"), and in Japanese 「し、」 or 「、また」 (商用目的での転載を禁止し、また再配布も禁止します。); a list after a
-lead-in that bans ("You agree not to: …; …; …") is read item by item with its lead-in. A second ban that says
-"otherwise" or "any other" after a grant of personal, private, non-commercial or internal use is read with that grant
-("You may store the data for your personal, non-commercial use, but must not otherwise copy it." holds nothing), and
-"publication" is an act of re-use only when it is done to a site's data ("Publication of the data in any medium
-requires our consent." holds the files; "This publication does not constitute investment advice." does not; both
-since the check of fix part 4, 23 Nov 2026). Still read as none, so that such a line does not hold the files: a
-purpose named for one of the acts a single ban lists is read as the whole ban's ("You may not copy or redistribute the
-data or use it for commercial purposes.", "Copying and redistribution of the data, and their use for commercial
-purposes, are prohibited."), and so is a ban named only by "as is" ("Copying the data for commercial purposes is
-prohibited, as is its redistribution.") or joined by "nor" without a comma ("You may not copy the data nor use it for
-commercial purposes."). The gate errs the other way elsewhere: it holds the files for some lines that bar nothing of
-a site's data ("We will never sell your personal information.", "Information published here does not constitute
-advice."); a page reached by a "legal" link counts as the terms only when its title or first
+purposes"), and in Japanese 「し、」 or 「、また」 after a ban verb (商用目的での転載を禁止し、また再配布も禁止します。); 「し、」
+joins the acts of one ban only after one of the 34 acts the gate lists (複製し、, 転載し、, 配布し、, 利用し、 …), 「、また」 only
+right after one of them (複製、また転載), and 「、または」 is "or" where no 「し、」 parts the sentence
+(商用目的で、本データを複製し、または再配布することを禁止します。 holds nothing; since the check of fix part 5, 23 Nov 2026, before
+which it held the files); elsewhere they part it as they part two bans, 「、また」 after an act's 〜し and 「し、」 after an act
+the list lacks (転用し、, 改編し、, 取得し、) among them, so that a single ban whose limit to commercial use is named before
+that mark is read as two, its second act without the limit, and holds the files (商用目的で、本データを複製し、また再配布することを禁止します。,
+商用目的で、本データを転用し、または再配布することを禁止します。; 「、さらに」, 「、かつ」 and 「、なお」 part it as 「、また」 does);
+a list after a lead-in that bans ("You agree not to: …; …; …") is read item by item with its lead-in. A second ban whose "otherwise" or "any
+other" refers back to a grant of personal, private, non-commercial or internal use in the same sentence is read with
+that grant ("You may store the data for your personal, non-commercial use, but must not otherwise copy it." holds
+nothing, nor does "…; any other copying is prohibited"); one whose "otherwise" or "any other" names another object or
+party is read on its own ("You may use the data for personal use, but you may not distribute it to any other party."
+holds the files, and so do "unless otherwise agreed", "except as otherwise permitted" and "in any other system"; from
+the check of fix part 4 until that of fix part 5, 23 Nov 2026, such a line held nothing), and "publication" is an act
+of re-use only when it is done to a site's data ("Publication of the data in any medium requires our consent." holds
+the files; "This publication does not constitute investment advice." does not; both since the check of fix part 4,
+23 Nov 2026). Still read as none, so that such a line does not hold the files: a purpose named for one of the acts a
+single ban lists is read as the whole ban's ("You may not copy or redistribute the data or use it for commercial
+purposes.", "Copying and redistribution of the data, and their use for commercial purposes, are prohibited."), and so
+is a ban named only by "as is" ("Copying the data for commercial purposes is prohibited, as is its redistribution.")
+or joined by "nor" without a comma ("You may not copy the data nor use it for commercial purposes."); a second ban in
+words the clause split does not know ("You may not copy the data for commercial purposes, and redistribution is also
+strictly prohibited.", "You may not copy the data for commercial purposes, and any redistribution shall be
+prohibited.", "You may not copy the data for commercial purposes, but redistribution of the content is never
+permitted.", "You may not copy the data for commercial purposes, and redistribution requires a separate licence."); in
+Japanese, a second ban joined otherwise than by a 「し、」, 「、また」, 「、さらに」, 「、かつ」 or 「、なお」 that parts the sentence
+(商用目的での転載は禁止されており、再配布も禁止されています。, 商用目的の転載は禁止、再配布も禁止します。,
+商用目的での転載を禁止するとともに、再配布も禁止します。);
+and a publication that is not "publication of" the site's data with "the", "any", "its", "our", "their", "all" or no
+word between ("Publication of this content is prohibited without our prior written consent.", "Any publication of
+these figures requires our prior written consent.", "Publication of such data without our consent is prohibited.",
+"Publication of the Nikkei Stock Average requires a licence from Nikkei Inc.", "Publication in any form is prohibited
+without our consent.", "Publication or broadcast of this information is prohibited."). The gate errs the other way
+elsewhere: it holds the files for some lines that bar nothing of a site's data ("We will never sell your personal
+information.", "Information published here does not constitute advice."), for a grant in words it does not know, whose
+second ban is then read on its own ("You may view and print pages for your personal use, but may not otherwise
+reproduce them.", "You are welcome to download the data for your personal use, but must not otherwise copy it."), and
+where 「、また」 joins two things of one ban that ends in no act (商用目的での当サイトの情報、また掲載画像の転載を禁止します。); a page
+reached by a "legal" link counts as the terms only when its title or first
 heading names them and its lines cover two of the subjects the gate reads or carry a ban (since 22 Nov 2026: by its
 name alone, or by two stray lines, a page counted as the terms read), and where no terms are found the files that need
 them stay unread. Until 21 Nov 2026 the gate knew a ban only by the wordings it was modelled on (a word of
 automated reading; "any purpose", "any form", "any means"; JPX's, Nomura's and Cboe's lines): it printed "none matched"
 above iShares UK's sentence that forbids copying and reproducing, and `pf_bench` went on to ask that site's product
 data (the address answered 404; nothing was read). The probes of governments', central banks' and regulators' own pages (`pf_rules`, `pf_holidays`, `pf_rates`) read
-`robots.txt` only. The helper also refuses three kinds of address outright, whichever probe asks, reading each address
+`robots.txt` only. The helper also refuses four kinds of address outright, whichever probe asks, reading each address
 as its request will go (the host without a trailing dot, escapes decoded) and putting every redirect to the same test,
-one hop at a time: `jpx.co.jp`; Cboe's VIX-family history files; Nomura's holdings files. On `jpx.co.jp` the files of
+one hop at a time: `jpx.co.jp`; Cboe's VIX-family history files; Nomura's holdings files; and, since 23 Nov 2026,
+NYSE's Reg SHO threshold list, its page and its download (any path of `nyse.com` that names "threshold", and the
+page `/regulation/regulation-sho` that its page ended at on 21 Nov), by the owner's answer of that day, "Go without"
+(ICE's terms, which NYSE's page links, prohibit robots unless ICE permits): `pf_borrow` still asks NYSE's `robots.txt`,
+and the hold refuses its page and its download before any request. On `jpx.co.jp` the files of
 the owner's first answer below, the list of triggered short-selling stocks and the list of ETFs are held by their paths
 as well, so they stay held while `pf_jpx` reads the site (since 22 Nov 2026; until then lifting the site's hold left
 nothing held there). On JPX the owner's answers of

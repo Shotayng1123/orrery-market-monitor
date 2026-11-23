@@ -2310,6 +2310,43 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const ETF_LIST = "https://www.jpx.co.jp/equities/products/etfs/issues/01.html";
     const lifted = await withSite({ "https://www.jpx.co.jp/robots.txt": { type: "text/plain", body: "User-agent: *\nDisallow:\n" }, "https://www.jpx.co.jp/english/equities/trading/domestic/01.html": { status: 302, location: RULED_OUT[0] } }, async (asked) => { const before = await probe.page("https://www.jpx.co.jp/robots.txt"); probe.liftJpxHold(); const after = await probe.page("https://www.jpx.co.jp/robots.txt"); const hop = await probe.page("https://www.jpx.co.jp/english/equities/trading/domestic/01.html"); const held = RULED_OUT.filter((u) => probe.heldWhy(u) !== null), etf = probe.heldWhy(ETF_LIST) !== null; probe.liftJpxHold({ etfList: true }); return { before: before.ok, after: after.ok, hop: hop.ok, n: asked.length, asked: asked.map((a) => a.url), held: held.length, etf, etfLifted: probe.heldWhy(ETF_LIST) === null, ruledStill: RULED_OUT.every((u) => probe.heldWhy(u) !== null), stillHeld: probe.heldWhy("https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv") !== null }; });
     ck(`jpx.co.jp is refused to every probe until pf_jpx lifts the hold for its own run; then the files of the owner's first answer and the list of triggered stocks stay held (${lifted.held} of ${RULED_OUT.length} addresses, a redirect to one not followed), and so does JPX's ETF list until its own switch says so (PX-7: once lifted, nothing on jpx.co.jp was held); Cboe's files stay held; the reason printed names the owner's answer of 21 Nov 2026`, lifted.before === false && lifted.after === true && lifted.hop === false && lifted.n === 2 && !lifted.asked.includes(RULED_OUT[0]) && lifted.held === RULED_OUT.length && lifted.etf && lifted.etfLifted && lifted.ruledStill && lifted.stillHeld && probe.heldWhy("https://www.jpx.co.jp/") !== null && /released on 21 Nov 2026/.test(probe.heldWhy("https://www.jpx.co.jp/") ?? "") && !/until the owner answers/.test(probe.heldWhy("https://www.jpx.co.jp/") ?? ""), lifted);
+    // RA-2 of the release audit of pull request #50 (23 Nov 2026): the owner's answer of 23 Nov 2026, 01:42 UTC, on NYSE's
+    // threshold list is "Go without" (no job reads it), and it is held by path like Cboe's and Nomura's files: its page,
+    // the page that one ended at on 21 Nov (/regulation/regulation-sho) and its download, however the address is
+    // written and behind a redirect, are refused before any request; pf_borrow itself, run offline, asks none of them
+    const NYSE_HELD = ["https://www.nyse.com/regulation/threshold-securities", "https://www.nyse.com/regulation/regulation-sho", "https://www.nyse.com/api/regulatory/threshold-securities/download?selectedDate=&market=", "https://www.nyse.com/api/regulatory/threshold-securities/download?selectedDate=2026-11-20&market=NYSE%20Arca", "https://WWW.NYSE.COM./regulation/threshold-securities", "https://www.nyse.com/regulation/%74hreshold-securities", "https://nyse.com//api/regulatory/threshold-securities/download", "https://www.nyse.com/regulation/Threshold_Securities.csv", "no address at all, but it names nyse.com's threshold-securities"];
+    const NYSE_FREE = ["https://www.nyse.com/robots.txt", "https://www.nyse.com/trade/hours-calendars", "https://www.nasdaqtrader.com/dynamic/symdir/regsho/nasdaqth20261120.txt"];
+    const nyse = await withSite({ "https://other.example/sho": { status: 302, location: NYSE_HELD[0] } }, async (asked) => {
+      let answered = 0;
+      for (const u of NYSE_HELD.slice(0, -1)) { const p = await probe.page(u), l = await probe.look(u, { show: 0 }), b = await probe.bytes(u); if (p.ok || p.status !== null || l.error !== "held" || b.data !== null || b.status !== null) answered++; }
+      const direct = asked.length, hop = await probe.page("https://other.example/sho");
+      return { answered, direct, hop: hop.ok, asked: asked.map((a) => a.url) };
+    });
+    const nyseWhy = probe.heldWhy(NYSE_HELD[0]) ?? "";
+    const borrowRun = { out: "", asked: [] as string[] };
+    {
+      const real = globalThis.fetch, lines: string[] = [], log = console.log;
+      // every robots.txt allows all, every other address is a 404: what pf_borrow would ask of nyse.com if nothing held it
+      globalThis.fetch = (async (input: unknown) => { const u = String(input); borrowRun.asked.push(u); const rb = /\/robots\.txt$/.test(new URL(u).pathname); return new Response(rb ? "User-agent: *\nDisallow:\n" : "not found", { status: rb ? 200 : 404, headers: { "content-type": rb ? "text/plain" : "text/html" } }); }) as typeof fetch;
+      (globalThis as { __probeOffline?: boolean }).__probeOffline = true;
+      console.log = (...a: unknown[]) => { lines.push(a.map(String).join(" ")); };
+      try { await import("../jobs/probes/pf_borrow.ts"); }
+      catch (e) { lines.push(`THE PROBE STOPPED: ${e instanceof Error ? e.message : String(e)}`); }
+      finally { console.log = log; globalThis.fetch = real; delete (globalThis as { __probeOffline?: boolean }).__probeOffline; probe.restoreHolds(); }
+      borrowRun.out = lines.join("\n");
+    }
+    const borrowNyse = borrowRun.asked.filter((u) => /nyse\.com/i.test(u));
+    ck(`RA-2: NYSE's threshold list is held by path, as the owner's "Go without" of 23 Nov 2026 says: ${NYSE_HELD.length - 1} addresses of its page, the page it ended at and its download (a capital host with a dot after it, an escaped letter, a doubled slash, another file name) are refused by page(), look() and bytes() before any request (${nyse.direct} asked, ${nyse.answered} answered), a redirect to it is not followed, text that names it is held; NYSE's robots.txt, its hours page and Nasdaq's Reg SHO file are not held; pf_borrow run offline asks nyse.com only its robots.txt (${borrowNyse.length}: ${borrowNyse.join(", ")}) and prints the page as NOT ASKED (held)`,
+      nyse.direct === 0 && nyse.answered === 0 && nyse.hop === false && nyse.asked.join() === "https://other.example/sho" && NYSE_HELD.every((u) => probe.heldWhy(u) !== null) && NYSE_FREE.every((u) => probe.heldWhy(u) === null) && /Go without/.test(nyseWhy) && /23 Nov 2026/.test(nyseWhy)
+        && borrowNyse.length === 1 && borrowNyse[0] === "https://www.nyse.com/robots.txt" && /NOT ASKED \(held\)\s+https:\/\/www\.nyse\.com\/regulation\/threshold-securities/.test(borrowRun.out) && /requests made:/.test(borrowRun.out) && !/THE PROBE STOPPED/.test(borrowRun.out),
+      { nyse, why: nyseWhy, borrowNyse, stopped: borrowRun.out.split("\n").filter((l) => /STOPPED|held/i.test(l)).slice(0, 6) });
+    // V7-4 of the check of batch 7b (23 Nov 2026): after the held page, step 1 still printed "\"NYSE\" is asked, a
+    // candidate" and put the download to the owner ("FOR THE OWNER"), who had answered "Go without" (23 Nov 2026, 01:42
+    // UTC). Step 1 now ends with a line that says the list is held by that answer
+    const step1 = borrowRun.out.slice(borrowRun.out.indexOf("== 1. NYSE"), borrowRun.out.indexOf("== 2. "));
+    ck(`V7-4: pf_borrow's step 1, run offline, says NYSE's threshold list is held by the owner's answer of 23 Nov 2026 ("Go without") and prints no market as a candidate to ask and nothing FOR THE OWNER (${step1.split("\n").filter((l) => l.trim()).length} lines)`,
+      borrowRun.out.indexOf("== 1. NYSE") >= 0 && borrowRun.out.indexOf("== 2. ") > borrowRun.out.indexOf("== 1. NYSE") && /held by the owner's answer of 23 Nov 2026, "Go without"/.test(step1) && !/candidate/i.test(step1) && !/FOR THE OWNER/.test(step1) && !/"NYSE" is asked|the download is NOT asked/.test(step1),
+      { step1: step1.split("\n").filter((l) => l.trim()) });
 
     // ---- PR-7: robots.txt ----
     const rob = await withSite({ "https://a.example/robots.txt": { type: "text/html", body: "User-agent: *\nDisallow: /\nCrawl-delay: 5\n" }, "https://b.example/robots.txt": { type: "text/html", body: "<!doctype html><html><head><title>Welcome</title></head><body>Home</body></html>" }, "https://c.example/robots.txt": { type: "text/plain", body: "User-agent: *\nDisallow: /private/\n" } }, async () => ({ a: await probe.robots("https://a.example", ["/data.csv"]), b: await probe.robots("https://b.example", ["/data.csv"]), c: await probe.robots("https://c.example", ["/data.csv"]) }));
@@ -2483,10 +2520,32 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const STILL_LIMITED = ["You may print pages for your personal use; you may not otherwise reproduce them.", "当サイトの情報は個人的な利用に限り複製を許可し、商用目的での利用を禁止します。", "You agree not to: use the data for any commercial purpose; resell the data for profit.", "The publication of this information does not constitute an offer."];
     const falseBars = NOT_BARS.filter((l) => kind(l) !== null), missed = [...MISSES, ...SAME_KIND].filter((l) => kind(l) === null), wrongLimited = STILL_LIMITED.filter((l) => kind(l) !== null);
     ck(`the gate both ways: ${NOT_BARS.length} lines that bar nothing of a site's data (six disclaimers that call the document a publication, two grants of personal use with "but must not otherwise copy it") are none (${falseBars.length} read as bars), and ${MISSES.length + SAME_KIND.length} unlimited bans after a semicolon, a noun for a subject, 「し、」 or a list's lead-in are bars (${missed.length} read as none); ${STILL_LIMITED.length} limited ones stay none`, falseBars.length === 0 && missed.length === 0 && wrongLimited.length === 0, { falseBars, missed, wrongLimited });
-    // what the README says the gate still reads as none: a limit after a plain "or" inside one ban (the check of fix part
-    // 3), a purpose named for the acts of a list joined by "and", a ban named only by "as is", and "nor" with no comma
-    const STILL_NONE = ["You may not copy or redistribute the data or use it for commercial purposes.", "Copying and redistribution of the data, and their use for commercial purposes, are prohibited.", "Copying the data for commercial purposes is prohibited, as is its redistribution.", "You may not copy the data nor use it for commercial purposes."];
-    ck("PL-2: what the README and lib.ts say the gate still reads as none is none: a limit named after a plain \"or\" inside one ban, a purpose named once for acts joined by \"and\", a ban named only by \"as is\", \"nor\" without a comma", STILL_NONE.every((l) => kind(l) === null), STILL_NONE.map(kind));
+    // R-1 of the check of fix part 5 (fix5-verify-5420, 23 Nov 2026): the rule above freed every clause that said
+    // "otherwise" or "any other" after a grant, also where the words name another object or party, so that an unlimited
+    // ban read none ("…, but you may not distribute it to any other party."). Only an "otherwise" or "any other" that
+    // refers back to the grant frees its clause now; the rest are bars again, as at dfd0970
+    const OTHER_ELSEWHERE = ["You may print the pages for your personal use, and you must not copy them to any other website.", "You may use the data for personal use, but you may not distribute it to any other party.", "You may copy the data for personal use, but you may not redistribute it unless otherwise agreed in writing.", "You may use the data for internal purposes, but unless otherwise agreed in writing you may not redistribute it.", "You may download the data for your personal use, and you may not redistribute it to any other person.", "You may download the data for your personal use; you may not redistribute it to any other person.", "You may print pages for personal use, but you must not store the data in any other system or redistribute it.", "You may store the data for your personal use, but except as otherwise permitted you may not redistribute it.", "You may use the data for personal use, but you may not copy, redistribute or otherwise exploit it."];
+    const BACK_TO_GRANT = ["You may download one copy for private study, but you must not otherwise reproduce it.", "You may use this content for your own personal use; any other copying or redistribution is prohibited.", "You may print one copy for your own internal use, but any other reproduction is prohibited.", "You may print pages for your personal use; you may not otherwise reproduce them.", "You may store the data for your personal, non-commercial use, but must not otherwise copy it.", "You may download and print one copy for your personal use, but may not otherwise reproduce the material.", "You may copy the data for your personal use; otherwise, you may not copy or redistribute it.", "You may print one copy for your personal use, but you may not reproduce it in any other form."];
+    const freed = OTHER_ELSEWHERE.filter((l) => kind(l) === null), heldBack = BACK_TO_GRANT.filter((l) => kind(l) !== null);
+    ck(`R-1: "otherwise" and "any other" free a second ban only where they refer back to the grant of personal, private or internal use in the same sentence: ${OTHER_ELSEWHERE.length} unlimited bans whose "otherwise" or "any other" names another object or party ("to any other party", "in any other system", "unless otherwise agreed", "except as otherwise permitted", "or otherwise exploit it") are bars (${freed.length} read as none), and ${BACK_TO_GRANT.length} that refer back ("must not otherwise reproduce it", "any other copying is prohibited", "; otherwise, you may not", "in any other form") are none (${heldBack.length} read as bars)`, freed.length === 0 && heldBack.length === 0, { freed, heldBack });
+    // R-2 of the same check: 「し、」 parted one ban whose acts are joined by 〜し、 (複製し、または再配布することを禁止します,
+    // a ban limited to commercial use, became a bar), and 「、また」 took "、または" ("or") and an act's "、また" for a
+    // second ban. A ban verb before 「し、」 or 「、また」 still parts two bans
+    const ONE_BAN_JA = ["商用目的で、本データを複製し、または再配布することを禁止します。", "私的使用を除き、複製し、または転載することを禁止します。", "当社の許可なく、営利目的で本データを複製し、販売し、または配布することを禁止します。", "私的使用の範囲内で複製することができますが、商用目的で転載し、または再配布することはできません。", "個人的な利用を除き、複製、また転載を禁止します。", "営利を目的として、当サイトの情報を複製し、または転載することはご遠慮ください。"];
+    const TWO_BANS_JA = ["商用目的での転載を禁止し、また再配布も禁止します。", "商用目的での転載を禁止し、再配布も禁止します。", "商用目的での転載はできませんし、再配布もできません。", "個人的な利用の範囲を超えた複製を禁止し、また、第三者への再配布も禁止します。"];
+    const oneBanBars = ONE_BAN_JA.filter((l) => kind(l) !== null), twoBansNone = TWO_BANS_JA.filter((l) => kind(l) === null);
+    ck(`R-2: ${ONE_BAN_JA.length} single Japanese bans limited to commercial use or leaving private use free, whose acts are joined by 〜し、, "、または" or an act's "、また" (the review's example: 商用目的で、本データを複製し、または再配布することを禁止します。), are none (${oneBanBars.length} read as bars); ${TWO_BANS_JA.length} sentences of two bans parted after a ban verb (禁止し、, できませんし、) are bars (${twoBansNone.length} read as none)`, oneBanBars.length === 0 && twoBansNone.length === 0, { oneBanBars, twoBansNone });
+    // what the README and lib.ts say the gate still reads as none, each kind they name (R-3 of the same check: the account
+    // left four kinds out): a limit after a plain "or" inside one ban (the check of fix part 3), a purpose named for the
+    // acts of a list joined by "and", a ban named only by "as is", "nor" with no comma; a second ban worded in a way the
+    // clause split does not know (two adverbs, "shall be prohibited", "is never permitted", "a separate licence"); a
+    // Japanese join other than 「し、」 or 「、また」 after a ban verb (禁止されており、, 禁止、, 禁止するとともに、); and a
+    // "publication" named by "this", "these", "such", by a name, or "in any form"
+    const STILL_NONE = ["You may not copy or redistribute the data or use it for commercial purposes.", "Copying and redistribution of the data, and their use for commercial purposes, are prohibited.", "Copying the data for commercial purposes is prohibited, as is its redistribution.", "You may not copy the data nor use it for commercial purposes.",
+      "You may not copy the data for commercial purposes, and redistribution is also strictly prohibited.", "You may not copy the data for commercial purposes, and any redistribution shall be prohibited.", "You may not copy the data for commercial purposes, but redistribution of the content is never permitted.", "You may not copy the data for commercial purposes, and redistribution requires a separate licence.",
+      "商用目的での転載は禁止されており、再配布も禁止されています。", "商用目的の転載は禁止、再配布も禁止します。", "商用目的での転載を禁止するとともに、再配布も禁止します。",
+      "Publication of this content is prohibited without our prior written consent.", "Any publication of these figures requires our prior written consent.", "Publication of such data without our consent is prohibited.", "Publication in any form is prohibited without our consent.", "Publication of the Nikkei Stock Average requires a licence from Nikkei Inc."];
+    ck(`PL-2 and R-3: what the README and lib.ts say the gate still reads as none is none, each kind they name (${STILL_NONE.length} lines): a limit named after a plain "or" inside one ban, a purpose named once for acts joined by "and", a ban named only by "as is", "nor" without a comma, a second ban worded in a way the clause split does not know, a Japanese join other than 「し、」 or 「、また」 after a ban verb, a "publication" named by "this", "these", "such", a name or "in any form"`, STILL_NONE.every((l) => kind(l) === null), STILL_NONE.map(kind));
     ck("a redirect off jpx.co.jp is not followed (R: nothing asked elsewhere); PX-7: a redirect from a released page to TOPIX's weight file on jpx.co.jp is not followed either (G), while the lift is on", !runs.R.asked.some((u) => /elsewhere/.test(u)) && /NOT ASKED \(held\)/.test(runs.R.out) && !runs.G.asked.some((u) => /topixweight/.test(u)) && /NOT ASKED \(held\)[^\n]*topixweight/.test(runs.G.out), { R: runs.R.asked.slice(-3), G: runs.G.asked });
   }
 
@@ -2761,7 +2820,8 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
 
   // [AK], what the READMEs say, is in sim/readme.test.ts since 23 Nov 2026: this file stops a deploy of the server or the
   // site when it fails, and since the check of fix part 4 it reads neither README, so no sentence of either can stop a
-  // deploy (the check of fix part 3: a README change alone ran no check and then stopped the next deploy; [AL] holds
+  // deploy (the check of fix part 3 found, by experiment, that a README change alone ran no check and would then stop the
+  // next deploy; [AL] holds
   // logic-tests' paths to every file this file does read). logic-tests runs both files.
 
   const reached: string[] = [];   // every file of the repository's own that this file imports, directly or through another ([AB]), for [AL]
@@ -2859,9 +2919,9 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
   console.log("\n[AL] logic-tests runs, on a pull request and on a push to main, on a change to any file this file imports or reads (the deploy trap: the check of fix part 4, 23 Nov 2026)");
   {
     // This file stops a deploy of the server (deploy-server's logic checks) and of the site (deploy-web's test). A file it
-    // imports or reads that changes alone, where no workflow of a pull request runs this file, merged with no check and
-    // stopped the next deploy: jobs/lib/marks.ts, jobs/live_check.ts or deploy-server.yml did, and before 23 Nov 2026 a
-    // sentence of the README. The list is the code's, not a hand's: the files the imports lead to ([AB]'s two looks);
+    // imports or reads that changes alone, where no workflow of a pull request runs this file, would merge with no check
+    // and stop the next deploy: experiments with jobs/lib/marks.ts, jobs/live_check.ts and deploy-server.yml showed it
+    // (the checks of fix parts 3 and 4; no deploy stopped so), and before 23 Nov 2026 a sentence of the README could. The list is the code's, not a hand's: the files the imports lead to ([AB]'s two looks);
     // every address this file and those files build as new URL("…", import.meta.url) (a template's fixed part, or one
     // that ends with "/", is a folder); and every file and folder this run read (readText and listDir record each). A
     // folder counts with every file under it and with one that may be added there. Each must match a path of
@@ -2899,12 +2959,17 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const push = pathsOf("push"), pr = pathsOf("pull_request");
     const globRe = (g: string) => new RegExp(`^${g.split("**").map((x) => x.split("*").map((y) => y.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join("[^/]*")).join(".*")}$`);
     const covers = (ps: string[] | null, f: string) => !!ps && ps.some((g) => !g.startsWith("!") && globRe(g).test(f));
-    const under = (dir: string): string[] => { const out: string[] = []; const walk = (d: string) => { for (const e of readdirSync(resolvePath(root, d), { withFileTypes: true })) { if (e.name === "node_modules") continue; const x = d ? `${d}/${e.name}` : e.name; if (e.isDirectory()) walk(x); else out.push(x); } }; walk(dir); return out; };
+    // a folder address that is not in the checkout (made at run time, or a typo) is named and fails this check; its walk
+    // crashed the whole file with ENOENT (R-6 of the check of fix part 5)
+    const absent: string[] = [];
+    const under = (dir: string): string[] => { const out: string[] = []; if (!isDir(resolvePath(root, dir))) { absent.push(dir); return out; } const walk = (d: string) => { for (const e of readdirSync(resolvePath(root, d), { withFileTypes: true })) { if (e.name === "node_modules") continue; const x = d ? `${d}/${e.name}` : e.name; if (e.isDirectory()) walk(x); else out.push(x); } }; walk(dir); return out; };
     const checked = [...files, ...[...folders].flatMap((d) => [...under(d), `${d}/a-file-added-later.ts`, `${d}/a-folder-added-later/a-file.ts`])];
     const missed = [...new Set(checked.filter((f) => !covers(push, f) || !covers(pr, f)))].sort();
-    const must = ["jobs/lib/marks.ts", "jobs/lib/pfwalls.ts", "jobs/live_check.ts", "jobs/package-lock.json", ".github/workflows/deploy-server.yml", "web/src/components/Help.tsx", "web/src/lib/sessions.ts", "supabase/functions/_shared/sessions.ts", "jobs/probes/lib.ts"];
-    ck(`logic-tests' paths (${push?.length ?? 0} for a push to main, ${pr?.length ?? 0} for a pull request) cover every file this file imports or reads, as the code says (${files.size} files, ${folders.size} folders, ${built} addresses built with import.meta.url, ${readsSeen.size} read in this run; ${checked.length} paths in all, ${missed.length} not covered), among them ${must.join(", ")}; and no README is read here (its checks are sim/readme.test.ts's)`,
-      !!push && !!pr && missed.length === 0 && must.every((f) => files.has(f) || [...folders].some((d) => f.startsWith(`${d}/`))) && !files.has("README.md") && !files.has("supabase/README.md"), { missed: missed.slice(0, 40), push, pr });
+    const must = ["jobs/lib/marks.ts", "jobs/lib/pfwalls.ts", "jobs/live_check.ts", "jobs/package-lock.json", ".github/workflows/deploy-server.yml", "web/src/components/Help.tsx", "web/src/lib/sessions.ts", "supabase/functions/_shared/sessions.ts", "jobs/probes/lib.ts", "jobs/probes/pf_borrow.ts"];
+    const walkNamesAbsent = (() => { const n = absent.length, got = under("a-folder-that-is-not-in-the-checkout"); const named = got.length === 0 && absent.length === n + 1 && absent[n] === "a-folder-that-is-not-in-the-checkout"; absent.length = n; return named; })();
+    ck(`logic-tests' paths (${push?.length ?? 0} for a push to main, ${pr?.length ?? 0} for a pull request) cover every file this file imports or reads, as the code says (${files.size} files, ${folders.size} folders, ${built} addresses built with import.meta.url, ${readsSeen.size} read in this run; ${checked.length} paths in all, ${missed.length} not covered; ${absent.length} folder addresses not in the checkout${absent.length ? `: ${absent.join(", ")}` : ""}), among them ${must.join(", ")}; and no README is read here (its checks are sim/readme.test.ts's)`,
+      !!push && !!pr && missed.length === 0 && absent.length === 0 && must.every((f) => files.has(f) || [...folders].some((d) => f.startsWith(`${d}/`))) && !files.has("README.md") && !files.has("supabase/README.md"), { missed: missed.slice(0, 40), absent, push, pr });
+    ck("R-6: a folder address that is not in the checkout is named by this section and fails it, instead of stopping the whole file", walkNamesAbsent);
   }
 
   console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

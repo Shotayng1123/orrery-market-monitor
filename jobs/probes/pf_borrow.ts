@@ -5,6 +5,10 @@
 //   1. NYSE's threshold-securities download, asked with a date and a market (with neither it answered 500, l.22): the
 //      page's own choices of market are read first, then NYSE's terms by the page's own link (they may stand on its
 //      group's site); the date is the last weekday. The download is asked only if the terms were read and do not bar it.
+//      Held since 23 Nov 2026 by the owner's answer, "Go without" (ICE's terms bar robots): lib.ts's hold refuses the
+//      page and the download before any request, so this step asks NYSE's robots.txt alone, prints the page as held and
+//      ends with a line that says the list is held by that answer (it names no market to ask and puts nothing of the
+//      list to the owner again: V7-4 of the check of batch 7b).
 //   2. Interactive Brokers' short-securities availability page, once (the first run read it twice, l.94 and l.124):
 //      the links and addresses on it that name its lists of shortable stocks by country (on the web, or by FTP), its
 //      table of countries, and whether it states a login. THIS PROBE SENDS NO LOGIN AND NEVER PRINTS ONE: job logs are
@@ -21,14 +25,15 @@
 // A site's robots.txt and terms are read before any data file of it. A site whose terms bar automated reading, or any
 // re-use whatever the purpose, keeps its files unread here: that finding goes to the owner (as JPX's, Nomura's and
 // Cboe's did on 21 Nov).
-// Requests: at most 24, 1.5 s apart: nyse.com (6), interactivebrokers.com (5, and one FTP greeting only if a page
-// names a host), jsf.co.jp (6), and JSF's data site if its pages name one (6); a site's terms take a second request
+// Requests: at most 24, 1.5 s apart: nyse.com (its robots.txt alone while the hold stands; 6 before it),
+// interactivebrokers.com (5, and one FTP greeting only if a page names a host), jsf.co.jp (6), and JSF's data site if
+// its pages name one (6); a site's terms take a second request
 // where its first "legal" page is only a hub. A robots.txt that answers 429 is asked once more after the wait it
 // names (60 s at most), so 28 at the very most.
 // Runtime: deno (the FTP greeting uses node:net, which Deno provides; node runs it too).
 //   Actions > source-probe > Run workflow: probe = pf_borrow, runtime = deno
 import { connect } from "node:net";
-import { bytes, counted, head, linksOf, look, masked, page, pause, printLines, readTerms, requestsMade, robots, siteOf, textLines, titleOf, type Page } from "./lib.ts";
+import { bytes, counted, head, heldWhy, linksOf, look, masked, page, pause, printLines, readTerms, requestsMade, robots, siteOf, textLines, titleOf, type Page } from "./lib.ts";
 
 const GAP = 1500, MAX = 24;
 const t0 = Date.now(), now = new Date(t0);
@@ -46,7 +51,10 @@ head("1. NYSE's Reg SHO threshold list: the page's choices of market, then the d
   const NYSE = "https://www.nyse.com", api = "/api/regulatory/threshold-securities/download";
   const rb = await robots(NYSE, ["/regulation/threshold-securities", api]);
   await pause(GAP);
-  if (!rb.allows("/regulation/threshold-securities")) console.log("  not asked: robots.txt holds the page");
+  if (heldWhy(`${NYSE}/regulation/threshold-securities`) && heldWhy(`${NYSE}${api}`)) {
+    await get(`${NYSE}/regulation/threshold-securities`);   // refused by the hold before any request: it prints why
+    console.log(`  NYSE's threshold list is held by the owner's answer of 23 Nov 2026, "Go without" (no job reads it): its page and its download are not asked, so no market, terms or rows of it are read here`);
+  } else if (!rb.allows("/regulation/threshold-securities")) console.log("  not asked: robots.txt holds the page");
   else {
     const p = await get(`${NYSE}/regulation/threshold-securities`);
     let markets: string[] = [], terms = { read: false, barred: false };

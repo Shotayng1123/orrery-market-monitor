@@ -49,10 +49,39 @@ console.log("\n[AK] what the README says of the checks is what the repository ho
   // says are still read as none, or hold nothing, read none; those it says hold the files read as bars
   const flat = readme.replace(/\s+/g, " "), from = flat.indexOf("A sentence of two bans is read ban by ban"), gate = from >= 0 ? flat.slice(from, flat.indexOf("a page reached by a \"legal\" link", from)) : "";
   const quoted = (t: string): string[] => [...t.matchAll(/"([A-Z][^"]*?\.)"/g)].map((m) => m[1]);
-  const none = [...quoted(gate.slice(gate.indexOf("Still read as none"), gate.indexOf("The gate errs the other way"))), ...[...gate.matchAll(/"([A-Z][^"]*?\.)" (?:holds nothing|does not)\b/g)].map((m) => m[1])];
-  const bars = [...quoted(gate.slice(gate.indexOf("The gate errs the other way"))), ...[...gate.matchAll(/"([A-Z][^"]*?\.)" holds the files/g)].map((m) => m[1]), ...[...gate.matchAll(/(商用目的[^）)]*?。)/g)].map((m) => m[1])];
+  // a Japanese example is a sentence from 商用目的 to its 。: none where the README says it is still read as none or that
+  // it holds nothing (since the check of fix part 5, 23 Nov 2026), else a bar
+  const noneSpan = gate.slice(gate.indexOf("Still read as none"), gate.indexOf("The gate errs the other way"));
+  const ja = [...gate.matchAll(/(商用目的[^）)\s]*?。)( holds nothing\b)?/g)], jaNone = new Set([...[...noneSpan.matchAll(/(商用目的[^）)\s]*?。)/g)].map((m) => m[1]), ...ja.filter((m) => m[2]).map((m) => m[1])]);
+  const none = [...quoted(noneSpan), ...[...gate.matchAll(/"([A-Z][^"]*?\.)" (?:holds nothing|does not)\b/g)].map((m) => m[1]), ...jaNone];
+  const bars = [...quoted(gate.slice(gate.indexOf("The gate errs the other way"))), ...[...gate.matchAll(/"([A-Z][^"]*?\.)" holds the files/g)].map((m) => m[1]), ...ja.map((m) => m[1]).filter((l) => !jaNone.has(l))];
   const misread = [...none.filter((l) => gateBar(l) !== null).map((l) => `none: ${l}`), ...bars.filter((l) => gateBar(l) === null).map((l) => `bar: ${l}`)];
   ck(`the README's examples of what the terms gate reads are what it reads: ${none.length} it quotes as none or holding nothing, ${bars.length} as holding the files (${misread.length} read otherwise)`, none.length >= 6 && bars.length >= 4 && misread.length === 0, { misread, none, bars });
+}
+{
+  // V7-1 of the check of batch 7b (23 Nov 2026): the README said that "after an act, 「し、」 and 「、また」 join the acts of
+  // one ban", but the gate parts 「、また」 after an act's 〜し, and 「し、」 after an act its closed list lacks, so that
+  // such a single ban limited to commercial use is read as two and holds the files. The README's account of the joins
+  // is held to that list (CLAUSE in jobs/probes/lib.ts, read as text) and to what the gate reads of the verifier's
+  // sentences (five single limited bans it parts, two it joins) and of the acts and words the README names
+  const flat = readText(new URL("../README.md", import.meta.url), "utf8").replace(/\s+/g, " ");
+  const clause = /^const CLAUSE = (\/.+\/i);$/m.exec(readText(new URL("../jobs/probes/lib.ts", import.meta.url), "utf8"))?.[1] ?? "";
+  const listIn = (re: RegExp): string[] => re.exec(clause)?.[1].split("|") ?? [];
+  const acts = listIn(/\(\?<=し\)\(\?<!\(\?:([^()]+)\)し\)、/), nouns = listIn(/\(\?<!\(\?:([^()]+)\)\)、\(\?=また\(\?!は\)/);
+  const joins = /「し、」 joins the acts of one ban only after one of the (\d+) acts the gate lists \(([^)]*)\), 「、また」 only right after one of them \(([^)]*)\), and 「、または」 is "or" where no 「し、」 parts the sentence/.exec(flat);
+  const parts = /elsewhere they part it as they part two bans, 「、また」 after an act's 〜し and 「し、」 after an act the list lacks \(([^)]*)\) among them, so that a single ban whose limit to commercial use is named before that mark is read as two, its second act without the limit, and holds the files \(([^)]*)\)/.exec(flat);
+  const named = (joins?.[2] ?? "").split(/[,\s]+/).map((a) => a.replace(/し、$/, "")).filter((a) => a && a !== "…");
+  const lacks = (parts?.[1] ?? "").split(/[,\s]+/).map((a) => a.replace(/し、$/, "")).filter((a) => a && a !== "…");
+  const also = [...(parts?.[2] ?? "").matchAll(/「、([^」]+)」/g)].map((m) => m[1]).filter((w) => w !== "また");
+  const S = (act: string, join: string): string => `商用目的で、本データを${act}${join}再配布することを禁止します。`;
+  const parted = [...new Set([S("複製し", "、また"), S("複製し", "、また、"), S("転用し", "、または"), S("改編し", "、または"), S("取得し", "、または"), ...lacks.map((a) => S(`${a}し`, "、または")), ...also.map((w) => S("複製し", `、${w}`))])];
+  const joined = [...new Set([S("複製し", "、または"), S("複製", "、また"), ...named.map((a) => S(`${a}し`, "、")), `商用目的での${joins?.[3] ?? "–"}を禁止します。`, ...also.map((w) => `商用目的での複製、${w}転載を禁止します。`)])];
+  // parted too, but with the limit named after the mark, in the clause of the ban verb: such a line holds nothing
+  const limitAfter = ["本データを転用し、商用目的で再配布することを禁止します。", "本データを複製し、また商用目的で再配布することを禁止します。"];
+  const wrong = [...parted.filter((s) => gateBar(s) === null).map((s) => `none: ${s}`), ...[...joined, ...limitAfter].filter((s) => gateBar(s) !== null).map((s) => `bar: ${s}`)];
+  ck(`V7-1: the README's account of the Japanese joins is the gate's: 「し、」 joins the acts of one ban only after one of the ${joins?.[1] ?? "–"} acts it lists (CLAUSE lists ${acts.length}; ${named.filter((a) => !acts.includes(a)).length} of the ${named.length} the README names are not among them), 「、また」 only right after one of them, and elsewhere both part a single ban, which then holds the files where its limit is named before the mark (after 複製し, and after the ${lacks.length} acts it names as lacking: ${lacks.filter((a) => acts.includes(a)).length} of them listed; 「、${also.join("」, 「、")}」 as 「、また」); ${parted.length} sentences it says are parted, ${joined.length} it says are joined and ${limitAfter.length} parted after their limit, put to the gate (${wrong.length} read otherwise)`,
+    !!joins && !!parts && acts.length > 0 && JSON.stringify(acts) === JSON.stringify(nouns) && Number(joins[1]) === acts.length && named.length >= 2 && named.every((a) => acts.includes(a)) && lacks.length >= 2 && lacks.every((a) => !acts.includes(a)) && also.length === 3 && wrong.length === 0 && !/after an act, 「し、」 and 「、また」 join the acts of one ban/.test(flat),
+    { joins: joins?.slice(1), parts: parts?.slice(1), acts: acts.length, nouns: nouns.length, named, lacks, also, wrong });
 }
 
 {
