@@ -292,7 +292,8 @@ conversation with a mail server), `sim/sql/signup.test.cjs` (the database functi
 
 Every account gets one welcome email (`supabase/functions/_shared/welcome.ts`), by itself: the idea behind the
 name first, then what the account opens (the six tabs, a company's own page, alerts, notifications on a phone,
-the watchlist) and a first five minutes. It goes out at the first sign-in that succeeds while the account has
+the watchlist) and a first five minutes, which start with the 1-minute tour (since 23 Nov 2026: its picture and its
+words link to the tour's page on the site, `{site}tour/`; README.md, "The tour"). It goes out at the first sign-in that succeeds while the account has
 none: for a new account that is the moment its password is set (`signupFinish`); for an account from before the
 email existed, one approved by hand, or one whose first sending failed, it is the next sign-in (`login`). It is
 sent by the same sender as the verification email and never stands in the account's way: if it cannot be sent,
@@ -303,9 +304,12 @@ taken back if the sending fails, so two sign-ins at the same moment cannot both 
 with `only` = `counts` says how many accounts have had it.
 
 - To read it as a new reader does: Account › Accounts › **SEND IT TO ME** sends it to the manager's own address.
-- Its two pictures (the Monitor's mark and a drawing of an orrery) are files of the site,
-  `web/public/mail/mark.png` and `orrery.png`, fetched by the reader's mail program from `MONITOR_SITE_URL`;
-  `web/tools/mail-pictures.cjs` draws them. With pictures switched off the email still reads whole.
+- Its three pictures (the Monitor's mark, a drawing of an orrery and the tour's) are files of the site,
+  `web/public/mail/mark.png`, `orrery.png` and `tour.jpg`, fetched by the reader's mail program from
+  `MONITOR_SITE_URL`; `web/tools/mail-pictures.cjs` draws the first two, and the tour's is the designer's render of the
+  tour (README.md, "The tour"). With pictures switched off the email still reads whole.
+- The tour's picture and link point at files of the site, so the site that carries them goes out before the server
+  that sends an email naming them.
 - With no email sender set up, nobody gets one; once a sender is set, each account gets it at its next sign-in.
 - Checked in `sim/logic.test.ts` (its words, its links, the rules an email must keep) and
   `web/e2e/welcome-mail.cjs` (drawn at a desktop mail program's width and at a phone's).

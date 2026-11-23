@@ -132,8 +132,7 @@ and 1W, where the dotted curve is the curve of a month ago), and SAMPLE DATA is 
 - Help's first row, "Watch the 1-minute tour", whose PLAY plays the film over the Monitor (`web/src/components/Tour.tsx`),
   in the Home Screen app's frame as well (`web/src/lib/scroller.ts`): the player and Help are drawn over the frame, close
   as they do without it, and leave the page where it stood (neither moves the page's scroll).
-- `web/public/mail/tour.jpg`: the tour's picture for the welcome email, a file of the site that goes out before the
-  server that sends an email naming it.
+- The welcome email's first five minutes: its picture, `web/public/mail/tour.jpg`, and its words link to `{site}tour/`.
 - The service worker leaves the tour to the network: it keeps and answers only the app's own page (`web/public/sw.js`).
 - On a dev server `{site}tour/` shows the Monitor (Vite's fallback page); there the tour's page is `{site}tour/index.html`.
 
