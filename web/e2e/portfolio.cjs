@@ -136,7 +136,7 @@ const header = (p) => p.evaluate(() => { const z = Number(document.body.style.zo
     const strip = await text(p, "#pf-strip");
     await hop(p, "market", "table.mkt"); await hop(p, "portfolio", "#pf-overview");
     const again = await p.evaluate(() => ({ hash: location.hash, book: document.querySelector(".pf-bookpage")?.dataset.book }));
-    ck(`a book's strip reads "${strip}"; opened once, #portfolio opens that book again (it is remembered on this device by its id)`, strip === "Tokyo L/S ▾ Equity L/S · Japan · AR · USD · PAPER · only you · created 1 Oct 2026 OVERVIEW SETTINGS" && again.hash === "#portfolio" && again.book === ID(1), { strip, again });
+    ck(`a book's strip reads "${strip}"; opened once, #portfolio opens that book again (it is remembered on this device by its id)`, strip === "Tokyo L/S ▾ Equity L/S · Japan · AR · USD · PAPER · only you · created 1 Oct 2026 OVERVIEW SETTINGS BUY / SELL" && again.hash === "#portfolio" && again.book === ID(1), { strip, again });
     await p.click("#pf-switch"); await p.waitForSelector("#pf-menu");
     const menu = await p.evaluate(() => [...document.querySelectorAll("#pf-menu a")].map((a) => `${a.innerText.replace(/\s+/g, " ").trim()}>${a.getAttribute("href")}`));
     await p.keyboard.press("Escape"); await p.waitForTimeout(100);

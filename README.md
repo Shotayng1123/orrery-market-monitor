@@ -111,7 +111,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,296 checks in 54 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290) and slice 8's `letter-placement` (6)): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,319 checks in 55 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6) and P-2.1's `pf-ticket` (23)): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -209,8 +209,8 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   with every face swapped for the generic monospace). A forced monospace alone widens next to nothing on a
   computer: IBM Plex Mono's letters are 0.600 of their size wide, DejaVu Sans Mono's 0.602, Liberation Mono's 0.600.
   The **paper portfolio** (P-1, on the development servers, where it is drawn switched on unless `om_paper` says
-  otherwise) has eight suites (`portfolio`, `phone-portfolio`, `layout-guard-portfolio`, `portfolio-accounts`,
-  `portfolio-fixes`, `pf-verdicts-forms`, `pf-verdicts-settings` and `pf-preview`), and the one-screen header's three (`header`, `header-sizes`,
+  otherwise) has nine suites (`portfolio`, `phone-portfolio`, `layout-guard-portfolio`, `portfolio-accounts`,
+  `portfolio-fixes`, `pf-verdicts-forms`, `pf-verdicts-settings`, `pf-preview` and `pf-ticket`), and the one-screen header's three (`header`, `header-sizes`,
   `header-wide`) count six tabs and seven.
   `portfolio` (a computer): the seventh tab at six sizes with the header as tall as with six tabs, in the machine's
   fonts and in a wide one; key 7; with no book,
@@ -270,6 +270,13 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   defaults listed, a name shown as it will be stored, and no line over the page after CREATE. `pf-verdicts-settings`:
   a book's change form with what is pending under what is in force and a take-back recorded as one, a form sheet's foot
   that does not scroll, GO TO under the header lighting the section in view, and RE-SET FOR NEXT YEAR.
+  `pf-ticket` (P-2.1, 23 Nov 2026, with the stand-in preview account and the page's clock set): BUY / SELL on a book's
+  strip opens the order ticket at the right of Overview, under the preview line, at C1 and at XL; a Tokyo name by shares
+  (1,050 → 1,000, 50 not placed) and by % of capital, a US one by an amount (USD 1,000,000 at 187.30 → 5,339 shares,
+  USD 5.30 not placed), each with its last print's time, age and source; the sides a book with no position allows; a
+  stopped feed's print too old to size an amount on; a future refused in words; a server of before the ticket; and on
+  an iPhone 13 and an SE the ticket as a page of the book, 16-px inputs and 44-px taps, on a weekend's dated print and
+  with a wide font, nothing cut.
   `source-lines` (round 3b, the designer's B.0.3 and B.1): every panel head's source line drawn whole or in its short
   form, never cut, at six windows and in a wider face, also as the window is resized; "personal use" whole, opening
   Help at its paragraph (in FULL too), and on a phone a space on each side of its dot; JPX's calendar named with
@@ -303,8 +310,9 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   no line, or no tab and no screens' file, in the other two states.
   `cd web && npm run e2e` starts the test servers it needs and runs them all, up to three suites at a time (two of
   the dev servers' and one of the built site's, whose suites queue behind each other): about
-  28 minutes on the engineer's machine (the whole run for the 54 suites and 3,296 checks of slices 8 and 9 together
-  is not yet timed in one run; slice 9's 53 suites and 3,290 checks took 2,061 s as installed, its new suite,
+  28 minutes on the engineer's machine (the whole run for the 55 suites and 3,315 checks of P-2.1 took 2,421 s with
+  the browser's own letter placement and other work on the machine, before three suites' lines were brought to the
+  ticket's door, `pf-ticket` 30 s; slice 9's 53 suites and 3,290 checks took 2,061 s as installed, its new suite,
   `pf-preview`, 40 to 50 s; slice 8's 53 suites and 3,277 checks 1,987 s, its new suite, `letter-placement`, 5 to
   11 s; both with other work on the machine; batch 7a's `source-lines-min` took 101 to 107 s beside the others;
   1,631 s as installed and 1,677 s with GitHub's letter placement on 23 Nov 2026 for 51 suites and 3,230 checks, after the check of fix
@@ -741,7 +749,8 @@ with three absolute-return starts (Equity long/short · Japan, Equity long/short
 relative-return starts that are named and not offered yet, the two targets (cash + x% a year and a target volatility)
 with what they mean together, the ladder and its three bases, a book's Overview and Settings with a reason asked for
 every change and a history that is only ever added to, notes of up to 2,000 characters, and delete after typing the
-name. There are no orders, no NAV and no limits at work yet: the book's page says so in one line.
+name. Since P-2.1 (23 Nov 2026) BUY / SELL opens an order ticket that works out an order's size and places nothing
+(below). There are no orders, no NAV and no limits at work yet: the book's page says so in one line.
 
 - **Where the rules live.** `supabase/functions/_shared/pf/` is the engine: the five starts' defaults, ranges,
   reasons and whose each is (`presets.ts`), the form's rules and refusals (`form.ts`), the targets' arithmetic and the
@@ -783,6 +792,19 @@ name. There are no orders, no NAV and no limits at work yet: the book's page say
   row reads FROM the pending value TO the value in force with "back to the value in force: the pending 15% taken back
   before it was in force", ACTIVITY the same, and the value in force keeps its own BY and SINCE before and after the
   day the pending one would have come into force.
+- **The order ticket** (P-2.1, 23 Nov 2026; `_shared/pf/size.ts`, the route `pf_ticket`). BUY / SELL on a book (on
+  a computer a 460-px panel at the right of Overview, on a phone a page of the book) takes a symbol, a side and a size:
+  % or bp of capital (an RR book's NAV once one is offered), an amount in the book's currency or the name's own, or
+  shares. It says what the order comes to in whole lots (100 shares in Tokyo, 1 in New York), always down, and the part
+  not placed, on the sizing price: Yahoo Finance's last print as the server reads it for the ticket (the quote a stock's
+  page shows, one request per look-up and one a minute while the ticket is open), with its time, its age and its source;
+  a dollar amount of a yen name goes through USD/JPY's last print, named with its time. A print too old to size on says
+  so: in a session, more than the feed's delay and 30 minutes old (Tokyo 50 minutes, New York 30), except in a
+  session's first such minutes, when the session before's still stands; outside one, from before the market's last
+  session (the Monitor's holidays and New York's early closes). Then only shares are sized, with no money beside them.
+  Only US and Tokyo stocks and ETFs are sized; a future, an index, a currency or a name listed elsewhere is refused in
+  words. The engine also sizes to a weight or an active weight (RR), Close and Reduce by x% (on a position, from the
+  fills of a later step), and never across zero. The route reads the book and the quotes and writes nothing.
 - **Notes held.** A book holds at most 500 notes (a removed one counts); from 450 a line under the box says how many
   are left ("50 notes left: every note is kept"). Raising the bound waits for the notes to be read in pages (PM A asks
   for 5,000, PM B for 2,500).
@@ -790,14 +812,17 @@ name. There are no orders, no NAV and no limits at work yet: the book's page say
   `orrery-paper-<book>-<panel>[-history]-<day>.csv`, `<book>` its name in letters and figures of any script, "-2" for a
   later book with the same file name.
 - **Addresses.** `#portfolio` (the book last opened on this device, else the list, else the starts),
-  `#portfolio/all`, `#portfolio/new[/<start>]`, `#portfolio/<id>`, `#portfolio/<id>/settings[/<section>]`. `<id>` is
+  `#portfolio/all`, `#portfolio/new[/<start>]`, `#portfolio/<id>`, `#portfolio/<id>/settings[/<section>]`,
+  `#portfolio/<id>/ticket[?s=<symbol>&side=buy]` (the order ticket, filled in). `<id>` is
   the portfolio's own id, never its name.
 - **The local copy.** Three stand-in books to start (`om_mock_pf` in the browser's storage: one with every default,
   two changes and four notes; one on a yen base with a 60-character name; one macro book), `?mock=empty` (no book, an
   account that has not agreed), `?mock=cap` (five open books), `om_mock_pf_account = "2"` (a second account, which
   sees none of them), `om_mock_pf_refuse` = `1` · `offline` · `signedout` (a write that fails each way),
   `om_mock_pf_delay` = `400` (every write answered after that many milliseconds), `om_mock_pf_off` = `1` (the stand-in
-  server's paper switch off: every route answers "Paper portfolios are not available yet."). With
+  server's paper switch off: every route answers "Paper portfolios are not available yet."), `om_mock_pf_ticket` = `0`
+  (a stand-in server of before the order ticket). The ticket's prices there are made up, timed by the page's clock as
+  the feed would time them (7203.T at 2,987, NVDA at 187.30; 9984.T's feed stopped; USD/JPY 158.4). With
   `om_mock_now` = `2026-12-15T02:00:00Z` the targets' window is open. `om_paper = "0"` shows the local copy as the
   published page is today for an account outside the preview list, with six tabs; `om_paper = "preview"` as it is for
   an account in it, with the preview line on every screen of the tab.

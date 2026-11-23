@@ -3,6 +3,7 @@
 //   #portfolio/all             the account's books
 //   #portfolio/new[/<start>]   NEW PAPER PORTFOLIO (on a phone also …/review and …/edit/<section>)
 //   #portfolio/<id>            a book's Overview;  #portfolio/<id>/settings[/<section>]  its Settings
+//   #portfolio/<id>/ticket[?s=<symbol>&side=buy]  the order ticket (P-2.1), beside Overview on a computer, in its place on a phone
 // Any other view of a book is not built and opens Overview; an id that is not the account's says so.
 // This file and everything it draws are loaded only where the page draws the paper book (lib/paper.ts): the switch
 // on, or a preview for this account, whose every screen then opens with the preview line (components/pf/Preview.tsx).
@@ -127,12 +128,20 @@ function Home({ all, phone, tick }: { all: boolean; phone: boolean; tick: number
   return <List list={list} phone={phone} />;
 }
 
+/** `#portfolio/<id>/ticket[?s=7203.T&side=buy]`: the order ticket over Overview, filled in (P-2.1). */
+function ticketOf(second: string): { s: string; side: string } | null {
+  const [v, q = ""] = second.split("?");
+  if (v !== "ticket") return null;
+  const p = new URLSearchParams(q);
+  return { s: (p.get("s") ?? "").slice(0, 20), side: p.get("side") ?? "" };
+}
+
 export default function PortfolioView({ sub, tick, phone, classic }: { sub: string; tick: number; phone: boolean; classic: boolean }) {
   // the earlier phone layout shows the computer's tabs, this one among them: its page is one line
   if (classic) return <><PreviewLine phone /><div className="pf"><p className="pf-classic" id="pf-classic">Paper portfolios are made for the phone layout · <button type="button" className="pf-link" onClick={() => setPhoneV2(true)}>NEW LAYOUT &#8250;</button></p></div></>;
   const [head = "", second = "", third = ""] = sub.split("/");
   const page = head === "new" ? <NewPortfolio sub={sub} phone={phone} tick={tick} />
     : head === "" || head === "all" ? <Home all={head === "all"} phone={phone} tick={tick} />
-      : <Book key={head} id={head} view={second === "settings" ? "settings" : "overview"} section={second === "settings" ? third : ""} phone={phone} tick={tick} />;
+      : <Book key={head} id={head} view={second === "settings" ? "settings" : "overview"} section={second === "settings" ? third : ""} phone={phone} tick={tick} ticket={ticketOf(second)} />;
   return <><PreviewLine phone={phone} />{page}<Flash /></>;
 }

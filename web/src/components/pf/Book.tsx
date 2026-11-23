@@ -11,6 +11,7 @@ import { ByTag, href, justCreated, Muted, PaperMark, setLastBook, lastBook } fro
 import { TradeLists } from "./Blocks";
 import { Activity, Notes } from "./Notes";
 import { Settings } from "./Settings";
+import { Ticket } from "./Ticket";
 import { serverWords, switchedOff, useRead, type BookAnswer, type ListAnswer } from "../../lib/pf";
 import { showValue } from "../../lib/pf/form.ts";
 import { fmtFull, fmtMoney2, fromMinor } from "../../lib/pf/money.ts";
@@ -164,7 +165,7 @@ export const NoSuch = ({ phone }: { phone: boolean }) => (
 
 /** `#portfolio/<id>` (Overview) and `#portfolio/<id>/settings[/<section>]`. Any other view of a book is not built: it
  *  opens Overview. */
-export function Book({ id, view, section, phone, tick }: { id: string; view: "overview" | "settings"; section: string; phone: boolean; tick: number }) {
+export function Book({ id, view, section, phone, tick, ticket = null }: { id: string; view: "overview" | "settings"; section: string; phone: boolean; tick: number; ticket?: { s: string; side: string } | null }) {
   // what is on screen is the account's own: asked again every few minutes, after every change, and as soon as the
   // valuation day turns at 17:00 New York, so that "in force now" and "from the next session" are the server's (RT-9)
   const slow = `${Math.floor(tick / 5)}|${valuationDay(new Date())}`;
@@ -187,19 +188,23 @@ export function Book({ id, view, section, phone, tick }: { id: string; view: "ov
   const others = rows.filter((r) => r.id !== b.id).map((r) => r.name), csvBook = bookWord(b, rows.some((r) => r.id === b.id) ? rows : [...rows, b]);
   const kept = book.keptAt != null ? <p className="pf-mut pf-kept" id="pf-kept">Offline: what this device last read, as of {fmtStamp(new Date(book.keptAt))}. A change needs the server.</p> : null;
   const page = view === "settings" ? <Settings a={a} section={section} others={others} phone={phone} onChanged={changed} csvBook={csvBook} /> : <Overview a={a} phone={phone} onChanged={changed} csvBook={csvBook} />;
+  // the order ticket (P-2.1): BUY / SELL opens it, on an open book; on a phone in the place of Overview, on a computer
+  // beside it at the right (`#portfolio/<id>/ticket`, with `?s=7203.T&side=buy` to fill it in)
+  const open = b.status === "open", tk = open && ticket ? <Ticket key={`${b.id}|${ticket.s}|${ticket.side}`} book={b} phone={phone} init={ticket} /> : null;
   if (phone) return (
     <div className="mp pfp pfp-book" data-book={b.id} data-view={view}>
       <header className="mp-head doc"><a className="mp-back" href={href("all")}>&#8249; Portfolios</a></header>
       <div className="pfp-bookhead" id="pf-strip">
         <div className="nm"><Switcher book={b} rows={rows} phone /><PaperMark phone /></div>
         <div className="meta">{def.short} · {def.kind} · {b.base} · {ONLY_YOU} · created {dm(createdDay(b.createdAt))}</div>
+        {open && !tk && <a className="pfp-buysell" id="pf-buysell" href={href(`${b.id}/ticket`)}>Buy / Sell</a>}
       </div>
       <nav className="pfp-views" aria-label="This portfolio's pages">
-        <a className={view === "overview" ? "on" : undefined} aria-current={view === "overview" ? "page" : undefined} href={href(b.id)}>Overview</a>
+        <a className={view === "overview" && !tk ? "on" : undefined} aria-current={view === "overview" && !tk ? "page" : undefined} href={href(b.id)}>Overview</a>
         <a className={view === "settings" ? "on" : undefined} aria-current={view === "settings" ? "page" : undefined} href={href(`${b.id}/settings`)}>Settings</a>
       </nav>
       {kept}
-      {page}
+      {tk ?? page}
     </div>
   );
   return (
@@ -211,9 +216,10 @@ export function Book({ id, view, section, phone, tick }: { id: string; view: "ov
           <a className={`chip-sm${view === "overview" ? " on" : ""}`} aria-current={view === "overview" ? "page" : undefined} href={href(b.id)}>OVERVIEW</a>
           <a className={`chip-sm${view === "settings" ? " on" : ""}`} aria-current={view === "settings" ? "page" : undefined} href={href(`${b.id}/settings`)}>SETTINGS</a>
         </nav>
+        {open && <a className="pf-go" id="pf-buysell" href={href(`${b.id}/ticket`)} aria-current={tk ? "page" : undefined}>BUY / SELL</a>}
       </div>
       {kept}
-      {page}
+      {tk ? <div className="pf-withticket"><div className="pf-main">{page}</div>{tk}</div> : page}
     </div>
   );
 }

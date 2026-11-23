@@ -91,6 +91,7 @@ const SUITES = [
   { name: "source-lines-min", needs: ["mock"] },
   { name: "stock-line", needs: ["mock"] },
   { name: "portfolio-fixes", needs: ["mock"] },
+  { name: "pf-ticket", needs: ["mock"] },
   { name: "pf-verdicts-forms", needs: ["mock"] },
   { name: "pf-verdicts-settings", needs: ["mock"] },
   { name: "letter-placement", needs: [] },
