@@ -6,13 +6,15 @@
 // never reaches a log line; a refusal goes back to the page that asked, in words it shows.
 import type { Base, BookFull, CashRate, FormFacts, NewBook, NewSetting, PfStore } from "./types.ts";
 import { StoreRefusal } from "./types.ts";
-import { calendarGap, changeDays, nextSessionDay, nyDate, sgDate, targetWindow, valuationDay, venuesOf, type Holidays } from "./calendar.ts";
-import { CALENDAR_UNREAD, calendarPast, FIXED_TARGETS, madeBefore, NEEDS_STATEMENT, NO_NOTE, NO_SUCH, NOT_YET, OLD_VERSION, WINDOW_CLOSED } from "./words.ts";
+import { calendarGap, changeDays, nextSessionDay, nyDate, sgDate, targetWindow, valuationDay, venueNow, venuesOf, type Holidays } from "./calendar.ts";
+import { CALENDAR_UNREAD, calendarPast, FIXED_TARGETS, madeBefore, NEEDS_STATEMENT, NO_NOTE, NO_SUCH, NOT_YET, OLD_VERSION, TICKET_NOTE, WINDOW_CLOSED } from "./words.ts";
 import { buildCreate, checkChange, checkForm, checkTargets, cleanName, nameRefusal, noteRefusal, outOfRange, reasonRefusal, type Raw } from "./form.ts";
 import { CAP_LINE, isStart, OPEN_CAP, STARTS } from "./presets.ts";
 import { changeBasis, settingsNow, valuesAhead, valuesNow } from "./view.ts";
+import { printAge, SIDES, SIZE_BYS, sidesFor, sizeOrder, tradable, VENUE_CCY, venueOfSymbol, type Side, type SizeBy, type TicketQuote } from "./size.ts";
+import { fromMinor } from "./money.ts";
 
-export const PF_ACTIONS = ["pf_form", "pf_list", "pf_get", "pf_create", "pf_rename", "pf_setting_set", "pf_targets_set", "pf_note_add", "pf_note_remove", "pf_delete", "consent", "consent_agree"] as const;
+export const PF_ACTIONS = ["pf_form", "pf_list", "pf_get", "pf_create", "pf_rename", "pf_setting_set", "pf_targets_set", "pf_note_add", "pf_note_remove", "pf_delete", "consent", "consent_agree", "pf_ticket"] as const;
 export const isPfAction = (a: string): boolean => (PF_ACTIONS as readonly string[]).includes(a);
 const WRITES = new Set<string>(["pf_create", "pf_rename", "pf_setting_set", "pf_targets_set", "pf_note_add", "pf_note_remove", "pf_delete", "consent_agree"]);
 /** The writes to one portfolio: each names it by its id, and one that names none is refused as no such portfolio. */
@@ -26,6 +28,9 @@ export interface PfDeps {
   now: () => Date;
   /** what the server holds besides the books: the overnight rates once they are stored, the USD/JPY close, the holidays */
   facts: () => Promise<PfFacts>;
+  /** the latest prints of these symbols, as the server reads them (Yahoo Finance's quote); null for one it has none of.
+   *  Asked only by the ticket (P-2.1), only for an account the routes admit */
+  quotes?: (symbols: string[]) => Promise<Record<string, TicketQuote | null>>;
 }
 export interface PfAnswer { status: number; body: unknown }
 const ok = (body: unknown): PfAnswer => ({ status: 200, body });
@@ -152,6 +157,31 @@ export async function pfRoute(deps: PfDeps, action: string, account: string, met
       }
       case "pf_note_remove": await store.noteRemove(account, str(body.id), Number(body.note)); return ok({ ok: true });
       case "pf_delete": await store.remove(account, str(body.id), cleanName(str(body.name))); return ok({ ok: true });
+      case "pf_ticket": {
+        // the ticket (P-2.1): what an order would come to, on the latest print, before anything is placed. It reads the
+        // book and the quotes and writes nothing: no order, no row, no log line
+        const id = str(query("id")), symbol = str(query("s")).trim().toUpperCase();
+        if (!isId(id)) return no(404, NO_SUCH);
+        if (!/^[A-Z0-9^][A-Z0-9.=^-]{0,19}$/.test(symbol)) return no(400, "type a symbol, for example 7203.T or NVDA");
+        if (!deps.quotes) return no(503, "the ticket's prices cannot be read on this server");
+        const book = await store.get(account, id);
+        if (!book) return no(404, NO_SUCH);
+        const f = await deps.facts(), capital = fromMinor(book.base, book.startingNav), position = 0;   // no order exists before P-2.2
+        const answer = { book: { id: book.id, name: book.name, base: book.base, kind: book.kind, start: book.start, capital }, symbol, position, sides: sidesFor(position), note: TICKET_NOTE, asked: now.toISOString() };
+        // one read for the name and, where its currency is not the book's, USD/JPY (the server's one request to Yahoo)
+        const v0 = venueOfSymbol(symbol), read = await deps.quotes(v0 && VENUE_CCY[v0] !== book.base ? [symbol, "USDJPY=X"] : [symbol]);
+        const q = read[symbol] ?? null, t = tradable(symbol, q);
+        if (!t.ok) return ok({ ...answer, instrument: null, refusal: t.text, print: null, fx: null, sized: null });
+        const fxq = t.ccy !== book.base ? read["USDJPY=X"] ?? null : null;
+        const fx = fxq && typeof fxq.price === "number" && fxq.price > 0 && fxq.at ? { rate: fxq.price, at: fxq.at, source: fxq.source } : null;
+        const age = q!.at && typeof q!.price === "number" && q!.price > 0 ? printAge(t.venue, q!.at, now, f.holidays) : null;
+        const print = age ? { price: q!.price!, at: q!.at!, source: q!.source, ageMin: age.ageMin, tooOld: age.tooOld, why: age.why } : null;
+        const side = str(query("side")) as Side, by = str(query("by")) as SizeBy, v = str(query("v"));
+        const sized = SIDES.includes(side) && SIZE_BYS.includes(by) && v.trim() !== "" ? sizeOrder({ side, by, value: Number(v.replace(/,/g, "")), position, lot: t.lot, price: print && !print.tooOld ? print.price : null, ccy: t.ccy, base: book.base, usdjpy: fx?.rate ?? null, kind: book.kind, capital }) : null;
+        // the market now, by the Monitor's session table and holidays: "open", "break" (Tokyo's lunch), "closed", "holiday"
+        const market = venueNow(t.venue, now, f.holidays).state;
+        return ok({ ...answer, instrument: { name: q!.name, exchange: q!.exchange, venue: t.venue, ccy: t.ccy, lot: t.lot, market }, refusal: null, print, fx, sized });
+      }
       default: return no(400, "unknown action");
     }
   } catch (e) {

@@ -526,7 +526,9 @@ one pull request (`README.md`, "The paper portfolio's two switches"). The migrat
 - **The API** (`functions/api/index.ts`) names none of these tables: its routes `pf_form`, `pf_list`, `pf_get`,
   `pf_create`, `pf_rename`, `pf_setting_set`, `pf_targets_set`, `pf_note_add`, `pf_note_remove`, `pf_delete`,
   `consent` and `consent_agree` run the engine (`_shared/pf/route.ts`) over the database's functions
-  (`_shared/pfstore.ts`). The ranges, steps and refusals are the engine's (`_shared/pf/form.ts`), the same file the
+  (`_shared/pfstore.ts`). `pf_ticket` (P-2.1, 23 Nov 2026), the order ticket, reads the book and Yahoo Finance's
+  quote of the name (and of USD/JPY where the currencies differ: one request) and sizes an order by `_shared/pf/size.ts`;
+  it writes nothing and calls no function of the store but `pf_get`'s. The ranges, steps and refusals are the engine's (`_shared/pf/form.ts`), the same file the
   page's form runs. Nothing in these routes writes a log line: a refusal goes back to the page that asked.
 - **The days the routes hand the database** (22 Nov 2026, the PMs' answers on EN-9 and the targets' window).
   `pf_setting_set`'s `p_effective` is the session a change is in force from by the book's start (`calendar.ts`

@@ -29,7 +29,10 @@ export const valuationDay = (now: Date): string => nyDate(new Date(now.getTime()
  *  last date both calendars are held for; null when they could not be read). A day past it cannot be told from a
  *  session day, so a change dated past it is refused (EN-15). Left out (the logic checks), the rows are taken as
  *  reaching every day asked about. */
-export interface Holidays { TSE?: Iterable<string>; NYSE?: Iterable<string>; through?: string | null }
+export interface Holidays { TSE?: Iterable<string>; NYSE?: Iterable<string>; through?: string | null;
+  /** a venue's early closes, as the Monitor's session table holds them (_shared/sessions.ts EARLY_CLOSES): the minute of
+   *  the local day its session ends, by date (P-2.1: a print of a half day's close is not read as an hour old) */
+  early?: Partial<Record<"TSE" | "NYSE", Record<string, number>>> }
 /** Whether a day lies inside what the holiday rows cover: null when it does, else the refusal's words. */
 export function calendarGap(ymd: string, hol: Holidays): { past: string } | { unread: true } | null {
   if (hol.through === undefined) return null;
@@ -68,6 +71,33 @@ export function sessionOpens(venue: Venue, ymd: string, hol: Holidays): string |
   const wd = weekday(ymd);
   if (wd === 0 || wd === 6 || new Set((venue === "TSE" ? hol.TSE : hol.NYSE) ?? []).has(ymd)) return null;
   return venue === "TSE" ? new Date(Date.parse(`${ymd}T00:00:00Z`)).toISOString() : new Date(Date.parse(nyAt(ymd, 9)) + 30 * 60e3).toISOString();
+}
+// ---- a venue's sessions now (P-2.1: how old a print may be to size an order on) ----
+/** Each venue's time zone and regular sessions, in minutes of its local day (Tokyo 09:00–11:30 and 12:30–15:30 JST, New
+ *  York 09:30–16:00 ET), and the feed's delay as the Monitor's session table states it (Tokyo 20 minutes, New York none).
+ *  The same figures as _shared/sessions.ts, which a file here cannot import. */
+export const VENUE_TZ: Record<Venue, string> = { TSE: "Asia/Tokyo", NYSE: "America/New_York" };
+export const SEGMENTS: Record<Venue, Array<[number, number]>> = { TSE: [[540, 690], [750, 930]], NYSE: [[570, 960]] };
+export const FEED_DELAY_MIN: Record<Venue, number> = { TSE: 20, NYSE: 0 };
+/** The instant of a minute of a venue's local day. */
+function venueAt(venue: Venue, ymd: string, minute: number): number {
+  return venue === "TSE" ? Date.parse(`${ymd}T00:00:00Z`) + (minute - 540) * 60e3 : Date.parse(nyAt(ymd, 0)) + minute * 60e3;
+}
+const tradesOn = (venue: Venue, ymd: string, hol: Holidays): boolean => sessionOpens(venue, ymd, hol) != null;
+/** A venue now: "open" in a regular session, "break" between two of one day's (Tokyo's lunch), else "closed" or
+ *  "holiday"; the start of the session running (`segStart`, ms) and where the print before it may be from (`before`:
+ *  the day's first session for Tokyo's afternoon, else the open of the session day before); and the open of its latest
+ *  session day that has opened (`lastOpen`, ms). */
+export function venueNow(venue: Venue, now: Date, hol: Holidays): { state: "open" | "break" | "closed" | "holiday"; segStart: number | null; before: number | null; lastOpen: number | null } {
+  const p = parts(VENUE_TZ[venue], now), ymd = `${p.year}-${p.month}-${p.day}`, min = Number(p.hour) * 60 + Number(p.minute), segs = SEGMENTS[venue];
+  const prevDayOpen = (from: string): number | null => { let d = addDays(from, -1); for (let k = 0; k < 14; k++, d = addDays(d, -1)) if (tradesOn(venue, d, hol)) return venueAt(venue, d, segs[0][0]); return null; };
+  if (!tradesOn(venue, ymd, hol)) return { state: [0, 6].includes(weekday(ymd)) ? "closed" : "holiday", segStart: null, before: null, lastOpen: prevDayOpen(ymd) };
+  const end = hol.early?.[venue]?.[ymd] ?? segs[segs.length - 1][1], opened = min >= segs[0][0];
+  const lastOpen = opened ? venueAt(venue, ymd, segs[0][0]) : prevDayOpen(ymd);
+  if (!opened || min >= end) return { state: "closed", segStart: null, before: null, lastOpen };
+  const i = segs.findIndex(([a, b]) => min >= a && min < Math.min(b, end));
+  if (i < 0) return { state: "break", segStart: null, before: null, lastOpen };
+  return { state: "open", segStart: venueAt(venue, ymd, segs[i][0]), before: i > 0 ? venueAt(venue, ymd, segs[0][0]) : prevDayOpen(ymd), lastOpen };
 }
 /** The day a change made now is in force from, and the last book day already traded in (what the store's own guard
  *  takes as its "today": a change is never in force in a day a market of the book has traded in). With venues, the
