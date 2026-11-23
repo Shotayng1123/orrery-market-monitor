@@ -22,7 +22,7 @@
 // window when it goes. The local copy and the checks' development servers stand in for such an account with
 // `om_paper = "preview"`, as for the paper book's preview (web/e2e/phone-frame.cjs).
 // To turn it on for everyone in the Home Screen app, once the owner has tried it: FRAME_FOR_EVERYONE = true.
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { usePreviewAccount } from "./paper";
 
 export const FRAME_FOR_EVERYONE = false;
@@ -48,17 +48,21 @@ export const homeScreenApp = (): boolean => {
   try { return (navigator as { standalone?: boolean }).standalone === true || window.matchMedia(STANDALONE).matches; } catch { return false; }
 };
 
-/** Whether the page should be drawn in the frame. `page`: the phone layout with the Monitor's page drawn. */
+/** Whether the page should be drawn in the frame. `page`: the phone layout with the Monitor's page drawn. Until it
+ *  is, the gate reads and follows nothing: a computer's window, wider than a phone's, does all it did before the frame
+ *  (no display-mode read, no listener). Once it is, display-mode is read before the page is painted and followed. */
 export function useFrame(page: boolean): boolean {
   const preview = usePreviewAccount();
-  const [home, setHome] = useState(homeScreenApp);
-  useEffect(() => {
+  const [home, setHome] = useState(() => page && homeScreenApp());
+  useLayoutEffect(() => {
+    if (!page) return;
+    const f = () => setHome(homeScreenApp());
+    f();
     let mq: MediaQueryList | null = null;
     try { mq = window.matchMedia(STANDALONE); } catch { return; }
-    const f = () => setHome(homeScreenApp());
     mq.addEventListener?.("change", f);
     return () => mq?.removeEventListener?.("change", f);
-  }, []);
+  }, [page]);
   return page && home && (FRAME_FOR_EVERYONE || preview);
 }
 

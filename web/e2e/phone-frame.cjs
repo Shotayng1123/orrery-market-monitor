@@ -7,7 +7,8 @@
 // account in the preview list with `om_paper = "preview"`, as pf-preview.cjs does. Nothing here reads the machine's
 // clock: every page sets `om_mock_now`.
 //   [1] when it is on: the Home Screen app, the phone layout, the Monitor's page and the preview flag, all four; Safari's
-//       tab, an account outside the list, the classic layout and a computer keep the page as it was
+//       tab, an account outside the list, the classic layout and a computer keep the page as it was, and on a computer
+//       the gate follows nothing (no listener on display-mode)
 //   [2] the nine phone screens (the six tabs, a company page, PORTFOLIO with and without books) at the top, the middle
 //       and the end: the bar's foot on the window's foot, the document never scrolled, the sticky head at the frame's
 //       top, the footer whole above the bar at the end; a wheel scrolls the frame; a form's sticky foot on the bar
@@ -41,7 +42,11 @@ async function open(b, { home = true, ls = { om_paper: "preview" }, phone = true
     if (home) {
       Object.defineProperty(Navigator.prototype, "standalone", { get: () => true, configurable: true });
       const mm = window.matchMedia.bind(window);
-      window.matchMedia = (q) => { const m = mm(q); return /display-mode:\s*standalone/.test(q) ? Object.assign(Object.create(m), { matches: true, media: q, addEventListener() {}, removeEventListener() {} }) : m; };
+      // display-mode standalone as the Home Screen app reports it; the listeners put on it are counted (only the frame's
+      // gate follows it). Its properties are defined, not assigned: `matches` and `media` are getters of the real
+      // query, and assigning one throws, which made every read of display-mode here throw until 23 Nov 2026.
+      window.__dmFollow = 0;
+      window.matchMedia = (q) => { const m = mm(q); return /display-mode:\s*standalone/.test(q) ? Object.create(m, { matches: { value: true }, media: { value: q }, addEventListener: { value(t) { if (t === "change") window.__dmFollow++; } }, removeEventListener: { value() {} } }) : m; };
     }
   }, [NOW, ls, home]);
   const p = await ctx.newPage(), errs = []; p.on("pageerror", (e) => errs.push(e.message));
@@ -84,12 +89,18 @@ const scrollFrame = (p, y) => p.evaluate((y) => { const s = document.getElementB
       ["the Home Screen app, the classic phone layout, the preview account", { ls: { om_paper: "preview", om_phone_v2: "0" }, sel: "#topbar" }, false],
       ["the Home Screen app on a computer (1440x900), the preview account", { phone: false, sel: "#topbar" }, false],
     ];
+    const follow = [];
     for (const [name, o, want] of cases) {
       const { ctx, p, errs } = await open(b, o); const s = await state(p);
       const off = !s.on && s.box === "contents" && (s.bar == null || s.bar.pos === "fixed");
       ck(`${name}: ${want ? "on" : "off"} (pframe ${s.on}, #pscroll ${s.box}, the bar ${s.bar ? s.bar.pos : "not drawn"})`, (want ? s.on && s.box === "block" && s.bar?.pos === "relative" : off) && !errs.length, { s, errs });
+      follow.push([name, await p.evaluate(() => window.__dmFollow ?? null), o.phone === false]);
       await ctx.close();
     }
+    // the gate follows display-mode where the phone layout is drawn, and reads nothing on a computer, whose window
+    // then does all it did before the frame
+    const comp = follow.find((f) => f[2]), home = follow[0];
+    ck(`the gate follows display-mode in the Home Screen app on a phone (${home[1]} listener(s)) and puts no listener on it on a computer (${comp[1]})`, home[1] >= 1 && comp[1] === 0, follow);
   }
 
   console.log("\n[2] the nine phone screens at the top, the middle and the end");
