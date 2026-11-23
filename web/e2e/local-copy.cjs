@@ -170,9 +170,13 @@ const calRows = (p, phone) => p.evaluate((phone) => phone
     // I-6 and B-27's stand-ins too: the 2.7σ alert's note and the stand-in futures' contracts (lib/mock.ts); and the
     // local copy's clock and its copy of the holiday calendar (lib/mockclock.ts; the live page takes the calendar from
     // the server's health answer, so a day of it such as 22 Mar 2027 is in no script)
-    // and the paper portfolio's stand-in books (lib/mockPf.ts), which no build carries, with the page's switch on or off
+    // and the paper portfolio's stand-in books (lib/mockPf.ts), which no build carries, with the page's switch on or off;
+    // and since RA-3 of the release audit of pull request #50 (23 Nov 2026): every "Nippon Stand-in" name (9990.T's long
+    // one in lib/mockStock.ts among them), the local copy's names key, its preview account (App.tsx) and the stand-in
+    // alert's KIOXIA (lib/standin.json)
     const marks = [H120, T110, LONG, JP, ZEW, "om_mock_watch", "Nippon Stand-in Heavy Industries", "σ of 63 daily changes to the last close", "GCG27.CMX", "GCZ26.CMX", "NKDZ26.CME", "om_mock_now", "2027-03-22",
-      "Tokyo L/S", "Global long/short on a yen base", "Autos into results", "Short side trimmed ahead", "stand-in failure", "second@mock.local", "om_mock_pf"].filter((s) => js.includes(s));
+      "Tokyo L/S", "Global long/short on a yen base", "Autos into results", "Short side trimmed ahead", "stand-in failure", "second@mock.local", "om_mock_pf",
+      "Nippon Stand-in", "om_mock_names", "preview@mock.local", "KIOXIA"].filter((s) => js.includes(s));
     ck(`the site as published (a production build) carries none of the stand-in rows (${js.length} characters of script searched)`, js.length > 100000 && marks.length === 0, marks);
     // ---- the paper portfolio and the page's switch ----
     const files = fs.readdirSync(DIST), all = files.filter((f) => /\.(js|css)$/.test(f)).map((f) => fs.readFileSync(path.join(DIST, f), "utf8")).join("\n") + fs.readFileSync(path.join(DIST, "..", "index.html"), "utf8");
