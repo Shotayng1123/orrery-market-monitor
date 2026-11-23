@@ -1,6 +1,8 @@
 // The 1-minute tour (slice 11, 23 Nov 2026; the designer's work order D/tour-storyboard.md §5.3, §7.3, §7.5): its page
 // (web/public/tour/index.html: plain HTML on the Monitor's tokens and faces, no app code, no sign-in), its film and
-// poster, and Help's first row, which plays the film over the Monitor. The film is the cut the owner accepted on 23 Nov
+// poster, and Help's first row, which plays the film over the Monitor, in the Home Screen app's frame too (PNAV-1,
+// web/src/lib/scroller.ts: Help and the player over the frame, the bar on the foot, the page's scroll left where it
+// stood). The film is the cut the owner accepted on 23 Nov
 // 2026 ("intro video good to go") with the two corrections a truth check of it required the same day (the work order's
 // revision 6: RATES & FX's line on the dotted curve, and SAMPLE DATA on in every frame that shows a screen): its bytes
 // are held to that cut, and its own boxes are read here, so that no ffprobe
@@ -174,6 +176,75 @@ const started = async (p) => { await p.waitForFunction(() => { const v = documen
     ck(`${kind === "pc" ? "Esc" : "CLOSE"} takes the player away and Help stays open; no page errors`, !s2.player && s2.help && errs.length === 0, { s2: { player: s2.player, help: s2.help }, errs });
     await ctx.close();
   }
+  // in the Home Screen app's frame (PNAV-1, web/src/lib/scroller.ts): a phone opened from the Home Screen, for an account
+  // in the preview list (the local copy stands in for one with om_paper "preview", as phone-frame.cjs does), where the
+  // page scrolls in #pscroll and the tab bar is the last item of a column under it. Help and the player are drawn at the
+  // page's root, over the frame, and close as they do without it: Back, Esc, CLOSE and a tap outside close the player
+  // first and Help after it. Meanwhile the bar stays on the window's foot and the frame where it stood (Help's one
+  // scrollIntoView, for a row asked for, moves Help's own box and nothing else), and afterwards the page scrolls again,
+  // with no overflow left written on html, body or #pscroll.
+  const framed = async () => {
+    const ctx = await b.newContext({ ...devices["iPhone 15 Pro"], viewport: { width: 393, height: 852 }, deviceScaleFactor: 1 });
+    await ctx.addInitScript(() => {
+      try { localStorage.setItem("om_a2hs_hide", "1"); localStorage.setItem("om_mock_now", "2026-11-24T01:20:00Z"); localStorage.setItem("om_paper", "preview"); } catch {}
+      // opened from the Home Screen: navigator.standalone and display-mode standalone, as an iPhone reports them
+      Object.defineProperty(Navigator.prototype, "standalone", { get: () => true, configurable: true });
+      const mm = window.matchMedia.bind(window);
+      window.matchMedia = (q) => { const m = mm(q); return /display-mode:\s*standalone/.test(q) ? Object.create(m, { matches: { value: true }, media: { value: q }, addEventListener: { value() {} }, removeEventListener: { value() {} } }) : m; };
+    });
+    const p = await ctx.newPage(), errs = []; p.on("pageerror", (e) => errs.push(e.message));
+    await p.goto(MOCK + "#market", { waitUntil: "networkidle" }); await p.waitForSelector(".mp-row"); await p.waitForTimeout(300);
+    return { ctx, p, errs };
+  };
+  // the frame as drawn: on (the class, and #pscroll a box), its scroll and the document's, the bar and what is drawn at its
+  // middle, the overflow written on html, body and #pscroll, #pscroll's own, and the marks of the history entry on screen
+  const fr = (p) => p.evaluate(() => {
+    const s = document.getElementById("pscroll"), nav = document.getElementById("pnav"), n = nav.getBoundingClientRect(), at = document.elementFromPoint(innerWidth / 2, (n.top + n.bottom) / 2), h = history.state || {};
+    return { on: document.documentElement.classList.contains("pframe") && getComputedStyle(s).display === "block", y: s.scrollTop, max: s.scrollHeight - s.clientHeight, winY: scrollY, ih: innerHeight, bar: [n.top, n.bottom], pos: getComputedStyle(nav).position,
+      over: !at ? "nothing" : at.closest(".tourwrap") ? "the player" : at.closest(".helpwrap") ? "Help" : at.closest("#pnav") ? "the bar" : at.tagName,
+      left: [document.documentElement.style.overflow, document.body.style.overflow, s.style.overflow], scrolls: getComputedStyle(s).overflowY, marks: ["omTour", "omSheet"].filter((k) => h[k] === true) };
+  });
+  const onFoot = (f) => f.on && f.pos === "relative" && Math.abs(f.bar[1] - f.ih) <= 0.5 && Math.abs(f.bar[1] - f.bar[0] - 59) <= 0.5 && f.winY === 0;
+  // a point of the window outside a box: below it, else above it, else beside it
+  const outside = (p, sel) => p.evaluate((sel) => { const r = document.querySelector(sel).getBoundingClientRect(); return innerHeight - r.bottom >= 8 ? [innerWidth / 2, (r.bottom + innerHeight) / 2] : r.top >= 8 ? [innerWidth / 2, r.top / 2] : [Math.max(1, r.left / 2), innerHeight / 2]; }, sel);
+  // a wheel over the head (over a box of the page that scrolls by itself it would scroll that box first)
+  const wheel = async (p) => { await p.mouse.move(150, 26); for (let i = 0; i < 4; i++) { await p.mouse.wheel(0, 120); await p.waitForTimeout(40); } await p.waitForTimeout(350); return fr(p); };
+  for (const how of ["Back", "Esc", "CLOSE", "a tap outside"]) {
+    console.log(`\n[Help's player in the Home Screen app's frame (iPhone 15 Pro, 393x852, the preview account), closed by ${how}]`);
+    const { ctx, p, errs } = await framed(), f0 = await fr(p);
+    await help(p, true); await p.evaluate(() => { window.__tourMark = 1; }); const s0 = await st(p), f1 = await fr(p);
+    await p.locator("#help-tour button").tap(); await p.waitForSelector(".tourwrap video", { timeout: 5000 }); await p.waitForTimeout(400);
+    const s1 = await st(p), f2 = await fr(p), v = s1.video;
+    ck(`the frame on (#pscroll at ${f0.y}, the bar ${f0.bar.map(Math.round).join("-")} on the window's foot ${f0.ih}): Help from the menu opens on "${s0.first?.h}" with PLAY (${s0.first?.play?.w} x ${s0.first?.play?.h} px), over the bar; PLAY opens the film over Help and the bar (${f2.over} at the bar's place), whole in the window (${v?.top} to ${v?.bottom} of ${s1.vh}); the bar still on the foot, the frame at ${f2.y}, the document at ${f2.winY}`,
+      onFoot(f0) && s0.first?.h === "Start here" && s0.first.play?.text === "PLAY" && s0.first.play.h >= 44 && f1.over === "Help" && onFoot(f1) && f1.y === f0.y && s1.player && s1.help && !!v && v.top >= 0 && v.bottom <= s1.vh && v.left >= 0 && v.right <= s1.vw && f2.over === "the player" && onFoot(f2) && f2.y === f0.y, { f0, f1, f2, v, first: s0.first });
+    const act = async (first) => {
+      if (how === "Back") await p.evaluate(() => history.back());
+      else if (how === "Esc") await p.keyboard.press("Escape");
+      else if (how === "CLOSE") await p.locator(first ? ".tourwrap .tourclose" : ".helphead .chip-sm").tap();
+      else { const [x, y] = await outside(p, first ? ".tourbox" : ".helpbox"); await p.touchscreen.tap(x, y); }
+      await p.waitForTimeout(700);
+    };
+    await act(true); const s2 = await st(p), f3 = await fr(p);
+    ck(`${how} closes the player only, and its history entry with it: Help is still open (${f3.over} at the bar's place), the bar on the foot, the frame at ${f3.y}`, !s2.player && s2.help && s2.mark && !f3.marks.includes("omTour") && f3.over === "Help" && onFoot(f3) && f3.y === f0.y, { s2: { player: s2.player, help: s2.help, mark: s2.mark }, f3 });
+    await act(false); const s3 = await st(p), f4 = await fr(p), f5 = await wheel(p);
+    ck(`${how} again closes Help: the same page at the same address (no navigation), no entry of the player's or Help's left (${f4.marks.join(", ") || "none"}), the bar on the foot (${f4.over} at its place), the frame at ${f4.y}; no overflow left on html, body or #pscroll (${JSON.stringify(f4.left)}; #pscroll's own ${f4.scrolls}), and a wheel scrolls the frame again (to ${Math.round(f5.y)}), the document at ${f5.winY}; no page errors`,
+      !s3.player && !s3.help && s3.mark && s3.href === s0.href && f4.marks.length === 0 && f4.over === "the bar" && onFoot(f4) && f4.y === f0.y && f4.left.every((x) => x === "") && f4.scrolls === "auto" && f5.y >= Math.min(f4.y + 100, f4.max) && f5.y > f4.y && onFoot(f5) && errs.length === 0, { s3: { player: s3.player, help: s3.help, href: s3.href, mark: s3.mark }, f4, f5, errs });
+    await ctx.close();
+  }
+  { console.log("\n[Help's player in the Home Screen app's frame scrolled down: Help asked for a row (its one scrollIntoView), PLAY, Back, Back]");
+    const { ctx, p, errs } = await framed();
+    await p.evaluate(() => { document.getElementById("pscroll").scrollTop = 600; }); await p.waitForTimeout(300); const f0 = await fr(p);
+    // what a computer's "personal use" asks (components/PersonalUse.tsx): Help opens with that row in view
+    await p.evaluate(() => window.dispatchEvent(new CustomEvent("om:help", { detail: "personal-use" }))); await p.waitForSelector(".helpwrap"); await p.waitForTimeout(500);
+    const f1 = await fr(p), row = await p.evaluate(() => { const r = document.getElementById("help-personal-use").getBoundingClientRect(); return { top: Math.round(r.top), bottom: Math.round(r.bottom), body: Math.round(document.querySelector(".helpbody").scrollTop), ih: innerHeight }; });
+    ck(`the frame at ${f0.y}: Help opened at a row brings that row into view (${row.top} to ${row.bottom} of ${row.ih}, Help's body scrolled to ${row.body}) and moves nothing else: the frame at ${f1.y}, the document at ${f1.winY}, the bar on the foot`,
+      onFoot(f0) && f0.y === 600 && row.top >= 0 && row.bottom <= row.ih && row.body > 0 && f1.over === "Help" && f1.y === f0.y && onFoot(f1), { f0, f1, row });
+    await p.locator("#help-tour button").tap(); await p.waitForSelector(".tourwrap video", { timeout: 5000 }); await p.waitForTimeout(400); const f2 = await fr(p);
+    await p.evaluate(() => history.back()); await p.waitForTimeout(700); const s3 = await st(p), f3 = await fr(p);
+    await p.evaluate(() => history.back()); await p.waitForTimeout(800); const s4 = await st(p), f4 = await fr(p), f5 = await wheel(p);
+    ck(`PLAY there opens the film (the frame at ${f2.y}, ${f2.over} at the bar's place); Back closes the player (Help open, the frame at ${f3.y}) and Back again Help (the frame at ${f4.y}, no entry of theirs left); the bar on the foot throughout, and a wheel scrolls the frame again (to ${Math.round(f5.y)}); no page errors`,
+      f2.over === "the player" && onFoot(f2) && f2.y === f0.y && !s3.player && s3.help && onFoot(f3) && f3.y === f0.y && !s4.player && !s4.help && f4.marks.length === 0 && onFoot(f4) && f4.y === f0.y && f4.left.every((x) => x === "") && f5.y >= Math.min(f4.y + 100, f4.max) && f5.y > f4.y && onFoot(f5) && errs.length === 0, { f2, f3, f4, f5, errs });
+    await ctx.close(); }
   { console.log("\n[Help's player for a reader who asked for less motion]");
     const ctx = await b.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" }), p = await ctx.newPage(); await p.goto(MOCK + "#market", { waitUntil: "networkidle" }); await p.waitForSelector("table.mkt");
     await help(p, false); await p.locator("#help-tour button").click(); await p.waitForSelector(".tourwrap video"); const pl = await p.evaluate(() => new Promise((res) => setTimeout(() => { const v = document.querySelector(".tourwrap video"); res({ autoplay: v.autoplay, paused: v.paused, t: v.currentTime }); }, 2000)));

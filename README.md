@@ -129,7 +129,9 @@ and 1W, where the dotted curve is the curve of a month ago), and SAMPLE DATA is 
   (the player's still) and `index.html`, its page at `{site}tour/`: plain HTML on the Monitor's tokens and faces, with no
   app code and no sign-in; the film, "Open the Monitor →", a line that the screens show sample data, and the captions as
   text under "Read the tour instead". The film does not start by itself for a reader who has asked for less motion.
-- Help's first row, "Watch the 1-minute tour", whose PLAY plays the film over the Monitor (`web/src/components/Tour.tsx`).
+- Help's first row, "Watch the 1-minute tour", whose PLAY plays the film over the Monitor (`web/src/components/Tour.tsx`),
+  in the Home Screen app's frame as well (`web/src/lib/scroller.ts`): the player and Help are drawn over the frame, close
+  as they do without it, and leave the page where it stood (neither moves the page's scroll).
 - `web/public/mail/tour.jpg`: the tour's picture for the welcome email, a file of the site that goes out before the
   server that sends an email naming it.
 - The service worker leaves the tour to the network: it keeps and answers only the app's own page (`web/public/sw.js`).
@@ -150,7 +152,7 @@ correction of the accepted cut that a check requires, with the owner told what c
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,525 checks in 57 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24), the Home Screen frame's `phone-frame` (111), and slice 11's new suite `tour` (87) and 7 more in `offline`): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,539 checks in 57 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24), the Home Screen frame's `phone-frame` (111), and slice 11's new suite `tour` (101) and 7 more in `offline`): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -223,7 +225,10 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   itself for a reader who has asked for less motion; Help's first row and its PLAY, the film over the Monitor whole
   inside the window at eleven windows and layouts (text S, AUTO and XL, the one-screen layout's floor and XL's least
   window, phones of 320 to 390 px, one on its side, the classic phone layout), Esc and on a phone Back closing the
-  player first and Help after it, with no navigation).
+  player first and Help after it, with no navigation; in the Home Screen app's frame, for the preview account, Back,
+  Esc, CLOSE and a tap outside closing the player first and Help after it, with the bar on the window's foot and the
+  frame where it stood, also scrolled down and with Help opened at a row, and the page scrolling again after, no
+  overflow left on html, body or #pscroll).
   The **layout guard** (`layout-guard`) opens all eight screens at five computer sizes (1280×720 to 2560×1440, and
   1440×900 with small text), at 1440×900 with large text (every screen but EQUITIES, which joins once it is fixed
   there) and on two phones, and a stock's two pages at three more windows (1366×768 and 1536×864 at text L,
@@ -369,10 +374,10 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   no line, or no tab and no screens' file, in the other two states.
   `cd web && npm run e2e` starts the test servers it needs and runs them all, up to three suites at a time (two of
   the dev servers' and one of the built site's, whose suites queue behind each other): about
-  28 minutes on the engineer's machine (the whole run for the 57 suites and 3,525 checks of P-2.1, the Home Screen
+  28 minutes on the engineer's machine (the whole run for the 57 suites and 3,539 checks of P-2.1, the Home Screen
   frame and slice 11 together is not timed in one run: GitHub runs every suite in both placements (since slice 8), and
   since that was calibrated (pull request #55) the engineer runs only the suites a slice touches; `phone-frame` takes
-  120 to 129 s and slice 11's new suite, `tour`, 66 to 87 s; the whole run of P-2.1's 55 suites and 3,319 checks,
+  120 to 129 s and slice 11's new suite, `tour`, 85 to 88 s; the whole run of P-2.1's 55 suites and 3,319 checks,
   `pf-ticket` then 23, took 2,421 s with the browser's own letter placement and other work on the machine, before three
   suites' lines were brought to the ticket's door, `pf-ticket` 30 s; slice 9's 53 suites and 3,290 checks took 2,061 s as installed,
   its new suite, `pf-preview`, 40 to 50 s; slice 8's 53 suites and 3,277 checks 1,987 s, its new suite, `letter-placement`, 5 to
