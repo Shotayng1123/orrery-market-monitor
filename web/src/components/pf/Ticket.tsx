@@ -4,10 +4,11 @@
 // On a computer a 460-px panel at the right of the book, beside Overview, under the preview line; on a phone a page of
 // the book. The server reads the price (pf_ticket, asked when the name is looked up and again each minute); the size is
 // worked out here with the server's own rules (lib/pf/size.ts, the same file), so it follows every key at once.
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Panel } from "../Panel";
 import { Section } from "../PhoneKit";
-import { href } from "./shared";
+import { href, useHeaderTop } from "./shared";
+import { zoomNow } from "../../lib/prefs";
 import { failureWords, noTicketRoute, pfTicket, type TicketAnswer } from "../../lib/pf";
 import { ageWords, SIDE_WORD, SIDES, sizeOrder, toUnit, type Side, type SizeBy } from "../../lib/pf/size.ts";
 import { parseAmount } from "../../lib/pf/money.ts";
@@ -29,6 +30,23 @@ export function Ticket({ book, phone, init }: { book: BookFull; phone: boolean; 
   const [by, setBy] = useState<SizeBy>("pct"), [value, setValue] = useState("");
   const [got, setA] = useState<TicketAnswer | null>(null), [err, setErr] = useState<string | null>(null), [busy, setBusy] = useState(false), [minute, setMinute] = useState(0);
   useEffect(() => { const t = setInterval(() => setMinute((m) => m + 1), 60e3); return () => clearInterval(t); }, []);
+  // on a computer the panel stays in view as the book scrolls, under the header where the header stays at the top (the
+  // scrolling layout), as the book's other cards that stay in view do (L2-1 of the night review of 23 Nov 2026: at top 0
+  // it slid under the header, its head, ✕, NAME and LOOK UP hidden); on a phone there is no panel and this does nothing
+  const panel = useRef<HTMLElement>(null);
+  useHeaderTop(panel);
+  // and never taller than the window's room under it (--pf-room, in the page's own px): in a small window at a large text
+  // size (1280x720 at XL) its foot would otherwise stay below the window while the book scrolls; it then scrolls inside
+  useLayoutEffect(() => {
+    const box = panel.current, bar = document.getElementById("topbar");
+    if (!box) return;
+    const set = () => { const top = parseFloat(box.style.getPropertyValue("--pf-top")) || 0; box.style.setProperty("--pf-room", `${Math.max(240, Math.floor(innerHeight / zoomNow() - top - 8))}px`); };
+    set();
+    const ro = typeof ResizeObserver !== "undefined" && bar ? new ResizeObserver(set) : null;
+    if (bar) ro?.observe(bar);
+    window.addEventListener("resize", set);
+    return () => { ro?.disconnect(); window.removeEventListener("resize", set); };
+  }, []);
   useEffect(() => {
     if (!sym) { setA(null); setErr(null); return; }
     let alive = true;
@@ -106,7 +124,7 @@ export function Ticket({ book, phone, init }: { book: BookFull; phone: boolean; 
   const title = `${book.name} (${book.kind} · ${book.base})`;
   if (phone) return <Section title="Paper order" aux={STARTS[book.start].short} pad><div id="pf-ticket" className="pfp-ticket">{form}</div></Section>;
   return (
-    <aside className="pf-ticket" id="pf-ticket" aria-label="Paper order" onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); location.hash = href(book.id); } }}>
+    <aside ref={panel} className="pf-ticket" id="pf-ticket" aria-label="Paper order" onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); location.hash = href(book.id); } }}>
       <Panel no="" title={`PAPER ORDER · ${title}`} k="pf-ticket" csv={false} aux={<a className="pf-link" id="pf-t-close" href={href(book.id)} aria-label="Close the ticket">&#10005;</a>}>{form}</Panel>
     </aside>
   );
