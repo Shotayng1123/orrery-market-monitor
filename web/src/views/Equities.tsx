@@ -1,7 +1,7 @@
 import { INDICES } from "../lib/indices";
 import { zoomNow } from "../lib/prefs";
-import { useMemo, useState } from "react";
-import { Empty, Panel } from "../components/Panel";
+import { useLayoutEffect, useMemo, useState, type ReactNode } from "react";
+import { Empty, Panel, SrcParts } from "../components/Panel";
 import { ChartPanel, type ChartPeriod } from "../components/ChartPanel";
 import { PeriodBar } from "../components/PeriodBar";
 import { Pick } from "../components/Pick";
@@ -15,7 +15,7 @@ import { Star } from "../components/Star";
 import { useApi } from "../lib/useApi";
 import type { TableRow } from "../lib/types";
 import { fmtNum, fmtPct, fmtSigned, signCls, stockDecimals } from "../lib/fmt";
-import { fmtDate, fmtStamp } from "../lib/time";
+import { fmtDate, fmtDayMon, fmtStamp, fmtWhen } from "../lib/time";
 import { DRIVERS, MEMBERS_SOURCE, MKT_CAP, PERIOD, VS_200D, VS_50D } from "../lib/labels";
 import { PersonalUse } from "../components/PersonalUse";
 import { mergeClasses } from "../lib/classes";
@@ -47,6 +47,13 @@ export interface JpShorts {
   margin: Array<{ d: string; sellShares: number | null; sellValue: number | null; buyShares: number | null; buyValue: number | null }>;
 }
 
+/** FLOW BY SECTOR's short source line: its cells are bare ("12.3bn"), so the currency is their unit and stays, with
+ *  both as-of times; the index's name goes (the designer's B.0.3). */
+const flowShort = (ccy: string, turnover: string, net: string, badge: ReactNode): ReactNode[] => {
+  const xs: ReactNode[] = [ccy, turnover, net].filter((x) => x !== "");
+  if (badge && xs.length) xs[xs.length - 1] = <>{xs[xs.length - 1]}{badge}</>;
+  return xs;
+};
 export const CCY: Record<string, string> = { SP500: "USD", NDX: "USD", NK225: "JPY", TOPIX: "JPY", KOSPI200: "KRW", HSI: "HKD", SSE180: "CNY" };
 const UP_RGB = "63,208,126", DN_RGB = "255,77,66";
 const shade = (v: number | null | undefined, full = 6) => (v == null || v === 0 ? undefined : `rgba(${v > 0 ? UP_RGB : DN_RGB},${(Math.min(1, Math.abs(v) / full) * 0.55).toFixed(3)})`);
@@ -272,7 +279,43 @@ function Screener({ s }: { s: IndexStats }) {
   );
 }
 
+/** The one-screen layout: a source line on its head's second line (the designer's B.0.3: the whole line, else its short
+ *  form beside the title, else that form under it) takes its height from the chart beside it, never from a table. The
+ *  head grew into the panel's body, and whole table rows of SECTOR PERFORMANCE, FLOW BY SECTOR and MARKET BREADTH went
+ *  behind the panel's own scroll (DP-1 of the final review of pull request #50: two lines while the market is open).
+ *  Each head's height beyond its first line is set on the grid, and the stylesheet moves the panels' edges by it:
+ *  BREADTH and FLOW down into the heat map under them, SECTORS and SHORT INTEREST up into the index and its drivers above
+ *  them (tokens.css). Measured when a head's size changes (a ResizeObserver: the fit, a resize, the fonts), never on a
+ *  timer. */
+function useHeadRoom(): void {
+  useLayoutEffect(() => {
+    const grid = document.getElementById("grid");
+    if (!grid || typeof ResizeObserver === "undefined") return;
+    const head = (k: string) => grid.querySelector<HTMLElement>(`:scope > .panel[data-k="${k}"] > .phead`);
+    const heads = { b: head("eq-breadth"), f: head("eq-flow"), s: head("eq-sectors"), h: head("eq-short") };
+    // a head's height below its first line (the title's), in CSS px: what its source line takes under the title
+    const extra = (h: HTMLElement | null): number => {
+      const t = h?.querySelector<HTMLElement>(":scope > .t");
+      if (!h || !t || !document.body.classList.contains("term")) return 0;
+      const z = zoomNow(), tr = t.getBoundingClientRect(), cs = getComputedStyle(h);
+      let first = tr.bottom;
+      for (const c of h.children) { const r = c.getBoundingClientRect(); if (r.height > 0 && r.top < tr.bottom && r.bottom > tr.top) first = Math.max(first, r.bottom); }
+      const x = (h.getBoundingClientRect().bottom - (parseFloat(cs.paddingBottom) + parseFloat(cs.borderBottomWidth)) * z - first) / z;
+      return x > 0.5 ? Math.round(x * 100) / 100 : 0;
+    };
+    const set = () => {
+      const v = { "--eq-xb": extra(heads.b), "--eq-xf": extra(heads.f), "--eq-xs": Math.max(extra(heads.s), extra(heads.h)) };
+      for (const [k, x] of Object.entries(v)) if (grid.style.getPropertyValue(k) !== `${x}px`) grid.style.setProperty(k, `${x}px`);
+    };
+    const ro = new ResizeObserver(set);
+    for (const h of Object.values(heads)) if (h) ro.observe(h);
+    set();
+    return () => { ro.disconnect(); for (const k of ["--eq-xb", "--eq-xf", "--eq-xs"]) grid.style.removeProperty(k); };
+  }, []);
+}
+
 export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: string) => void; tick: number }) {
+  useHeadRoom();
   const ix = INDICES.find((i) => i.id === sub) ?? INDICES[1];
   const [period, setPeriod] = useState<ChartPeriod>("12M");
   const [sigmaWindow, setSigmaWindow] = useState<SigmaWindow>("m12");
@@ -295,6 +338,26 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
   const statsAux = s ? (s.live
     ? <><span className="badge live" id="eq-live" title={`The market is open: the 1D figures (movers, breadth, sectors, heat map) are today's moves so far, from quotes pulled every ten to twenty minutes. Changes over longer periods are measured to the close of ${fmtDate(s.asOf)}.`}>INTRADAY</span><span className="nb">{s.idx} constituents</span> · <span className="nb">1D at {fmtStamp(s.live.asOf)}</span> · <span className="nb">longer periods at the close of {fmtDate(s.asOf)}</span>{standIn}</>
     : <>{s.idx} constituents · closes of {fmtDate(s.asOf)}{standIn}</>) : "";
+  // the source lines' short forms for the one-screen layout (the designer's B.0.3): the state (INTRADAY, STAND-IN) and
+  // every as-of of the figures stay; what the rows are and how they are weighted go
+  const statsShort: ReactNode[] = s ? (s.live
+    ? [<><span className="badge live" title={`The market is open: the 1D figures are today's moves so far. Changes over longer periods are measured to the close of ${fmtDate(s.asOf)}.`}>INTRADAY</span>1D at {fmtStamp(s.live.asOf)}</>, <>longer periods at the close of {fmtDate(s.asOf)}{standIn}</>]
+    : [<>closes of {fmtDate(s.asOf)}{standIn}</>]) : [];
+  // the same parts written shorter, for a head whose room the short form overflows (R2 of the check of fix part 3, 23 Nov
+  // 2026): with the market open the short forms took one or two lines under their titles, and that height came out of
+  // the tables (DP-1) or the charts beside them. A date as a cell writes it ("24 Nov"; the year is in the tooltip,
+  // which holds the whole line) and a time of today alone with its zone ("1D 10:12 SGT"); the state, every as-of and the
+  // unit stay; SECTOR PERFORMANCE's "GICS" goes, as what the rows are (B.0.3's rule; the tooltip keeps it)
+  const intraday = s?.live ? <span className="badge live" title={`The market is open: the 1D figures are today's moves so far, at ${fmtStamp(s.live.asOf)}. Changes over longer periods are measured to the close of ${fmtDate(s.asOf)}.`}>INTRADAY</span> : null;
+  const statsCompact: ReactNode[] = s ? (s.live
+    ? [<>{intraday}1D {fmtWhen(s.live.asOf)} SGT</>, <>close {fmtDayMon(s.asOf)}{standIn}</>]
+    : [<>closes {fmtDayMon(s.asOf)}{standIn}</>]) : [];
+  // the last form before a second line (R2 of the check of fix part 4): where even the compact form is wider than its
+  // room (an index whose names are a STAND-IN, at the narrowest windows: the badge tipped it), the state's badges and the
+  // time of the figures alone, "INTRADAY 1D 10:12 SGT STAND-IN" (the 1D figures as of 10:12 SGT; the longer periods'
+  // close goes to the tooltip and Help) or "closes 24 Nov STAND-IN", each part true alone. A head takes a second line
+  // only where even this does not fit
+  const statsMin: ReactNode[] = s ? (s.live ? [<>{intraday}1D {fmtWhen(s.live.asOf)} SGT{standIn}</>] : [<>closes {fmtDayMon(s.asOf)}{standIn}</>]) : [];
   const noStats = <Empty title="Statistics not computed yet">{st.error ?? "The daily statistics job runs after each close."}</Empty>;
   const hasMcap = !!s?.rows.some((r) => r.mcap != null);
   const merged = useMemo(() => (s ? mergeClasses(s.rows) : []), [s]);
@@ -306,19 +369,19 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
   return (
     <>
       <div className="c12">{toggle}<PeriodBar period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} /></div>
-      <Panel no="01" title={ix.label} span={8} k="eq-index" aux={<>{ix.symbol}{main?.proxyFor && <span className="badge proxy" title="1306.T ETF stands in for the index intraday; official JPX close for daily figures">PROXY</span>}</>}>
+      <Panel no="01" title={ix.label} span={8} k="eq-index" aux={<>{ix.symbol}{main?.proxyFor && <span className="badge proxy" title="1306.T, an ETF, stands in for TOPIX: its prices, intraday and daily, are Yahoo Finance's. No JPX value of the index is read.">PROXY</span>}</>}>
         {main ? <div className="bigwrap"><ChartPanel row={main} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes /></div> : <Empty title="Awaiting the data feed">{table.error ?? "The index chart loads with the market table."}</Empty>}
       </Panel>
       <Panel no="02" title={DRIVERS.toUpperCase()} span={4} k="eq-drivers" aux={`${support.length} of 4`}>
         {support.length ? <div className="sqgrid">{support.map((r) => <ChartPanel key={r.symbol} row={r} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="square" />)}</div> : <Empty title="Drivers">Four related markets shown beside the index (an index future, other indices, a currency, a yield, the VIX or copper) load with the market table.</Empty>}
       </Panel>
-      <Panel no="03" title="SECTOR PERFORMANCE" span={6} k="eq-sectors" aux={<>{statsAux} · <span title={(ix.stats === "SP500" ? "Official GICS sectors from the S&P 500 constituent list. " : "GICS sector names; classification from Yahoo Finance (official GICS where the name is in the S&P 500). ") + "Sector moves are weighted by the published index weight where there is one, otherwise by market cap."}>GICS sectors · cap-weighted</span></>}>{s ? <Sectors s={s} onSector={setDrawer} /> : noStats}</Panel>
-      <Panel no="04" title="FLOW BY SECTOR · 1D" span={6} k="eq-flow" aux={s ? <>{s.idx} · {ccy}{s.quoteAt ? ` · turnover ${fmtStamp(s.quoteAt)}` : ""}{s.mfD ? ` · net flow ${fmtDate(s.mfD)}` : ""}{standIn}</> : ""}>{s ? <SectorFlow s={s} onSector={setDrawer} /> : noStats}</Panel>
-      <Panel no="05" title="MOVERS" span={12} k="eq-movers" aux={statsAux}>{s ? <div className="msg2"><Movers rows={movers.top} title="Top 15 by 1D" s={s} /><Movers rows={movers.bottom} title="Bottom 15 by 1D" s={s} /></div> : noStats}</Panel>
-      <Panel no="06" title="MARKET BREADTH" span={12} k="eq-breadth" aux={statsAux}>
+      <Panel no="03" title="SECTOR PERFORMANCE" span={6} k="eq-sectors" auxShort={s ? <SrcParts parts={[...statsShort, "GICS"]} /> : undefined} auxCompact={s ? <SrcParts parts={statsCompact} /> : undefined} auxMin={s ? <SrcParts parts={statsMin} /> : undefined} aux={<>{statsAux} · <span title={(ix.stats === "SP500" ? "Official GICS sectors from the S&P 500 constituent list. " : "GICS sector names; classification from Yahoo Finance (official GICS where the name is in the S&P 500). ") + "Sector moves are weighted by the published index weight where there is one, otherwise by market cap."}>GICS sectors · cap-weighted</span></>}>{s ? <Sectors s={s} onSector={setDrawer} /> : noStats}</Panel>
+      <Panel no="04" title="FLOW BY SECTOR · 1D" span={6} k="eq-flow" auxShort={s ? <SrcParts parts={flowShort(ccy, s.quoteAt ? `turnover ${fmtStamp(s.quoteAt)}` : "", s.mfD ? `net flow ${fmtDate(s.mfD)}` : "", standIn)} /> : undefined} auxCompact={s ? <SrcParts parts={flowShort(ccy, s.quoteAt ? `turnover ${fmtWhen(s.quoteAt)} SGT` : "", s.mfD ? `net flow ${fmtDayMon(s.mfD)}` : "", standIn)} /> : undefined} auxMin={s ? <SrcParts parts={flowShort("", s.quoteAt ? `turnover ${fmtWhen(s.quoteAt)} SGT` : "", s.quoteAt ? "" : s.mfD ? `net flow ${fmtDayMon(s.mfD)}` : "", standIn)} /> : undefined} aux={s ? <>{s.idx} · {ccy}{s.quoteAt ? ` · turnover ${fmtStamp(s.quoteAt)}` : ""}{s.mfD ? ` · net flow ${fmtDate(s.mfD)}` : ""}{standIn}</> : ""}>{s ? <SectorFlow s={s} onSector={setDrawer} /> : noStats}</Panel>
+      <Panel no="05" title="MOVERS" span={12} k="eq-movers" aux={statsAux} auxShort={s ? <SrcParts parts={statsShort} /> : undefined} auxCompact={s ? <SrcParts parts={statsCompact} /> : undefined} auxMin={s ? <SrcParts parts={statsMin} /> : undefined}>{s ? <div className="msg2"><Movers rows={movers.top} title="Top 15 by 1D" s={s} /><Movers rows={movers.bottom} title="Bottom 15 by 1D" s={s} /></div> : noStats}</Panel>
+      <Panel no="06" title="MARKET BREADTH" span={12} k="eq-breadth" aux={statsAux} auxShort={s ? <SrcParts parts={statsShort} /> : undefined} auxCompact={s ? <SrcParts parts={statsCompact} /> : undefined} auxMin={s ? <SrcParts parts={statsMin} /> : undefined}>
         {s ? <div className="brwrap"><div><BreadthTable s={s} hist={bh.data?.rows ?? []} /></div><div className="brchart"><div className="minih" id="br-caption" title="Each day counted over the index's members as of today: a company that has left the index is not in the line, and one that joined later counts from before it joined">Breadth over three years, daily · today's {s.breadth?.n ?? s.rows.length} members</div><BreadthChart rows={bh.data?.rows ?? []} height={210} /></div></div> : noStats}
       </Panel>
-      <Panel no="07" title="SHORT INTEREST" span={12} k="eq-short" aux={jp ? <span id="eq-short-src">JPX short-selling ratio (空売り集計) · short-position reports (空売り残高報告) · margin balances (信用取引現在高) · <PersonalUse /></span> : s?.shorts ? <>FINRA consolidated short-sale volume · {fmtDate(s.shorts.d)}</> : ""}>
+      <Panel no="07" title="SHORT INTEREST" span={12} k="eq-short" auxShort={jp ? <SrcParts parts={["JPX", <PersonalUse key="pu" />]} /> : s?.shorts ? <SrcParts parts={["FINRA", fmtDate(s.shorts.d)]} /> : undefined} aux={jp ? <span id="eq-short-src">JPX short-selling ratio (空売り集計) · short-position reports (空売り残高報告) · margin balances (信用取引現在高) · <PersonalUse /></span> : s?.shorts ? <>FINRA consolidated short-sale volume · {fmtDate(s.shorts.d)}</> : ""}>
         {jp ? <JpShortPanel idx={ix.stats} /> : s?.shorts ? (
           <div className="msg3" id="eq-short">
             <div>
@@ -334,8 +397,8 @@ export function EquitiesView({ sub, onSub, tick }: { sub: string; onSub: (s: str
           </div>
         ) : <Empty title={us ? "No short-volume data" : "No short data for this market"}>{us ? "The FINRA job runs after the US close." : "Public per-name short data is not available for this exchange."}</Empty>}
       </Panel>
-      <Panel no="08" title="HEAT MAP" span={12} k="eq-heat" aux={s ? <>{statsAux} · GICS sectors · colour = 1D % · size = {hasMcap ? MKT_CAP.toLowerCase() : s.rows.some((r) => r.weight != null) ? "index weight" : "equal"}</> : ""}>{s ? <HeatMap s={s} rows={merged} /> : noStats}</Panel>
-      <Panel no="09" title="SCREENER" span={12} k="eq-screener" aux={s && MEMBERS_SOURCE[ix.stats] ? <>{statsAux} · <span id="eq-members-src">{MEMBERS_SOURCE[ix.stats].line} · <PersonalUse /></span></> : statsAux}>{s ? <Screener s={s} /> : noStats}</Panel>
+      <Panel no="08" title="HEAT MAP" span={12} k="eq-heat" auxShort={s ? <SrcParts parts={[...statsShort, "colour 1D %"]} /> : undefined} auxCompact={s ? <SrcParts parts={[...statsCompact, "colour 1D %"]} /> : undefined} auxMin={s ? <SrcParts parts={[...statsMin, "colour 1D %"]} /> : undefined} aux={s ? <>{statsAux} · GICS sectors · colour = 1D % · size = {hasMcap ? MKT_CAP.toLowerCase() : s.rows.some((r) => r.weight != null) ? "index weight" : "equal"}</> : ""}>{s ? <HeatMap s={s} rows={merged} /> : noStats}</Panel>
+      <Panel no="09" title="SCREENER" span={12} k="eq-screener" auxShort={s ? <SrcParts parts={MEMBERS_SOURCE[ix.stats] ? [...statsShort, MEMBERS_SOURCE[ix.stats].short, <PersonalUse key="pu" />] : statsShort} /> : undefined} auxCompact={s ? <SrcParts parts={MEMBERS_SOURCE[ix.stats] ? [...statsCompact, MEMBERS_SOURCE[ix.stats].short, <PersonalUse key="pu" />] : statsCompact} /> : undefined} auxMin={s ? <SrcParts parts={MEMBERS_SOURCE[ix.stats] ? [...statsMin, MEMBERS_SOURCE[ix.stats].short, <PersonalUse key="pu" />] : statsMin} /> : undefined} aux={s && MEMBERS_SOURCE[ix.stats] ? <>{statsAux} · <span id="eq-members-src">{MEMBERS_SOURCE[ix.stats].line} · <PersonalUse /></span></> : statsAux}>{s ? <Screener s={s} /> : noStats}</Panel>
       {drawer && s && <SectorDrawer title={ix.label} sector={drawer} rows={drawerRows} ccy={ccy} jp={jp} onClose={() => setDrawer(null)} />}
     </>
   );

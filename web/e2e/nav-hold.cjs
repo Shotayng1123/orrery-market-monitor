@@ -7,7 +7,8 @@
 // passed them all. Here, on a phone's WATCHLIST of eleven names with its answers late, as on the live site (the names
 // 0.5 s after the address, the market table 1.5 s: the hold is then on for about 1.8 s after Back):
 //   - with no input the row that was tapped is back where it stood (the hold does its work);
-//   - a wheel or a key while the list is still on its way ends the hold: the page is not put back when the answers come;
+//   - a wheel, a key or a finger's swipe (a touch, the input of the phone drawn here) while the list is still on its way
+//     ends the hold: the page is not put back when the answers come;
 //   - three seconds after Back the hold is over: a move to the top that comes with no touch, wheel or key stays.
 // The page's clock is set (Tue 24 Nov 2026, 07:10 SGT), never the machine's. Positions are compared with where the same
 // row stood when it was left, never with a number of pixels.
@@ -49,16 +50,23 @@ const rowTop = (p) => p.evaluate((name) => { const rows = [...document.querySele
     await p.goBack(); await settle(p, 250);
     const waiting = await p.evaluate(() => !!document.querySelector("[data-nav-wait]"));   // the list is still on its way: the hold is on
     if (input === "wheel") await p.mouse.wheel(0, -160); else if (input === "key") await p.keyboard.press("ArrowUp");
+    else if (input === "touch") {   // a finger's swipe down the list, as a phone's reader moves it (SF-6, CF-2 of the review of fix part 1)
+      const cdp = await ctx.newCDPSession(p);
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: 195, y: 300 }] });
+      for (let i = 1; i <= 10; i++) { await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: 195, y: 300 + i * 30 }] }); await p.waitForTimeout(16); }
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    }
     await settle(p, 3000); const after = await rowTop(p), hash = await p.evaluate(() => location.hash);
     await p.evaluate(() => scrollTo(0, 0)); await settle(p, 700); const top = await p.evaluate(() => Math.round(scrollY));
     await ctx.close(); return { input, waiting, before, after, opened, hash, moved: before && after ? after.top - before.top : null, top, errs }; };
 
   console.log("\n[a phone's WATCHLIST, its answers late: the hold after Back does its work, gives way to the reader, and ends]");
-  const none = await visit(null), wheel = await visit("wheel"), key = await visit("key");
+  const none = await visit(null), wheel = await visit("wheel"), key = await visit("key"), touch = await visit("touch");
   const sound = (v) => v.waiting && v.hash === "#watch" && v.opened.hash === "#asset/NKD%3DF" && v.opened.y === 0 && v.before?.rows === 11 && v.before.y > 100 && v.errs.length === 0;
   ck(`with no input: ${NK}'s page opened from y ${none.before?.y}, the browser's Back, and three seconds later the line is where it stood (moved ${none.moved} px), the list having been on its way a quarter of a second after Back`, sound(none) && Math.abs(none.moved) <= 2, none);
   ck(`a wheel while the hold is on ends it: the page is not put back when the answers come (the line ${wheel.moved} px from where it stood)`, sound(wheel) && Math.abs(wheel.moved) > 100, wheel);
   ck(`a key the same (the line ${key.moved} px from where it stood)`, sound(key) && Math.abs(key.moved) > 100, key);
+  ck(`a touch the same: a finger's swipe while the hold is on ends it, as on the phone this suite draws (the line ${touch.moved} px from where it stood)`, sound(touch) && Math.abs(touch.moved) > 100, touch);
   ck(`the hold is over once the answers have come: a move to the top that no touch, wheel or key came with stays (y ${none.top}; the list had stood at y ${none.after?.y})`, none.top === 0 && none.after?.y > 100, none);
   await b.close();
   console.log(fails ? `\n${fails} check(s) failed` : "\nall checks passed");

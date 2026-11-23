@@ -16,12 +16,12 @@ intraday prices, yield curves, calendar, news, notes, reports and sign-ins; pg_c
    ```bash
    npx supabase login            # opens the browser
    npx supabase link --project-ref <ref>
-   npx supabase db push          # applies supabase/migrations (schema, seeds, fn_table_anchors)
+   npx supabase db push --remote # applies supabase/migrations (schema, seeds, fn_table_anchors); CLI 3 needs --remote
    ```
 3. Function secrets (never in git):
    ```bash
    npx supabase secrets set MONITOR_PASSWORD='<the shared password>' MONITOR_TOKEN_SECRET='<32+ random chars>' CRON_SECRET='<32+ random chars>' REPORT_SECRET='<32+ random chars>'
-   npx supabase functions deploy tick daily api
+   npx supabase functions deploy tick daily api --use-api
    ```
 4. In the SQL editor, install the schedules (this also stores the two values pg_cron needs in Vault; `supabase/cron.sql` holds the same line):
    ```sql
@@ -46,9 +46,9 @@ intraday prices, yield curves, calendar, news, notes, reports and sign-ins; pg_c
 
 The database changes and the three functions are deployed by the `deploy-server` workflow, the way `deploy-web` publishes
 the site: a push to `main` that touches `supabase/` deploys it. Nobody needs the Supabase CLI or a key on their own
-machine, so a change can come from any session. Deploying by hand (`npx supabase db push`, `npx supabase functions
-deploy tick daily api`; with CLI 3, `db push --remote`) still works, but then deploy only what is already on `main`, or the next automatic deploy
-will put `main`'s code back.
+machine, so a change can come from any session. Deploying by hand (`npx supabase db push --remote` and `npx supabase
+functions deploy tick daily api --use-api`, the commands of CLI 3: below) still works, but then deploy only what is
+already on `main`, or the next automatic deploy will put `main`'s code back.
 
 Set up once, in the repository's Settings › Secrets and variables › Actions › Secrets:
 
@@ -62,8 +62,10 @@ Set up once, in the repository's Settings › Secrets and variables › Actions 
 workflow says "Not set up yet" and does nothing.
 
 What a deploy does, in order: the logic checks (`sim/logic.test.ts`; a failure stops it); a list of what is waiting;
-a guard; `supabase db push`; the notification key, made on the runner and stored on the server if the server has
-none (never shown, never in git); `supabase functions deploy tick daily api`; if `NOTE_DISPATCH_TOKEN` is set,
+a guard; the database checks (`sim/sql`, on PGlite, with none of the job's secrets in their environment and no
+package's install script run; a failure stops it, since 22 Nov 2026); `supabase db push`; the notification key, made on the runner and stored on the server if the server has
+none (never shown, never in git); `supabase functions deploy` for api, then tick, then daily, each with `--use-api` and
+up to three tries; if `NOTE_DISPATCH_TOKEN` is set,
 storing it in the database with `monitor_set_github_token`; the page's reads against the live tables (a warning only);
 and last the paper portfolio's walls as the database sees them (`pf_selftest`, the live check's part `pf`: a wall down
 fails the run, "The paper portfolio" below; last, so that a red step there skips nothing of the rest).
@@ -99,14 +101,14 @@ Alerts reach phones and browsers as notifications once the server has a signing 
 With the `deploy-server` workflow set up (above) none of these steps is needed: it applies the migration, makes the
 key if the server has none, and deploys. By hand:
 
-1. `npx supabase db push` (migration `20261118000001_push.sql`: the `push_subs` table and `alerts.pushed_at`).
+1. `npx supabase db push --remote` (migration `20261118000001_push.sql`: the `push_subs` table and `alerts.pushed_at`).
 2. The key pair, made once and never shown:
    ```bash
    node jobs/tools/gen_vapid.mjs                              # writes jobs/.env.vapid (git-ignored)
    npx supabase secrets set --env-file jobs/.env.vapid
    ```
    Keep the file. A different key ends every device's subscription without telling anyone.
-3. `npx supabase functions deploy tick daily api`.
+3. `npx supabase functions deploy tick daily api --use-api`.
 
 How it works: the tick offers every alert not yet marked (`alerts.pushed_at`) to the devices in `push_subs`, within a
 minute of the alert being written, whichever job wrote it. A device set to "My watchlist only" gets alerts on its
@@ -165,6 +167,11 @@ is kept).
   so the page says what a dash is: the source gives none, or the Monitor has not read it again since 22 Nov 2026
   (Help, MY NAMES' header, the date's tooltip: `NO_MARK_HELD` in `web/src/lib/results.ts`; the checks of 22 Nov, RK-1).
   For a US member that lasts until Monday's run at 14:00 UTC.
+  Whether the flag comes back to the server's own request (its `fields=` list names it) is counted by the live check's
+  part `marks` (`jobs/lib/marks.ts`; A-37's done-when, line 2): for each list, the stored dates since the migration in
+  four shapes (a date with the flag true, with the flag false, with no flag, no date), the rows pulled before it
+  apart, then the watchlists' names (every account's together) and up to 100 members a list asked now by the same
+  request; counts only. A list where no date carries a flag of either kind says so in capitals.
 - **σ alerts** (`alerts.kind` 'sigma', with `sigma` and `note`): the tick scans the table every minute
   (`scanSigmaAlerts`) for every currency, yield, commodity, volatility index, future and coin at 2σ or beyond; one row
   per instrument and session (a currency pair's FX day; a future's CME trade date, so an evening's move from 18:00 New
@@ -201,7 +208,7 @@ The same token serves three things: the note at 07:00 SGT, the look-up of a big 
 queues it ("Big moves and why"), and, since 19 Nov, the start of the second path for prices within a minute of the
 server's own answers stopping ("When the price feed stops"). Without it all three wait for GitHub's schedule.
 
-1. `npx supabase db push` (migration `20261118000002_note_on_time.sql`). This also adds one quote pull after the
+1. `npx supabase db push --remote` (migration `20261118000002_note_on_time.sql`). This also adds one quote pull after the
    Tokyo and Seoul closes, for alerts on closing-auction moves.
 2. A GitHub token that may start this repository's workflows. GitHub › Settings › Developer settings › Personal
    access tokens › Fine-grained tokens › Generate new token: *Repository access* = Only select repositories ›
@@ -508,6 +515,13 @@ shows no entry while `PAPER_ON_LIVE_SITE` (`web/src/lib/paper.ts`) is `false`. B
   `consent` and `consent_agree` run the engine (`_shared/pf/route.ts`) over the database's functions
   (`_shared/pfstore.ts`). The ranges, steps and refusals are the engine's (`_shared/pf/form.ts`), the same file the
   page's form runs. Nothing in these routes writes a log line: a refusal goes back to the page that asked.
+- **The days the routes hand the database** (22 Nov 2026, the PMs' answers on EN-9 and the targets' window).
+  `pf_setting_set`'s `p_effective` is the session a change is in force from by the book's start (`calendar.ts`
+  `changeDays`: on an equity book the book day running while none of its stock exchanges has opened in it, else the
+  next session day), and its `p_today` the last book day the book's markets have traded in; the function's own guard
+  refuses an effective day not after it ("never backwards"). `pf_targets_set`'s `p_today` is the book day now
+  (`valuationDay`), so the window opens with the book day of 1 Dec, at 17:00 New York on 30 Nov (06:00 SGT). Neither
+  needs a change to the functions.
 - **The statement** is the owner's wording (b) of 20 Nov 2026, kept as version 1. The owner's record reads:
 
 > "Private notes, levels and paper portfolios are kept for your account only. Do not enter non-public or confidential information, in notes or in positions: nothing material and non-public about a company or a market, and nothing confidential of your firm or its clients. ☐ I agree"

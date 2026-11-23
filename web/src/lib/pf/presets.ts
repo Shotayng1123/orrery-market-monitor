@@ -7,25 +7,35 @@
 //   PM B   the global macro PM's advice (B/portfolio-spec.md P-B01 to P-B04; B/portfolio-benchmarks.md §2, §3)
 //   Owner  the owner's own rule or answer (20 Nov 2026): the starts, the 4/2/2 ladder and its default base, cash + 5%
 //   C      a value the engineer settled where the two PMs' files crossed (R-nn of the plan's §0.7; C-nn its own
-//          corrections), with who has accepted it (the PMs' answers of 21 Nov 2026, the plan's §0.12)
+//          corrections), with who has accepted it and when (the PMs' answers of 21 Nov 2026, the plan's §0.12, and of
+//          22 Nov 2026, its §0.13)
 // The why lines are the PMs' own, one line a row. The steps of a typed value are the designer's where the PMs gave
 // ranges only (0.5 for the ladder's levels, 5 for its capital per cents, 0.1 or 0.05 for the VaR limit, 5 for the band
 // and the amber line, 0.1 for the multiples); the targets' 0.5 and the blend's 10 are the PMs'. Where no step is
 // given a value may carry the decimals its range is written with, and a finer one is refused as off its step.
 // No source is read for any of this: every figure here is a default or a rule, never a market figure.
 import type { After, Base, Field, SectionId, StartDef, StartId, Who } from "./types.ts";
+import { WINDOW_WORDS } from "./calendar.ts";
 
 // ---- whose ----
 const who = (tag: string, basis: string, card: string): Who => ({ tag, basis, card });
-const ADVISED = "20 Nov 2026", ACCEPTED = "21 Nov 2026";
+const ADVISED = "20 Nov 2026";
+/** The days the PMs answered on the settled rows: their verdicts on round 3a (21 Nov 2026) and on round 3b (22 Nov). */
+export const R3A = "21 Nov 2026", R3B = "22 Nov 2026";
 export const PM_A = who("PM A", "default (PM advice: A)", `PM A · default advised by the equity long/short PM, ${ADVISED}`);
 export const PM_B = who("PM B", "default (PM advice: B)", `PM B · default advised by the global macro PM, ${ADVISED}`);
 export const PM_AB = who("PM A · PM B", "default (PM advice: A and B)", `PM A · PM B · default advised by both PMs, ${ADVISED}`);
 export const OWNER = who("Owner", `default (the owner's, ${ADVISED})`, `Owner · the owner's rule, ${ADVISED}`);
-/** Who has accepted a value C settled: both PMs, one, or none yet ("the PM to accept"); `null` where no acceptance
- *  was asked for (the settled value is the wider of the two the PMs gave). */
-export type Accept = "AB" | "A" | "B" | "none" | null;
-const acceptWords = (by: Accept): string => (by === "AB" ? `accepted by PM A and PM B, ${ACCEPTED}` : by === "A" ? `accepted by PM A, ${ACCEPTED}` : by === "B" ? `accepted by PM B, ${ACCEPTED}` : by === "none" ? "the PM to accept" : "");
+/** Who has accepted a value C settled, each PM with the day of the answer ({ A: R3A, B: R3B }), or none yet ("the PM
+ *  to accept"); `null` where no acceptance was asked for. */
+export type Accept = { A?: string; B?: string } | "none" | null;
+const acceptWords = (by: Accept): string => {
+  if (by === "none") return "the PM to accept";
+  if (!by) return "";
+  const { A: a, B: b } = by;
+  return a && b ? (a === b ? `accepted by PM A and PM B, ${a}` : `accepted by PM A, ${a}, and by PM B, ${b}`) : a ? `accepted by PM A, ${a}` : b ? `accepted by PM B, ${b}` : "";
+};
+const AB: Accept = { A: R3A, B: R3A }, A_ONLY: Accept = { A: R3A };
 /** The adviser line of a row the settlement amended: "settled by C (R-29); accepted by PM A and PM B, 21 Nov 2026",
  *  or "settled by C (R-29); the PM to accept" until an acceptance is entered. */
 export const settledLine = (r: string, by: Accept): string => `settled by C (${r})${by ? `; ${acceptWords(by)}` : ""}`;
@@ -60,13 +70,13 @@ function kindRows(name: string, baseWho: Who, baseWhy: string, navWho: Who, navW
 // ---- 02 TARGETS AND REFERENCE ----
 function targetRows(first: Who, bandNote: string): Field[] {
   return [
-    num("target_x", "targets", "Target return", "window", withNote(first, "the range", "R-29", "AB"), "cash + x asks the same of a dollar PM and a yen PM: the PM's work is the margin over cash", "0–15%, step 0.5",
+    num("target_x", "targets", "Target return", "window", withNote(first, "the range", "R-29", AB), "cash + x asks the same of a dollar PM and a yen PM: the PM's work is the margin over cash", "0–15%, step 0.5",
       { def: 5, lo: 0, hi: 15, step: 0.5, dp: 1, fix: 1, refuse: pc(0, 15), pre: "cash +", unit: "% a year", show: "cash + {v}% a year" }),
-    num("target_vol", "targets", "Target volatility", "window", withNote(first, "the tie to the VaR limit (it is PM B's rule)", "R-31", "A"), "the risk the book is granted: it puts the owner's ladder at 0.8, 1.2 and 1.6 target volatilities", "2–8%, step 0.5",
+    num("target_vol", "targets", "Target volatility", "window", withNote(first, "the tie to the VaR limit (it is PM B's rule)", "R-31", { A: R3A, B: R3B }), "the risk the book is granted: it puts the owner's ladder at 0.8, 1.2 and 1.6 target volatilities", "2–8%, step 0.5",
       { def: 5, lo: 2, hi: 8, step: 0.5, dp: 1, fix: 1, refuse: pc(2, 8), unit: "% of capital a year", show: "{v}% of capital a year" }),
-    num("band", "targets", "Band around the target", "limit", settled("R-32", "AB", `settled by C between the PMs' two figures (${bandNote})`), "inside it the guide suggests no change: the estimators' own error", "±5–50",
+    num("band", "targets", "Band around the target", "limit", settled("R-32", AB, `settled by C between the PMs' two figures (${bandNote})`), "inside it the guide suggests no change: the estimators' own error", "±5–50",
       { def: 20, lo: 5, hi: 50, step: 5, dp: 0, refuse: "between ±5 and ±50 points", pre: "±", unit: "points", show: "±{v} points" }),
-    num("amber", "targets", "Amber above", "limit", settled("R-32", "AB", "settled by C between the PMs' two figures"), "risk used turns amber; nothing is refused", "100–150%",
+    num("amber", "targets", "Amber above", "limit", settled("R-32", AB, "settled by C between the PMs' two figures"), "risk used turns amber; nothing is refused", "100–150%",
       { def: 120, lo: 100, hi: 150, step: 5, dp: 0, refuse: pc(100, 150), unit: "% of the target", show: "{v}% of the target" }),
     fixed("underuse", "targets", "Under-use line", PM_AB, "a platform takes capital back from a PM who does not use it", "below 50% of the target for 20 NAVs"),
     fixed("sizing", "targets", "Sizing figure", PM_AB, "a calm month never invites the book to lever up, and a spike is seen at once", "the higher of the EWMA (λ 0.94) and the 252-session figure"),
@@ -78,7 +88,7 @@ const CASH5: Field = fixed("cash5", "targets", "Cash + 5% a year", OWNER, "the o
 const LADDER_WHY = "the multi-manager practice the owner's 4/2/2 comes from";
 function ladderRows(): Field[] {
   return [
-    { key: "ladder_base", section: "ladder", label: "Base", after: "fixed", who: noted(OWNER, "the owner's answer of 20 Nov 2026: \"Make the PMs' version the default\"; the guard is PM A's and PM B's (R-42, C-25)"), why: "after a losing year the high and the reference capital carry on: a slow loss is still cut", range: "fixed",
+    { key: "ladder_base", section: "ladder", label: "Base", after: "fixed", who: noted(OWNER, `the owner's answer of 20 Nov 2026: "Make the PMs' version the default"; the guard is PM A's and PM B's (R-42); the three bases offered (C-25): ${settledLine("C-25", { A: R3B, B: R3B })}`), why: "after a losing year the high and the reference capital carry on: a slow loss is still cut", range: "fixed",
       choices: { def: "guarded", options: [{ value: "guarded", label: "Yearly reset, not after a losing year" }, { value: "yearly", label: "Yearly reset" }, { value: "start", label: "Since the start" }] } },
     num("cut1", "ladder", "First cut at a drawdown of", "fixed", noted(OWNER, "the 4/2/2; the range is PM A's and PM B's"), LADDER_WHY, "2–8%",
       { def: 4, lo: 2, hi: 8, step: 0.5, dp: 1, refuse: pc(2, 8), unit: "% of the reference capital", show: "{v}% of the reference capital" }),
@@ -86,7 +96,7 @@ function ladderRows(): Field[] {
       { def: 50, lo: 25, hi: 75, step: 5, dp: 0, refuse: pc(25, 75), unit: "% of the reference capital", show: "{v}% of the reference capital" }),
     num("cut2", "ladder", "Second cut at a further", "fixed", OWNER, LADDER_WHY, "1–4%",
       { def: 2, lo: 1, hi: 4, step: 0.5, dp: 1, refuse: pc(1, 4), pre: "+", unit: "%", show: "+{v}%" }),
-    num("cap2", "ladder", "Capital after the second cut", "fixed", withNote(OWNER, "that it must be below the first", "C-24", "AB"), "\"cut by 70%\": the owner's words; the deeper loss never hands capital back", "10–50%, below the first",
+    num("cap2", "ladder", "Capital after the second cut", "fixed", withNote(OWNER, "that it must be below the first", "C-24", AB), "\"cut by 70%\": the owner's words; the deeper loss never hands capital back", "10–50%, below the first",
       { def: 30, lo: 10, hi: 50, step: 5, dp: 0, refuse: pc(10, 50), unit: "%", show: "{v}%" }),
     num("out", "ladder", "Out at a further", "fixed", OWNER, "Out is final: the only restart is a new portfolio", "1–4%",
       { def: 2, lo: 1, hi: 4, step: 0.5, dp: 1, refuse: pc(1, 4), pre: "+", unit: "%", show: "+{v}%" }),
@@ -105,7 +115,7 @@ const spread = (key: string, label: string, w: Who, why: string, def: number, lo
 function financingRows(): Field[] {
   return [
     spread("cash_spread", "Own cash earns", PM_A, "A's assumption: what a prime broker pays on a client's own cash (EFFR, or TONA on a yen balance)", -0.25, -1, 0, "−1.00 to 0", "between −1.00 and 0"),
-    spread("debit_spread", "A margin debit pays", withNote(PM_A, "the range", "R-38", null), "A's assumption: what a prime broker charges on a margin debit", 0.4, 0, 1.5, "0 to +1.50", "between 0 and +1.50"),
+    spread("debit_spread", "A margin debit pays", withNote(PM_A, "the range", "R-38", { A: R3B, B: R3B }), "A's assumption: what a prime broker charges on a margin debit", 0.4, 0, 1.5, "0 to +1.50", "between 0 and +1.50"),
     spread("rebate_spread", "Short proceeds earn (the rebate)", PM_A, "short proceeds are held as collateral for the stock lent: they earn the rebate, not the credit rate", -0.25, -1, 0, "−1.00 to 0", "between −1.00 and 0"),
   ];
 }
@@ -121,7 +131,7 @@ function borrowRows(): Field[] {
     borrow("borrow_htb", "Borrow, hard to borrow", 10, 5, 30, 1, "A's assumption for a name on a threshold list"),
   ];
 }
-const FUNDING = (names: string): Field => ({ key: "funding", section: "costs", label: `Funding of ${names} (a dollar base)`, after: "assumption", who: withNote(PM_A, "that it can change later", "C-15", "A"), why: "the Tokyo longs are a yen debit; the capital stays in dollars", range: "–", usdOnly: true, group: "Financing", ...A_MARK,
+const FUNDING = (names: string): Field => ({ key: "funding", section: "costs", label: `Funding of ${names} (a dollar base)`, after: "assumption", who: withNote(PM_A, "that it can change later", "C-15", A_ONLY), why: "the Tokyo longs are a yen debit; the capital stays in dollars", range: "–", usdOnly: true, group: "Financing", ...A_MARK,
   choices: { def: "pb", options: [{ value: "pb", label: "Yen from the prime broker", line: "the Tokyo longs are a yen debit; the capital stays in dollars" }, { value: "fwd", label: "Spot and a one-month forward, rolled monthly", off: "not yet: currencies are not built" }] } });
 function costRows(): Field[] {
   const bp = (key: string, label: string, def: number, hi: number): Field => num(key, "costs", label, "assumption", PM_A, "an equity desk's negotiated rate; no public source", `0–${hi} bp`, { def, lo: 0, hi, dp: 1, refuse: `between 0 and ${hi} bp`, unit: "bp of value", show: "{v} bp of value" }, { ...A_MARK, group: "Costs" });
@@ -143,13 +153,36 @@ const FLOOR_CURE = fixed("floor_cure", "cash", "A breach of the floor is cured t
 const UC_ZERO = fixed("uc_zero", "cash", "Unencumbered cash below zero", PM_AB, "the prime broker's call does not wait", "the prime broker's call: cut from each market's next session, no day of grace");
 
 // ---- what a start can trade (BP-5), and what it cannot trade here, with the reason (V-13) ----
-const OSAKA = "Osaka's futures (Nikkei 225, TOPIX): JPX's files are not used in this Monitor. Japan's index futures here are CME's NKD and NIY.";
-const TPY = "CME's yen TOPIX future (TPY): only if a named month trades at least 100 contracts a day over 20 sessions; not checked yet.";
-const NO_LENDING_FEE = "No lending-fee signal for Tokyo: a Tokyo short is priced as general collateral or warm, never hard to borrow, and never refused for a stop on new shorts.";
+// what is not used is Osaka's settlement and volume files, by the owner's answer of 21 Nov 2026; JPX's other files are
+// read (the second review of P-1, DC-9: "JPX's files are not used" was not so)
+/** The Japan start's line on names listed elsewhere: the book's own limit is printed in it (canLines), never a fixed
+ *  20% (the second review of P-1, DC-10: the limit is 0 to 50%, typed at creation and changed later). */
+export const FOREIGN_LINE = "names listed outside Tokyo, within the book's own limit";
+/** What a start can trade, with the lines that depend on a book's values filled in: "up to 40% of capital, gross (a
+ *  limit)", or "none (its limit is 0%)"; the line as it stands where the value is not known. */
+export function canLines(start: StartId, values: Partial<Record<string, number | string>> = {}): string[] {
+  return STARTS[start].trade.can.map((x) => { if (x !== FOREIGN_LINE) return x; const v = values.foreign; return typeof v !== "number" ? x : v === 0 ? "names listed outside Tokyo: none (its limit is 0%)" : `names listed outside Tokyo, up to ${v}% of capital, gross (a limit)`; });
+}
+// The probes of 21 Nov 2026 (C/portfolio-plan.md §0.13): the CFTC's report gives NIY's contract unit and none for NKD,
+// so NKD waits for its multiplier from a source (PM A and PM B); TPY has one close in the feed; one broker lists 860 of
+// 4,501 Japan listings as shortable, so a Tokyo short needs a locate (PM A's rule, an assumption).
+const NKD_WAITS = "NKD once its multiplier is read from a source";
+const OSAKA = `Osaka's futures (Nikkei 225, TOPIX): Osaka's settlement and volume files are not used in this Monitor (the owner's answer of 21 Nov 2026). Japan's index futures here are CME's NIY, and ${NKD_WAITS}.`;
+const TPY = "CME's yen TOPIX future (TPY): not tradable here: one close in the feed, 19 Nov 2026, 5 contracts (open interest 55; Yahoo Finance, read 21 Nov 2026), where the line is at least 100 contracts a day over 20 sessions.";
+const NO_LENDING_FEE = "No lending-fee signal for Tokyo: a TOPIX 500 member is priced as general collateral; another TOPIX member as warm, at most 1% of capital short each (A); any other Tokyo name is refused, \"no locate (A)\". One broker lists 860 of 4,501 Japan listings as shortable (Interactive Brokers, read 21 Nov 2026).";
 const NOT_IN_START = "Written options, bonds and repo: not in this start.";
+/** Duration outside the US, as the probes of 21 Nov 2026 found its funds (PM B's answer, 22 Nov; pf_yahoo_funds):
+ *  Tokyo's seven yen bond funds' value traded a day over 60 sessions of Yahoo Finance's daily bars to 20 Nov 2026
+ *  (572A.T JPY 3.85m to 2510.T JPY 104.56m), and Germany's three government bond funds' 3-month average volume times
+ *  their last price in its quote (X03G.DE about EUR 0.8m, IS0L.DE and EXX6.DE about 0.3m). Government bonds at the
+ *  official curves are PM B's request B-38, not built. */
+const MACRO_FUNDS = "So duration outside the US only through funds, and they are small: Tokyo's yen bond funds trade JPY 4m to 105m a day (over 60 sessions) and each of Germany's government bond funds under EUR 1m (its 3-month average) (Yahoo Finance, to 20 Nov 2026), so within the exit limit a position there is a token.";
+/** FedInvest's prices may not be read (treasurydirect.gov's robots.txt disallows every path, 21 Nov 2026). */
+const CASH_UST = "Cash Treasuries and repo: no source of their prices may be read (TreasuryDirect's robots.txt disallows every path, read 21 Nov 2026).";
 /** The classes whose orders are not built yet (the build's own: a class leaves the list when its orders are built). */
 export const NOT_BUILT_CLASSES = ["orders in stocks and ETFs", "futures", "currencies", "options"];
-export const notBuiltLine = (): string => `Not built yet: ${NOT_BUILT_CLASSES.join(" · ")}.`;
+/** The line under NOT BUILT YET: the classes alone, the head says what they are (the designer's B.2). */
+export const notBuiltLine = (): string => `${NOT_BUILT_CLASSES.join(" · ")}.`;
 /** The lines of NOT BUILT YET for a start: the classes, and for the macro start, once stocks and ETFs are built and
  *  futures are not, what it can hold meanwhile. */
 export function notBuiltLines(start: StartId): string[] {
@@ -178,7 +211,7 @@ const JP_FIELDS: Field[] = [
   num("gross", "limits", "Gross", "limit", noted(PM_A, "R-47"), "at a 5% target volatility 170% to 250% gross reaches the target; 200% sits in the middle", "100–300%", { def: 200, lo: 100, hi: 300, dp: 0, refuse: pc(100, 300), pre: "≤", unit: "% of capital", show: "≤ {v}% of capital" }),
   num("net", "limits", "Net", "limit", PM_A, "the net limits keep the book hedged, so the ladder judges the stock picking, not the market", "±5–100%", { def: 20, lo: 5, hi: 100, dp: 1, refuse: pm(5, 100), pre: "±", unit: "% of capital", show: "±{v}% of capital" }),
   num("beta_net", "limits", "β-adjusted net", "limit", PM_A, "a 4/2/2 ladder needs a hedged book", "±5–50%", { def: 10, lo: 5, hi: 50, dp: 1, refuse: pm(5, 50), pre: "±", unit: "% of capital", show: "±{v}% of capital" }),
-  num("var", "limits", "VaR, one-day 99%", "limit", noted(PM_A, "R-15"), "tied to the target volatility; measured on a single-index estimate (E) until the risk step", "0.5–3%, step 0.1", { def: 1, lo: 0.5, hi: 3, step: 0.1, dp: 1, fix: 1, refuse: pc(0.5, 3), pre: "≤", unit: "% of capital, warning at 80% of it", show: "≤ {v}% of capital" }),
+  num("var", "limits", "VaR, one-day 99%", "limit", noted(PM_A, "R-15"), "tied to the target volatility; measured on a single-index estimate (E) until the risk step", "0.5–3%, step 0.1", { def: 1, lo: 0.5, hi: 3, step: 0.1, dp: 1, fix: 1, refuse: pc(0.5, 3), pre: "≤", unit: "% of capital", note: "warning at 80% of it", show: "≤ {v}% of capital" }),
   num("exit_long", "limits", "Days to exit a long at 20% of avg daily volume (60d)", "limit", PM_A, "a winning long may be trimmed over a week", "1–20", { def: 5, lo: 1, hi: 20, dp: 0, refuse: "between 1 and 20 sessions", pre: "≤", unit: "sessions", show: "≤ {v} sessions" }),
   num("exit_short", "limits", "Days to exit a short", "limit", PM_A, "a short must be closable fast: three days of exit at 20% of volume", "1–20", { def: 3, lo: 1, hi: 20, dp: 0, refuse: "between 1 and 20 sessions", pre: "≤", unit: "sessions", show: "≤ {v} sessions" }),
   fixed("cure", "limits", "A breach from prices is cured within", noted(PM_A, "R-10"), "a short that runs against the book must go fast; a winning long may be trimmed over a week", "5 sessions for a long, 2 for a short"),
@@ -187,7 +220,7 @@ const JP_FIELDS: Field[] = [
   FLOOR_CURE, UC_ZERO,
   fixed("house_margin", "cash", "House margin", noted(PM_A, "FINRA Rule 4210's levels as a stand-in"), "the public US rule; a real prime broker's house rule is stricter and not public", "long 25% of value; short 30%, at least USD 5 a share, 100% under USD 5; futures at the exchange's margin", { ...A_MARK, group: "Margin" }),
   mult("house_multiple", "House margin multiple", "fixed", PM_A, "a stricter prime broker: every margin requirement × this", 1, 2),
-  mult("stress_mult", "Stressed unencumbered cash: every margin ×", "assumption", settled("R-37", "A", "PM B's rule; on the equity long/short starts settled by C"), "margins rise in stress: the floor's real test. Amber below the floor, nothing refused", 1.5, 3),
+  mult("stress_mult", "Stressed unencumbered cash: every margin", "assumption", settled("R-37", A_ONLY, "PM B's rule; on the equity long/short starts settled by C"), "margins rise in stress: the floor's real test. Amber below the floor, nothing refused", 1.5, 3),
   ...financingRows(), FUNDING("Tokyo names"), ...borrowRows(), ...costRows(),
 ];
 
@@ -200,7 +233,7 @@ const GL_DIFF = new Map<string, Field | null>([
   ["gross", num("gross", "limits", "Gross", "limit", noted(PM_A, "R-47"), "at a 5% target volatility 170% to 250% gross reaches the target; two single-name markets and futures in each reach 400%", "100–400%", { def: 200, lo: 100, hi: 400, dp: 0, refuse: pc(100, 400), pre: "≤", unit: "% of capital", show: "≤ {v}% of capital" })],
 ]);
 const GL_EXTRA: Field[] = [
-  num("region_net", "limits", "Region, net, each of US · Japan · Europe · emerging markets · other developed", "limit", withNote(PM_A, "the regions' map", "C-17", "A"), "a 10% fall in one market then costs at most 1.5% of capital, under half the first step", "±5–50%", { def: 15, lo: 5, hi: 50, dp: 1, refuse: pm(5, 50), pre: "±", unit: "% of capital", show: "±{v}% of capital" }),
+  num("region_net", "limits", "Region, net, each of US · Japan · Europe · emerging markets · other developed", "limit", withNote(PM_A, "the regions' map", "C-17", A_ONLY), "a 10% fall in one market then costs at most 1.5% of capital, under half the first step", "±5–50%", { def: 15, lo: 5, hi: 50, dp: 1, refuse: pm(5, 50), pre: "±", unit: "% of capital", show: "±{v}% of capital" }),
   num("region_max", "limits", "The largest region", "limit", PM_A, "the book stays global; 100% allows a one-market book", "50–100%", { def: 75, lo: 50, hi: 100, dp: 1, refuse: pc(50, 100), pre: "≤", unit: "% of gross", show: "≤ {v}% of gross" }),
 ];
 const GL_CCY_ALL = num("ccy_all", "limits", "Currencies other than the base, in all", "limit", PM_A, "not this PM's edge: the whole currency exposure stays a fraction of the first step", "0–100%", { def: 20, lo: 0, hi: 100, dp: 1, refuse: pc(0, 100), pre: "net ≤", unit: "% of capital", show: "net ≤ {v}% of capital" });
@@ -231,7 +264,7 @@ const MACRO_FIELDS: Field[] = [
   cap("sector_gross", "Sector, gross", 100, 25, 300, "room for a generalist's tilt"),
   cap("eq_gross", "Equity book, gross", 300, 50, 600, "room for a market-neutral book; a fundamental long/short book runs well inside it"),
   cap("eq_net", "Equity book, net", 30, 0, 100, "net 30% in a 25% market fall is 7.5% of capital, just inside Out (8%)", { pmSign: true, refuse: "at most ±100%", range: "up to ±100%" }),
-  num("var", "limits", "VaR, one-day 99%, historical", "limit", PM_B, "four days' VaR stand between the high and the first cut · measured from the risk step on", "0.25–3%, step 0.05", { def: 1, lo: 0.25, hi: 3, step: 0.05, dp: 2, fix: 1, refuse: pc(0.25, 3), pre: "≤", unit: "% of capital, warning at 80% of it", show: "≤ {v}% of capital" }),
+  num("var", "limits", "VaR, one-day 99%, historical", "limit", PM_B, "four days' VaR stand between the high and the first cut · measured from the risk step on", "0.25–3%, step 0.05", { def: 1, lo: 0.25, hi: 3, step: 0.05, dp: 2, fix: 1, refuse: pc(0.25, 3), pre: "≤", unit: "% of capital", note: "warning at 80% of it", show: "≤ {v}% of capital" }),
   cap("stress", "Worst stress", 8, 4, 12, "no single shock in the standard set may take the book to Out · measured from the risk step on", { pre: "≤" }),
   cap("dv01_each", "DV01, each curve", 0.05, 0.01, 0.2, "USD 50,000 a bp on USD 100m: a 6bp day costs 0.3% of capital, a third of the VaR limit for one curve", { unit: "% of capital a bp", dp: 2, refuse: "between 0.01% and 0.20%", range: "0.01–0.20%" }),
   cap("dv01_all", "DV01, all curves", 0.1, 0.02, 0.4, "two curves at full size", { unit: "% of capital a bp", dp: 2, refuse: "between 0.02% and 0.40%", range: "0.02–0.40%" }),
@@ -250,7 +283,7 @@ const MACRO_FIELDS: Field[] = [
   mult("fut_multiple", "Futures margin multiple", "assumption", PM_B, "a broker may ask more than the exchange", 1, 2),
   num("fxcoll_g10", "cash", "FX collateral · G10", "assumption", PM_B, "B's desk: the collateral a forward's counterparty asks", "1–10%", { def: 3, lo: 1, hi: 10, dp: 1, refuse: pc(1, 10), unit: "% of notional", show: "{v}% of notional" }, { ...A_MARK, group: "Margin" }),
   num("fxcoll_other", "cash", "FX collateral · others", "assumption", PM_B, "B's desk: the collateral a forward's counterparty asks", "3–20%", { def: 7.5, lo: 3, hi: 20, dp: 1, refuse: pc(3, 20), unit: "% of notional", show: "{v}% of notional" }, { ...A_MARK, group: "Margin" }),
-  mult("stress_mult", "Stressed unencumbered cash: every margin and haircut ×", "assumption", PM_B, "margins and haircuts rise in stress: the floor's real test. Amber below the floor", 1.5, 3),
+  mult("stress_mult", "Stressed unencumbered cash: every margin and haircut", "assumption", PM_B, "margins and haircuts rise in stress: the floor's real test. Amber below the floor", 1.5, 3),
   ...financingRows().map((f) => ({ ...f, who: noted(f.who, "PM B takes PM A's") })),
   ...borrowRows(),
   { key: "repo", section: "costs", label: "Repo, for cash Treasuries", after: "assumption", who: PM_B, why: "a hedge fund borrows through its dealer, above what cash lenders earn", range: "–", group: "Financing", ...A_MARK, text: "SOFR + 0.10%, overnight · later: cash Treasuries are not built" },
@@ -276,7 +309,7 @@ export const STARTS: Record<StartId, StartDef> = {
     reference: { short: "MSCI Japan, hedged", byBase: { USD: { label: "MSCI Japan, net, hedged to USD (E)", note: "" }, JPY: { label: "MSCI Japan, net, JPY", note: "" } }, proxy: "rebuilt from iShares MSCI Japan ETF (EWJ) holdings × Tokyo closes · fee not read yet", state: "waits for its series" },
     fields: JP_FIELDS,
     trade: {
-      can: ["Tokyo-listed stocks and ETFs, long and short", "names listed outside Tokyo, up to 20% of capital, gross", "CME's Nikkei 225 futures by named month (NKD, NIY)", "1306.T and 1321.T", "long options", "USD/JPY spot and forwards"],
+      can: ["Tokyo-listed stocks and ETFs, long and short", FOREIGN_LINE, `CME's yen Nikkei 225 future by named month (NIY; ${NKD_WAITS})`, "1306.T and 1321.T", "long options", "USD/JPY spot and forwards"],
       cannot: [OSAKA, TPY, NO_LENDING_FEE, NOT_IN_START],
     },
     summary: eqSummary,
@@ -287,7 +320,7 @@ export const STARTS: Record<StartId, StartDef> = {
     reference: { short: "MSCI ACWI", byBase: { USD: { label: "MSCI ACWI, net, USD, unhedged", note: "includes currency moves the book does not carry" }, JPY: { label: "MSCI ACWI, net, JPY, unhedged", note: "includes currency moves the book does not carry" } }, proxy: "iShares MSCI ACWI ETF (ACWI) total return · fee not read yet", state: "waits for its series" },
     fields: GL_FIELDS,
     trade: {
-      can: ["US- and Tokyo-listed stocks, long and short", "other regions through ETFs, counted by their underlying", "ES, NQ, NKD and NIY by named month", "index and region ETFs", "long options", "FX spot and forwards"],
+      can: ["US- and Tokyo-listed stocks, long and short", "other regions through ETFs, counted by their underlying", `ES, NQ and NIY by named month (${NKD_WAITS})`, "index and region ETFs", "long options", "FX spot and forwards"],
       cannot: ["Stocks listed outside the US and Tokyo: only through ETFs.", OSAKA, TPY, NO_LENDING_FEE, NOT_IN_START],
     },
     summary: eqSummary,
@@ -301,8 +334,8 @@ export const STARTS: Record<StartId, StartDef> = {
     }, proxy: "iShares MSCI ACWI ETF (ACWI) · the Global Aggregate's tracker · fees not read yet", state: "waits for its series" },
     fields: MACRO_FIELDS,
     trade: {
-      can: ["CME's futures by named month, the front and the next: ES, NQ, YM, RTY, NKD, NIY · ZT, ZF, ZN, TN, ZB, UB · CL, BZ, NG, GC, SI, HG", "FX spot, forwards and NDFs", "options, long and short", "stocks and ETFs within its equity limits"],
-      cannot: ["JGB, Bund and Gilt futures: not in the free feed the Monitor reads (Yahoo Finance carries none).", "Osaka's contracts: JPX's files are not used in this Monitor.", "So duration outside the US only through funds.", "Contract months beyond the next: too thin in the feed.", "Futures of Eurex, ICE Europe, Montréal and ASX: none in the feed.", "Cash Treasuries and repo: later, once their prices are read."],
+      can: [`CME's futures by named month, the front and the next by open interest: ES, NQ, YM, RTY, NIY (${NKD_WAITS}) · ZT, ZF, ZN, TN, ZB, UB · ZQ, the three months after the front · CL, BZ, NG, GC, SI, HG`, "FX spot, forwards and NDFs", "options, long and short", "stocks and ETFs within its equity limits"],
+      cannot: ["JGB, Bund and Gilt futures: not in the free feed the Monitor reads (Yahoo Finance carries none).", "Osaka's contracts: Osaka's settlement and volume files are not used in this Monitor.", MACRO_FUNDS, "Contract months beyond the next: too thin in the feed.", "Futures of Eurex, ICE Europe, Montréal and ASX: none in the feed.", CASH_UST],
       bold: 3,
     },
     summary: (v) => [`Adjusted gross ≤ ${sumFig(v.adj_gross)} · VaR ≤ ${sumFig(v.var, 1)} · floor ${sumFig(v.floor)}`],
@@ -322,7 +355,7 @@ export const STARTS: Record<StartId, StartDef> = {
     card: { lines: [], phone: "", advice: "PM B's advice" },
     notYet: { line: "Fixed-income long-only (against the Global Aggregate): offered once its benchmark's profile is read.", phone: "Fixed-income long-only: offered once its benchmark's profile is read." },
     reference: null, fields: [],
-    trade: { can: ["Bond ETFs", "government bond futures, long and short, by named month", "FX forwards, to hedge and within the currency limits", "Later: single Treasuries, paid in full (no repo)"], cannot: ["JGB, Bund and Gilt futures: not in the free feed the Monitor reads (Yahoo Finance carries none).", "Osaka's contracts: JPX's files are not used in this Monitor.", "So duration outside the US only through funds.", "No single corporate bonds, options, swaps, shorts of funds or equities."] },
+    trade: { can: ["Bond ETFs", "government bond futures, long and short, by named month", "FX forwards, to hedge and within the currency limits", "Later: single Treasuries, paid in full (no repo)"], cannot: ["JGB, Bund and Gilt futures: not in the free feed the Monitor reads (Yahoo Finance carries none).", "Osaka's contracts: Osaka's settlement and volume files are not used in this Monitor.", "So duration outside the US only through funds.", "No single corporate bonds, options, swaps, shorts of funds or equities."] },
     summary: () => [],
   },
 };
@@ -364,4 +397,5 @@ export function leverageHelp(volPct: number, figs: { es: number | null; zn: numb
 }
 export const ADJ_GROSS_CARD = "equity, option delta, FX and commodity notionals, and rates in 10-year equivalents: a 2-year note counts at its risk. Gross notional is shown, not limited.";
 /** The line on what is fixed, at the foot of the summary. */
-export const FIXED_LINE = "Fixed after creation: the start and kind, the base currency, the starting NAV, the reference, the ladder's base and numbers, the house margin multiple. The targets: re-set only from 1 Dec to a January reset, under a yearly base.";
+// the window's words are calendar.ts's, built from the one moment it opens (the designer's B.0.2, revision 2)
+export const FIXED_LINE = `Fixed after creation: the start and kind, the base currency, the starting NAV, the reference, the ladder's base and numbers, the house margin multiple. The targets: ${WINDOW_WORDS}, under a yearly base.`;

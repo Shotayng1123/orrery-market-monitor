@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Empty, Panel } from "../components/Panel";
+import { Empty, Panel, SrcParts } from "../components/Panel";
 import { ASSET_PERIODS, ChartPanel, type ChartPeriod } from "../components/ChartPanel";
 import { PeriodBar } from "../components/PeriodBar";
 import type { SigmaWindow } from "../components/SigmaChart";
@@ -14,7 +14,7 @@ import type { TableRow } from "../lib/types";
 import { pageLive } from "../lib/opens";
 import { fmtNum, fmtPct, signCls, stockDecimals } from "../lib/fmt";
 import { fmtDate, fmtStamp } from "../lib/time";
-import { avgTurnover, avgVolume, LARGEST_FALL, MKT_CAP, NEWS, NEXT_RESULTS, RANGE_52W, REALISED_VOL } from "../lib/labels";
+import { avgTurnover, avgVolume, LARGEST_FALL, MEMBERS_SOURCE, MKT_CAP, NEWS, NEXT_RESULTS, PERSONAL_USE, RANGE_52W, REALISED_VOL } from "../lib/labels";
 import { PersonalUse } from "../components/PersonalUse";
 import { chartMarks, finSections, fmtCount, fmtPc, fmtPp, fmtX, isSmallMove, moveParts, moveRule, noDocWhy, periodDoc, siteOf, whyText, type Fin, type MoveRow, type StockPage } from "../lib/stock";
 import { fmtResultsDate, resultsTip, resultsWords } from "../lib/results";
@@ -32,6 +32,42 @@ export const decimalsOf = (price: number | null): number => stockDecimals(price)
  *  and CLOSED with when it next opens outside them (until 20 Nov 2026 a stock's tile said CLOSED at every hour). */
 export const chartRow = (d: StockPage): TableRow => { const market = stockMarketOf(d.symbol); return { symbol: d.symbol, name: d.name, cls: "Equities", market, currency: d.currency ?? "", decimals: decimalsOf(d.price), group: "equity", order: 0, last: d.price, lastAt: d.asOf, live: pageLive(market, d.asOf), closes: { d1: d.prevClose }, closeDates: {}, pct: { d1: d.pct } }; };
 
+/** The credit for a Tokyo company's index memberships, which come from the index publishers' own files (Nikkei's weights
+ *  file, JPX's list of TSE-listed issues: the owner's P4, "each credited"); the tooltip of the memberships where the page
+ *  names them (WD-6 of the final review of pull request #50: the line credited Yahoo Finance alone). None for a
+ *  membership from another list. */
+export function membersCredit(indices: string[]): string | undefined {
+  const named = indices.map((x) => MEMBERS_SOURCE[x]?.full).filter((x): x is string => !!x);
+  return named.length ? `${named.join(" ")} Used for ${PERSONAL_USE} (Help: Data sources · ${PERSONAL_USE}).` : undefined;
+}
+/** The same credit drawn after the memberships, by publisher, "NK225, TOPIX (Nikkei, JPX · personal use)": a tooltip is
+ *  read on hover only, and on a touch screen not at all, where the line read as Yahoo Finance's (WD-6, the check of fix
+ *  part 3). "personal use" opens Help's paragraph, as on every line that names those files. Nothing for a membership
+ *  from another list (the S&P 500's and the Nasdaq-100's are not theirs). */
+export function MembersBy({ indices, part = false }: { indices: string[]; part?: boolean /* a part of a line that breaks only between its parts (StockLine) */ }) {
+  const who = indices.map((x) => MEMBERS_SOURCE[x]?.short.replace(/^members: /, "")).filter((x): x is string => !!x);
+  return who.length ? <span id="st-members-by" className={part ? "sp" : undefined} data-credit={part ? "" : undefined} title={membersCredit(indices)}> ({who.join(", ")} · <PersonalUse />)</span> : null;
+}
+/** A stock's line on its chart's head: the star, the symbol, the exchange, the sector and the industry, the index
+ *  memberships with their publishers' credit, and Yahoo Finance, whose prices the chart draws. Drawn once, its parts
+ *  in spans that break only between them. Where the one-screen layout's head has no room for it (N1 of the check of fix
+ *  part 4: with the credit it was cut with an ellipsis at the least window of each text size, at worst "… (Nikkei, JPX
+ *  · …" with "personal use" and "Yahoo Finance" gone), the descriptive parts are left out (Panel `auxDrop`): the
+ *  industry first, then the sector, then the exchange. In a layout that wraps the line they are left out only where
+ *  the credit would cost the head more than one line (on a phone in the classic layout it took two). The symbol, the
+ *  memberships with their credit and "personal use", and Yahoo Finance are never left out, and the whole line is the
+ *  head's tooltip (Help: Single-name page). */
+export function StockLine({ d }: { d: StockPage }) {
+  const part = (x: ReactNode, drop?: 1 | 2 | 3) => <span data-drop={drop}><span className="sd"> · </span><span className="sp">{x}</span></span>;
+  return (
+    <>
+      <Star symbol={d.symbol} name={d.name} /> <span className="sp">{d.symbol}</span>
+      {d.exchange && part(d.exchange, 3)}{d.sector && part(d.sector, 2)}{d.industry && part(d.industry, 1)}
+      {d.indices.length > 0 && <><span className="sd"> · </span><span className="sp" id="st-members" title={membersCredit(d.indices)}>{d.indices.join(", ")}</span><MembersBy indices={d.indices} part /></>}
+      {part("Yahoo Finance")}
+    </>
+  );
+}
 /** What the short figure is, in a few words, by its source. */
 export function shortLine(d: StockPage): { label: string; value: string; title: string } {
   const s = d.short;
@@ -130,7 +166,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
       <div className="c12"><PeriodBar periods={ASSET_PERIODS} period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} extra={term ? <ScreenChips sections={sections} screen={scr} onScreen={setScreen} /> : undefined} /></div>
       <div className="pcols" data-even={even && feed ? "" : undefined} data-page="stock" data-screen={term ? scr : undefined}>
         <div className="pcol w8">
-          {on("chart") && <Panel no={no("chart")} k="st-chart" title={d.name.toUpperCase()} span={8} aux={<><Star symbol={d.symbol} name={d.name} /> {d.symbol}{d.exchange ? ` · ${d.exchange}` : ""}{d.sector ? ` · ${d.sector}` : ""}{d.industry ? ` · ${d.industry}` : ""}{d.indices.length ? ` · ${d.indices.join(", ")}` : ""} · Yahoo Finance</>}>
+          {on("chart") && <Panel no={no("chart")} k="st-chart" title={d.name.toUpperCase()} span={8} aux={<StockLine d={d} />} auxDrop>
             <div className="bigwrap"><ChartPanel row={row} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes volume marks={marks} /></div>
           </Panel>}
           {on("perf") && <Panel no={no("perf")} k="st-perf" title={bms.length ? `PERFORMANCE VS ${title.toUpperCase()}` : "PERFORMANCE"} span={8} aux="price change, dividends not included">
@@ -209,7 +245,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
               <StockNews key={d.symbol} symbol={d.symbol} feed={feed} fit even={even} onEven={setEven} />
             </Panel>
           )}
-          {on("short") && <Panel no={no("short")} k="st-short" title="SHORT INTEREST" span={4} aux={s ? (s.kind === "jpx" ? <span id="st-short-src">JPX short-position reports · <PersonalUse /></span> : s.kind === "interest" ? "exchange-reported · Yahoo Finance" : "FINRA") : ""}>
+          {on("short") && <Panel no={no("short")} k="st-short" title="SHORT INTEREST" span={4} auxShort={s?.kind === "jpx" ? <SrcParts parts={["JPX", <PersonalUse key="pu" />]} /> : undefined} aux={s ? (s.kind === "jpx" ? <span id="st-short-src">JPX short-position reports · <PersonalUse /></span> : s.kind === "interest" ? "exchange-reported · Yahoo Finance" : "FINRA") : ""}>
             {!s ? <Empty title="No short data">None reported for this name.</Empty> : s.kind === "jpx" ? (
               <table className="secT" id="st-short"><tbody>
                 <tr><td className="l"><b>Reported positions (0.5% and above) · <span className="nb">{fmtDate(s.d)}</span></b></td><td className="num"><b>{(s.ratio * 100).toFixed(2)}%</b></td></tr>

@@ -15,7 +15,7 @@
 //     fonts and drawn wider (GitHub's machines draw the same faces wider; e2e/room.cjs says how both are measured);
 //   - a name cell that carries a day has room for the name, its PROXY mark and the day in every layout the table is
 //     drawn in: the scrolling layout down to its least width, the one-screen layout down to its smallest window at
-//     AUTO, 1170 x 540, and at text L and XL in theirs, 1495 x 900 and 1755 x 1000 (GitHub's run of 21 Nov 2026 found
+//     AUTO, 1179 x 540, and at text L and XL in theirs, 1507 x 900 and 1769 x 1000 (GitHub's run of 21 Nov 2026 found
 //     TOPIX's cell a pixel short at 1280 x 720; the review of 22 Nov, SF-1, its day cut at L and XL in layouts under
 //     1,150 px, which the one-screen layout no longer offers), and the classic phone layout, where the day stands
 //     under its name;
@@ -38,10 +38,10 @@ const ROOM_OWN = 3, ROOM_WIDER = 0.5, NAME_OWN = 6, NAME_WIDER = 2;
 const SIZES = {   // the designer's sizes (plan review §3.7), and each layout's smallest window
   C1: { vp: [1440, 900], prefs: { size: "AUTO", compact: false } }, C2: { vp: [1280, 720], prefs: { size: "AUTO", compact: false } }, C3: { vp: [1440, 900], prefs: { size: "XL", compact: false } },
   C4: { vp: [1440, 900], prefs: { size: "AUTO", compact: true } }, C4b: { vp: [1280, 720], prefs: { size: "AUTO", compact: true } }, CL: { vp: [1440, 900], prefs: { size: "L", compact: false } },
-  // the one-screen layout is offered where its layout is at least 1,300 CSS px wide (lib/prefs.ts): from a window of
-  // 1170 x 540 at AUTO, 1495 at L and 1755 at XL; the scrolling layout's table keeps a least width under which its
+  // the one-screen layout is offered where its layout is at least 1,310 x 560 CSS px (lib/prefs.ts; the designer's
+  // revision 2): from a window of 1179 x 540 at AUTO, 1507 x 644 at L and 1769 x 756 at XL; the scrolling layout's table keeps a least width under which its
   // panel scrolls sideways, so a window of 760 px draws its name column at its narrowest
-  C4c: { vp: [1170, 540], prefs: { size: "AUTO", compact: true } }, C4L: { vp: [1495, 900], prefs: { size: "L", compact: true } }, C4X: { vp: [1755, 1000], prefs: { size: "XL", compact: true } },
+  C4c: { vp: [1179, 540], prefs: { size: "AUTO", compact: true } }, C4L: { vp: [1507, 900], prefs: { size: "L", compact: true } }, C4X: { vp: [1769, 1000], prefs: { size: "XL", compact: true } },
   C0: { vp: [760, 800], prefs: { size: "AUTO", compact: false } },
   P1: { dev: "iPhone SE (3rd gen)" }, P2: { dev: "iPhone 13" },
   // the classic phone layout (CLASSIC LAYOUT in the menu): the computer's table in a 104-px name column
@@ -100,6 +100,13 @@ const without = async (p) => { const st = await p.addStyleTag({ content: "#mk-sg
   await st.evaluate((e) => e.remove()); await p.waitForTimeout(250); return v; };
 
 (async () => { const b = await chromium.launch();
+  // the measure itself (CF-5 of the review of fix part 1, 22 Nov 2026): a part that ends on a badge has the room its
+  // box has, not its letters: a 100-px cell holding a 100-px badge whose letters end 5 px before its border
+  { const ctx = await b.newContext({ viewport: { width: 400, height: 200 }, deviceScaleFactor: 1 }); await ctx.addInitScript({ content: ROOM }); const p = await ctx.newPage();
+    await p.setContent('<div id="c" style="width:100px;overflow:hidden;white-space:nowrap;font:12px monospace"><span id="t"><span id="g" style="display:inline-block;padding:0 4px;border:1px solid #888">DELAYED~10</span></span></div>');
+    const m = await p.evaluate(() => { const t = document.getElementById("t"), g = document.getElementById("g"), c = document.getElementById("c").getBoundingClientRect(); return { spare: window.__room.spare(g), outer: window.__room.spare(t), boxRoom: Math.round((c.right - g.getBoundingClientRect().right) * 10) / 10, textRoom: Math.round((c.right - window.__room.text(g).right) * 10) / 10 }; });
+    ck(`the room of a part that ends on a badge is measured to the badge's border: ${m.spare} px (its box leaves ${m.boxRoom}, its letters ${m.textRoom})`, Math.abs(m.spare - m.boxRoom) <= 0.1 && Math.abs(m.outer - m.boxRoom) <= 0.1 && m.textRoom - m.spare >= 4, m);
+    await ctx.close(); }
   for (const code of ["C1", "C4", "C4b"]) {
     const one = code !== "C1";
     console.log(`\n[${code}, ${SIZES[code].vp.join("x")}${one ? ", the one-screen layout" : ""}: Tue 24 Nov 2026, 07:10 SGT]`);

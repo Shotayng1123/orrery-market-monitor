@@ -70,6 +70,28 @@ const FOREIGN: FinLayout = {
   },
 };
 
+// Names for a stock's line on its chart's head (N1 of the check of fix part 4: the line, longer by its memberships'
+// credit, was cut at the least window of each text size): Tokyo companies whose names, sectors and industries run as
+// long as real ones do, written as their sources would give them, and one far longer than any listed company's, so the
+// local copy shows how the line fits; every other symbol keeps the mock's own name. `om_mock_names` in this browser's
+// storage (JSON: symbol → [name, sector, industry]) puts others in, of any length (web/e2e/source-lines.cjs [10]).
+const LONG_NAMES: Record<string, [string, string, string]> = {
+  "8035.T": ["Tokyo Electron Limited", "Information Technology", "Semiconductor Equipment & Materials"],
+  "6857.T": ["Advantest Corporation", "Information Technology", "Semiconductor Equipment & Materials"],
+  "7974.T": ["Nintendo Co., Ltd.", "Communication Services", "Electronic Gaming & Multimedia"],
+  "8766.T": ["Tokio Marine Holdings, Inc.", "Financials", "Insurance - Property & Casualty"],
+  "6301.T": ["Komatsu Ltd.", "Industrials", "Farm & Heavy Construction Machinery"],
+  "8306.T": ["Mitsubishi UFJ Financial Group, Inc.", "Financials", "Banks - Diversified"],
+  "6501.T": ["Hitachi, Ltd.", "Industrials", "Specialty Industrial Machinery"],
+  "4063.T": ["Shin-Etsu Chemical Co., Ltd.", "Materials", "Specialty Chemicals"],
+  "9433.T": ["KDDI Corporation", "Communication Services", "Telecom Services"],
+  "9990.T": ["Nippon Stand-in Holdings, a Registered Name Far Longer Than Any Listed Company's, Written Out in Full for the Checks of the Line", "A Stand-in Sector Whose Name Runs Far Longer Than Any GICS Sector's", "A Stand-in Industry Whose Name Runs Far Longer Than Any Industry a Source Gives, for the Checks of the Line"],
+};
+function namesOf(symbol: string): [string, string, string] | null {
+  try { const o: unknown = JSON.parse(localStorage.getItem("om_mock_names") ?? "null"); const x = o && typeof o === "object" ? (o as Record<string, unknown>)[symbol] : null; if (Array.isArray(x) && x.length === 3 && x.every((v) => typeof v === "string")) return x as [string, string, string]; } catch { /* no storage here */ }
+  return LONG_NAMES[symbol] ?? null;
+}
+
 export function mockStock(symbol: string, last?: number, pts: Array<{ t: number; v: number }> = []): StockPage {
   const r = rng(seedOf(symbol)), jp = /\.T$/.test(symbol), now = new Date();
   const drawn = jp ? Math.round(1500 + r() * 4000) : Math.round((60 + r() * 380) * 100) / 100, dayPct = (r() - 0.5) * 5;
@@ -78,6 +100,7 @@ export function mockStock(symbol: string, last?: number, pts: Array<{ t: number;
   const sharesOut = Math.round((scale * 0.07 * 16) / price);   // sized so the mock earnings give a P/E in the teens
   const P = (end: string, label: string, kind: FinPeriod["kind"], months: number, std: string | null, doc: { doc?: string | null; url: string | null; filed: string | null; gone?: string } = { url: null, filed: null }): FinPeriod => ({ key: `${kind}:${end}`, end, label, kind, months, std, doc: doc.doc ?? null, url: doc.url, note: null, filed: doc.filed, ...(doc.gone ? { docGone: doc.gone } : {}) });
   const toyota = symbol === "7203.T", ir = `https://example.com/mock-ir/${symbol.replace(/\W/g, "")}`;
+  const named = namesOf(symbol);
 
   // ---- annual
   const years = jp ? 10 : 4, lastFy = jp ? 2026 : 2025, fyM = jp ? 3 : 12;
@@ -142,8 +165,8 @@ export function mockStock(symbol: string, last?: number, pts: Array<{ t: number;
   const perf = [mk("1D", dayPct, 0.4), mk("1M", (r() - 0.4) * 14, 2.1), mk("3M", (r() - 0.4) * 24, 5.6), mk("6M", (r() - 0.4) * 36, 9.8), mk("12M", (r() - 0.35) * 60, 18.2), mk("36M", (r() - 0.3) * 120, 61.5), jp ? mk("60M", (r() - 0.25) * 180, 88.3) : mk("60M", null, null)];
   const hi = price * 1.22, lo = price * 0.71;
   return {
-    symbol, name: jp ? "Mock Motor Corp" : "Mock Inc.", exchange: jp ? "Tokyo" : "NasdaqGS", currency: jp ? "JPY" : "USD", quoteType: "EQUITY",
-    sector: jp ? "Consumer Discretionary" : "Information Technology", industry: jp ? "Auto Manufacturers" : "Consumer Electronics", indices: jp ? ["NK225", "TOPIX"] : ["SP500", "NDX"],
+    symbol, name: named?.[0] ?? (jp ? "Mock Motor Corp" : "Mock Inc."), exchange: jp ? "Tokyo" : "NasdaqGS", currency: jp ? "JPY" : "USD", quoteType: "EQUITY",
+    sector: named?.[1] ?? (jp ? "Consumer Discretionary" : "Information Technology"), industry: named?.[2] ?? (jp ? "Auto Manufacturers" : "Consumer Electronics"), indices: jp ? ["NK225", "TOPIX"] : ["SP500", "NDX"],
     price, prevClose: price / (1 + dayPct / 100), pct: dayPct, asOf: now.toISOString(), open: price * 0.995, high: price * 1.012, low: price * 0.988, volume: 2.4e7, mcap: price * sharesOut,
     benchmarks: jp ? [{ symbol: "^N225", name: "Nikkei 225", note: null }, { symbol: "1306.T", name: "TOPIX", note: "TOPIX is read from the 1306.T exchange-traded fund that tracks it (the feed has no TOPIX series). The fund pays out the dividends it has collected once a year, so over a period that starts or ends near that payout its change differs a little from the index's." }] : [{ symbol: "^GSPC", name: "S&P 500", note: null }],
     perf, range: { hi, hiDate: iso(new Date(now.getTime() - 96 * 86400e3)), lo, loDate: iso(new Date(now.getTime() - 221 * 86400e3)), fromHi: (price / hi - 1) * 100, fromLo: (price / lo - 1) * 100, pos: ((price - lo) / (hi - lo)) * 100 },

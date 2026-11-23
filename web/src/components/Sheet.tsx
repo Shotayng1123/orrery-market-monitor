@@ -55,12 +55,23 @@ function sheetGone(): void {
 }
 /** Resolves once no sheet's history entry is being stepped out of: at once when none is. */
 export const sheetsSettled = (): Promise<void> => settling ?? Promise.resolve();
+/** The same entry for an overlay that is not a sheet but closes on Back as a sheet does: Help in the phone layout (PP-2
+ *  of the final review of pull request #50: drawn at the page's root since LV-3, it no longer left the screen with the
+ *  phone's menu, and Back moved the page under it unseen). One entry for every sheet and such overlay together.
+ *  `shown` when it opens, `gone` when it closes, `left` on popstate: whether Back has left the entry (it then closes). */
+export const backEntry = {
+  shown: sheetShown,
+  gone: sheetGone,
+  left: (): boolean => { if (marked()) return false; entry = false; return true; },
+};
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /** `title`: the sheet's head. `onClose`: asked for by ✕, Esc, Back and a tap outside. `modal`: a tap outside does not
- *  close it (a statement that must be answered). `id`: the panel's, for the checks. */
-export function Sheet({ title, onClose, children, id, modal = false }: { title: ReactNode; onClose: () => void; children: ReactNode; id?: string; modal?: boolean }) {
+ *  close it (a statement that must be answered). `id`: the panel's, for the checks. `foot`: a form's two buttons, in a
+ *  foot that does not scroll (the designer's B.1 UI-13: CANCEL and the action side by side, 52 px, equal widths, 12 px
+ *  above the window's foot and the phone's safe area); the body scrolls between the head and the foot. */
+export function Sheet({ title, onClose, children, id, modal = false, foot }: { title: ReactNode; onClose: () => void; children: ReactNode; id?: string; modal?: boolean; foot?: ReactNode }) {
   const panel = useRef<HTMLDivElement>(null), label = useId();
   const close = useRef(onClose);
   close.current = onClose;
@@ -82,7 +93,7 @@ export function Sheet({ title, onClose, children, id, modal = false }: { title: 
       if (e.shiftKey && (at === first || at === el || !el.contains(at))) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && (at === last || !el.contains(at))) { e.preventDefault(); first.focus(); }
     };
-    const pop = () => { if (!marked()) { entry = false; close.current(); } };   // Back: the sheet's entry was left
+    const pop = () => { if (backEntry.left()) close.current(); };   // Back: the sheet's entry was left
     document.addEventListener("keydown", key, true);
     window.addEventListener("popstate", pop);
     return () => {
@@ -97,7 +108,8 @@ export function Sheet({ title, onClose, children, id, modal = false }: { title: 
     <div className="sheet-bg" onClick={(e) => { if (!modal && e.target === e.currentTarget) onClose(); }}>
       <div className="sheet" id={id} ref={panel} role="dialog" aria-modal="true" aria-labelledby={label} tabIndex={-1}>
         <div className="sheet-head"><span className="t" id={label}>{title}</span><button type="button" className="x" aria-label="Close" onClick={onClose}>&times;</button></div>
-        <div className="sheet-body">{children}</div>
+        <div className={`sheet-body${foot ? " hasfoot" : ""}`}>{children}</div>
+        {foot && <div className="sheet-foot">{foot}</div>}
       </div>
     </div>
   );

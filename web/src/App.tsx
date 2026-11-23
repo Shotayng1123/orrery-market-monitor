@@ -2,6 +2,7 @@ import { pageHash } from "./lib/indices";
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Topbar, VIEWS, type ViewId } from "./components/Topbar";
 import { CrashSwitch, TabGuard } from "./components/TabGuard";
+import { unloadedTab } from "./components/PortfolioUnloaded";
 import { Gate } from "./auth/Gate";
 import { takeVerifyLink } from "./lib/verify";
 import { api, apiConfigured, getToken, signOutHere, tokenId, type Me } from "./lib/api";
@@ -39,8 +40,10 @@ import { CardLayer } from "./components/CompanyCard";
 import { navChanged, navDrawn, navPopped, navStart } from "./lib/nav";
 
 // The paper portfolio's screens (P-1) are a file of their own, asked for when the tab is first opened, and only where
-// the build carries the paper book (lib/paper.ts): a build with the switch off does not make that file.
-const PortfolioView = __PAPER_BUILD__ ? lazy(() => import("./views/Portfolio")) : null;
+// the build carries the paper book (lib/paper.ts): a build with the switch off does not make that file. A file that
+// cannot be loaded in this page (a later publish replaced it; the device is offline and never opened the tab) gives a
+// tab that says so and offers UPDATE or RELOAD (DC-4: components/PortfolioUnloaded.tsx), never the crash notice.
+const PortfolioView = __PAPER_BUILD__ ? lazy(() => import("./views/Portfolio").catch((e: unknown) => ({ default: unloadedTab(e) }))) : null;
 
 interface Route { view: ViewId; sub: string }
 function parseHash(): Route {

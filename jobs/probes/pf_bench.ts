@@ -256,8 +256,11 @@ head("2. iShares (UK): the London Global Aggregate fund, found by its name in th
       head("2a. iShares (UK): its terms, by the list page's own link (before its product list's data is read)");
       const t0 = await readTerms(lp, { allows: (x) => rbIsh.allows(x), gapMs: GAP });
       if (t0.barred) console.log("  the UK site's terms bar automated reading or re-use (above): its product list and the fund's holdings file are not opened; FOR THE OWNER");
+      // the product list's data needs the site's terms read in this run and not barred, as BlackRock Japan's files do
+      // (PX-4 of the review of fix part 1: on a failed terms page the list's data was asked with nothing read)
+      else if (!t0.read) console.log("  the UK site's terms were not read in this run: its product list's data, the fund's page and its holdings file are not asked (the UK terms read on 21 Nov 2026 carry a ban: C/probes/pf_bench.log)");
       head("2b. iShares (UK): the fund in the product list, and its page");
-      const r = sc && rbIsh.allows(sc) && !t0.barred ? await look(sc, { headers: { accept: "application/json" }, show: 0, timeoutMs: 60000 }) : null;
+      const r = sc && rbIsh.allows(sc) && t0.read && !t0.barred ? await look(sc, { headers: { accept: "application/json" }, show: 0, timeoutMs: 60000 }) : null;
       if (r) await pause(GAP);
       const items = r ? itemsOf(r.text) : [];
       const hits = items.filter((o) => /core global aggregate bond/i.test(String(o.fundName ?? "")));
@@ -278,7 +281,7 @@ head("2. iShares (UK): the London Global Aggregate fund, found by its name in th
           head("2c. iShares (UK): the fund's holdings file: the dollar share (V-14) and the Global Aggregate's profile (P-4c)");
           if (!h) console.log("  no holdings file is linked on the page");
           else if (t.barred) console.log(`  linked (${masked(h.href)}), but the UK site's terms bar it (above): not opened; FOR THE OWNER`);
-          else if (!t.read) console.log(`  linked (${masked(h.href)}), but the UK site's terms were not found: not opened (a site this probe has not read before)`);
+          else if (!t.read) console.log(`  linked (${masked(h.href)}), but the UK site's terms were not found in this run: not opened`);
           else await holdings("the London fund's holdings file", h.href, rbIsh);
         }
       } else if (hits.length) console.log("  no page address for it in the list");
@@ -341,7 +344,7 @@ head("5. BlackRock Japan: the iShares Core TOPIX ETF (1475), found in the Japane
       head("5b. BlackRock Japan: 1475 in the list, its page, its holdings file");
       const r = sc && rb.allows(sc) && ok ? await look(sc, { headers: { accept: "application/json" }, show: 0, timeoutMs: 60000 }) : null;
       if (r) await pause(GAP);
-      if (!ok) console.log(`  the site's terms ${t.barred ? "bar automated reading or re-use (above): FOR THE OWNER" : "were not found (a site this probe has not read before)"}: its list and its holdings file are not opened`);
+      if (!ok) console.log(`  the site's terms ${t.barred ? "bar automated reading or re-use (above): FOR THE OWNER" : "were not found in this run"}: its list and its holdings file are not opened`);
       const items = r ? itemsOf(r.text) : [];
       const o = items.find((x) => String(x.localExchangeTicker ?? "") === "1475") ?? items.find((x) => /TOPIX/i.test(String(x.fundName ?? "")) && /コア|core/i.test(String(x.fundName ?? "")));
       if (r) console.log(`  ${items.length} products; 1475: ${o ? `${o.fundName ?? "–"} · ${Object.entries(o).filter(([k, v]) => /^(fees|ter|navAmount|navAmountAsOf|inceptionDate)$|benchmark|index/i.test(k) && v != null && v !== "").map(([k, v]) => `${k} ${show(v)}`).join(", ")}` : "not in the list"}`);

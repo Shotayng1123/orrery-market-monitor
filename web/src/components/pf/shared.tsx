@@ -18,7 +18,14 @@ const LAST = "om_pf_last";
 export const lastBook = (): string | null => { try { return localStorage.getItem(LAST); } catch { return null; } };
 export const setLastBook = (id: string | null): void => { try { if (id) localStorage.setItem(LAST, id); else localStorage.removeItem(LAST); } catch { /* not kept */ } };
 
-// ---- the line at the foot that says a thing was done ("Paper portfolio created · …"), for six seconds ----
+// ---- a book just created (the designer's B.2 lead 6): its Overview lights the BOOK card's "created" line for six
+// seconds and says it in a status the eye does not see; nothing is drawn over the page ----
+let made: { id: string; name: string; at: number } | null = null;
+export const markCreated = (id: string, name: string): void => { made = { id, name, at: Date.now() }; };
+/** Whether a book was created in this page less than six seconds ago, and its name. */
+export const justCreated = (id: string): { name: string; left: number } | null => (made && made.id === id && Date.now() - made.at < 6000 ? { name: made.name, left: 6000 - (Date.now() - made.at) } : null);
+
+// ---- the line at the foot that says a thing was done ("Paper portfolio deleted · …"), for six seconds ----
 let flashText: string | null = null, flashTimer: ReturnType<typeof setTimeout> | undefined;
 const flashSubs = new Set<() => void>();
 export function flash(text: string): void {
@@ -93,6 +100,7 @@ export function NumInput({ field, value, onChange, onBlur, refusal, phone = fals
           onChange={(e) => onChange(e.target.value)} onBlur={onBlur} autoFocus={autoFocus} />
         {n?.unit && <span className="unit">{n.unit}</span>}
       </span>
+      {n?.note && <span className="pf-unitnote">{n.note}</span>}
       {refusal && <span className="pf-no" id={`${key}-no`} role="alert">{refusal}</span>}
     </span>
   );

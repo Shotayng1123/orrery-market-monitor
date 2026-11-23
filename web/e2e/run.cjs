@@ -3,7 +3,10 @@
 //
 //   node e2e/run.cjs                          every suite
 //   node e2e/run.cjs offline notifications    only these (names as in SUITES below)
-//   node e2e/run.cjs --serial                 one suite at a time (default: three at once)
+//   node e2e/run.cjs --serial                 one suite at a time (default: up to three at once, two of the dev
+//                                             servers' suites and one of the built site's; part 1 has none of those)
+//   node e2e/run.cjs --part=1                 the first of the two halves GitHub runs as two jobs (deploy-web.yml),
+//   node e2e/run.cjs --part=2                 and the second: every suite not in PART_ONE below
 //
 // The runner starts the servers the chosen suites need, runs the suites, tries a failed one once more, prints
 // one line per suite (with the failed lines of a first try that the second try passed) and exits with 1 if any
@@ -63,16 +66,36 @@ const SUITES = [
   { name: "shut-reasons", needs: ["mock", "standin"] },
   { name: "nav-hold", needs: ["mock", "standin"] },
   { name: "header", needs: ["mock"] },
+  { name: "header-sizes", needs: ["mock"] },
+  { name: "header-wide", needs: ["mock"] },
   { name: "portfolio", needs: ["mock", "standin"] },
   { name: "phone-portfolio", needs: ["mock"] },
   { name: "layout-guard-portfolio", needs: ["mock"] },
   { name: "portfolio-accounts", needs: ["mock", "gate"] },
+  { name: "source-lines", needs: ["mock"] },
+  { name: "source-lines-fit", needs: ["mock"] },
+  { name: "stock-line", needs: ["mock"] },
+  { name: "portfolio-fixes", needs: ["mock"] },
+  { name: "pf-verdicts-forms", needs: ["mock"] },
+  { name: "pf-verdicts-settings", needs: ["mock"] },
 ];
+// The publish's browser checks run on GitHub as two jobs, each with its own 30-minute limit (deploy-web.yml): at the
+// fixes after the final review of pull request #50 the one job took 25 min 17 s of its 30 (run 45080955695, 22 Nov
+// 2026, 23:01 to 23:27 UTC). PART_ONE is about half of the suites' time (the per-suite seconds of the whole run of 22
+// Nov, GitHub's letter placement, 3,573 s in all; on d549a59 GitHub's two browser steps took 12 min 2 s and 12 min 37 s),
+// and part 2 every other suite, so a new suite is never left out: it joins part 2 until it is placed here. The suites of
+// the built site stay together in part 2 (the build is made once there). source-lines-fit joined part 1 and stock-line
+// part 2 when they left source-lines (the check of fix part 4).
+const PART_ONE = ["accounts", "calendar-default", "chart-pointer", "classic-phone", "dropdowns", "header-wide", "install-hint", "layout-guard", "layout-guard-closed", "layout-guard-instruments", "nothing-cut", "opening", "opens", "pf-verdicts-forms", "phone-default", "phone-first", "phone-market", "portfolio", "portfolio-fixes", "results-dates", "source-lines-fit", "stale-feed", "stock-page", "units-labels", "welcome-mail"];
 
 const args = process.argv.slice(2), serial = args.includes("--serial"), names = args.filter((a) => !a.startsWith("--"));
+const part = (args.find((a) => a.startsWith("--part=")) ?? "").slice(7);
+if (part && part !== "1" && part !== "2") { console.error(`--part=1 or --part=2, not "${part}"`); process.exit(2); }
+const strays = PART_ONE.filter((n) => !SUITES.some((s) => s.name === n));
+if (strays.length) { console.error(`PART_ONE names a suite that is not in SUITES: ${strays.join(", ")}`); process.exit(2); }
 const unknown = names.filter((n) => !SUITES.some((s) => s.name === n));
 if (unknown.length) { console.error(`unknown suite: ${unknown.join(", ")}\nsuites: ${SUITES.map((s) => s.name).join(", ")}`); process.exit(2); }
-const chosen = names.length ? SUITES.filter((s) => names.includes(s.name)) : SUITES;
+const chosen = (names.length ? SUITES.filter((s) => names.includes(s.name)) : SUITES).filter((s) => !part || (part === "1") === PART_ONE.includes(s.name));
 
 const up = (port) => new Promise((res) => { const rq = http.get({ host: "localhost", port, path: BASE, timeout: 2000 }, (r) => { r.resume(); res(r.statusCode === 200); }); rq.on("error", () => res(false)); rq.on("timeout", () => { rq.destroy(); res(false); }); });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -128,9 +151,10 @@ async function run(suite) {
   try {
     console.log("servers:");
     for (const id of Object.keys(SERVERS)) if (chosen.some((s) => s.needs.includes(id))) await start(id);   // one after another: they share vite's dependency cache
-    console.log(`\nsuites (${chosen.length}${serial ? ", one at a time" : ", three at once"}):`);
-    // suites of the built site rewrite its files, so they queue behind each other; the rest run alongside
+    // suites of the built site rewrite its files, so they queue behind each other; the rest run alongside, two at a time
     const queue = [...chosen.filter((s) => !s.needs.includes("built"))], builtQueue = chosen.filter((s) => s.needs.includes("built"));
+    const atOnce = serial ? 1 : Math.min(2, queue.length) + (builtQueue.length ? 1 : 0);
+    console.log(`\nsuites (${chosen.length}, ${["none", "one at a time", "two at once", "three at once"][atOnce] ?? `${atOnce} at once`}):`);
     const lanes = serial ? [async () => { for (const s of [...queue, ...builtQueue]) results.push(await run(s)); }]
       : [async () => { for (const s of builtQueue) results.push(await run(s)); }, ...[0, 1].map(() => async () => { for (let s = queue.shift(); s; s = queue.shift()) results.push(await run(s)); })];
     await Promise.all(lanes.map((f) => f()));

@@ -6,23 +6,80 @@
 // printed every line that held a match, cut at 220 characters: four sentences of JPX's prose, two navigation labels,
 // seventeen link labels and three notice titles went into a public job log. So nothing here returns a line of a page.
 // What a page gives is one of:
-//   - a value with the few words beside it (`valueBits`: the match and at most two words on each side);
+//   - its values (`valueBits`): the matches of one line in order, joined only by the one short word that stands
+//     between two of them ("9:00 am to 11:30 am"); never the words around them. (Until 22 Nov 2026 each value came with
+//     two words on each side, and on JPX's trading-hours page the pieces of one paragraph touched and overlapped, so
+//     consecutive lines gave back its sentences: PX-1 of the review of fix part 1);
 //   - the cells of a table of figures (`figureTables`: a table most of whose cells are figures; a cell of prose in it
 //     is counted, not printed; a table of notices or of text is not a table of figures and is left out whole);
 //   - a date the page gives for a market holiday (`calendarDays`: the date itself, from a line that carries its weekday).
 // `sayable` is the last guard: pf_jpx passes every piece of a page it prints through it.
-import { addressOf, decoded, tablesOf, textLines } from "./lib.ts";
+import { addressOf, decoded, firstHeading, tablesOf, textLines, titleOf } from "./lib.ts";
 
-/** The most words a printed piece of a page may have (a value with its words beside it, a table cell, a label). */
+/** The most words a printed piece of a page may have (a run of values, a table cell, a label). */
 export const MAX_WORDS = 9;
 const words = (s: string): string[] => s.trim().split(/\s+/).filter(Boolean);
 const CJK = /[぀-ヿ㐀-鿿]/;
 /** The characters of a piece written without spaces between words (Japanese), its figures and marks aside. */
 const jaLength = (t: string): number => t.replace(/[\s\d\/（）().,:：|%％-]/g, "").length;
-/** Whether a piece of a page may be printed: no more than MAX_WORDS words and 90 characters; and, where it is written
- *  without spaces between words (Japanese), no more than 28 characters and no full stop (。): a Japanese sentence may be
- *  shorter than that, but it ends with one ("2026年9月22日（火）は、…休日です。" is 21 characters, and went into the log). */
-export const sayable = (s: string): boolean => { const t = s.trim(); return words(t).length <= MAX_WORDS && t.length <= 90 && !(CJK.test(t) && (t.includes("。") || jaLength(t) > 28)); };
+/** A piece that reads as a sentence, however short: it ends with a full stop, a question or an exclamation mark after
+ *  a word (not an abbreviation such as "a.m." or "No."), it holds two sentences, or it says something with a verb of
+ *  being, of the modal kind or of what is done ("Orders are accepted from 8:00 am", "Short selling is prohibited");
+ *  in Japanese, one that ends as a sentence does (です, ます, ません …). A label, a figure or a date says nothing of
+ *  the kind ("Tick Size (yen)", "More than 3,000 yen up to 5,000 yen", "2026/11/23（月） 勤労感謝の日"). */
+const ABBREV = /(?:\b[a-z]\.|\b(?:no|nos|vol|approx|etc|inc|ltd|co|corp|jr|sr|st|vs|e\.g|i\.e)\.)$/i;
+// lower case only, so that the month "May" is no verb; a sentence that opens with one is caught by VERB_FIRST
+const VERB = /\b(?:is|are|was|were|be|been|being|will|shall|may|might|must|can|cannot|could|should|would|has|have|had|do|does|did|accepted|applies|apply|applied|prohibited|permitted|allowed|required|means|refers)\b/;
+const VERB_FIRST = /^(?:Is|Are|Was|Were|Will|Shall|Must|Can|Cannot|Could|Should|Would|Do|Does|Did|Has|Have|Had)\b/;
+const JA_END = /(?:です|ます|ません|でした|ました|である|となる|となります|ください|下さい)[）)」』]?$/;
+export const sentenceLike = (s: string): boolean => {
+  const t = s.trim();
+  if (CJK.test(t) && JA_END.test(t.replace(/[\s.。]+$/, ""))) return true;
+  if (/[.!?]$/.test(t) && /[A-Za-z]{2,}[.!?]$/.test(t) && !ABBREV.test(t)) return true;
+  if (/[a-z]{2,}[.!?]\s+[A-Z]/.test(t)) return true;
+  return VERB.test(t) || VERB_FIRST.test(t);
+};
+// ---- the closed list (PL-1 of the final review of pull request #50) ----
+// sentenceLike knows a sentence only by its signs, and a short statement with any other verb passed it: "Trading
+// resumes at 12:30 pm" as a cell, "The afternoon session ends at 3:30 pm" as the label before a table, 取引は9時に始まる.
+// So a piece is printed only when it is made of figures, dates, clock times and the words of a closed list: the labels,
+// units and joining words JPX's tables of figures carry (the logs of 20 and 21 Nov 2026 and the checks' pages). A piece
+// without a figure must be one of the labels whole in English; in Japanese it may be the list's labels joined by の,
+// から and まで ("構成銘柄以外の銘柄"); one with figures may hold, beside them, only words of the list. Anything else is
+// counted, not printed. A new label JPX adds is held until it is put here. Many of the list's words can be read as
+// verbs as well as nouns (changes, limits, limit, order, note, quote, issues, issue, shares, share, prices, price,
+// groups, spread, rules, market and others): a piece made of the list's words and figures alone passes as it stands,
+// whatever it says ("TOPIX changes from 2027", "Order 100 shares", "TOPIX groups issues from 2027", "Short selling
+// rules 10% of prices"; the checks of fix parts 3 and 4); only a word outside the list, a verb among them, holds it.
+const LABELS = new Set(["price per share (yen)", "tick size (yen)", "tick size", "tick sizes", "up to", "over", "less than", "more than", "or more", "or less", "previous day's closing price/special quote (yen)", "previous day's closing price", "special quote", "daily price limits (yen)", "daily price limits", "daily price limit (yen)", "daily price limit", "base price (yen)", "base price", "morning session", "afternoon session", "auction trading", "order acceptance", "note", "notes", "other issues", "topix500 constituents", "trading rules of domestic stocks", "trading hours", "trading unit", "date", "code", "name"]);
+const LABEL_WORDS = new Set(("yen million billion thousand units unit shares share am pm a.m p.m % to and or up over under less than more from until till through per of no " +
+  "price prices tick size sizes previous day's day days closing special quote daily limits limit base morning afternoon session sessions auction trading order acceptance note other issues issue " +
+  "constituents constituent topix changes effective rules domestic stocks short selling market holiday holidays str spread-to-tick spread ratio class classes group groups category categories " +
+  "jan feb mar apr may jun jul aug sep sept oct nov dec january february march april june july august september october november december mon tue wed thu fri sat sun").split(" "));
+// Japanese: the labels and units its tables and holiday rows carry; the particles の, から and まで between them
+const JA_LABELS = ["勤労感謝の日", "建国記念の日", "スポーツの日", "みどりの日", "こどもの日", "成人の日", "春分の日", "秋分の日", "昭和の日", "文化の日", "敬老の日", "海の日", "山の日", "国民の休日", "振替休日", "天皇誕生日", "憲法記念日", "休業日", "元日", "祝日", "休日",
+  "構成銘柄", "銘柄", "以外", "以上", "以下", "未満", "値段", "呼値", "値幅", "制限", "単元", "前場", "後場", "立会", "円", "超", "株", "年", "月", "日", "時", "分"];
+const isFig = (w: string): boolean => /\d/.test(w) || /^[-–—~〜～&±/|%％:：]+$/.test(w) || w === "&plusmn;";
+/** Whether a piece holds nothing but figures, dates, clock times and the closed list's labels and words (above). */
+export const labelOnly = (s: string): boolean => {
+  const t = s.replace(/\s+/g, " ").trim();
+  if (!t) return true;
+  const latin = t.replace(/[぀-ヿ㐀-鿿（）]/g, " ").split(/[\s/|]+/).map((w) => w.toLowerCase().replace(/^[(\["“'‘]+|[)\]"”'’,.:;\-–]+$/g, "")).filter(Boolean);
+  const latinOk = latin.every((w) => isFig(w) || LABEL_WORDS.has(w) || LABEL_WORDS.has(w.replace(/\.$/, "")));
+  if (CJK.test(t)) {
+    let r = t.replace(/[（(][日月火水木金土][）)]/g, " ").replace(/[A-Za-z0-9.,:：/%％()（）\-–~〜～・、|\s]+/g, " ");
+    for (const tok of JA_LABELS) r = r.split(tok).join(" ");
+    return latinOk && r.replace(/から|まで|の/g, " ").trim() === "";
+  }
+  if (!/\d/.test(t)) return LABELS.has(t.toLowerCase().replace(/[.:]$/, ""));
+  return latinOk;
+};
+/** Whether a piece of a page may be printed: no more than MAX_WORDS words and 90 characters, nothing that reads as a
+ *  sentence (sentenceLike), however short (PX-1: a table cell, a heading or a title piece of up to nine words could
+ *  carry a whole sentence); where it is written without spaces between words (Japanese), no more than 28 characters
+ *  and no full stop (。): "2026年9月22日（火）は、…休日です。" is 21 characters, and went into the log; and nothing
+ *  but figures, dates, clock times and the closed list's labels and words (labelOnly, PL-1). */
+export const sayable = (s: string): boolean => { const t = s.trim(); return words(t).length <= MAX_WORDS && t.length <= 90 && !sentenceLike(t) && !(CJK.test(t) && (t.includes("。") || jaLength(t) > 28)) && labelOnly(t); };
 
 /** Whether an address is on jpx.co.jp: the host itself or one under it, as a request reads the address (lib.ts). */
 export const onJpx = (url: string): boolean => { const a = addressOf(url); return !!a && (a.host === "jpx.co.jp" || a.host.endsWith(".jpx.co.jp")); };
@@ -38,34 +95,42 @@ export const linkedOnJpx = (links: Array<{ href: string; text: string }>, want: 
  *  stocks is what the first run read by mistake. */
 export const SHORT_SELLING = /short[- ]?sell/i, RULE_WORD = /regulat|restrict|rule|price/i, NOT_A_RULE = /value|ratio|statistic|data|list|trigger|balance|report|daily|weekly|monthly|outstanding/i;
 export const shortRuleLink = (links: Array<{ href: string; text: string }>): { href: string; text: string } | null => linkedOnJpx(links, SHORT_SELLING, RULE_WORD, NOT_A_RULE);
+/** Whether a page taken by its link's name is, by its own title or first heading, a page of figures, names or a
+ *  report and not a rule page: nothing of it is printed then. JPX's section "Short Selling Regulation- Information"
+ *  passes the link's test, and the page behind it is the daily list of triggered stocks (PX-6 of the review of fix
+ *  part 1). */
+export const notRulePage = (html: string): boolean => [titleOf(html), firstHeading(html)].some((t) => NOT_A_RULE.test(t));
 /** The addresses of the links that name short selling on jpx.co.jp and were not taken as the rule page (addresses
  *  only: a person reads them and gives the rule page's address). */
 export const shortOtherLinks = (links: Array<{ href: string; text: string }>): string[] => { const taken = shortRuleLink(links)?.href; return [...new Set(links.filter((l) => SHORT_SELLING.test(l.text) && onJpx(l.href) && l.href !== taken).map((l) => l.href))]; };
 
-/** The values a page's text gives: every match of `want`, each with at most `around` words before and after it, as one
- *  short piece ("from 9:00 am to 11:30"); in text without spaces, at most eight characters on each side, and none
- *  from beyond the sentence's end (。). Each piece once, at most `max`. Never a whole line. */
-export function valueBits(lines: string[], want: RegExp, max = 30, around = 2): string[] {
+/** The one short word that may stand between two values a page gives ("9:00 am to 11:30 am", "8:00 am and 12:05
+ *  pm", 9:00～11:30): a word that joins a range or a pair, nothing that says what the values are about. */
+const JOIN = /^(?:to|and|or|until|till|through|thru|-|–|—|~|〜|～|&|\/|から|まで|及び|および|・|、)$/i;
+/** The values a page's text gives: in each line (each table cell of it, each Japanese sentence), the matches of
+ *  `want` in order, one piece per run of values that only a joining word (JOIN) or nothing stands between: "9:00 am to
+ *  11:30 am". No word around the values is printed, so no two pieces can carry the page's words between them, and the
+ *  pieces of a paragraph cannot be read back into its sentences (PX-1). Each piece once, at most `max`. */
+export function valueBits(lines: string[], want: RegExp, max = 30): string[] {
   const re = new RegExp(want.source, want.flags.includes("g") ? want.flags : `${want.flags}g`), out: string[] = [], seen = new Set<string>();
+  // a clock time's "pm" takes the sentence's full stop with it ("3:30 pm."): it is the sentence's, not the value's
+  const push = (bit: string) => { const b = bit.replace(/\s+/g, " ").trim().replace(/(\d\s*[ap]m)\.$/i, "$1"); if (!b || seen.has(b)) return; seen.add(b); if (out.length < max) out.push(b); };
   for (const line of lines) {
+    let run = "", prevEnd = -1;
     for (const m of line.matchAll(re)) {
-      if (!m[0].trim()) continue;
-      const at = m.index ?? 0, end = at + m[0].length;
-      let bit: string;
-      if (CJK.test(line) && words(line).length <= 3) {
-        const left = line.slice(0, at).split(/[。|]/).pop() ?? "", right = line.slice(end).split(/[。|]/)[0] ?? "";
-        bit = `${left.length > 8 ? "…" : ""}${left.slice(-8)}${m[0]}${right.slice(0, 8)}${right.length > 8 ? "…" : ""}`;
-      } else {
-        // the words beside the value, within its own table cell: a cell's edge (" | " in a line of text) is not crossed
-        const left = line.slice(0, at).split("|").pop() ?? "", right = line.slice(end).split("|")[0] ?? "";
-        const before = words(left).slice(-around), after = words(right).slice(0, around);
-        bit = `${words(left).length > around ? "… " : ""}${[...before, m[0].trim(), ...after].map((w) => (w.length > 24 ? `${w.slice(0, 24)}…` : w)).join(" ")}${words(right).length > around ? " …" : ""}`;
-      }
-      bit = bit.replace(/\s+/g, " ").replace(/ ([,.;:)）、])/g, "$1").trim();
-      if (seen.has(bit)) continue;
-      seen.add(bit);
-      if (out.length < max) out.push(bit);
+      const val = m[0].trim();
+      if (!val) continue;
+      const at = m.index ?? 0;
+      if (prevEnd >= 0) {
+        const gap = line.slice(prevEnd, at), g = gap.trim();
+        // a cell's edge (" | "), a sentence's end, or more than one word between two values: the run ends there
+        const joins = !/[|。]/.test(gap) && !/[.!?;]\s/.test(gap) && (g === "" || g === "," || (words(g).length === 1 && JOIN.test(g)));
+        // in Japanese the joining word stands with no space ("9時00分から11時30分")
+        if (joins) run += g === "" ? ` ${val}` : g === "," ? `, ${val}` : CJK.test(g) || /^[〜～~]$/.test(g) ? `${g}${val}` : ` ${g} ${val}`; else { push(run); run = val; }
+      } else run = val;
+      prevEnd = at + m[0].length;
     }
+    if (run) push(run);
   }
   return out;
 }
@@ -73,9 +138,9 @@ export function valueBits(lines: string[], want: RegExp, max = 30, around = 2): 
 const digitsOf = (c: string): number => (c.match(/[\d.,:%]/g) ?? []).length;
 /** A cell that is a figure: it holds a digit, and it is short (three words at most; in Japanese, which has no spaces
  *  between words, twelve characters beside its figures) or at least three of its ten characters are digits and their
- *  marks ("More than 3,000 yen up to 5,000 yen" is; a notice's title with a year in it is not). A Japanese sentence
- *  (it ends with 。) is none, whatever figures it holds. */
-export const figureCell = (c: string): boolean => /\d/.test(c) && !(CJK.test(c) && c.includes("。")) && ((words(c).length <= 3 && (!CJK.test(c) || jaLength(c) <= 12)) || digitsOf(c) / Math.max(1, c.replace(/\s/g, "").length) >= 0.3);
+ *  marks ("More than 3,000 yen up to 5,000 yen" is; a notice's title with a year in it is not). A sentence (it ends
+ *  with 。, or reads as one: sentenceLike) is none, whatever figures it holds. */
+export const figureCell = (c: string): boolean => /\d/.test(c) && !(CJK.test(c) && c.includes("。")) && !sentenceLike(c) && labelOnly(c) && ((words(c).length <= 3 && (!CJK.test(c) || jaLength(c) <= 12)) || digitsOf(c) / Math.max(1, c.replace(/\s/g, "").length) >= 0.3);
 /** A cell as it may be printed: a figure or a label (cut at 40 characters); a cell of prose is not printed, only said
  *  to be there. */
 export const cellOut = (c: string): string => (c === "" ? "" : figureCell(c) || sayable(c) ? (c.length > 40 ? `${c.slice(0, 40)}…` : c) : CJK.test(c) && words(c).length <= 3 ? `(text of ${c.length} characters: not printed)` : `(text of ${words(c).length} words: not printed)`);

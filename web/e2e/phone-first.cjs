@@ -193,9 +193,11 @@ const near = (v, want, tol = 0.5) => v != null && Math.abs(v - want) <= tol;
     await p.route("**/fakeapi?*", (r) => (new URL(r.request().url()).searchParams.get("action") === "alerts" ? r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ rows: [row] }) }) : r.fallback()));
     await p.goto(STANDIN + "#market", { waitUntil: "networkidle" }); await p.waitForSelector("#alerts .alrt .one .fig"); await p.evaluate(() => document.fonts.ready); await p.waitForTimeout(400);
     const tight = () => p.evaluate(() => { const al = document.querySelector("#alerts .alrt"), one = al.querySelector(".one"), m = window.__room, R = (e) => e.getBoundingClientRect(), t = (s) => al.querySelector(s)?.textContent ?? null, seen = (s) => al.querySelector(s)?.innerText.replace(/\s+/g, " ").trim() ?? null;
-      // the floor: the name's first letter and "…", drawn in the name's own box (its face, size and spacing)
-      const nm = one.querySelector(".nm"), probe = nm.cloneNode(false); probe.textContent = `${nm.textContent.slice(0, 1)}…`; probe.style.cssText = "position:absolute;visibility:hidden;left:0;top:0;width:auto;min-width:0;max-width:none;flex:none"; nm.parentElement.appendChild(probe); const floor = R(probe).width / m.z(); probe.remove();
-      return { vw: innerWidth, h: R(al).height, lit: al.classList.contains("new"), pulse: getComputedStyle(al).animationName, fit: document.querySelector("#alerts").className.trim(), k: t(".k"), kSeen: seen(".k"), kd: t(".one .kd"), nm: t(".one .nm"), fig: t(".one .fig"), time: t(".t"), timeSeen: seen(".t"), box: Math.round(R(one).width * 10) / 10, figIn: m.within(one.querySelector(".fig"), one), kdIn: m.within(one.querySelector(".kd"), one), nameLeft: Math.round(R(nm).width / m.z() * 10) / 10, floor: Math.round(floor * 10) / 10, lineIn: Math.min(...[...al.querySelectorAll(".k,.t")].map((e) => m.within(e, al))), ox: document.documentElement.scrollWidth - innerWidth }; });
+      // the floor: the name's first letter and "…", measured as the fit measures it (components/Alerts.tsx keepWidth: a
+      // hidden span inside the name, so in its face, size and spacing; until 22 Nov 2026 a clone beside it)
+      const nm = one.querySelector(".nm"), probe = document.createElement("span"); probe.textContent = `${[...nm.textContent][0]}…`; probe.style.cssText = "position:absolute;visibility:hidden;white-space:pre;left:0;top:0"; nm.appendChild(probe); const floor = R(probe).width / m.z(); probe.remove();
+      const hd = document.querySelector("#alerts"), trace = { fit: hd.dataset.fit ?? null, name: hd.dataset.fitName ?? null, cut: hd.dataset.fitCut ?? null };
+      return { vw: innerWidth, h: R(al).height, lit: al.classList.contains("new"), pulse: getComputedStyle(al).animationName, fit: document.querySelector("#alerts").className.trim(), k: t(".k"), kSeen: seen(".k"), kd: t(".one .kd"), nm: t(".one .nm"), fig: t(".one .fig"), time: t(".t"), timeSeen: seen(".t"), box: Math.round(R(one).width * 10) / 10, figIn: m.within(one.querySelector(".fig"), one), kdIn: m.within(one.querySelector(".kd"), one), nameLeft: Math.round(R(nm).width / m.z() * 10) / 10, floor: Math.round(floor * 10) / 10, lineIn: Math.min(...[...al.querySelectorAll(".k,.t")].map((e) => m.within(e, al))), ox: document.documentElement.scrollWidth - innerWidth, trace }; });
     for (const font of ["the machine's fonts", "every letter drawn 2% of its size wider", "a wide font forced"]) {
       if (font.startsWith("every")) { await widen(p); await p.waitForTimeout(150); }
       if (font.startsWith("a wide")) { await p.reload({ waitUntil: "networkidle" }); await p.waitForSelector("#alerts .alrt .one .fig"); await p.evaluate(() => document.fonts.ready); await p.addStyleTag({ content: MONO }); await p.waitForTimeout(400); }
@@ -226,5 +228,20 @@ const near = (v, want, tol = 0.5) => v != null && Math.abs(v - want) <= tol;
     const v = await p.evaluate(() => ({ one: document.querySelector(".mp-head").classList.contains("one"), sub: document.querySelector(".mp-head .mp-asof")?.innerText.trim() ?? "", h: Math.round(document.querySelector(".mp-head").getBoundingClientRect().height), sigma: !!document.querySelector("#mk-sigma"), ox: document.documentElement.scrollWidth - innerWidth }));
     ck(`while the table does not come the line is under the title as before ("${v.sub.slice(0, 60)}"), the row ${v.h} px, and there is no σ head`, !v.one && v.sub.length > 0 && v.h > 44 && !v.sigma && v.ox <= 0, v);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+
+  // PP-3 of the final review of pull request #50: the line's fit ran after every render of the header, whose clock
+  // renders it every second: twice a second on a page left alone, 12 forced layouts a second. It runs on its triggers
+  // only (a render that changes what the line draws, a change of its width, the fonts).
+  console.log("\n[a page left alone: the line's fit does not run]");
+  { const { ctx, p, errs } = await page(b, "P1", MORNING, { om_alert_seen: "999999999" });
+    await go(p, MOCK, "#market", "#alerts .alrt .nm"); await p.waitForTimeout(1200);
+    const fit = await p.evaluate(() => document.querySelector("#alerts").dataset.fit ?? null);
+    await p.evaluate(() => { window.__fitW = 0; window.__spans = 0; new MutationObserver((ms) => { for (const m of ms) { if (m.type === "attributes") window.__fitW++; else for (const n of m.addedNodes) if (n.nodeType === 1 && n.style && n.style.visibility === "hidden") window.__spans++; } }).observe(document.querySelector("#alerts"), { attributes: true, attributeFilter: ["data-fit", "data-fit-name", "data-fit-cut"], childList: true, subtree: true }); });
+    const cdp = await ctx.newCDPSession(p); await cdp.send("Performance.enable");
+    const layouts = async () => (await cdp.send("Performance.getMetrics")).metrics.find((m) => m.name === "LayoutCount").value;
+    const l0 = await layouts(); await p.waitForTimeout(5000); const l1 = await layouts();
+    const idle = await p.evaluate(() => ({ writes: window.__fitW, spans: window.__spans }));
+    ck(`375 px, MARKETS left alone for 5 s: the fit wrote its trace ${idle.writes} times and put ${idle.spans} hidden spans into the name (it ran at load: data-fit "${fit}"), and the page took ${l1 - l0} layouts (at most 5; 60 when the fit ran twice a second)`, fit !== null && idle.writes === 0 && idle.spans === 0 && l1 - l0 <= 5 && errs.length === 0, { fit, idle, layouts: l1 - l0, errs });
+    await ctx.close(); }
 
   await b.close(); console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed"); process.exit(fails ? 1 : 0); })();

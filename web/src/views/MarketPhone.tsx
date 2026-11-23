@@ -9,7 +9,7 @@ import { useApi, DEV_MOCK } from "../lib/useApi";
 import { fmtPct, fmtSigma, fmtStampSafe, isYield, signCls } from "./shared";
 import { PERIODS, type PeriodKey, type TableRow } from "../lib/types";
 import { marketOf } from "../lib/sessions";
-import { rowSession, rowStateWords, staleInSession, stateWord } from "../lib/opens";
+import { rowState, rowStateWords, stateWord } from "../lib/opens";
 import { shortName } from "../lib/short";
 import { cellBp, cellPct, CurvePanel, levelOf, RANGE_52W, RANGE_52W_TIP, rollTip, SIGMA_1D_TIP, SIGMA_1M, SIGMA_1M_TIP } from "./Market";
 import { asOfCell, fmtDate, isOfficialRow, rowAsOf, rowAsOfTitle } from "../lib/time";
@@ -56,10 +56,11 @@ const lastWords = (r: TableRow): string => { const a = rowAsOf(r); return !a ? "
  *  table does not keep: what the figure is as of ("Last print 05:00"), in the line's usual colour, with when it is
  *  next read. The line beside the state goes under it, whole, where the two do not fit on one line. */
 function Status({ r }: { r: TableRow }) {
-  const m = marketOf(r.market), ses = rowSession(r), pub = isOfficialRow(r) ? rowAsOf(r) : null, stale = staleInSession(ses);
+  // one rule for the row's state (lib/opens.ts rowState): the opened row's chart tile reads the same
+  const m = marketOf(r.market), { live, ses, stale } = rowState(r), pub = isOfficialRow(r) ? rowAsOf(r) : null;
   return (
     <span className="mp-st">
-      {r.live ? (m && m.delayMin > 0 ? <span className="delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>{delayed(m.delayMin)}</span> : <span className="live">Live</span>)
+      {live ? (m && m.delayMin > 0 ? <span className="delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>{delayed(m.delayMin)}</span> : <span className="live">Live</span>)
         : pub ? <span className="pub" title={rowAsOfTitle(r)}>Published {fmtDate(pub.ymd)}</span>
         : <span className={`state${stale ? " stale" : ""}`} title={rowAsOfTitle(r)}>{stale ? lastWords(r) : stateWord(ses) ?? lastWords(r)}</span>}
       {ses.note && <span className={`opens ${ses.note.kind}`} title={ses.note.tip}>{ses.note.text}</span>}

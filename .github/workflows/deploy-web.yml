@@ -21,17 +21,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # The browser checks (web/e2e: 2,706 of them in 42 suites on 22 Nov 2026) and the logic checks (sim/logic.test.ts,
-  # 816 of them). Since 18 Nov 2026 the site is published only when they pass: until then a publish checked only that
-  # the site builds. The limit was 20 minutes when the checks took three. On 21 Nov 2026 the browser run of 2,052
-  # checks in 34 suites took 14.5 minutes on the engineer's machine and 13 here, before the installs; with the three
-  # suites added that day it took 17.2 minutes on the engineer's machine (1,029 s) and 16.3 here (977 s, pull request
-  # #49); with the paper portfolio's three after them (40 suites) 18.9 minutes there (1,136 s), and with the suite
-  # and the wider drawings of the fixes after that day's checks (41 suites) 19.5 (1,169 s), and with the suite of
-  # the fixes after the second review of P-1 (42 suites, 22 Nov) 20.1 (1,204 s), which by the ratio of pull request
-  # #49 is about 19 here. The limit stays 30: a run cut off by the clock would stop a publish. One
-  # suite is stopped at six minutes (web/e2e/run.cjs) and tried again; the longest, opens, takes about 3.1 on the
-  # engineer's machine.
+  # The browser checks (web/e2e: 51 suites) and the logic checks (sim/logic.test.ts). Since 18 Nov 2026 the site is
+  # published only when they pass: until then a publish checked only that the site builds. The limit was 20 minutes
+  # when the checks took three. On 21 Nov 2026 the browser run of 2,052 checks in 34 suites took 14.5 minutes on the
+  # engineer's machine and 13 here, before the installs; the 49 suites of pull request #50 (3,156 checks) took 28.1 there
+  # (1,687 s) and 20.8 here (1,247 s), and with the checks of its final review (3,179) 29.7 there (1,781 s) and, in one
+  # job, 25 min 17 s here of the job's 30 (run 45080955695, 22 Nov 2026, 23:01 to 23:27 UTC). So since the fixes after
+  # that review's check the browser checks run as two jobs of about equal time, `test` (web/e2e/run.cjs --part=1, with
+  # the logic checks) and `test-2` (--part=2: every suite not in run.cjs's PART_ONE, the built site's among them), each
+  # with its own 30 minutes, and a publish needs both. One suite is stopped at six minutes (web/e2e/run.cjs) and tried again; the longest, opens, takes
+  # about 3.1 on the engineer's machine.
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -48,14 +47,38 @@ jobs:
         working-directory: web
       - run: npx playwright install --with-deps chromium
         working-directory: web
-      - run: node e2e/run.cjs
+      - run: node e2e/run.cjs --part=1
         working-directory: web
       - run: npm ci && npx tsx ../sim/logic.test.ts
         working-directory: jobs
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-output
+          name: e2e-output-1
+          path: web/e2e/.out
+          include-hidden-files: true
+          retention-days: 7
+
+  test-2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+      - run: node e2e/run.cjs --part=2
+        working-directory: web
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-output-2
           path: web/e2e/.out
           include-hidden-files: true
           retention-days: 7
@@ -85,7 +108,7 @@ jobs:
 
   deploy:
     if: github.event_name != 'pull_request'
-    needs: [build, test]
+    needs: [build, test, test-2]
     runs-on: ubuntu-latest
     environment:
       name: github-pages

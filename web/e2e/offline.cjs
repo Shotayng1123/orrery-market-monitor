@@ -1,6 +1,9 @@
 // Opening without a connection: the service worker and the kept data.
 // Run from web/:  node e2e/run.cjs offline   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright"); const fs = require("fs"); const { routes } = require("./harness.cjs");
+// the bar's items on the site as published: six while the paper book's switch is off, seven once it is on
+// (PAPER_ON_LIVE_SITE in src/lib/paper.ts, read as local-copy.cjs reads it: PC-8, DC-2 of the second review of P-1)
+const BAR_ITEMS = /^export const PAPER_ON_LIVE_SITE = true;/m.test(require("fs").readFileSync(require("path").join(__dirname, "..", "src", "lib", "paper.ts"), "utf8")) ? 7 : 6;
 const PREVIEW = "http://localhost:5187/orrery-market-monitor/", MOCK = "http://localhost:5179/orrery-market-monitor/", INDEX = require("path").join(__dirname, ".dist", "index.html");
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d)}`); };
 const token = Buffer.from(JSON.stringify({ id: "reader@example.com" })).toString("base64") + ".sig";
@@ -14,7 +17,9 @@ const api = async (p) => { await routes(p); await p.route("**/fakeapi?*", async 
   const ok = (x) => r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "*" }, body: JSON.stringify(x) });
   if (r.request().method() === "OPTIONS") return r.fulfill({ status: 204, headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "GET,POST,OPTIONS" } });
   if (a === "login") return ok({ token }); if (a === "me") return ok({ email: "reader@example.com", role: "user", mustChange: false }); if (a === "table") return ok(table()); return r.fallback(); }); };
-const first = (p) => p.evaluate(() => { const r = document.querySelector(".mp-row, table.mkt tbody tr:not(.cls)"); return r ? r.textContent.replace(/\s+/g, " ").trim().slice(0, 60) : null; });
+// the first row's text, long enough to hold its level after the longest state line ("Last print 09:44 · session 08:00–10:30
+// SGT, scheduled" in Tokyo's morning: at 60 characters the level was cut off, and the checks failed in those hours only)
+const first = (p) => p.evaluate(() => { const r = document.querySelector(".mp-row, table.mkt tbody tr:not(.cls)"); return r ? r.textContent.replace(/\s+/g, " ").trim().slice(0, 160) : null; });
 const level = async (p) => { const t = await first(p); const m = t && t.match(/57,0\d\d/); return m ? Number(m[0].replace(",", "")) : null; };
 const bars = (p) => p.evaluate(() => ({ net: document.querySelector("#netbar")?.textContent ?? null, cls: document.querySelector("#netbar")?.className ?? null, upd: !!document.querySelector("#updbar") }));
 const keptCount = (p) => p.evaluate(() => new Promise((res) => { const r = indexedDB.open("om-keep"); r.onsuccess = () => { try { const q = r.result.transaction("api").objectStore("api").getAllKeys(); q.onsuccess = () => res(q.result.map(String)); q.onerror = () => res(null); } catch { res([]); } }; r.onerror = () => res(null); }));
@@ -37,7 +42,7 @@ const keptCount = (p) => p.evaluate(() => new Promise((res) => { const r = index
   net.mode = "down"; await ctx.setOffline(true); const before = await level(p);
   await p.reload({ waitUntil: "load" }); await p.waitForSelector("#topbar"); await p.waitForTimeout(1200);
   const l2 = await level(p), b2 = await bars(p); await p.screenshot({ path: "off-phone.png" });
-  ck("the app opens without a connection (the page comes from the device)", (await p.locator("#pnav a").count()) === 6 && (await p.evaluate(() => document.body.classList.contains("pv2"))));
+  ck(`the app opens without a connection (the page comes from the device): ${BAR_ITEMS} items in the bar, as the page's switch says`, (await p.locator("#pnav a").count()) === BAR_ITEMS && (await p.evaluate(() => document.body.classList.contains("pv2"))));
   ck("Markets shows the last data it received", l2 != null && l2 === before, { before, l2, first: await first(p) });
   ck("a bar says so, with the time of that data", !!b2.net && /^No connection\. Data from \d{1,2} [A-Z][a-z]{2} \d\d:\d\d SGT\.$/.test(b2.net) && b2.cls === "off", b2);
   const pos = await p.evaluate(() => { const r = document.querySelector("#footbars").getBoundingClientRect(), n = document.querySelector("#pnav").getBoundingClientRect(); return { left: Math.round(r.left), right: Math.round(r.right), bottom: Math.round(r.bottom), navTop: Math.round(n.top), vw: innerWidth, font: parseFloat(getComputedStyle(document.querySelector("#netbar")).fontSize), overflowX: document.documentElement.scrollWidth - innerWidth }; });

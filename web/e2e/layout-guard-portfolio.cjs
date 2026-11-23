@@ -10,4 +10,7 @@
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 process.env.GUARD_CLOCK = "2026-11-21T09:00:00Z";
 process.env.GUARD_SCREENS = ["portfolio/all", "portfolio/new/ar-ls-jp", "portfolio/new/ar-ls-gl", "portfolio/new/ar-macro", ...[1, 2, 3].flatMap((n) => [`portfolio/${id(n)}`, `portfolio/${id(n)}/settings`])].join(",");
+// what each screen must show for its measure to count: a check that the guard measured the screen named, not "No such
+// paper portfolio", "loading…" or a failed tab (PC-9 of the second review of P-1: its checks passed over any of them)
+process.env.GUARD_EXPECT = JSON.stringify({ "portfolio/all": "#pf-list", "portfolio/new/ar-ls-jp": "#pf-create, #pf-review", "portfolio/new/ar-ls-gl": "#pf-create, #pf-review", "portfolio/new/ar-macro": "#pf-create, #pf-review", ...Object.fromEntries([1, 2, 3].flatMap((n) => [[`portfolio/${id(n)}`, "#pf-overview"], [`portfolio/${id(n)}/settings`, "#pf-settings"]])) });
 require("./layout-guard.cjs");

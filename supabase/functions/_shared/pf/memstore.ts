@@ -93,7 +93,7 @@ export function memStore(deps: MemDeps): PfStore {
     },
     targetsSet: (account, id, t) => {
       try {
-        const s = deps.load(), b = mine(s, account, id), w = targetWindow(t.nyDate, b.ladderBase, b.resets, b.startedOn);
+        const s = deps.load(), b = mine(s, account, id), w = targetWindow(t.day, b.ladderBase, b.resets, b.startedOn);
         if (w.fixed) throw refuse(FIXED_TARGETS);
         if (!w.open || w.forYear == null) throw refuse(WINDOW_CLOSED);
         if (b.settings.filter((r) => r.key === "target_x" && r.forYear === w.forYear).length >= RESETS_MAX) throw refuse(resetsFull(w.forYear));

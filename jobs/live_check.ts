@@ -1,12 +1,15 @@
 // A read-only look at the live database (Shota, 19 Nov 2026): what the jobs last did, whether EQUITIES has
-// today's quotes, the alerts of the last two days, the reasons for big moves and what they cost, and how much of
-// the EDINET DB allowance is used. It changes nothing. It prints market data and counts only: no email address,
-// no watchlist, no account detail.
+// today's quotes, the alerts of the last two days, the reasons for big moves and what they cost, how much of the
+// EDINET DB allowance is used, and how many results dates of each list carry Yahoo's mark. It changes nothing. It
+// prints market data and counts only: no email address, no watchlist's name, no account detail.
 //
 //   npx tsx live_check.ts
 // Needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (workflow live-check: Actions > live-check > Run workflow).
 import { db } from "./lib/db.js";
 import { spark } from "./lib/yahoo.js";
+import { pfWalls } from "./lib/pfwalls.js";
+import { countShapes, MARKS_SINCE, marksLine } from "./lib/marks.js";
+import { quotes } from "../supabase/functions/_shared/yahoo.ts";
 import { feedFor, headlineQuery, instrumentPage, INSTRUMENT_COLS, tableRow } from "../supabase/functions/_shared/pagefeed.ts";
 import type { InstrumentDef } from "../supabase/functions/_shared/instrstats.ts";
 
@@ -16,7 +19,7 @@ const utc = (iso: string | null | undefined): string => (iso ? iso.slice(0, 16).
 const head = (t: string): void => console.log(`\n== ${t}`);
 // a table or a column that a database from before some change does not have is said, not thrown
 // LIVE_CHECK_ONLY (the workflow's "only" input): a comma-separated choice of parts, by the first word of each title
-// below (jobs, relay, sources, market, source, equities, alerts, reasons, edinet, stock, counts, pf); empty for all of them
+// below (jobs, relay, sources, market, source, equities, alerts, reasons, edinet, stock, marks, counts, pf); empty for all of them
 const ONLY = (process.env.LIVE_CHECK_ONLY ?? "").toLowerCase().split(",").map((x) => x.trim()).filter(Boolean);
 async function part(key: string, title: string, f: () => Promise<void>): Promise<void> { if (ONLY.length && !ONLY.includes(key)) return; head(title); try { await f(); } catch (e) { console.log(`  could not be read: ${e instanceof Error ? e.message : String(e)}`); } }
 const must = <T>(r: { data: T | null; error: { message: string } | null }): T => { if (r.error) throw new Error(r.error.message); return r.data as T; };
@@ -213,6 +216,32 @@ async function main(): Promise<void> {
     console.log(`  7203.T (a stock's NEWS only; its statements are not asked for here): headlines ${f.news.length}, alerts ${f.alerts.length}, feed rows ${f.news.length + f.alerts.length}${f.error ? `, error: ${f.error}` : ""}`);
   });
 
+  // A results date's mark by the shape of Yahoo's answer (A-37, RM-2; jobs/lib/marks.ts): per list, the stored marks the
+  // server's own quote runs wrote since the migration of 22 Nov 2026, then the watchlists' names (every account's
+  // together, counts only) and up to 100 members of each list asked now by the server's own request (yahoo.ts `quotes`,
+  // one request a list: the source asked directly, as the part "source" does). Numbers only: no name, no account.
+  await part("marks", "results dates' marks by the shape of Yahoo's answer (A-37; counts only)", async () => {
+    const rows: Array<{ idx: string; symbol: string; earnings_at: string | null; earnings_est: boolean | null; quote_at: string | null }> = [];
+    for (let from = 0; ; from += 1000) { const page = must(await sb.from("constituent_stats").select("idx,symbol,earnings_at,earnings_est,quote_at").order("idx").order("symbol").range(from, from + 999)) as typeof rows; rows.push(...page); if (page.length < 1000) break; }
+    const lists = [...new Set(rows.map((r) => r.idx))].sort();
+    console.log("  stored by the lists' own quote runs (constituent_stats):");
+    for (const idx of lists) { const rs = rows.filter((r) => r.idx === idx); console.log(marksLine(idx, countShapes(rs.map((r) => ({ at: r.earnings_at, est: r.earnings_est, pulled: r.quote_at })), MARKS_SINCE), MARKS_SINCE)); }
+    // the watchlists' names: a member of a list reads its list's stored row; any other name is asked now
+    const wl: Array<{ symbol: string }> = [];
+    for (let from = 0; ; from += 1000) { const page = must(await sb.from("watchlists").select("symbol").order("symbol").range(from, from + 999)) as typeof wl; wl.push(...page); if (page.length < 1000) break; }
+    const watched = [...new Set(wl.map((w) => w.symbol))];
+    const bySym = new Map(rows.map((r) => [r.symbol, r] as const)), members = watched.filter((s) => bySym.has(s)), others = watched.filter((s) => !bySym.has(s));
+    console.log(marksLine("watchlists, names on a list (stored)", countShapes(members.map((s) => { const r = bySym.get(s)!; return { at: r.earnings_at, est: r.earnings_est, pulled: r.quote_at }; }), MARKS_SINCE), MARKS_SINCE));
+    try {
+      const q = others.length ? await quotes(others) : {};
+      console.log(marksLine(`watchlists, names on no list (asked now, ${Object.keys(q).length} of ${others.length} answered)`, countShapes(others.filter((s) => q[s]).map((s) => ({ at: q[s].earningsAt, est: q[s].earningsEst })))));
+      for (const idx of lists) {
+        const sample = rows.filter((r) => r.idx === idx).slice(0, 100).map((r) => r.symbol), a = await quotes(sample);
+        console.log(marksLine(`${idx}, asked now (${Object.keys(a).length} of ${sample.length} answered)`, countShapes(sample.filter((s) => a[s]).map((s) => ({ at: a[s].earningsAt, est: a[s].earningsEst })))));
+      }
+    } catch (e) { console.log(`  asked now: the source did not answer: ${e instanceof Error ? e.message : String(e)}`); }
+  });
+
   // The week's first hours (supabase/functions/_shared/feedhealth.ts, weekFirstPrint): what the minute job's own pull
   // got on the last Sunday evenings, from its log rows (job_runs, kept 30 days). Each row says how many of the
   // instruments due answered with a priced bar, and how many one-minute bars of the last 36 hours the answers held
@@ -250,16 +279,9 @@ async function main(): Promise<void> {
   // workflow that runs it turns red (deploy-server runs this part on its own after each deploy). A function the
   // database has just made may take a few seconds to be found by the API: the look is asked up to six times.
   await part("pf", "the paper portfolio's store: who may reach it (counts only)", async () => {
-    let r = await sb.rpc("pf_selftest");
-    for (let k = 1; k < 6 && r.error && /could not find|schema cache|does not exist/i.test(r.error.message); k++) { await new Promise((res) => setTimeout(res, 10000)); r = await sb.rpc("pf_selftest"); }
-    if (r.error) { console.log(`  pf_selftest could not be run: ${r.error.message}`); process.exitCode = 1; return; }
-    const t = (r.data ?? {}) as Record<string, number | boolean | null>;
-    if (t.ok !== true) process.exitCode = 1;
-    const n = (k: string): string => (typeof t[k] === "number" ? String(t[k]) : "–");
-    console.log(`  pf_selftest ${t.ok === true ? "ok" : "FAILED"}: ${n("rls")} of ${n("tables")} tables with row level security; ${n("openGrants")} privileges on them held by anon or authenticated, ${n("serviceRoleGrants")} by the server's own role, ${n("sequenceGrants")} on a sequence; ${n("openFunctions")} of its functions callable by anon or authenticated; ${n("rowsSeen")} rows seen as a made-up account; ${n("statements")} version(s) of the statement`);
-    console.log(typeof t.functions === "number" && t.definerOwner === t.functions
-      ? `  the second wall is in force: all ${n("functions")} functions run as the role the policies bind (${n("policies")} policies), and through the policies alone a made-up account sees ${n("rowsThroughPolicies")} rows`
-      : `  the second wall is NOT in force: ${n("definerOwner")} of ${n("functions")} functions are owned by the role the policies bind; each function still names the account in every statement`);
+    const w = await pfWalls(sb);   // jobs/lib/pfwalls.ts, which the logic checks run against a stand-in (DC-4)
+    for (const l of w.lines) console.log(l);
+    if (!w.ok) process.exitCode = 1;
   });
 
   // The one part that is not read-only, and it runs only when asked for by name ("token"), never with the others:

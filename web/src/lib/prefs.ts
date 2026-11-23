@@ -22,22 +22,33 @@ export function savePrefs(p: Prefs): void { try { localStorage.setItem(KEY, JSON
 const REF_W = 1440, REF_H = 800, TERM_MIN_W = 1100, TERM_MIN_H = 540;
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const round3 = (v: number) => Math.round(v * 1000) / 1000;
-/** The one-screen header is one row by rule (the designer's notes of 22 Nov 2026, Part A): its items have their widths
- *  by rule and only the alert line takes what is left, with a margin of 101 px over the line's longest promise in
- *  both letter placements. That holds where the page's own layout (the window's width over the zoom) is at least
- *  1,300 CSS px wide: a window of 1,170 px at AUTO, 1,105 at S, 1,300 at M, 1,495 at L, 1,755 at XL. Below it COMPACT
- *  keeps the scrolling layout. Under 1,420 the Monitor's name shows its mark only (body.tight; the mark's tooltip
- *  says the name). */
-export const TERM_MIN_LAYOUT_W = 1300, NAME_FROM_W = 1420;
+/** The one-screen header is one row by rule (the designer's notes of 22 Nov 2026, Part A, revision 2): its items have
+ *  their widths by rule and only the alert line takes what is left, with a margin of 103 px over the line's longest
+ *  promise in both letter placements. That holds where the page's own layout (the window's size over the zoom) is at
+ *  least 1,310 x 560 CSS px: a window of 1,179 x 540 at AUTO, 1,114 x 540 at S, 1,310 x 560 at M, 1,507 x 644 at L,
+ *  1,769 x 756 at XL. 560 is the page's own least height (#root): where the layout is offered it never scrolls up and
+ *  down, so no scrollbar takes the row's width in any browser. Below it COMPACT keeps the scrolling layout. Under 1,420
+ *  the Monitor's name shows its mark only (body.tight; the mark's tooltip says the name). */
+export const TERM_MIN_LAYOUT_W = 1310, TERM_MIN_LAYOUT_H = 560, NAME_FROM_W = 1420;
 
 export function termFits(): boolean { return window.innerWidth >= TERM_MIN_W && window.innerHeight >= TERM_MIN_H; }
 
-// The alert line's fit, last step (components/Alerts.tsx): in a drawing so much wider than the Monitor's own (about
-// 60%) that even "NEW ALERT 07:07" cannot stand whole, the one-screen layout is refused for that window size, text size
-// and number of tabs, and COMPACT gives the scrolling layout. Kept in memory: a reload or another size tries again.
+// The alert line's fit, last step (components/Alerts.tsx; the designer's A.2.5): in a drawing so much wider than the
+// Monitor's own that even "NEW ALERT 07:07" (or "no excessive moves"), or the row's fixed items alone, cannot stand whole,
+// the one-screen layout is refused for this window size and text size, and COMPACT gives the scrolling layout. Kept
+// for the page's life; another size tries again. App's resize handler applies the prefs again at once.
 const refused = new Set<string>();
-const refuseKey = (size: SizeKey) => `${window.innerWidth}x${window.innerHeight} ${size} ${document.querySelectorAll("#nav a").length}`;
-export function refuseTerm(): void { refused.add(refuseKey(loadPrefs().size)); window.dispatchEvent(new Event("resize")); }
+let termKey = "";
+export function refuseTerm(): void { if (termKey && !refused.has(termKey)) { refused.add(termKey); window.dispatchEvent(new Event("resize")); } }
+// A refusal made while a face was still loading is taken back once, when a later font load ends (the orchestrator's
+// settlement of 22 Nov 2026, 10:20 UTC, of break-3 §5.1: a page refused on its fallback faces kept the refusal after its
+// own faces, which fit, had loaded): the fit then runs again on the faces as drawn.
+const retried = new Set<string>();
+export function retryTerm(): boolean {
+  if (!termKey || !refused.has(termKey) || retried.has(termKey)) return false;
+  refused.delete(termKey); retried.add(termKey); window.dispatchEvent(new Event("resize"));
+  return true;
+}
 
 /** The scale for the current window. COMPACT fits both dimensions; the scrolling layout follows the width only. */
 export function autoZoom(term: boolean): number {
@@ -53,9 +64,10 @@ export function autoZoom(term: boolean): number {
  *  for a phone and has nothing to shrink, and <body> carries the class `pv2`. */
 export function applyPrefs(p: Prefs, full: boolean, phoneApp = false): boolean {
   const fixed = SIZES.find((s) => s.k === p.size)?.z ?? 0;
-  // the one-screen layout's own zoom first: it is offered only where its layout is at least TERM_MIN_LAYOUT_W wide
+  // the one-screen layout's own zoom first: it is offered only where its layout is at least 1,310 x 560
   const zt = round3(fixed || autoZoom(true));
-  const term = !phoneApp && p.compact && termFits() && window.innerWidth / zt >= TERM_MIN_LAYOUT_W && !refused.has(refuseKey(p.size));
+  termKey = `${window.innerWidth}x${window.innerHeight}|${p.size}`;
+  const term = !phoneApp && p.compact && termFits() && window.innerWidth / zt >= TERM_MIN_LAYOUT_W && window.innerHeight / zt >= TERM_MIN_LAYOUT_H && !refused.has(termKey);
   const z = phoneApp ? 1 : round3(fixed || autoZoom(term));
   const b = document.body;
   b.style.setProperty("--z", String(z));
@@ -68,9 +80,15 @@ export function applyPrefs(p: Prefs, full: boolean, phoneApp = false): boolean {
   return term;
 }
 
-/** COMPACT is on but its one-screen layout is not offered in this window (it is at least 1,100 x 540, and its layout
- *  would be under TERM_MIN_LAYOUT_W, or the alert line's fit refused it): the scrolling layout is drawn instead. */
-export const compactRefused = (p: Prefs, phoneApp = false): boolean => !phoneApp && p.compact && termFits() && !document.body.classList.contains("term");
+/** Why COMPACT, on, draws the scrolling layout in a window of at least 1,100 x 540 (its chip's tooltip, A.6.6):
+ *  "small", its layout would be under 1,310 x 560; "refused", the alert line's fit refused it for this window and
+ *  text size; "" when the one-screen layout is drawn, or COMPACT is off, or the window is smaller, or a phone. */
+export function termWhy(p: Prefs, phoneApp = false): "" | "small" | "refused" {
+  if (phoneApp || !p.compact || !termFits() || document.body.classList.contains("term")) return "";
+  const fixed = SIZES.find((s) => s.k === p.size)?.z ?? 0, zt = round3(fixed || autoZoom(true));
+  if (window.innerWidth / zt < TERM_MIN_LAYOUT_W || window.innerHeight / zt < TERM_MIN_LAYOUT_H) return "small";
+  return refused.has(`${window.innerWidth}x${window.innerHeight}|${p.size}`) ? "refused" : "";
+}
 
 /** Current zoom factor (pointer coordinates are in visual pixels, layout in zoomed CSS pixels). */
 export const zoomNow = (): number => Number(document.body.style.getPropertyValue("--z")) || 1;

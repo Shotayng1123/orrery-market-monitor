@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Empty, Panel } from "../components/Panel";
+import { Empty, Panel, SrcParts } from "../components/Panel";
 import { ChartPanel, type ChartPeriod } from "../components/ChartPanel";
 import { PeriodBar } from "../components/PeriodBar";
 import { TileGrid } from "../components/TileGrid";
@@ -63,7 +63,7 @@ function CurveBlock({ country, label, ago, tick, no, span, ts, set = "std" }: { 
   // a yield's level ends in "%" (the designer's D-05), its change is in bp
   const row = (t: string, v: number | null, gv: number | null) => <tr key={t}><td className="l" title={t}>{shortTenor(t)}</td><td className="num">{fmtLevel(v, 3, true)}</td><td className="num mut">{fmtLevel(gv, 3, true)}</td><td className={`num ${signCls(v != null && gv != null ? (v - gv) * 100 : null, 1)}`}>{v != null && gv != null ? fmtChg(v - gv, 1, true) : "–"}</td></tr>;
   return (
-    <Panel no={no} title={label} span={span} k="curve" ts={ts} aux={c ? <>{fmtDate(c.date)} · {dottedLine(fmtDate(g?.date), a)} · {c.source}</> : d.error ? <span className="warn">{d.error}</span> : ""}>
+    <Panel no={no} title={label} span={span} k="curve" ts={ts} aux={c ? <>{fmtDate(c.date)} · {dottedLine(fmtDate(g?.date), a)} · {c.source}</> : d.error ? <span className="warn">{d.error}</span> : ""} auxShort={c ? <SrcParts parts={[c.source, fmtDate(c.date), ...(g?.date ? [`dotted: ${fmtDate(g.date)}`] : [])]} /> : undefined}>
       {c ? (
         <div className="curvebody">
           <div className="curvechart">

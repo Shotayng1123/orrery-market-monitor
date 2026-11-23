@@ -480,6 +480,15 @@ body.term #grid[data-view="equities"]>.panel[data-k="eq-short"]{grid-column:5 / 
 body.term #grid[data-view="equities"]>.panel[data-k="eq-heat"]{grid-column:9 / span 4;grid-row:4 / span 2}
 body.term #grid[data-view="equities"]>.panel[data-k="eq-movers"]{grid-column:1 / span 8;grid-row:5}
 body.term #grid[data-view="equities"]>.panel[data-k="eq-screener"]{grid-column:1 / -1;grid-row:6}
+/* a source line on its head's second line (B.0.3) takes its height from the chart beside it, never from a table (DP-1 of
+   the final review of pull request #50): BREADTH and FLOW reach down into the heat map under them, SECTORS and SHORT
+   INTEREST up into the index and its drivers above them, each by its head's height below its first line, which
+   Equities.tsx (useHeadRoom) sets on the grid as drawn; the gap between two panels stays as it is */
+body.term #grid[data-view="equities"]>.panel[data-k="eq-breadth"]{margin-bottom:calc(-1 * var(--eq-xb, 0px))}
+body.term #grid[data-view="equities"]>.panel[data-k="eq-flow"]{margin-top:var(--eq-xb, 0px);margin-bottom:calc(-1 * (var(--eq-xb, 0px) + var(--eq-xf, 0px)))}
+body.term #grid[data-view="equities"]>.panel[data-k="eq-heat"]{margin-top:calc(var(--eq-xb, 0px) + var(--eq-xf, 0px))}
+body.term #grid[data-view="equities"]>.panel[data-k="eq-index"],body.term #grid[data-view="equities"]>.panel[data-k="eq-drivers"]{margin-bottom:var(--eq-xs, 0px)}
+body.term #grid[data-view="equities"]>.panel[data-k="eq-sectors"],body.term #grid[data-view="equities"]>.panel[data-k="eq-short"]{margin-top:calc(-1 * var(--eq-xs, 0px))}
 body.term #grid[data-view="market"] .cgrid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
 body.term #grid[data-view="news"] .panel[data-no="01"]{grid-column:span 7;grid-row:span 2}
 body.term #grid[data-view="news"] .panel[data-no="02"],body.term #grid[data-view="news"] .panel[data-no="03"]{grid-column:span 5;grid-row:span 1}
@@ -524,9 +533,47 @@ body.term{overflow:auto}                              /* scrolls only when the w
 body.term #root{min-height:560px}
 body.term #alerts{min-width:0}
 body.term #alerts .alrt{max-width:min(320px,100%)}
-body.term #search input{width:180px;padding:1px 6px;font-size:10px}
+body.term #search input{width:96px;padding:1px 6px;font-size:10px}   /* the one-screen header's box (its rule at the end of this file) */
 body.term .phead .aux{display:block;flex:1 1 0;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 body.term .phead .aux:has(.chips){display:inline-flex;flex-wrap:wrap;white-space:normal;overflow:visible}
+/* a source line is drawn whole or in its short form, never cut (the designer's B.0.3, 22 Nov 2026; Panel.tsx
+   useSourceFit picks the form): the whole line beside the title; .short, the short form beside it; .compact, the same
+   parts written shorter beside it (R2 of the check of fix part 3, 23 Nov 2026); .min, the state's badge and the time
+   of the figures alone (R2 of the check of fix part 4); .wrap, the shortest form there is on a second line of the
+   head, right-aligned, broken only between its parts. A line drawn once (.src-drop, a stock's) leaves out its parts
+   marked data-drop instead: .d1 the first, .d2 the first two, .d3 all three. The scrolling layout keeps the whole
+   line, wrapped as before; a stock's line flows there as text (N1's nit: as flex items its parts took a line each),
+   and leaves out its descriptive parts only where its credit would cost its head more than one line. */
+.phead .aux.src-fit>.src-long{display:contents}
+.phead .aux.src-fit>.src-short,.phead .aux.src-fit>.src-compact,.phead .aux.src-fit>.src-min{display:none}
+.phead .aux.src-fit.src-drop{display:block;text-align:right}
+/* in a layout that wraps the line (the classic one on a phone, the scrolling one), a stock's line beside a title that
+   leaves it less room than its longest part takes a row of its own under the title, the head's whole width, and flows
+   there as text (`wrap`, Panel.tsx useSourceFit; N5-1 of the check of fix part 5: as a block beside a title that left
+   it next to no room, its text ran off the panel and the screen); the title keeps the first row */
+body:not(.term) .phead:has(>.aux.src-fit.src-drop.wrap){flex-wrap:wrap;row-gap:1px}
+body:not(.term) .phead>.aux.src-fit.src-drop.wrap{flex:1 1 100%;margin-left:0;order:2}
+body:not(.term) .phead:has(>.aux.src-fit.src-drop.wrap)>.t{flex:1 1 0;min-width:0}
+body:not(.term) .phead:has(>.aux.src-fit.src-drop.wrap)>.csvbtn{order:1}
+body.term .phead .aux.src-fit{display:block;flex:1 1 0;min-width:0;text-align:right;overflow:visible;text-overflow:clip}
+body.term .phead .aux.src-fit>.src-long{display:inline;white-space:nowrap}
+body.term .phead .aux.src-fit.short>.src-long{display:none}
+body.term .phead .aux.src-fit.short>.src-short{display:inline;white-space:nowrap}
+body.term .phead .aux.src-fit.compact>.src-long{display:none}
+body.term .phead .aux.src-fit.compact>.src-compact{display:inline;white-space:nowrap}
+body.term .phead .aux.src-fit.min>.src-long{display:none}
+body.term .phead .aux.src-fit.min>.src-min{display:inline;white-space:nowrap}
+.phead .aux.src-fit.d1 [data-drop="1"],.phead .aux.src-fit.d2 :is([data-drop="1"],[data-drop="2"]),.phead .aux.src-fit.d3 [data-drop]{display:none}
+body.term .phead .aux.src-fit .sp{white-space:nowrap}
+body.term .phead:has(>.aux.src-fit.wrap){flex-wrap:wrap;row-gap:1px}
+body.term .phead .aux.src-fit.wrap{flex:1 1 100%;order:2}
+body.term .phead .aux.src-fit.wrap>.src-short,body.term .phead .aux.src-fit.wrap>.src-compact,body.term .phead .aux.src-fit.wrap>.src-min,body.term .phead .aux.src-fit.src-drop.wrap>.src-long{white-space:normal}
+body.term .phead:has(>.aux.src-fit.wrap)>.csvbtn{order:1;margin-left:auto}
+/* a title wider than its head's whole line (a name far longer than any listed company's) is cut at its end, its
+   tooltip whole (Panel.tsx), and never pushes the CSV button or the source line off the head; with the line on its
+   second line the title has the first line beside the button */
+body.term .phead>.t{flex:0 1 auto;min-width:0;overflow-x:clip;text-overflow:ellipsis}
+body.term .phead:has(>.aux.src-fit.wrap)>.t{flex:1 1 0}
 
 /* the selector strip (index toggle, period, σ window) is the first row and only as tall as its chips */
 body.term #grid:has(>.c12:not(.panel)){grid-template-rows:auto}
@@ -562,7 +609,7 @@ body.term table.mkt tr.cls td{height:1%}
    the column is 120 px whatever the window, and the figures share the rest evenly. From 1,500 it is what the
    figures' shares leave, 19.6% (143 px and more: a wide window keeps its wider name column). Under 1,150 CSS px,
    which only a fixed text size in a small window reached, the table did not fit at all (its figures were cut): since
-   22 Nov 2026 the one-screen layout is offered only from a layout of 1,300 CSS px (lib/prefs.ts; the review's SF-1
+   22 Nov 2026 the one-screen layout is offered only from a layout of 1,310 x 560 CSS px (lib/prefs.ts; the review's SF-1
    found TOPIX's day cut at text M, L and XL there), so the column is 120 px at every size it is drawn at under 1,500.
    The layout's width is the page's own, read on #wrap (the text size works by zoom, so a window media query would
    not see it). */
@@ -1908,6 +1955,10 @@ a.mp-line:active,.mp-line .open:active,.mp-line .x:active{background:var(--panel
 .sheet-head .x{flex:none;width:44px;height:44px;margin:0;padding:0;border:0;border-radius:10px;background:transparent;color:var(--txt2);font-size:24px;line-height:1;cursor:pointer}
 .sheet-head .x:active{background:var(--panel)}
 .sheet-body{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:4px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+/* a form's foot (UI-13): it never scrolls; CANCEL and the action side by side, each (the foot's inner width − 12) ÷ 2 */
+.sheet-body.hasfoot{padding-bottom:12px}
+.sheet-foot{flex:none;display:flex;gap:12px;padding:12px 12px calc(12px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--bord2);background:var(--panel2)}
+.sheet .sheet-foot>button{flex:1 1 0;min-width:0;width:auto;height:52px;min-height:52px;margin:0;padding:0 12px;border-width:1px;box-sizing:border-box;border-radius:12px;font-family:var(--sans);font-size:16px;letter-spacing:0;overflow:hidden;text-overflow:ellipsis}
 .sheet-link{display:flex;align-items:center;min-height:44px;margin:6px 0 0;padding:0;border:0;background:transparent;color:var(--cyan);font-family:var(--sans);font-size:14.5px;cursor:pointer}
 /* the install sheet's words and steps (they were the card's) */
 .a2hs-tx{display:flex;flex-direction:column;gap:8px}
@@ -2008,69 +2059,78 @@ body.term #grid[data-view="portfolio"]{display:block;overflow:auto;overscroll-be
 .psrc{position:relative;display:inline-flex;align-items:center;justify-content:flex-end;min-width:44px;min-height:28px;margin:0;padding:0;border:0;border-radius:0;background:none;color:var(--mut);font:inherit;font-weight:400;letter-spacing:0;text-transform:none;white-space:nowrap;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .psrc::before{content:"";position:absolute;inset:-8px -4px}
 .psrc .pu{color:var(--cyan)}
+.psrc .psep{white-space:pre}
+/* a phone section's heading with a source line (the designer's LV-2, 22 Nov 2026): the title and the line on one line
+   when both fit; else the line whole on a second line, right-aligned; the title never breaks */
+.mp-sec h2:has(.psrc){flex-wrap:wrap;row-gap:0}
+.mp-sec h2:has(.psrc)>span:first-child{white-space:nowrap}
+.mp-sec h2:has(.psrc)>.aux{margin-left:auto}
 .psrc:focus{outline:none}
 .psrc:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
 .psrc-p{margin:4px 0 12px;font-size:15px;line-height:1.5}
 
-/* ===== the one-screen header: one row by rule (the designer's notes of 22 Nov 2026, Part A; D/r3b-fix/header-proto.css)
-   For body.term only. The layout is offered where its own width is at least 1,300 CSS px (lib/prefs.ts); body.tight:
-   under 1,420, where the Monitor's name shows its mark only. Every item has its width by rule, the same in every state
-   (the focus, typing, the results list open, a lit alert, the menu open); only the alert line's holder takes what is
-   left, at least 101 px more than the line's longest promise in both letter placements. The scrolling layout and the
-   phone layout are as before. */
-/* 1 · one row, always. Nothing wraps; only the alert line gives way */
+/* ===== the one-screen header: one row, by rule (the designer's notes of 22 Nov 2026, Part A, revision 2; the block is
+   D/r3b-fix/header-proto.css as it is, with the ten edits of the older lines that its A.6.2 lists). Every rule of the
+   one-screen layout starts with "body.term #topbar": it outranks every older rule of that header, so the block gives
+   the same page wherever it stands in the file. The lines marked "every layout" keep the phone's header and the
+   scrolling layout's header as they were. The layout itself is offered where its own size is at least 1,310 x 560 CSS
+   px (lib/prefs.ts); body.tight: under 1,420, where the Monitor's name shows its mark only. Only the alert line's
+   holder takes what is left: at least 103 px more than the line's longest promise in both letter placements. */
+/* 1 · one row, always. Nothing wraps; every item has its width by rule; only the alert line's holder takes what is left */
 body.term #topbar{flex-wrap:nowrap}
-body.term #topbar .brand,body.term #nav,body.term #search,body.term #topbar .bmq{flex:0 0 auto}
-body.term #nav{flex-wrap:nowrap}
-body.term #alerts{flex:1 1 0;min-width:0}
-/* 2 · the tabs: 5 px of side padding, six tabs or seven (body.term #nav a, above) */
-/* 3 · the search box: 96 px, the same with the focus, empty or typed in. Its words "Search" (components/Search.tsx);
-   the "/" key cap until something is typed */
-body.term #search{flex:0 0 auto;width:auto}
-body.term #search input{width:96px;position:static}
-/* 4 · the clock: Singapore's hour and minute. The seconds, Tokyo's and New York's time are in its tooltip and on the
-   menu's first line */
-body.term #clock .ss,body.term #clock .zz{display:none}
-/* 5 · the Monitor's name: the mark always; its words from 1,420 CSS px of layout (the mark's tooltip says them) */
+body.term #topbar .brand,body.term #topbar #nav,body.term #topbar #search,body.term #topbar .bmq{flex:0 0 auto}
+body.term #topbar #nav{flex-wrap:nowrap}
+body.term #topbar #alerts{flex:1 1 0;min-width:0}
+
+/* 2 · the tabs: 5 px of side padding, six tabs or seven */
+body.term #topbar #nav a{padding:2px 5px}
+
+/* 3 · the search box: 88 px, focused or not, empty or typed in. Nothing grows; nothing is laid over anything */
+body.term #topbar #search{width:auto}
+body.term #topbar #search input{width:88px;position:static}
+
+/* 4 · the clock: Singapore's hour and minute. Its seconds, Tokyo's and New York's time: its tooltip and the menu's first line */
+body.term #topbar #clock .ss,body.term #topbar #clock .zz{display:none}
+
+/* 5 · the Monitor's name: the mark always, its words from a layout 1,420 px wide (body.tight under that: lib/prefs.ts) */
 body.term.tight #topbar .brand .bw{display:none}
 body.term.tight #topbar .brand{gap:0}
-/* 6 · the menu: text size, COMPACT, FULL and the account leave the row for a list under one button (22 px).
-   Outside the one-screen layout the button is not drawn and the span is not a box: nothing changes there */
-#more-btn{display:none}
-#more{display:contents}
-#more .mclock{display:none}
-body.term #more-btn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:15px;padding:0;margin-left:2px;border:1px solid var(--bord2);border-radius:2px;background:none;color:var(--txt2);cursor:pointer}
-body.term #more-btn:hover,body.term #topbar.more #more-btn{border-color:var(--amber);color:var(--amber)}
-body.term #more-btn:focus{outline:none}
-body.term #more-btn:focus-visible{outline:1px solid var(--amber);outline-offset:1px}
-body.term #more-btn svg{width:11px;height:11px;display:block}
-body.term #more{display:none}
-body.term #topbar{position:relative}
-body.term #topbar.more #more{display:flex;flex-direction:column;align-items:flex-start;gap:7px;position:absolute;right:8px;top:calc(100% + 3px);z-index:60;min-width:200px;padding:8px 10px;background:var(--panel2);border:1px solid var(--bord2);border-radius:4px;box-shadow:0 10px 28px rgba(0,0,0,.6)}
+
+/* 6 · the menu "≡": Tokyo's and New York's time, TEXT SIZE, COMPACT, FULL, the account (and NEW LAYOUT where it is drawn) */
+#more-btn{display:none}                                   /* every layout: no button outside the one-screen layout */
+#more{display:contents}                                   /* every layout: the span is no box, its items stand in the row as at c374776 */
+#more .mclock{display:none}                               /* every layout: the menu's clock line only in the open menu */
+body.term #topbar .bmq{position:relative}
+body.term #topbar #more-btn{display:inline-flex;align-items:center;justify-content:center;width:22px;height:15px;padding:0;margin-left:2px;border:1px solid var(--bord2);border-radius:2px;background:none;color:var(--txt2);cursor:pointer}
+body.term #topbar #more-btn:hover,body.term #topbar.more #more-btn{border-color:var(--amber);color:var(--amber)}
+body.term #topbar #more-btn svg{width:11px;height:11px;display:block}
+body.term #topbar #more{display:none}
+body.term #topbar.more #more{display:flex;flex-direction:column;align-items:flex-start;gap:7px;position:absolute;right:0;top:calc(100% + 6px);z-index:60;min-width:200px;padding:8px 10px;background:var(--panel2);border:1px solid var(--bord2);border-radius:4px;box-shadow:0 10px 28px rgba(0,0,0,.6)}
 body.term #topbar.more #more .mclock{display:block;align-self:stretch;padding-bottom:6px;border-bottom:1px solid var(--bord);color:var(--txt2);font-size:10.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
 body.term #topbar.more #more .chip-sm,body.term #topbar.more #more .chip,body.term #topbar.more #more .pick{margin:0}
 body.term #topbar.more #more #userchip .so{display:inline}
-/* COMPACT on where its one-screen layout is not offered (a layout under 1,300 CSS px): the chip is muted and says why */
-#cmp-ctl.off{opacity:.55}
+
 /* 7 · the alert line. Never cut: the label, the kind, the figure with its word ("intraday", "at close", "1D"), the
-   time. The name is the only part that is cut, with an ellipsis, and never below its first 8 characters (the fit in
-   components/Alerts.tsx holds that). "via <publisher>" shows only beside a whole name: `.one` is one line high and
-   wraps, so what does not fit beside `.core` stands on a second line that is not drawn */
-#alerts .alrt .one .core{display:contents}                                 /* outside the one-screen layout (scrolling layout, phone) the line is as before */
-body.term #alerts .alrt{display:flex;width:fit-content;max-width:100%}
-body.term #alerts .alrt .one{flex:1 1 auto;display:flex;flex-wrap:wrap;align-content:flex-start;align-items:baseline;column-gap:6px;row-gap:6px;height:1.28em;line-height:1.28;min-width:0;overflow:hidden}
-body.term #alerts .alrt .one .core{display:flex;align-items:baseline;gap:6px;flex:0 1 auto;min-width:0;max-width:100%;overflow:hidden}
-body.term #alerts .alrt .one .core .nm{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-body.term #alerts .alrt .one .core .kd,body.term #alerts .alrt .one .core .fig,body.term #alerts .alrt .one .core .q{flex:none}
-body.term #alerts .alrt .one .src{flex:none}
-/* 8 · what gives way in a drawing wider than the row was measured for, by rule and never a cut figure: the fit finds the
-   line cannot hold its promise (label, kind, 8 characters of the name, figure and word, time) and drops whole parts:
-   first the label (a lit line still says "new" by its colour and pulse); then, if still short, everything but the label
-   and the time ("NEW ALERT 07:07", all of it one hover or click away); if even that cannot stand whole, the one-screen
-   layout is refused for that window (lib/prefs.ts) */
-body.term #alerts.a-nolabel .alrt:not(.none)>.k{display:none}
-body.term #alerts.a-min .alrt:not(.none)>.k{display:inline}
-body.term #alerts.a-min .alrt .one{display:none}
+   time. The name is the only part that gives way, with "…", never under its first 8 characters (the fit in Alerts.tsx
+   holds that: A.6.4). "via <publisher>" stands only beside a whole name: `.one` is one line high and wraps, so what does
+   not fit beside `.core` goes to a second line that is not drawn */
+#alerts .alrt .one .core{display:contents}                /* every layout: outside the one-screen layout the line is as at c374776 */
+body.term #topbar #alerts .alrt{display:flex;width:fit-content;max-width:100%}
+body.term #topbar #alerts .alrt .one{flex:1 1 auto;display:flex;flex-wrap:wrap;align-content:flex-start;align-items:baseline;column-gap:6px;row-gap:6px;height:1.28em;line-height:1.28;min-width:0;overflow:hidden}
+body.term #topbar #alerts .alrt .one .core{display:flex;align-items:baseline;gap:6px;flex:0 1 auto;min-width:0;max-width:100%;overflow:hidden}
+body.term #topbar #alerts .alrt .one .core .nm{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body.term #topbar #alerts .alrt .one .core .kd,body.term #topbar #alerts .alrt .one .core .fig,body.term #topbar #alerts .alrt .one .core .q,body.term #topbar #alerts .alrt .one .src{flex:none}
+
+/* 8 · what gives way in a drawing wider than measured, by rule, never a cut figure (the fit, A.2.5): first the label
+   (a lit line still says "new" by its colour and pulse); then everything but the label and the time ("NEW ALERT 07:07",
+   the rest one hover or click away); then the one-screen layout itself is refused for that window (lib/prefs.ts) */
+body.term #topbar #alerts.a-nolabel .alrt:not(.none)>.k{display:none}
+body.term #topbar #alerts.a-min .alrt .one{display:none}
+/* the menu button's ring for the keyboard only (not in the prototype) */
+body.term #topbar #more-btn:focus{outline:none}
+body.term #topbar #more-btn:focus-visible{outline:1px solid var(--amber);outline-offset:1px}
+/* COMPACT on where its one-screen layout is not offered (A.6.6): the chip muted, its tooltip says why */
+#cmp-ctl.off{opacity:.55}
 /* A phone's line (body.pv2), in the same order (SF-2 of the checks of 22 Nov 2026): where the line has too little room
    for the label, the kind, the name's first letter and "…", the figure and the time, the label's "NEW" leaves first (a
    lit line keeps its colour and pulse), then the time's day ("23 Nov"); only then is the name cut below one letter.
