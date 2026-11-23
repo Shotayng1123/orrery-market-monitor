@@ -21,7 +21,7 @@ intraday prices, yield curves, calendar, news, notes, reports and sign-ins; pg_c
 3. Function secrets (never in git):
    ```bash
    npx supabase secrets set MONITOR_PASSWORD='<the shared password>' MONITOR_TOKEN_SECRET='<32+ random chars>' CRON_SECRET='<32+ random chars>' REPORT_SECRET='<32+ random chars>'
-   npx supabase functions deploy tick daily api
+   npx supabase functions deploy tick daily api --use-api
    ```
 4. In the SQL editor, install the schedules (this also stores the two values pg_cron needs in Vault; `supabase/cron.sql` holds the same line):
    ```sql
@@ -108,7 +108,7 @@ key if the server has none, and deploys. By hand:
    npx supabase secrets set --env-file jobs/.env.vapid
    ```
    Keep the file. A different key ends every device's subscription without telling anyone.
-3. `npx supabase functions deploy tick daily api`.
+3. `npx supabase functions deploy tick daily api --use-api`.
 
 How it works: the tick offers every alert not yet marked (`alerts.pushed_at`) to the devices in `push_subs`, within a
 minute of the alert being written, whichever job wrote it. A device set to "My watchlist only" gets alerts on its

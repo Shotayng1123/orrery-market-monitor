@@ -361,14 +361,17 @@ const TOPICS: Array<[string, RegExp]> = [
 // redistribution or commercial use … is prohibited", "commercially exploit") is no limit: only a purpose the ban is
 // limited to is ("for commercial purposes"); a sentence of two bans is read clause by clause too (CLAUSE); and these are
 // bans as well: "Nothing/None … may be", "must/may never", "requires/subject to … consent", "may only be … with …
-// permission", "without our permission", 許可が必要.
+// permission", "without our permission", 許可が必要. Since the check of fix part 3 (23 Nov 2026): a second ban with no
+// subject of its own is a clause too ("…, and may not …", "…, nor …"), and "publication" and "republication" are
+// acts of re-use. What is still read as "none": a limit named after a plain "or" inside one ban ("may not copy or
+// redistribute the data or use it for commercial purposes"), which the gate takes as the whole sentence's.
 const BAN_EN = /\b(?:may not|must not|shall not|should not|will not|cannot|can not|do not|does not|agree(?:s|d)? not to|undertake(?:s)? not to|not (?:be )?(?:permitted|allowed|authori[sz]ed)|(?:is|are) not to be|prohibit(?:ed|s|ion)?|forbidden|forbids?|refrain(?:s|ing)? from|you (?:will|shall|do) not)\b|\bno\b[^.]{0,400}\b(?:may|can|shall) be\b|\bno\b[^.]{0,400}\b(?:is|are) (?:allowed|permitted|authori[sz]ed)\b|\bneither\b[^.]{0,400}\b(?:may|can|shall) be\b|\bonly with (?:the |our |its |their |prior |express |written |explicit )*(?:permission|consent|authori[sz]ation|approval)|without (?:the |our |its |any )?(?:prior |express |written |explicit |specific )+(?:permission|consent|authori[sz]ation|approval|agreement)|\b(?:nothing|none)\b[^.]{0,400}\b(?:may|can|shall|must) be\b|\b(?:must|may|shall|should|can|will) never\b|\b(?:requires?|required|subject to|conditional (?:up)?on)\s+(?:the |our |its |their |a |an )?(?:prior |express |written |explicit |specific |formal )*(?:permission|consent|authori[sz]ation|approval|licen[cs]e)\b|\bonly\b[^.]{0,60}\bwith (?:the |our |its |their |prior |express |written |explicit )*(?:permission|consent|authori[sz]ation|approval)|\bwithout (?:the |our |its |their |any )?(?:permission|consent|authori[sz]ation|approval)\b/i;
 const BAN_JA = /禁止|禁じ|禁ず|禁無断|できません|できない|出来ません|出来ない|お断り|ご遠慮|認められません|認めておりません|一切認め|してはなりません|してはならない|行ってはなりません|行わないで|しないでください|しないで下さい|固くお断り|(?:許可|許諾|承諾|同意|承認)(?:を得る)?(?:こと)?が必要/;
 /** A clause that declines liability or a warranty: its "shall not" forbids the reader nothing. It is set aside only up
  *  to the next conjunction or the sentence's end, so "… shall not be liable for errors, and you may not copy …" keeps
  *  its ban (PX-3: the clause took the rest of the sentence with it). */
 const LIABILITY = /\b(?:shall|will|does|do|can|may|would)\s*not\s+(?:be\s+(?:held\s+)?(?:liable|responsible)|accept|assume|bear|warrant|guarantee|represent|have any (?:liability|responsibility))\b[^.;]*?(?=,?\s+(?:and|but|nor|or|however|while)\s+(?:you|users?|no|neither|it|we|the)\b|[.;]|$)/gi;
-const REUSE_EN = /\b(?:cop(?:y|ies|ied|ying)|reproduc\w*|re-?distribut\w*|distribut\w*|re-?publish\w*|publish\w*|re-?transmi\w*|transmit\w*|re-?deliver\w*|re-?sell\w*|sell|duplicat\w*|stor(?:e|ed|ing)|download\w*|extract\w*|derivative works?|fram(?:e|ing)|mirror\w*|secondary use|re-?use\w*)\b/i;
+const REUSE_EN = /\b(?:cop(?:y|ies|ied|ying)|reproduc\w*|re-?distribut\w*|distribut\w*|re-?publish\w*|publish\w*|(?:re-?)?publication\w*|re-?transmi\w*|transmit\w*|re-?deliver\w*|re-?sell\w*|sell|duplicat\w*|stor(?:e|ed|ing)|download\w*|extract\w*|derivative works?|fram(?:e|ing)|mirror\w*|secondary use|re-?use\w*)\b/i;
 const REUSE_JA = /複製|複写|転載|再配信|再配布|配布|頒布|転送|二次利用|再利用|引用|蓄積|データ収集/;
 const AUTO_EN = /\b(?:automat\w*|robots?|scrap\w*|crawl\w*|spiders?|data[- ]?mining|harvest\w*|bots?|screen[- ]scrap\w*|programmatic\w*)\b/i;
 const AUTO_JA = /自動|機械的|クローラ|スクレイピング|ロボット|プログラムによる/;
@@ -386,8 +389,11 @@ const sentencesOf = (line: string): string[] => line.split(/(?<=[.!?。！？])\
  *  "re-use" (it forbids copying, reproducing, storing or redistributing and names no purpose the ban is limited to).
  *  Null for a line that does neither. Read sentence by sentence. */
 /** Where a sentence joins two bans ("…, and you may not use it for commercial purposes"), each clause is read on its
- *  own as well, so that the limit one of them names does not free the other (PL-2). */
-const CLAUSE = /,?\s+(?:and|but|while|nor)\s+(?=(?:you|users?|the user|no|neither|nothing|none|it|we|they|visitors?)\b)/i;
+ *  own as well, so that the limit one of them names does not free the other (PL-2). Since the check of fix part 3
+ *  (23 Nov 2026) a second ban needs no subject of its own: "…, and may not use it for commercial purposes", "…, nor use
+ *  them for commercial gain". A limit after a plain "or" inside one ban ("may not copy or redistribute the data or use
+ *  it for commercial purposes") is still read as the whole sentence's: the gate cannot tell which act it limits. */
+const CLAUSE = /,?\s+(?:and|but|while|nor)\s+(?=(?:you|users?|the user|no|neither|nothing|none|it|we|they|visitors?)\b)|,?\s+(?:and|but|or)\s+(?=(?:may|must|shall|should|will|can|do|does)\s+not\b|cannot\b|(?:may|must|shall|should|will|can) never\b)|,\s*nor\s+/i;
 export function termsBar(line: string): { kind: "automated" | "re-use"; sentence: string } | null {
   for (const raw of sentencesOf(line)) {
     const whole = raw.replace(LIABILITY, " ");   // what is left once a clause that only declines liability is taken out

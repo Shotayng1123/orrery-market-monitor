@@ -74,17 +74,24 @@ export const rowDay = (r: Pick<TableRow, "lastAt" | "source">, now: Date = new D
 /** For how long after its print a row the server called live still counts as live on the page: the server's own rule
  *  (the feed's delay plus fifteen minutes: table.ts) and three minutes for the page's own refresh. */
 export const LIVE_PRINT_MIN = 15, LIVE_SLACK_MIN = 3;
+/** How old a print may be for the page to call it live now, in minutes: its feed's delay, the server's fifteen and the
+ *  page's three (USD/JPY 18, Tokyo's 20-minute feed 38). One window for every row: one the server called live (below)
+ *  and one whose `live` the page reads itself, a stock's quote or an instrument outside the market table (lib/opens.ts
+ *  pageLive), which allowed thirty minutes beyond the delay until 23 Nov 2026, so that a stock's chart said LIVE beside
+ *  a line that called its price late (R1 of the check of fix part 3). */
+export const liveWindowMin = (market: string | null | undefined): number => (marketOf(market)?.delayMin ?? 0) + LIVE_PRINT_MIN + LIVE_SLACK_MIN;
 /** Whether a row is live NOW. `live` is the server's word at the moment of its answer, and the page can show an answer
  *  long after: the table it kept on the device, read with no connection the next morning, or a page left open while
  *  its refreshes fail. A row that was live then carried no day beside figures of the day before, while the closed rows
  *  beside it were dated (the checks of round 3b, 21 Nov 2026: H-3). So the page keeps the server's word only while the
  *  row's own print is recent; past that the print's date decides, as for any other row. A row without a print time
- *  keeps the server's word. */
+ *  keeps the server's word. This is the one rule of a row's state (lib/opens.ts rowState): its line, its tooltip, its
+ *  marks, and its chart tile's word, colour and DELAYED badge all read it. */
 export function stillLive(r: { lastAt?: string | null; live: boolean; market?: string | null }, now: Date = new Date()): boolean {
   if (!r.live) return false;
   const t = r.lastAt ? Date.parse(r.lastAt) : NaN;
   if (!Number.isFinite(t)) return true;
-  return now.getTime() - t <= ((marketOf(r.market)?.delayMin ?? 0) + LIVE_PRINT_MIN + LIVE_SLACK_MIN) * 60e3;
+  return now.getTime() - t <= liveWindowMin(r.market) * 60e3;
 }
 /** The day to write beside a row's figures where they are not today's: none for a row that is live now, for a figure
  *  dated today in Singapore, and for a row from a server that does not send the last session (the page is then as

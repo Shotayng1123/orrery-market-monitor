@@ -26,9 +26,10 @@
 // words around them; a market holiday as its date; addresses. Every piece of a page but its title goes through one
 // guard (`piece`): nothing of more than nine words or ninety characters, nothing with the signs of a sentence (a verb of
 // being or a modal, a full stop after a word; in Japanese an ending of one, or more than 28 characters), and nothing
-// but figures, dates, clock times and the words of a closed list of the labels and units JPX's tables carry, which
-// holds no verb, so that no sentence of a page, however short, is printed (jpx_read.ts labelOnly: PL-1 of the final
-// review of pull request #50). (Until 22 Nov 2026 a value came with two words on each side, and the pieces of one paragraph of the
+// but figures, dates, clock times and the words of a closed list of the labels, units and joining words JPX's tables
+// carry, so that a sentence with any other word is not printed, however short; a few of the list's words are verbs as
+// well as nouns (changes, limits, order, quote, shares), and a run of those and figures is printed as it stands
+// ("TOPIX changes from 2027") (jpx_read.ts labelOnly: PL-1 of the final review of pull request #50 and its check). (Until 22 Nov 2026 a value came with two words on each side, and the pieces of one paragraph of the
 // hours page touched and overlapped, so consecutive lines gave its sentences back: PX-1.) (The run of 21 Nov, before this rule, printed every line that held a match, cut at 220
 // characters: four sentences of JPX's pages, two navigation labels, seventeen link labels and three notice titles
 // went into a public job log: the checks of round 3b, PR-5.)

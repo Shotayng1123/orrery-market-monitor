@@ -17,10 +17,10 @@
 //     New York's hours: its stamp says LAST PRINT and the line when the Monitor next reads it, "next read 22:30 SGT".
 //   - An official yield is published once a day and has no session: nothing is said of it. Crypto never closes.
 import { calendarState, EARLY_CLOSES, HOLIDAY_SOURCES, holidaysNow, marketOf, marketStatus, nextOpen, openSince, stockMarket, type HolidayMap, type Market, type MarketId, type NextOpen } from "./sessions";
-import { fmtClock, fmtDate, fmtDayMon, fmtDayTime, fmtStamp, fmtWhen, isOfficialRow, TZ_ABBR } from "./time";
+import { fmtClock, fmtDate, fmtDayMon, fmtDayTime, fmtStamp, fmtWhen, isOfficialRow, tileStamp, TZ_ABBR, type TileStamp } from "./time";
 import { delayed, PERSONAL_USE_PUBLISHERS } from "./labels";
 import { shortName } from "./short";
-import { stillLive } from "./movers";
+import { liveWindowMin, stillLive } from "./movers";
 
 /** What the session table says of a market now: shut, in its timetable's hours, or not known to it (no such market in
  *  the table, one that never closes, one whose calendar has not arrived yet, or an instrument that is only read in
@@ -195,6 +195,25 @@ export function stateWord(s: RowSession): string | null {
  *  and a tile's LAST PRINT are amber (the designer's D-66). A row the Monitor only reads in New York's hours is never
  *  in this state: its print is not late. */
 export const staleInSession = (s: RowSession): boolean => s.now === "open" && !!s.note && s.note.kind !== "due";
+/** A row's state now, by one rule for every place that draws it (R1 of the check of fix part 3, 23 Nov 2026): a
+ *  phone's line and an opened row's, a row's tooltip and its marks in a table, and a chart tile's word, colour and
+ *  DELAYED badge (MARKETS, RATES & FX, EQUITIES' index and drivers, a stock's page, an instrument's page; a computer
+ *  and a phone). `live`: live now (lib/movers.ts stillLive, one window for the server's word and the page's own);
+ *  `ses`: what its market's session says when it is not; `stale`: an old price while its market trades (D-66). Until
+ *  then a tile took its word, its colour and its badge from the answer's `live` and its line from stillLive, so a kept
+ *  answer's tile read "LIVE 20 Nov 14:00 SGT" beside "opens 23 Nov 08:00 SGT", and a stock's chart amber "LIVE 09:20
+ *  SGT" beside "open since 08:00 SGT". Now LIVE stands alone, never beside a shut market or a print called late. */
+export interface RowState { live: boolean; ses: RowSession; stale: boolean }
+export function rowState(r: SessionRow, now: Date = new Date(), cal: Cal = calNow()): RowState {
+  const ses = rowSession(r, now, cal);
+  return { live: stillLive(r, now), ses, stale: staleInSession(ses) };
+}
+/** A chart tile's state: the row's (rowState) and its stamp, worded by the same `live` ("LIVE 13:35 SGT", "CLOSED 20 Nov
+ *  14:00 SGT", "LAST PRINT 08:40 SGT"; lib/time.ts tileStamp). */
+export function tileState(r: SessionRow & { lastAt: string | null; symbol: string }, now: Date = new Date(), cal: Cal = calNow()): RowState & { stamp: TileStamp } {
+  const s = rowState(r, now, cal);
+  return { ...s, stamp: tileStamp({ ...r, live: s.live }, now, s.ses.now) };
+}
 /** The holidays a next open passes over, short: "23 Nov: holiday", "31 Dec, 1 Jan: holidays"; null for none. */
 export const skippedWords = (n: Pick<SessionNote, "skipped"> | null | undefined): string | null => (n?.skipped?.length ? `${n.skipped.map((d) => fmtDayMon(d)).join(", ")}: ${n.skipped.length === 1 ? "holiday" : "holidays"}` : null);
 /** The same in full, for an opened phone row and a tooltip: "23 Nov 2026: a holiday in JPX's calendar". */
@@ -229,14 +248,15 @@ export function rowStateWords(r: SessionRow, now: Date = new Date(), cal: Cal = 
 }
 
 // ---- rows whose `live` the server does not send: a stock's page, an instrument outside the market table ----
-/** How old a print may be, beyond its feed's delay, for the page to call it live: the server keeps a stock's quote ten
- *  minutes and the page asks every five (the server's own rule for a market-table row is the delay plus fifteen). */
-export const PAGE_FRESH_MIN = 30;
-/** Whether a print is live by the page's own reading: its market in its regular hours, and the print recent. */
+/** Whether a print is live by the page's own reading: its market in its regular hours, and the print no older than the
+ *  window of every row (lib/movers.ts liveWindowMin: the feed's delay and 18 minutes; the page asks for a stock's quote
+ *  every five minutes, and the quote is the source's own at each ask). Until 23 Nov 2026 this allowed the delay and 30
+ *  minutes while the row's line allowed 18, and a stock's chart said LIVE beside "open since" (R1 of the check of fix
+ *  part 3). */
 export function pageLive(market: string | null | undefined, lastAt: string | null | undefined, now: Date = new Date(), holidays: HolidayMap = holidaysNow()): boolean {
   const m = marketOf(market), t = lastAt ? Date.parse(lastAt) : NaN;
   if (!m || !Number.isFinite(t) || /T00:00:00(\.000)?Z$/.test(lastAt ?? "")) return false;   // a booked close has a date, no time of day
-  return marketStatus(m, now, holidays).state === "OPEN" && (now.getTime() - t) / 60000 < m.delayMin + PAGE_FRESH_MIN;
+  return marketStatus(m, now, holidays).state === "OPEN" && now.getTime() - t <= liveWindowMin(market) * 60e3;
 }
 /** The market of a symbol the Monitor's table does not carry, where the symbol itself says it: a currency pair
  *  trades the FX week, a coin never stops, a stock is on the exchange of its suffix. Null otherwise: an index or a
@@ -294,8 +314,9 @@ export function closedLine(rows: PanelRow[], now: Date = new Date(), cal: Cal = 
   return { lead: lone ? "" : "Closed now: ", entries, read: rd ? { lead: `${words}: `, names, text: `${words}: ${names.join(", ")}`, tip: rd.tip } : null };
 }
 /** A market-table row for the line: nothing for an official yield (it has no session); a row the Monitor only reads in
- *  New York's hours by its short name; any other by its market. */
-export const panelRowOf = (r: SessionRow & { symbol: string; name: string }): PanelRow => (isOfficialRow(r) ? {} : readInNewYork(r) ? { read: shortName(r.symbol, r.name), live: r.live } : { market: r.market });
+ *  New York's hours by its short name, being read while it is live now (stillLive, the rule its own line reads: a kept
+ *  answer's VIX called live last night is not being read this morning); any other by its market. */
+export const panelRowOf = (r: SessionRow & { symbol: string; name: string }): PanelRow => (isOfficialRow(r) ? {} : readInNewYork(r) ? { read: shortName(r.symbol, r.name), live: stillLive(r) } : { market: r.market });
 /** The line as text: "Closed now: New York opens 22:30 SGT · … · next read 22:30 SGT: VIX, DXY, UST 10Y". */
 export const closedLineText = (c: ClosedLine): string => `${c.lead}${[...c.entries.map((e) => e.text), ...(c.read ? [c.read.text] : [])].join(" · ")}`;
 

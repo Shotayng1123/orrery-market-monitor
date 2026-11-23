@@ -3,10 +3,10 @@ import { DN, FLAT, fmtVol, SigmaChart, UP, type ChartMark, type SigmaWindow } fr
 import { useApi, DEV_MOCK } from "../lib/useApi";
 import type { Series, TableRow } from "../lib/types";
 import { fmtChg, fmtLevel, fmtPct, fmtSigma, isYield, signCls } from "../lib/fmt";
-import { fmtDate, fmtStamp, SGT, tileStamp } from "../lib/time";
+import { fmtDate, fmtStamp, SGT } from "../lib/time";
 import { delayed } from "../lib/labels";
 import { marketOf } from "../lib/sessions";
-import { pageLine, rowSession, staleInSession } from "../lib/opens";
+import { pageLine, tileState } from "../lib/opens";
 import { pageHash } from "../lib/indices";
 import { Flash } from "./Flash";
 import { LONG_PERIODS, PERIOD_DAYS, type ChartPeriod } from "../lib/periods";
@@ -88,14 +88,17 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
   // D-65: the reasons were in tooltips). A small tile keeps the opening alone until its head is rebuilt (I-9): the longer
   // line would take chart height there.
   // Where the row holds an old price while its market's timetable has a session, the stamp's word is amber (D-66).
-  const ses = rowSession(row), stamp = tileStamp(row, new Date(), ses.now), stale = staleInSession(ses);
+  // The stamp's word, the tile's live colour and its DELAYED badge read the row's state by the rule its line reads
+  // (lib/opens.ts tileState, R1 of the check of fix part 3): a kept answer's row called live, or a stock's quote past the
+  // live window, is not LIVE beside "opens 23 Nov 08:00 SGT" or "open since 08:00 SGT".
+  const { live, ses, stamp, stale } = tileState(row);
   const opens = ses.note ? <span className={`opens ${ses.note.kind}`} title={ses.note.tip}>{shape === "large" ? pageLine(ses.note) : ses.note.text}</span> : null;
   // the idle read-out under a daily chart: what is drawn, and on 5Y and 10Y that the big-move circles cover the last
   // three years only (the designer's I-3 note)
   const daily = `daily closes · σ corridors${volume ? " · volume" : ""}${LONG_PERIODS.has(period) && marks?.length ? " · circles: last three years" : ""}${shortFrom ? ` · history from ${shortFrom}` : ""}`;
   const panLabel = pan > 0 ? `← ${pan >= DAY ? `${Math.round(pan / DAY)}d` : `${Math.round(pan / 3600)}h`} back · double-click = latest` : "";
   return (
-    <div ref={box} className={`mtile cp ${shape}${row.live ? " live" : ""}`}>
+    <div ref={box} className={`mtile cp ${shape}${live ? " live" : ""}`}>
       <div className="lb">
         {link ? <a className="lbtxt lnk" href={`#${pageHash(row.symbol)}`} title={`${row.name} (${row.symbol}): open its page`}>{row.name}</a>
           : <span className="lbtxt" title={`${row.name} (${row.symbol})`}>{row.name}</span>}
@@ -104,7 +107,7 @@ export function ChartPanel({ row, period, tick, sigmaWindow = "m12", shape = "wi
         <span className="px"><Flash value={row.last}>{lvl(row.last)}</Flash></span>
         <span className="tags">
           {row.proxyFor && <span className="badge proxy" title={`${row.name} stands in for ${row.proxyFor}`}>PROXY</span>}
-          {row.live && m && m.delayMin > 0 && <span className="badge delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>{delayed(m.delayMin, true)}</span>}
+          {live && m && m.delayMin > 0 && <span className="badge delay" title={`${m.name} feed is delayed about ${m.delayMin} minutes`}>{delayed(m.delayMin, true)}</span>}
           {DEV_MOCK && <span className="badge est">MOCK</span>}
           <span className="asof" title={stamp.tip}><span className={`st${stamp.label === "LIVE" ? " live" : ""}${stale ? " stale" : ""}`}>{stamp.label}</span> {stamp.text}</span>
           {shape === "large" && opens}

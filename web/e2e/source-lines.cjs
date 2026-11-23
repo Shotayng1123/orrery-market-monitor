@@ -10,8 +10,9 @@
 //       SHORT INTEREST reads "JPX · personal use" with at least 145 px to spare (twice the largest difference the
 //       designer measured between the two letter placements)
 //   [2] the same with DejaVu Sans forced (a wider face) at 1179x800 and 1440x900
-//   [3] 1440x900 resized to 1179x800 and back, with no reload: never cut at any step; FLOW BY SECTOR's line takes the
-//       head's second line and comes back beside its title
+//   [3] 1440x900 resized to 1179x800 and back, with no reload: never cut at any step; FLOW BY SECTOR's line takes its
+//       compact form beside its title at 1179x800 (until R2 of the check of fix part 3, the head's second line) and
+//       comes back to the form it had
 //   [4] the short form's "personal use" opens Help at its paragraph, as the whole line's does
 //   [5] a phone at 360, 375 and 390 px: the dot keeps a space on each side ("JPX · personal use", the distance from the
 //       dot to "personal" a space ±0.5 px); no heading's title on two lines; every source line inside its heading
@@ -23,7 +24,11 @@
 //   [9] EQUITIES in the one-screen layout, the market open and closed, TOPIX and KOSPI (STAND-IN), at 1280x720, 1179x800
 //       and 1769x1000 XL, and in DejaVu Sans: a source line under its title takes no whole table row (whole rows as
 //       drawn against the same page with the lines held on the titles' line, which are the live site's), no panel
-//       stands over another, no line is cut (DP-1 of the same review)
+//       stands over another, no line is cut (DP-1 of the same review); TOPIX's heads keep one line (the compact form) and
+//       its heat map, index chart and drivers are as tall as with the lines held; a head on a second line is one whose
+//       compact form is wider than its room, and gives up no more than that line (R2 of the check of that fix)
+//   [10] a Tokyo stock's page draws the credit of its index memberships on the line ("(Nikkei, JPX · personal use)"),
+//       not only in a tooltip, in both computer layouts; a US stock's carries none (WD-6 of the same review)
 // It must pass as installed and GitHub's way (letters on whole px).
 // Run from web/:  node e2e/run.cjs source-lines   (the runner starts the server this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
@@ -45,6 +50,9 @@ const settle = async (p, ms = 250) => { await p.evaluate(() => document.fonts.re
 async function go(p, hash, sel, chip, face = "") {
   await p.goto(`${MOCK}#${hash}`, { waitUntil: "networkidle" }); await p.waitForSelector(chip ? "#scrbar .chip-sm" : sel, { timeout: 20000 });
   await p.addStyleTag({ content: "#mockbar{display:none!important}" + face }); await settle(p);
+  // a face put in by the check comes with no font event (a page's own web face sends "loadingdone", on which the fit runs
+  // again): a resize, on which the fit runs too, has every source line fitted in the face now drawn
+  if (face) { await p.evaluate(() => window.dispatchEvent(new Event("resize"))); await settle(p, 300); }
   // a stock's SHORT INTEREST is on its News screen in the one-screen layout: GO TO › SHORT INTEREST
   if (chip) { await p.locator("#scrbar .chip-sm").filter({ hasText: new RegExp(`^${chip}$`, "i") }).first().click(); await p.waitForSelector(sel, { timeout: 10000 }); await settle(p, 300); }
 }
@@ -54,12 +62,12 @@ async function go(p, hash, sel, chip, face = "") {
 const audit = (p) => p.evaluate(() => {
   const z = Number(document.body.style.zoom) || 1, R = (e) => e.getBoundingClientRect(), px = (x) => Math.round((x / z) * 10) / 10;
   return [...document.querySelectorAll(".phead .aux")].filter((a) => a.getClientRects().length && a.textContent.trim()).map((a) => {
-    const head = a.closest(".phead"), t = head.querySelector(".t"), vis = [...a.querySelectorAll(":scope > .src-long, :scope > .src-short")].find((e) => getComputedStyle(e).display !== "none") ?? a;
+    const head = a.closest(".phead"), t = head.querySelector(".t"), vis = [...a.querySelectorAll(":scope > .src-long, :scope > .src-short, :scope > .src-compact")].find((e) => getComputedStyle(e).display !== "none") ?? a;
     const rg = document.createRange(); rg.selectNodeContents(vis); const cs = getComputedStyle(a), box = R(a).width - (parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)) * z, need = rg.getBoundingClientRect().width;
     const pu = [...vis.querySelectorAll(".puse")].find((e) => e.getClientRects().length) ?? null, hr = R(head), ar = R(a);
     const puIn = pu ? (() => { const r = R(pu); return r.left >= Math.max(hr.left, ar.left) - 0.5 && r.right <= Math.min(hr.right, ar.right) + 0.5 && r.top >= hr.top - 0.5 && r.bottom <= hr.bottom + 0.5; })() : null;
-    const long = a.querySelector(":scope > .src-long"), short = a.classList.contains("short");
-    return { panel: t ? t.textContent.trim() : "?", k: head.parentElement?.dataset.k ?? "", text: vis.textContent.replace(/\s+/g, " ").trim(), need: px(need), box: px(box), spare: px(box - need), over: need > box + 0.01, scrolls: a.scrollWidth > a.clientWidth, pu: !!pu, puIn, short, wrap: a.classList.contains("wrap"), tipWhole: !short || (!!long && a.title === long.textContent.replace(/\s+/g, " ").trim()), headH: px(hr.height) };
+    const long = a.querySelector(":scope > .src-long"), compact = a.classList.contains("compact"), short = a.classList.contains("short") || compact;
+    return { panel: t ? t.textContent.trim() : "?", k: head.parentElement?.dataset.k ?? "", text: vis.textContent.replace(/\s+/g, " ").trim(), need: px(need), box: px(box), spare: px(box - need), over: need > box + 0.01, scrolls: a.scrollWidth > a.clientWidth, pu: !!pu, puIn, short, compact, wrap: a.classList.contains("wrap"), tipWhole: !short || (!!long && a.title === long.textContent.replace(/\s+/g, " ").trim()), headH: px(hr.height) };
   });
 });
 const bad = (rows) => rows.filter((r) => r.over || r.scrolls || r.puIn === false || !r.tipWhole);
@@ -76,7 +84,7 @@ const label = (w, h, size) => `${w}x${h}${size !== "AUTO" ? ` ${size}` : ""}`;
       const term = await p.evaluate(() => document.body.classList.contains("term"));
       for (const hash of ["equities", "equities/topix"]) { const r = all.find((x) => x.page === hash && x.k === "eq-short"); short.push(r); }
       const badRows = bad(all);
-      ck(`${label(w, h, size)}: ${all.length} source lines on the five screens, none cut, none wider than its box, every "personal use" drawn inside its head, every short form with the whole line as its tooltip (${all.filter((r) => r.short).length} in their short form, ${all.filter((r) => r.wrap).length} of them on the head's second line)`, term && all.length >= 20 && badRows.length === 0 && errs.length === 0, { term, badRows, errs });
+      ck(`${label(w, h, size)}: ${all.length} source lines on the five screens, none cut, none wider than its box, every "personal use" drawn inside its head, every short form with the whole line as its tooltip (${all.filter((r) => r.short).length} in a short form, ${all.filter((r) => r.compact).length} of them compact, ${all.filter((r) => r.wrap).length} on the head's second line)`, term && all.length >= 20 && badRows.length === 0 && errs.length === 0, { term, badRows, errs });
       ck(`${label(w, h, size)}: EQUITIES' SHORT INTEREST (Nikkei 225, TOPIX) reads "${short[0]?.text}" with ${short.map((r) => r?.spare).join(" and ")} px to spare (at least ${SPARE}), "personal use" whole in its head`, short.every((r) => r && r.text === "JPX · personal use" && r.short && r.spare >= SPARE && r.puIn === true), short);
       await ctx.close();
     }
@@ -97,8 +105,11 @@ const label = (w, h, size) => `${w}x${h}${size !== "AUTO" ? ` ${size}` : ""}`;
       await go(p, "equities", ".panel[data-k='eq-flow'] .phead .aux");
       const step = async (w, h) => { await p.setViewportSize({ width: w, height: h }); await p.waitForTimeout(450); const rows = await audit(p); return { rows, flow: rows.find((r) => r.k === "eq-flow") }; };
       const a = await step(1440, 900), c = await step(1179, 800), d = await step(1440, 900);
-      ck(`1440x900 → 1179x800 → 1440x900: never cut (${[a, c, d].map((s) => bad(s.rows).length).join(", ")} cut); FLOW BY SECTOR "${c.flow?.text}" ${c.flow?.wrap ? "on the head's second line" : "beside its title"} at 1179x800, then ${d.flow?.wrap ? "still on the second line" : d.flow?.short ? "short beside its title" : "whole beside its title"} at 1440x900`,
-        [a, c, d].every((s) => bad(s.rows).length === 0) && !!c.flow && c.flow.wrap && !!d.flow && !d.flow.wrap && !!a.flow && !a.flow.wrap && errs.length === 0, { a: a.flow, c: c.flow, d: d.flow, cut: [a, c, d].map((s) => bad(s.rows)), errs });
+      // FLOW BY SECTOR's short form is wider than its head's room at 1179x800: it took the head's second line there until
+      // the compact form (R2 of the check of fix part 3), which stands beside the title
+      const form = (f) => (!f ? "none" : f.wrap ? "on the head's second line" : f.compact ? "compact beside its title" : f.short ? "short beside its title" : "whole beside its title");
+      ck(`1440x900 → 1179x800 → 1440x900: never cut (${[a, c, d].map((s) => bad(s.rows).length).join(", ")} cut); FLOW BY SECTOR "${c.flow?.text}" ${form(c.flow)} at 1179x800, then "${d.flow?.text}" ${form(d.flow)} at 1440x900, as at first`,
+        [a, c, d].every((s) => bad(s.rows).length === 0) && !!c.flow && c.flow.compact && !c.flow.wrap && !!d.flow && !d.flow.wrap && !!a.flow && !a.flow.wrap && form(a.flow) === form(d.flow) && errs.length === 0, { a: a.flow, c: c.flow, d: d.flow, cut: [a, c, d].map((s) => bad(s.rows)), errs });
       await ctx.close();
     }
 
@@ -195,27 +206,42 @@ const label = (w, h, size) => `${w}x${h}${size !== "AUTO" ? ` ${size}` : ""}`;
 
     // DP-1 of the final review of pull request #50: a short form on its head's second line grew the head into the
     // panel's body, and whole rows of SECTOR PERFORMANCE, FLOW BY SECTOR and MARKET BREADTH went behind the panel's own
-    // scroll (8 of 11 sector rows became 6 at 1280x720 with the market open). The line takes its height from the chart
-    // beside it now (Equities.tsx useHeadRoom). Each case is counted twice on one page: as drawn, and with every wrapped
-    // line held on its title's line as before 22 Nov (cut), whose rows are the live site's; none may be fewer as drawn.
-    console.log("\n[9] EQUITIES in the one-screen layout: a source line under its title takes no whole table row");
+    // scroll (8 of 11 sector rows became 6 at 1280x720 with the market open). The line took its height from the chart
+    // beside it then (Equities.tsx useHeadRoom), and the heat map, the index chart and its drivers were shorter than
+    // before (R2 of the check of that fix). Since then a compact form ("INTRADAY 1D 07:03 SGT · close 22 Nov") stands
+    // beside the title where the short form does not fit, and a head takes a second line only where even that does not
+    // fit (KOSPI's STAND-IN at the narrowest windows). Each case is measured twice on one page: as drawn, and with every
+    // line held on its title's line (cut), whose rows and chart heights are the live site's: no whole row may be fewer as
+    // drawn; TOPIX's heads stay on one line, and its charts are as tall as held; a head on a second line is one whose
+    // compact form is wider than its room beside the title, and the chart under or above it gives up no more than that line.
+    console.log("\n[9] EQUITIES in the one-screen layout: no whole table row and no chart height given to a source line that fits beside its title");
     {
-      const ONE_LINE = "body.term .phead:has(>.aux.src-fit.wrap){flex-wrap:nowrap!important}body.term .phead .aux.src-fit.wrap{flex:1 1 0!important;order:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}body.term .phead .aux.src-fit.wrap>.src-short{white-space:nowrap!important}body.term .phead:has(>.aux.src-fit.wrap)>.csvbtn{order:0!important;margin-left:0!important}";
-      const TABLES = ["eq-sectors", "eq-flow", "eq-breadth", "eq-movers", "eq-screener"];
-      const rows = (p) => p.evaluate((ks) => {
-        const out = {};
+      const ONE_LINE = "body.term .phead:has(>.aux.src-fit.wrap){flex-wrap:nowrap!important}body.term .phead .aux.src-fit.wrap{flex:1 1 0!important;order:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}body.term .phead .aux.src-fit.wrap>.src-short,body.term .phead .aux.src-fit.wrap>.src-compact{white-space:nowrap!important}body.term .phead:has(>.aux.src-fit.wrap)>.csvbtn{order:0!important;margin-left:5px!important}";   // the CSV button's own margin on one line (tokens.css body.term .csvbtn), so the room beside the title is the fit's
+      const TABLES = ["eq-sectors", "eq-flow", "eq-breadth", "eq-movers", "eq-screener"], HEADS = ["eq-sectors", "eq-flow", "eq-breadth", "eq-short", "eq-heat"];
+      const rows = (p) => p.evaluate(([ks, hs]) => {
+        const z = Number(document.body.style.zoom) || 1, R = (e) => e.getBoundingClientRect(), px = (x) => Math.round((x / z) * 10) / 10, out = {}, heads = {};
         for (const k of ks) {
-          const pn = document.querySelector(`#grid > .panel[data-k="${k}"]`), body = pn?.querySelector(":scope > .pbody"), a = pn?.querySelector(":scope > .phead > .aux");
+          const pn = document.querySelector(`#grid > .panel[data-k="${k}"]`), body = pn?.querySelector(":scope > .pbody");
           if (!body) continue;
-          const br = body.getBoundingClientRect(), sc = body.offsetHeight ? br.height / body.offsetHeight : 1, top = br.top + body.clientTop * sc, bot = top + body.clientHeight * sc;
+          const br = R(body), sc = body.offsetHeight ? br.height / body.offsetHeight : 1, top = br.top + body.clientTop * sc, bot = top + body.clientHeight * sc;
           let whole = 0, all = 0;
-          for (const tr of body.querySelectorAll("table tr")) { if (tr.closest("thead") || !tr.getClientRects().length) continue; all++; const r = tr.getBoundingClientRect(); if (r.top >= top - 0.5 && r.bottom <= bot + 0.5) whole++; }
-          out[k] = { whole, all, wrap: !!a && a.classList.contains("wrap") };
+          for (const tr of body.querySelectorAll("table tr")) { if (tr.closest("thead") || !tr.getClientRects().length) continue; all++; const r = R(tr); if (r.top >= top - 0.5 && r.bottom <= bot + 0.5) whole++; }
+          out[k] = { whole, all };
         }
-        const ps = [...document.querySelectorAll("#grid > .panel")].map((e) => [e.dataset.k, e.getBoundingClientRect()]), overlap = [];
+        // each head's form, and (held on one line) its room beside the title against the drawn width of its narrowest form
+        for (const k of hs) {
+          const a = document.querySelector(`#grid > .panel[data-k="${k}"] > .phead > .aux`); if (!a) continue;
+          const narrow = a.querySelector(":scope > .src-compact") ?? a.querySelector(":scope > .src-short"), cs = getComputedStyle(a), rg = document.createRange();
+          let need = null;
+          if (narrow) { const d = narrow.style.display; narrow.style.display = "inline"; rg.selectNodeContents(narrow); need = px(rg.getBoundingClientRect().width); narrow.style.display = d; }
+          heads[k] = { wrap: a.classList.contains("wrap"), compact: a.classList.contains("compact"), box: px(R(a).width - (parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)) * z), need, headH: px(R(a.closest(".phead")).height) };
+        }
+        const h = (sel) => { const e = document.querySelector(sel); return e && e.getClientRects().length ? px(R(e).height) : null; };
+        const charts = { heat: h('#grid > .panel[data-k="eq-heat"] .tmap'), index: h('#grid > .panel[data-k="eq-index"] .bigwrap canvas'), drivers: h('#grid > .panel[data-k="eq-drivers"] .sqgrid canvas') };
+        const ps = [...document.querySelectorAll("#grid > .panel")].map((e) => [e.dataset.k, R(e)]), overlap = [];
         for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) { const [ka, x] = ps[i], [kb, y] = ps[j]; if (x.left < y.right - 0.5 && y.left < x.right - 0.5 && x.top < y.bottom - 0.5 && y.top < x.bottom - 0.5) overlap.push(`${ka}/${kb}`); }
-        return { out, overlap, term: document.body.classList.contains("term") };
-      }, TABLES);
+        return { out, heads, charts, overlap, term: document.body.classList.contains("term") };
+      }, [TABLES, HEADS]);
       const frames = (p) => p.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
       const cases = [[1280, 720, "AUTO", ""], [1179, 800, "AUTO", ""], [1769, 1000, "XL", ""], [1280, 720, "AUTO", DEJAVU]];
       for (const [w, h, size, face] of cases) for (const open of face ? [true] : [true, false]) {
@@ -227,12 +253,38 @@ const label = (w, h, size) => `${w}x${h}${size !== "AUTO" ? ` ${size}` : ""}`;
           const drawn = await rows(p), cut = bad(await audit(p));
           const held = await p.addStyleTag({ content: ONE_LINE }); await frames(p); await p.waitForTimeout(250); await frames(p);
           const before = await rows(p); await held.evaluate((e) => e.remove());
-          const lost = TABLES.filter((k) => drawn.out[k] && before.out[k] && drawn.out[k].whole < before.out[k].whole), wraps = TABLES.filter((k) => drawn.out[k]?.wrap);
-          ck(`${label(w, h, size)}${face ? " in DejaVu Sans" : ""}, ${idx === "kospi" ? "KOSPI (STAND-IN)" : "TOPIX"}, market ${open ? "open" : "closed"}: ${wraps.length} line(s) under their titles (${wraps.map((k) => k.slice(3)).join(", ") || "none"}); whole rows as drawn / with the lines held on the titles' line: ${TABLES.map((k) => `${k.slice(3)} ${drawn.out[k]?.whole}/${before.out[k]?.whole} of ${drawn.out[k]?.all}`).join(", ")}; none fewer, no panel over another, no source line cut`,
-            drawn.term && (!open || wraps.length > 0) && lost.length === 0 && drawn.overlap.length === 0 && cut.length === 0 && errs.length === 0, { lost: lost.map((k) => [k, drawn.out[k], before.out[k]]), overlap: drawn.overlap, cut, errs });
+          const lost = TABLES.filter((k) => drawn.out[k] && before.out[k] && drawn.out[k].whole < before.out[k].whole);
+          const wraps = HEADS.filter((k) => drawn.heads[k]?.wrap), dishonest = wraps.filter((k) => !(before.heads[k]?.need > before.heads[k]?.box));
+          // the most a chart may give up: one line of each head on a second line that reaches it (BREADTH and FLOW the heat
+          // map, SECTORS and SHORT INTEREST the index and its drivers), a line being a head's height on one line or less
+          const line = (k) => (drawn.heads[k]?.wrap ? Math.max(0, drawn.heads[k].headH - before.heads[k].headH) : 0);
+          const giveUp = { heat: line("eq-breadth") + line("eq-flow"), index: Math.max(line("eq-sectors"), line("eq-short")), drivers: Math.max(line("eq-sectors"), line("eq-short")) };
+          const shorter = Object.keys(giveUp).filter((c) => drawn.charts[c] != null && before.charts[c] != null && drawn.charts[c] < before.charts[c] - giveUp[c] - 1.5);
+          const tooTall = HEADS.filter((k) => drawn.heads[k]?.wrap && line(k) > before.heads[k].headH + 1);
+          ck(`${label(w, h, size)}${face ? " in DejaVu Sans" : ""}, ${idx === "kospi" ? "KOSPI (STAND-IN)" : "TOPIX"}, market ${open ? "open" : "closed"}: ${wraps.length} head(s) on a second line (${wraps.map((k) => `${k.slice(3)}: compact ${before.heads[k]?.need} px in ${before.heads[k]?.box}`).join(", ") || "none"}); charts as drawn / held (px): ${Object.keys(giveUp).map((c) => `${c} ${drawn.charts[c]}/${before.charts[c]}`).join(", ")}; whole rows as drawn / held: ${TABLES.map((k) => `${k.slice(3)} ${drawn.out[k]?.whole}/${before.out[k]?.whole} of ${drawn.out[k]?.all}`).join(", ")}; none fewer, no panel over another, no source line cut`,
+            drawn.term && (idx !== "topix" || wraps.length === 0) && dishonest.length === 0 && tooTall.length === 0 && shorter.length === 0 && lost.length === 0 && drawn.overlap.length === 0 && cut.length === 0 && errs.length === 0, { lost: lost.map((k) => [k, drawn.out[k], before.out[k]]), wraps, dishonest: dishonest.map((k) => [k, before.heads[k]]), tooTall, shorter: shorter.map((c) => [c, drawn.charts[c], before.charts[c], giveUp[c]]), overlap: drawn.overlap, cut, errs });
         }
         await ctx.close();
       }
+    }
+
+    // WD-6 of the final review of pull request #50 and its check: a Tokyo company's page names its index memberships
+    // from Nikkei's and JPX's files, and credited them in a tooltip only; on a touch screen, and to anyone who does not
+    // hover, the line read as Yahoo Finance's. The credit is drawn after them now, with "personal use" that opens Help.
+    console.log("\n[10] a Tokyo stock's index memberships credited on the line itself (WD-6)");
+    for (const [w, h, size, compact] of [[1440, 900, "AUTO", true], [1179, 800, "AUTO", true], [1440, 900, "AUTO", false]]) {
+      const { ctx, p, errs } = await open(b, { vw: w, vh: h, size, compact });
+      const read = async (sym) => { await p.goto(`${MOCK}#asset/${sym}`, { waitUntil: "networkidle" }); await p.waitForSelector(".panel[data-k='st-chart'] .phead .aux", { timeout: 20000 }); await p.addStyleTag({ content: "#mockbar{display:none!important}" }); await settle(p, 300);
+        return p.evaluate(() => { const a = document.querySelector(".panel[data-k='st-chart'] .phead .aux"), by = document.querySelector("#st-members-by"), pu = by?.querySelector(".puse"), R = (e) => e.getBoundingClientRect(), hr = R(a.closest(".phead")), z = Number(document.body.style.zoom) || 1;
+          const rg = document.createRange(); rg.selectNodeContents(a); const cs = getComputedStyle(a), box = R(a).width - (parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)) * z;
+          const puIn = pu ? (() => { const r = R(pu); return r.width > 0 && r.left >= hr.left - 0.5 && r.right <= hr.right + 0.5 && r.top >= hr.top - 0.5 && r.bottom <= hr.bottom + 0.5; })() : null;
+          return { line: a.textContent.replace(/\s+/g, " ").trim(), by: by ? by.textContent.replace(/\s+/g, " ").trim() : null, drawn: !!by && by.getClientRects().length > 0 && getComputedStyle(by).visibility !== "hidden", puIn, cut: (cs.whiteSpace === "nowrap" && rg.getBoundingClientRect().width > box + 0.01) || a.scrollWidth > a.clientWidth, tip: by?.getAttribute("title") ?? "" }; }); };
+      const us = await read("NVDA"), jp = await read("7203.T");
+      if (await p.locator("#st-members-by .puse").count()) { await p.locator("#st-members-by .puse").click(); await p.waitForTimeout(350); }
+      const helpAt = await p.evaluate(() => !!document.querySelector("#help-personal-use.at"));
+      ck(`${label(w, h, size)} ${compact ? "one-screen" : "scrolling"}: 7203.T reads "${jp.line}", the credit "${jp.by}" drawn on the line, not cut, its "personal use" inside its head and opening Help at its paragraph (${helpAt}); NVDA (S&P 500, Nasdaq-100: not Nikkei's or JPX's lists) carries none ("${us.line}")`,
+        jp.by === "(Nikkei, JPX · personal use)" && jp.drawn && !jp.cut && jp.puIn === true && helpAt && /Nikkei Inc\., its weights file/.test(jp.tip) && /list of TSE-listed issues/.test(jp.tip) && us.by === null && !us.cut && errs.length === 0, { jp, us, helpAt, errs });
+      await ctx.close();
     }
   } finally { await b.close(); }
   console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed");

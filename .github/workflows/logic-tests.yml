@@ -1,14 +1,20 @@
 name: logic-tests
 
 # The checks that need no browser and no live database: sim/logic.test.ts (exchange sessions, rolling bands, alert
-# measures, the push-notification encryption, accounts by email, the gates of the source probes) and sim/sql (database
-# functions, run on an in-memory Postgres). Run when the code they cover changes.
+# measures, the push-notification encryption, accounts by email, the gates of the source probes), sim/readme.test.ts
+# (what README.md says of the checks, held to the repository) and sim/sql (database functions, run on an in-memory
+# Postgres). Run when the code they cover changes, and when README.md, supabase/README.md or a browser suite does: the
+# README's checks of the checks run here only, not in the deploys' gates (a sentence of the README cannot break the
+# server or the site), and the logic file still holds a few of the READMEs' sentences to the code (the "personal use"
+# paragraph, the paper book's switches, the statement's words), so a change to a README alone is checked before it
+# merges and cannot stop the next deploy unseen (the check of fix part 3 of the final review of pull request #50, 23 Nov
+# 2026).
 on:
   push:
     branches: [main]
-    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/lib/**", "jobs/tools/**", "jobs/probes/**", ".github/workflows/logic-tests.yml"]
+    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/lib/**", "web/e2e/**", "jobs/tools/**", "jobs/probes/**", "README.md", "supabase/README.md", ".github/workflows/logic-tests.yml"]
   pull_request:
-    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/lib/**", "jobs/tools/**", "jobs/probes/**", ".github/workflows/logic-tests.yml"]
+    paths: ["supabase/functions/**", "supabase/migrations/**", "sim/**", "web/src/lib/**", "web/e2e/**", "jobs/tools/**", "jobs/probes/**", "README.md", "supabase/README.md", ".github/workflows/logic-tests.yml"]
   workflow_dispatch:
 
 permissions:
@@ -30,6 +36,8 @@ jobs:
           cache-dependency-path: jobs/package-lock.json
       - run: npm ci
       - run: npx tsx ../sim/logic.test.ts
+      # what README.md says of the checks (section [AK]); here only, never in a deploy's gate
+      - run: npx tsx ../sim/readme.test.ts
       # the guard that decides whether a server deploy may apply database changes (jobs/tools/deploy_guard.jq)
       - run: bash ../sim/deploy_guard.test.sh
 

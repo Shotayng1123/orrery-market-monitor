@@ -17,7 +17,9 @@ const api = async (p) => { await routes(p); await p.route("**/fakeapi?*", async 
   const ok = (x) => r.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "*" }, body: JSON.stringify(x) });
   if (r.request().method() === "OPTIONS") return r.fulfill({ status: 204, headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "GET,POST,OPTIONS" } });
   if (a === "login") return ok({ token }); if (a === "me") return ok({ email: "reader@example.com", role: "user", mustChange: false }); if (a === "table") return ok(table()); return r.fallback(); }); };
-const first = (p) => p.evaluate(() => { const r = document.querySelector(".mp-row, table.mkt tbody tr:not(.cls)"); return r ? r.textContent.replace(/\s+/g, " ").trim().slice(0, 60) : null; });
+// the first row's text, long enough to hold its level after the longest state line ("Last print 09:44 · session 08:00–10:30
+// SGT, scheduled" in Tokyo's morning: at 60 characters the level was cut off, and the checks failed in those hours only)
+const first = (p) => p.evaluate(() => { const r = document.querySelector(".mp-row, table.mkt tbody tr:not(.cls)"); return r ? r.textContent.replace(/\s+/g, " ").trim().slice(0, 160) : null; });
 const level = async (p) => { const t = await first(p); const m = t && t.match(/57,0\d\d/); return m ? Number(m[0].replace(",", "")) : null; };
 const bars = (p) => p.evaluate(() => ({ net: document.querySelector("#netbar")?.textContent ?? null, cls: document.querySelector("#netbar")?.className ?? null, upd: !!document.querySelector("#updbar") }));
 const keptCount = (p) => p.evaluate(() => new Promise((res) => { const r = indexedDB.open("om-keep"); r.onsuccess = () => { try { const q = r.result.transaction("api").objectStore("api").getAllKeys(); q.onsuccess = () => res(q.result.map(String)); q.onerror = () => res(null); } catch { res([]); } }; r.onerror = () => res(null); }));

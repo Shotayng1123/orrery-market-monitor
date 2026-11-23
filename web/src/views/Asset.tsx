@@ -40,6 +40,14 @@ export function membersCredit(indices: string[]): string | undefined {
   const named = indices.map((x) => MEMBERS_SOURCE[x]?.full).filter((x): x is string => !!x);
   return named.length ? `${named.join(" ")} Used for ${PERSONAL_USE} (Help: Data sources · ${PERSONAL_USE}).` : undefined;
 }
+/** The same credit drawn after the memberships, by publisher, "NK225, TOPIX (Nikkei, JPX · personal use)": a tooltip is
+ *  read on hover only, and on a touch screen not at all, where the line read as Yahoo Finance's (WD-6, the check of fix
+ *  part 3). "personal use" opens Help's paragraph, as on every line that names those files. Nothing for a membership
+ *  from another list (the S&P 500's and the Nasdaq-100's are not theirs). */
+export function MembersBy({ indices }: { indices: string[] }) {
+  const who = indices.map((x) => MEMBERS_SOURCE[x]?.short.replace(/^members: /, "")).filter((x): x is string => !!x);
+  return who.length ? <span id="st-members-by" title={membersCredit(indices)}> ({who.join(", ")} · <PersonalUse />)</span> : null;
+}
 /** What the short figure is, in a few words, by its source. */
 export function shortLine(d: StockPage): { label: string; value: string; title: string } {
   const s = d.short;
@@ -138,7 +146,7 @@ export function AssetView({ symbol, tick }: { symbol: string; tick: number }) {
       <div className="c12"><PeriodBar periods={ASSET_PERIODS} period={period} onPeriod={setPeriod} sigmaWindow={sigmaWindow} onSigmaWindow={setSigmaWindow} extra={term ? <ScreenChips sections={sections} screen={scr} onScreen={setScreen} /> : undefined} /></div>
       <div className="pcols" data-even={even && feed ? "" : undefined} data-page="stock" data-screen={term ? scr : undefined}>
         <div className="pcol w8">
-          {on("chart") && <Panel no={no("chart")} k="st-chart" title={d.name.toUpperCase()} span={8} aux={<><Star symbol={d.symbol} name={d.name} /> {d.symbol}{d.exchange ? ` · ${d.exchange}` : ""}{d.sector ? ` · ${d.sector}` : ""}{d.industry ? ` · ${d.industry}` : ""}{d.indices.length ? <> · <span id="st-members" title={membersCredit(d.indices)}>{d.indices.join(", ")}</span></> : ""} · Yahoo Finance</>}>
+          {on("chart") && <Panel no={no("chart")} k="st-chart" title={d.name.toUpperCase()} span={8} aux={<><Star symbol={d.symbol} name={d.name} /> {d.symbol}{d.exchange ? ` · ${d.exchange}` : ""}{d.sector ? ` · ${d.sector}` : ""}{d.industry ? ` · ${d.industry}` : ""}{d.indices.length ? <> · <span id="st-members" title={membersCredit(d.indices)}>{d.indices.join(", ")}</span><MembersBy indices={d.indices} /></> : ""} · Yahoo Finance</>}>
             <div className="bigwrap"><ChartPanel row={row} period={period} tick={tick} sigmaWindow={sigmaWindow} shape="large" axes volume marks={marks} /></div>
           </Panel>}
           {on("perf") && <Panel no={no("perf")} k="st-perf" title={bms.length ? `PERFORMANCE VS ${title.toUpperCase()}` : "PERFORMANCE"} span={8} aux="price change, dividends not included">

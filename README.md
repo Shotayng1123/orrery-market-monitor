@@ -110,7 +110,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,179 checks in 49 suites on 22 Nov 2026): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,195 checks in 49 suites on 23 Nov 2026): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -161,7 +161,10 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   account by verification email, the manager's accounts list, the
   home-screen line and the sheet it opens, the new-version bar, opening without a connection, notifications (with the kinds a device receives and its σ line), a tab that fails
   while it is drawn (it says so in its own space; the header and the other tabs stay), the welcome email as its
-  reader sees it, a price feed that has stopped (the bar and the DATA chip say so), and the opening.
+  reader sees it, a price feed that has stopped (the bar and the DATA chip say so) and an answer kept long after it
+  came (`stale-feed`: a row called live then carries no LIVE mark now, its line on a phone follows its market's session,
+  and since 23 Nov 2026 every chart tile says the same as its line: MARKETS' tiles, a phone's opened row, a stock's
+  page and an instrument's page, never LIVE beside an opening or an old price), and the opening.
   The **layout guard** (`layout-guard`) opens all eight screens at five computer sizes (1280×720 to 2560×1440, and
   1440×900 with small text), at 1440×900 with large text (every screen but EQUITIES, which joins once it is fixed
   there) and on two phones, and a stock's two pages at three more windows (1366×768 and 1536×864 at text L,
@@ -271,20 +274,27 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   Help at its paragraph (in FULL too), and on a phone a space on each side of its dot; JPX's calendar named with
   "(personal use)" on Tokyo's holiday; TOPIX's PROXY badges and Help's rows saying what is read; and since the final
   review of pull request #50, on EQUITIES in the one-screen layout, a source line under its title taking no whole
-  table row (the market open and closed, TOPIX and KOSPI, at 1280×720, 1179×800 and 1769×1000 XL, and in DejaVu Sans).
+  table row (the market open and closed, TOPIX and KOSPI, at 1280×720, 1179×800 and 1769×1000 XL, and in DejaVu Sans),
+  and since its check (23 Nov 2026) no chart height either where the compact form fits beside the title (TOPIX's heads
+  on one line, its heat map, index chart and drivers as tall as the live site's; a head on a second line only where its
+  compact form is wider than its room); a Tokyo stock's index memberships credited on the line itself.
   `portfolio`, `phone-portfolio` and `source-lines` also check the "personal use" lines, which are live on the published
   page, and `local-copy` opens the built site on both layouts to check the state the page's switch says: with it off,
   six tabs, no "PORTFOLIO" or "Portfolio" anywhere, `#portfolio/new` showing MARKETS, no portfolio route asked, and
   no file of the portfolio's screens or of its stand-in books among the published files.
   `cd web && npm run e2e` starts the test servers it needs and runs them all, three suites at a time: about
-  30 minutes on the engineer's machine (1,781 s as installed and 1,721 s with GitHub's letter placement on 22 Nov
-  2026 for the 49 suites and 3,179 checks, after the final review of pull request #50; 1,687 s and 1,601 s for the
+  28 minutes on the engineer's machine (1,666 s as installed and 1,659 s with GitHub's letter placement on 23 Nov
+  2026 for the 49 suites and 3,195 checks, after the check of fix part 3; 1,781 s and 1,721 s on 22 Nov for the 49
+  suites and 3,179 checks after the final review of pull request #50; 1,687 s and 1,601 s for the
   49 suites and 3,156 checks before it, which took 1,247 s on GitHub; 1,206 s for the 43 suites, with `header`; 1,204 s
   for 42, with `portfolio-accounts`; 1,169 s
   late on 21 Nov 2026 for the 41 suites, with `nav-hold` and the wider
   drawings of the fixes after that day's checks; 1,136 s for the 40 suites with the paper portfolio's three; 1,029 s
   for the 37 suites and 2,337 checks before them, which took 977 s on GitHub; the 34 suites and 2,052 checks before
   that day's first three new suites took 14.5 minutes there and 13 on GitHub). `node e2e/run.cjs offline` runs one suite. Suites and servers are listed at the top of `web/e2e/run.cjs`.
+  On GitHub the publish runs them as two jobs of about equal time, each with its own 30-minute limit and both needed
+  for a publish (`deploy-web`'s `test`, `node e2e/run.cjs --part=1`, and `test-2`, `--part=2`: every suite not in the
+  runner's `PART_ONE`); in one job they took 25 min 17 s of its 30 on 22 Nov 2026.
   A suite that fails once is tried again; when the second try passes, the lines that failed the first time are
   printed all the same, so a check that fails only now and then can be found from the publish job's log.
   Needs Playwright's browser once: `npx playwright install chromium`.
@@ -337,6 +347,13 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   therefore lives in a module that imports no package (`lib/pagetop.ts` beside `lib/nav.ts`), and a type from a
   module that does is imported with `import type`. To run the file exactly as GitHub does:
   `git archive HEAD | tar -x -C <an empty folder>`, then `npm ci` and the command above in that folder's `jobs/`.
+- **The README's own checks** (`sim/readme.test.ts`, section [AK]): what this file says of the checks is what the
+  repository holds (the number of browser suites in `web/e2e/run.cjs`, the paper portfolio's suites by name, the suites
+  described here by name, which suites check the "personal use" lines, the windows of the morning check, what `pf_jpx`
+  asks). They were a section of the logic checks until 23 Nov 2026; the logic checks stop a deploy of the server and of
+  the site, a sentence of this file cannot break either, and a change to this file alone ran no check at all, so a
+  rewording could merge unchecked and stop the next deploy. They run in `logic-tests` only, which runs on a change to
+  this file as well. `cd jobs && npx tsx ../sim/readme.test.ts`.
 - **Database checks** (`sim/sql`): the rules that live in database functions (the limits on verification emails;
   the queue for the reasons of big moves; the request for the second path),
   run with the migration file itself on PGlite, a Postgres inside Node; and the pattern an instrument's headlines are
@@ -353,8 +370,11 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   `cd sim/sql && npm ci && npm test`.
 
 The `deploy-web` workflow runs the browser and logic checks before it publishes: a failing check stops the publish.
-A pull request that touches `web/` runs them without publishing. `logic-tests` runs the logic and database checks
-when the server's functions or migrations, the page's `src/lib`, or the source probes change.
+A pull request that touches `web/` runs them without publishing. `logic-tests` runs the logic, README and database
+checks when the server's functions or migrations, the page's `src/lib`, a browser suite, the source probes, this file or
+`supabase/README.md` change: the README's checks are in no deploy's gate, and the few sentences of the two READMEs the
+logic checks hold to the code (the "personal use" paragraph, the paper book's switches, the account statement's words
+as `supabase/README.md` quotes them) are checked before a change to them merges.
 
 ## Data sources (v1)
 
@@ -402,7 +422,7 @@ in Singapore, "opens 23 Nov 22:30 SGT" on another day. Nothing is fetched for it
 | ", scheduled" | Every other market (Hong Kong, Shanghai, Seoul, Taipei, Mumbai, Singapore, Sydney, Frankfurt, Zurich, London, São Paulo, Mexico City, CME Globex, FX), New York and Tokyo after 31 Dec 2027, and any market when the calendar did not load: the Monitor does not hold those holidays, so the time is the timetable's and says so; on a local holiday the market stays shut |
 | LAST PRINT, with what the Monitor knows | A row that is not live while its market's timetable has a session is not called CLOSED. In a session's first minutes on a delayed feed (its start plus the feed's delay, and fifteen minutes more): "first print due ~08:20 SGT". After them, for Tokyo and New York, whose holidays are held: "open since 08:00 SGT". For every other market: "session 16:00–00:30 SGT, scheduled" (the FX week: "session to 28 Nov 06:00 SGT, scheduled"): on a local holiday the Monitor does not hold there is no session, and it does not say the market is open |
 | "next read 22:30 SGT" | The dollar index (`DX-Y.NYB`, ICE), the Cboe yield indices (`^FVX`, `^TNX`, `^TYX`) and `^VIX` and `^VXN` carry the market `NYSE` in the instruments table: that is when the server reads them, not their venue's session, and the Monitor holds neither Cboe's nor ICE's hours. The page's rule (`readInNewYork` in `web/src/lib/opens.ts`): a row whose market is `NYSE` and whose class is not Equities. Outside New York's session such a row says LAST PRINT and when it is next read, never CLOSED, an opening or NYSE's early close |
-| A stock's page | The stock route sends no live state: the page reads it from the session table and the quote's own time (the exchange from the symbol's suffix, as the server's alerts do), so the chart says LIVE in the exchange's hours and CLOSED with the opening outside them. A stock on an exchange the table does not keep (`MC.PA`) says neither |
+| A stock's page | The stock route sends no live state: the page reads it from the session table and the quote's own time (the exchange from the symbol's suffix, as the server's alerts do), so the chart says LIVE in the exchange's hours while the quote is no older than the feed's delay plus 18 minutes (the window of every row, `liveWindowMin` in `web/src/lib/movers.ts`; until 23 Nov 2026 thirty minutes, while the line beside the chart allowed eighteen), LAST PRINT in amber with its time when it is older, and CLOSED with the opening outside them. A stock on an exchange the table does not keep (`MC.PA`) says neither |
 
 The words are made in `web/src/lib/opens.ts`. A midday break gives the afternoon's start; crypto, which never closes,
 and an official yield, published once a day, have no such line.
@@ -442,7 +462,7 @@ York's hours keeps the usual colour while New York is shut: its print is not lat
 |---|---|
 | MOVERS IN σ (the ten largest of the day, any class) and the 1D IN σ column | Worked out by the Monitor from its stored daily closes (`_shared/sigma.ts`, and the database's `fn_table_stats` with the same rule): the day's change over the standard deviation of the instrument's own daily changes in the 63 sessions before it, a yield's in points of its level (bp), a price's in per cent. The newest change is never in its own yardstick. An official-curve yield's day counts once it is booked (Japan's, the euro area's, the UK's and Canada's curves are published a day late; the US Treasury's on the day itself, and its tooltip says "its newest published day"). Each figure's closes are on its tooltip |
 | TODAY · LAST SESSION (since 2026-11-21) | A currency's day ends at 17:00 New York and a CME future's with it, so at 07:00 SGT their day is an hour or two old and the strip had lost the session that had just ended. LAST SESSION is each instrument's newest completed day: the change between its two newest booked closes over the σ of the 63 daily changes that end at the earlier of them (`lastSession` and `tableLastSession` in `_shared/sigma.ts`, sent with each row of the table as `ls`; the database's `sd63x`, which never holds the change it measures). A roll day is counted within the new contract; where the size of a change of contract is not known there is no σ. A day is "completed" here once it is booked, by the run of 22:35 UTC (06:35 SGT): a currency's 35 minutes after 17:00 New York in its winter and 95 in its summer, and a CME future's with it in New York's winter. In New York's summer (from 15 Mar 2027) the booking run of 22:35 UTC finds Globex open again and leaves a future's day to the run of 07:05 UTC, so from Tuesday to Friday a future's LAST SESSION is the session before, with its date, until 15:05 SGT; booking a future's day by CME's trade date is in the backlog. The page opens on TODAY. No new source and no migration |
-| The date beside a figure | A figure that is not of today in Singapore carries its day ("20 Nov"): on the strip and a phone's cards, after the name in the table, in a phone line's pill in place of "1D", and in the strip cell's and the name's tooltips (the table's 1D IN σ tooltip gives the last session's date). The table's CSV gives it in a column of its own after the name ("Figures of (blank: today in SGT)"; from a server that sends no days, "Figures of (not known: this answer carries no days)"), with the row's marks (ROLL, PROXY, DELAYED ~10m, LIVE) in another; until 2026-11-21 both ran into the name ("S&P 50023 Nov"). The file is named by the day in Singapore (until 22 Nov 2026 by the UTC day). A row the answer called live whose print is older than its feed's delay and a few minutes (a kept table, refreshes that fail) carries no LIVE or DELAYED mark: its day stands after its name. A table kept on a device and read long after its answer came counts a row as live only while its print is recent (the feed's delay, fifteen minutes and three more: `stillLive` in `web/src/lib/movers.ts`), so an old print carries its day. The day is the row's own (the SGT date of its last print, or the date of its booked close or published yield), so nothing is worked out for it. Under LAST SESSION every figure carries its session's date. A server from before sends no `ls`, and the page then shows neither the choice nor a day |
+| The date beside a figure | A figure that is not of today in Singapore carries its day ("20 Nov"): on the strip and a phone's cards, after the name in the table, in a phone line's pill in place of "1D", and in the strip cell's and the name's tooltips (the table's 1D IN σ tooltip gives the last session's date). The table's CSV gives it in a column of its own after the name ("Figures of (blank: today in SGT)"; from a server that sends no days, "Figures of (not known: this answer carries no days)"), with the row's marks (ROLL, PROXY, DELAYED ~10m, LIVE) in another; until 2026-11-21 both ran into the name ("S&P 50023 Nov"). The file is named by the day in Singapore (until 22 Nov 2026 by the UTC day). A row the answer called live whose print is older than its feed's delay and a few minutes (a kept table, refreshes that fail) carries no LIVE or DELAYED mark: its day stands after its name, and its chart tile, on a computer and in a phone's opened row, says CLOSED with the opening or LAST PRINT with its time, as its line does (one rule for a row's state, `rowState` in `web/src/lib/opens.ts`; until 23 Nov 2026 the tile kept "LIVE" beside "opens 23 Nov 08:00 SGT"). A table kept on a device and read long after its answer came counts a row as live only while its print is recent (the feed's delay, fifteen minutes and three more: `stillLive` in `web/src/lib/movers.ts`), so an old print carries its day. The day is the row's own (the SGT date of its last print, or the date of its booked close or published yield), so nothing is worked out for it. Under LAST SESSION every figure carries its session's date. A server from before sends no `ls`, and the page then shows neither the choice nor a day |
 | "last session -2.2σ" under a figure | For three hours after 17:00 New York (to 09:00 SGT in New York's winter, 08:00 in its summer) a currency's cell on TODAY shows the session that has just ended under the new day's figure, once that session is booked (06:35 SGT) and has a σ (`youngDay` and `showsLast` in `web/src/lib/movers.ts`); a phone's opened row says the same in words, as it has no tooltip. A CME future's cell does not from Tuesday to Friday: in New York's winter the server dates a future's quote by New York's calendar day, so until midnight there its row is the booked close of the session that has just ended, with its date beside it, and the figure is that session's own; in New York's summer the run of 22:35 UTC does not book that session (Globex is open again), so until the run of 07:05 UTC (15:05 SGT) the row is the live print, its 1D from the close before that session, over two sessions, with no date. On a Monday morning no day has ended since Friday's, and in New York's winter a pair's and a future's cell both show Friday's session under the new week's figure, from the week's first print until three hours after Sunday 17:00 New York (since 2026-11-21; before, the three hours were counted from Friday's bell and the line never showed on a Monday); in its summer those three hours end at 00:00 UTC, as a pair's first bar comes, so a pair's cell does not. The local copy shows the line under a future on every morning, which the live Monitor does not |
 | σ moves in the alert list and as notifications | The same figure, for every currency, yield, commodity, volatility index, future and coin (the equity indices keep their ±3% alert): raised from 2σ, one per instrument and session, updated while the move grows; the lists everyone reads show them from 2.5σ, and each device chooses its kinds and its own line (2, 2.5 or 3σ) in Notifications. Each names its σ, its window and its source |
 
@@ -479,10 +499,16 @@ once more; a Crawl-delay longer than the probe's own pace is kept, up to thirty 
 `robots.txt` answers 401, 403 or 418 should be read at all is a question put to the owner: until it is answered a probe
 still reads such a site's pages and says so, and sends it no form (`pf_rates` holds its one POST there). The probes of
 publishers' files (`pf_bench`, `pf_borrow`) also read the site's terms, by its own link, before any data file of it
-(`readTerms()`, `termsBar()`): a line that forbids automated reading, or that forbids copying, reproducing, storing or
-redistributing and names no purpose the ban is limited to (commercial use named among the banned acts is none: "any
-copying, redistribution or commercial use … is prohibited"), holds that site's files and is printed for a person to read,
-and that finding goes to the owner; a page reached by a "legal" link counts as the terms only when its title or first
+(`readTerms()`, `termsBar()`): a line that forbids automated reading, or that forbids copying, reproducing, storing,
+publishing or redistributing and names no purpose the ban is limited to (commercial use named among the banned acts is
+none: "any copying, redistribution or commercial use … is prohibited"), holds that site's files and is printed for a
+person to read, and that finding goes to the owner. A sentence of two bans is read ban by ban where the second opens
+with its own subject, its own "may not", "must not", "cannot" or the like, or "nor" ("…, and may not use it for
+commercial purposes"), so the purpose one names does not free the other; a purpose named for one of the acts a single ban lists is read as the
+whole ban's ("may not copy or redistribute the data or use it for commercial purposes", "copying and redistribution of
+the data, and their use for commercial purposes, are prohibited"), and such a line does not hold the files. The gate
+errs the other way elsewhere: it holds the files for some lines that bar nothing of a site's data ("we will never sell
+your personal information"); a page reached by a "legal" link counts as the terms only when its title or first
 heading names them and its lines cover two of the subjects the gate reads or carry a ban (since 22 Nov 2026: by its
 name alone, or by two stray lines, a page counted as the terms read), and where no terms are found the files that need
 them stay unread. Until 21 Nov 2026 the gate knew a ban only by the wordings it was modelled on (a word of
@@ -505,9 +531,11 @@ names a list, figures or a report it prints the address, the status and the titl
 only once the page is asked). It prints only values: a table's cells under its heading or the short label before it,
 a page's clock times, dates and percentages in order with at most the one joining word between two of them and none
 around them ("9:00 am to 11:30 am"), each page's own title, a holiday as its date; and any piece of a page it prints
-other than a title holds nothing but figures, dates, clock times and the words of a closed list of the labels and units
-JPX's tables carry, which holds no verb, so that no sentence of a page is printed however short (`jobs/probes/jpx_read.ts`,
-`labelOnly`; until 22 Nov 2026 a value came with two words on each side, and the pieces of one
+other than a title holds nothing but figures, dates, clock times and the words of a closed list of the labels, units
+and joining words JPX's tables carry (a piece without a figure must be one of its labels whole), so that a sentence with
+any other word is not printed, however short; some words of the list are verbs as well as nouns (changes, limits,
+order, quote, shares, prices, issues, note), and a few words of a page made of those and figures alone are printed as
+they stand ("TOPIX changes from 2027", "Order 100 shares") (`jobs/probes/jpx_read.ts`, `labelOnly`; until 22 Nov 2026 a value came with two words on each side, and the pieces of one
 paragraph overlapped so that consecutive lines gave its sentences back; until the final review of pull request #50 a
 short sentence with a verb the guard did not list, "Trading resumes at 12:30 pm", passed it;
 its first run, on 21 Nov, printed whole lines of JPX's pages into the public job log and asked one address from memory,
