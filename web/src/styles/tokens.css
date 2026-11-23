@@ -882,6 +882,22 @@ body.pv2 .helphead{font-size:13px;padding:12px 14px}
 body.pv2 .helphead .chip-sm{font-size:13px;padding:10px 13px;border-radius:9px}
 body.pv2 .helpsec h4{font-size:12.5px;margin:16px 0 6px}
 body.pv2 .helpsec dl>div{grid-template-columns:104px minmax(0,1fr);gap:10px;padding:7px 0;font-size:14px;line-height:1.45}
+/* the 1-minute tour (slice 11): PLAY under Help's first row, and the film over the Monitor and Help, 4:5, at most 560 px
+   wide on a computer and edge to edge on a phone, its head and the whole film inside the window. The page's text size
+   is a zoom of <body> (lib/prefs.ts, --z), which scales every length here, the window's height too: the two limits
+   are divided by it, so that 560 px and the window's height are the screen's at every text size (64 px: the head and
+   the margins) */
+.tourgo{display:block;margin-top:7px}
+.tourplay{background:none;font:inherit;font-size:10px;color:var(--txt);margin-left:0}
+.tourwrap{position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:70;display:flex;align-items:center;justify-content:center;padding:12px}
+.tourbox{background:var(--bg);border:1px solid var(--bord2);border-radius:6px;overflow:hidden;width:min(100%,calc(560px / var(--z,1)),calc((100vh / var(--z,1) - 64px) * .8));width:min(100%,calc(560px / var(--z,1)),calc((100dvh / var(--z,1) - 64px) * .8))}
+.tourhead{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--bord);letter-spacing:.1em;font-size:11.5px;color:var(--amber)}
+.tourhead .chip-sm{background:none;font:inherit;font-size:10px;color:var(--txt2);letter-spacing:.05em}
+.tourbox video{display:block;width:100%;height:auto;aspect-ratio:4/5;background:var(--bg)}
+body.pv2 .tourwrap{padding:0}
+body.pv2 .tourbox{border-radius:0;border-left:0;border-right:0}
+body.pv2 .tourhead{font-size:13px;padding:6px 8px 6px 14px}
+body.pv2 .tourhead .chip-sm,body.pv2 .tourplay{font-size:13px;padding:10px 13px;border-radius:9px;min-width:44px;min-height:44px}
 /* phones: table figures a little larger than the rest (they were under 8.5px after the overall reduction) */
 @media (max-width:720px){table.mkt,table.mini,table.secT{font-size:11.5px}.nwrow{font-size:11.5px}}
 /* printing a research piece: the piece only, black on white */

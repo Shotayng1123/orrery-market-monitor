@@ -1,10 +1,13 @@
 // Opening without a connection: the service worker and the kept data.
 // Run from web/:  node e2e/run.cjs offline   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright"); const fs = require("fs"); const { routes } = require("./harness.cjs");
+const path = require("path"), http = require("http"), crypto = require("crypto"), { spawnSync } = require("child_process");
 // the bar's items on the site as published: six while the paper book's switch is off, seven once it is on
 // (PAPER_ON_LIVE_SITE in src/lib/paper.ts, read as local-copy.cjs reads it: PC-8, DC-2 of the second review of P-1)
 const BAR_ITEMS = /^export const PAPER_ON_LIVE_SITE = true;/m.test(require("fs").readFileSync(require("path").join(__dirname, "..", "src", "lib", "paper.ts"), "utf8")) ? 7 : 6;
 const PREVIEW = "http://localhost:5187/orrery-market-monitor/", MOCK = "http://localhost:5179/orrery-market-monitor/", INDEX = require("path").join(__dirname, ".dist", "index.html");
+// the worker's cache, by the worker's own name (public/sw.js): its name changes with what a new worker must drop (slice 11)
+const CACHE = /const CACHE = "([^"]+)"/.exec(fs.readFileSync(require("path").join(__dirname, "..", "public", "sw.js"), "utf8"))[1];
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d)}`); };
 const token = Buffer.from(JSON.stringify({ id: "reader@example.com" })).toString("base64") + ".sig";
 // a stand-in market table whose first level rises by one with every answer, so a fresh answer can be told from a kept one
@@ -28,7 +31,7 @@ const keptCount = (p) => p.evaluate(() => new Promise((res) => { const r = index
   const ctx = await b.newContext({ ...devices["iPhone 13"] }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message)); await api(p);
   await p.goto(PREVIEW, { waitUntil: "networkidle" }); await p.waitForSelector(".gatewrap .modal");
   await p.locator("#g-id").fill("reader@example.com"); await p.locator("#g-pw").fill("a-password"); await p.locator(".gatewrap button.go").tap(); await p.waitForSelector(".mp-row"); await p.waitForTimeout(2500);
-  const sw = await p.evaluate(async () => ({ controlled: !!navigator.serviceWorker.controller, kept: (await (await caches.open("om-shell-v1")).keys()).map((r) => r.url.replace(location.origin + "/orrery-market-monitor/", "/")) }));
+  const sw = await p.evaluate(async (CACHE) => ({ controlled: !!navigator.serviceWorker.controller, kept: (await (await caches.open(CACHE)).keys()).map((r) => r.url.replace(location.origin + "/orrery-market-monitor/", "/")) }), CACHE);
   ck("the service worker is in control and holds the page, its script and its stylesheet", sw.controlled && sw.kept.includes("/") && sw.kept.some((u) => /^\/assets\/index-.*\.js$/.test(u)) && sw.kept.some((u) => /^\/assets\/index-.*\.css$/.test(u)), sw);
   const fonts = await p.evaluate(() => ({ loaded: performance.getEntriesByType("resource").filter((e) => /fonts\.(googleapis|gstatic)\.com/.test(e.name)).length }));
   const keptFonts = sw.kept.filter((u) => /fonts\.(googleapis|gstatic)\.com/.test(u)).length;
@@ -87,6 +90,77 @@ const keptCount = (p) => p.evaluate(() => new Promise((res) => { const r = index
     net.mode = "down"; await c2.setOffline(true); await q.reload({ waitUntil: "load" }); await q.waitForSelector("#topbar"); await q.waitForTimeout(1200); const d2 = await level(q), bb = await bars(q);
     const pos = await q.evaluate(() => { const r = document.querySelector("#footbars").getBoundingClientRect(); return { mid: Math.round((r.left + r.right) / 2), vw: innerWidth, bottom: Math.round(r.bottom), vh: innerHeight }; }); await q.screenshot({ path: "off-laptop.png" });
     ck("the desktop table opens without a connection with its last data, the bar centred at the foot of the window", d1 != null && d2 === d1 && /^No connection\. Data from /.test(bb.net ?? "") && Math.abs(pos.mid - pos.vw / 2) <= 2 && pos.bottom <= pos.vh && e2.length === 0, { d1, d2, bb, pos, e2 }); net.mode = "ok"; await c2.close(); }
+
+  // The 1-minute tour (slice 11, the designer's work order §7.4): a page of the worker's scope that is not the app's. The
+  // worker before it answered every page of its scope from the network and kept the answer under the app's own key, so
+  // the tour's page, once opened, was what the device showed for the Monitor without a connection.
+  console.log(`\n[the tour's page and its film are the network's: the app's key keeps the app (cache ${CACHE})]`);
+  { const c4 = await b.newContext({ viewport: { width: 1280, height: 800 } }); await c4.addInitScript((t) => { try { if (!localStorage.getItem("om_token")) localStorage.setItem("om_token", t); } catch {} }, token); const q = await c4.newPage(); const e4 = []; q.on("pageerror", (e) => e4.push(e.message)); await api(q);
+    await q.goto(PREVIEW, { waitUntil: "networkidle" }); await q.waitForSelector("table.mkt tbody tr:not(.cls)");
+    const keptApp = (pg) => pg.evaluate(async (CACHE) => { const c = await caches.open(CACHE), page = await c.match(location.origin + "/orrery-market-monitor/"); return { page: page ? await page.text() : null, keys: (await c.keys()).map((r) => r.url.replace(location.origin + "/orrery-market-monitor/", "/")) }; }, CACHE);
+    for (let i = 0; i < 20 && !(await keptApp(q)).page; i++) await q.waitForTimeout(250);   // the page sends the worker its files once it has loaded
+    const before = await keptApp(q), ctl = await q.evaluate(() => !!navigator.serviceWorker.controller);
+    const t1 = await q.goto(PREVIEW + "tour/", { waitUntil: "load" }), tour = await q.evaluate(() => ({ h1: document.querySelector("h1")?.textContent ?? null, controlled: !!navigator.serviceWorker.controller }));
+    const t2 = await q.goto(PREVIEW + "tour/orrery-tour.mp4", { waitUntil: "commit" }).then((r) => r.status(), (e) => String(e.message).slice(0, 80)); await q.waitForTimeout(400);
+    await q.goto(PREVIEW + "tour/", { waitUntil: "load" }); const after = await keptApp(q);
+    ck(`the app's page kept under its key (${before.keys.length} entries); then the tour's page (${t1.status()}, "${tour.h1}") and its film (${t2}) opened by address: the key still holds the app's page, and nothing of the tour is kept`,
+      ctl && /<div id="root">/.test(before.page ?? "") && t1.status() === 200 && tour.h1 === "The one-minute tour" && t2 === 200 && /<div id="root">/.test(after.page ?? "") && !/one-minute tour/.test(after.page ?? "") && !after.keys.some((k) => /^\/tour\//.test(k)), { ctl, tour, t2, before: before.keys, after: after.keys, page: (after.page ?? "").slice(0, 120) });
+    await c4.setOffline(true); await q.goto(PREVIEW, { waitUntil: "load" }).catch(() => undefined); await q.waitForSelector("#topbar", { timeout: 8000 }).catch(() => undefined); await q.waitForTimeout(800);
+    const off = await q.evaluate(() => ({ app: !!document.querySelector("#topbar"), h1: document.querySelector("h1")?.textContent ?? null }));
+    ck("offline, the app's address opens the Monitor (from the device), not the tour", off.app && off.h1 !== "The one-minute tour" && e4.length === 0, { off, e4 });
+    await c4.setOffline(false); await c4.close(); }
+
+  // An update of the worker itself (V11-1 of slice 11's check). A device whose Monitor was kept by live's worker (cache
+  // om-shell-v1; e2e/sw-om-shell-v1.js is web/public/sw.js as published until slice 11, byte for byte) visits once after
+  // the publish that brings this worker, then has no connection. That visit is answered by the worker before (the app's
+  // "keep" at its load goes there too) and the new one's activation removes the older cache: nothing of the visit was
+  // left, and without a connection the Monitor did not open until a second visit. The first visit is the app's, or the
+  // tour's page, which live's worker keeps under the app's own key. One origin, served as GitHub Pages serves a folder:
+  // live's worker on a build of its own (GitHub checks out one commit, so live's site cannot be built from its commit
+  // there), then this site; "off" drops every connection, the page's and the worker's, and no-cache keeps the browser's
+  // own cache from standing in for the device's copy.
+  console.log(`\n[an update from live's worker (om-shell-v1) to this one (${CACHE}) on one origin: one visit, then no connection]`);
+  { const PORT = 5189, UPG = `http://localhost:${PORT}/orrery-market-monitor/`, OLD = path.join(__dirname, ".out", "upgrade-live"), NEW = path.join(__dirname, ".dist"), site = { dir: OLD, off: false };
+    const v1 = fs.readFileSync(path.join(__dirname, "sw-om-shell-v1.js")), v1sha = crypto.createHash("sha256").update(v1).digest("hex");
+    // the older site: a build of its own (GITHUB_SHA empty: its id from the time, another release than this site's) with live's worker
+    const lb = spawnSync(process.execPath, [path.join(__dirname, "..", "node_modules", "vite", "bin", "vite.js"), "build", "--outDir", OLD, "--emptyOutDir"], { cwd: path.join(__dirname, ".."), env: { ...process.env, VITE_API_URL: "http://localhost:5187/fakeapi", GITHUB_SHA: "" }, encoding: "utf8" });
+    if (lb.status !== 0) throw new Error(`the older site's build failed: ${(lb.stderr || lb.stdout || "").split("\n").slice(-6).join(" | ")}`);
+    fs.writeFileSync(path.join(OLD, "sw.js"), v1);
+    const id = (d) => JSON.parse(fs.readFileSync(path.join(d, "version.json"), "utf8")).id, page = (d) => fs.readFileSync(path.join(d, "index.html"), "utf8");
+    const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png", ".jpg": "image/jpeg", ".mp4": "video/mp4" };
+    const srv = http.createServer((rq, rs) => { if (site.off) return rq.socket.destroy();
+      let f = path.join(site.dir, decodeURIComponent(new URL(rq.url, UPG).pathname).replace(/^\/orrery-market-monitor\//, "")); if (fs.existsSync(f) && fs.statSync(f).isDirectory()) f = path.join(f, "index.html");
+      if (!f.startsWith(site.dir) || !fs.existsSync(f)) { rs.writeHead(404); return rs.end("not found"); }
+      rs.writeHead(200, { "content-type": TYPES[path.extname(f)] ?? "application/octet-stream", "cache-control": "no-cache" }); fs.createReadStream(f).pipe(rs); });
+    await new Promise((res) => srv.listen(PORT, res));
+    const ROW = "table.mkt tbody tr:not(.cls)";
+    const held = (pg) => pg.evaluate(async (P) => { const out = {}; for (const k of await caches.keys()) { const c = await caches.open(k), r = await c.match(P), keys = (await c.keys()).map((x) => x.url.replace(P, "/")); out[k] = { n: keys.length, tour: keys.filter((u) => u.startsWith("/tour/")).length, page: r ? await r.text() : null }; } return { out, ctl: !!navigator.serviceWorker.controller }; }, UPG).catch((e) => ({ out: {}, err: String(e.message).slice(0, 80) }));
+    const said = (k) => ({ ctl: k.ctl, err: k.err, caches: Object.fromEntries(Object.entries(k.out).map(([n, v]) => [n, `${v.n} entries${v.tour ? `, ${v.tour} of the tour` : ""}, page: ${v.page == null ? "none" : v.page === page(OLD) ? "live's" : v.page === page(NEW) ? "this build's" : v.page.slice(0, 50)}`])) });
+    for (const firstVisit of ["", "tour/"]) {
+      site.dir = OLD; const c5 = await b.newContext({ viewport: { width: 1280, height: 800 } }); await c5.addInitScript((t) => { try { if (!localStorage.getItem("om_token")) localStorage.setItem("om_token", t); } catch {} }, token);
+      const q = await c5.newPage(); const e5 = []; q.on("pageerror", (e) => e5.push(e.message)); await api(q);
+      const go = (u, waitUntil = "networkidle") => q.goto("about:blank").then(() => q.goto(UPG + u, { waitUntil })).then(() => "", (e) => String(e.message).split("\n")[0].slice(0, 100));
+      try {
+        await go(""); await q.waitForSelector(ROW); for (let i = 0; i < 40 && !(await held(q)).out["om-shell-v1"]?.page; i++) await q.waitForTimeout(250);   // the page sends live's worker its files once it has loaded
+        await go(""); await q.waitForSelector(ROW); await q.waitForTimeout(1500); const k1 = await held(q), before = await level(q);
+        if (!firstVisit) ck(`live's worker (sha256 ${v1sha.slice(0, 12)}…) with a build of its own (${id(OLD)}), opened twice: the worker controls the page, and om-shell-v1 keeps it and its files`,
+          v1sha === "1d698aff117f6fdc3d98aac97aa1f127e5ffe06b4946e8562bcf3d409b7b2a00" && id(OLD) !== id(NEW) && k1.ctl && Object.keys(k1.out).join() === "om-shell-v1" && k1.out["om-shell-v1"].page === page(OLD), said(k1));
+        site.dir = NEW; const nav = await go(firstVisit, firstVisit ? "load" : "networkidle");
+        const seen = firstVisit ? await q.evaluate(() => document.querySelector("h1")?.textContent ?? null) : await q.waitForSelector(ROW).then(() => level(q), () => null);
+        let k2 = await held(q); for (let i = 0; i < 80 && (k2.err || "om-shell-v1" in k2.out); i++) { await q.waitForTimeout(250); k2 = await held(q); }   // the visit brings the new worker (the browser looks for one at every visit); its activation removes om-shell-v1
+        ck(firstVisit ? `a first visit to the tour's page after the publish ("${seen}"): the new worker takes over and keeps this build's page and its files (${k2.out[CACHE]?.n} entries), nothing of the tour`
+          : `the site published again with this worker (${id(NEW)}): one visit with a connection opens the Monitor with fresh data, and the new worker takes over (om-shell-v1 removed) and keeps what that visit loaded, this build's page and its files (${k2.out[CACHE]?.n} entries)`,
+          !nav && (firstVisit ? seen === "The one-minute tour" : seen != null && seen !== before) && k2.ctl && !("om-shell-v1" in k2.out) && k2.out[CACHE]?.page === page(NEW) && !k2.out[CACHE].tour && k2.out[CACHE].n >= 3, { nav, seen, before, ...said(k2) });
+        const last = firstVisit ? before : await level(q);
+        site.off = true; net.mode = "down"; await c5.setOffline(true);
+        const offNav = await go("", "load"); await q.waitForSelector(ROW, { timeout: 8000 }).catch(() => undefined); await q.waitForTimeout(800);
+        const off = await q.evaluate(() => ({ app: !!document.querySelector("#topbar"), build: document.documentElement.dataset.build ?? null, bar: document.querySelector("#netbar")?.textContent ?? null })).catch(() => ({ app: false })), kept = await level(q).catch(() => null);
+        const tourOff = firstVisit ? await go("tour/", "load") : null;
+        ck(`then no connection: the Monitor opens from the device, this build's page, with the last data it received (${last}) and a bar that says so${firstVisit ? "; the tour's page is not answered from the device" : ""}`,
+          !offNav && off.app && off.build === id(NEW) && kept != null && kept === last && /^No connection\. Data from /.test(off.bar ?? "") && (!firstVisit || /ERR_/.test(tourOff)) && e5.length === 0, { offNav, off, last, kept, tourOff, e5 });
+      } finally { site.off = false; net.mode = "ok"; await c5.setOffline(false); await c5.close(); }
+    }
+    srv.closeAllConnections(); await new Promise((res) => srv.close(res)); }
 
   console.log("\n[the dev servers]");
   { const c3 = await b.newContext({ ...devices["iPhone 13"] }); const q = await c3.newPage(); await q.goto(MOCK, { waitUntil: "networkidle" }); await q.waitForSelector(".mp-row"); await q.waitForTimeout(800);

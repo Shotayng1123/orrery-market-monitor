@@ -51,6 +51,8 @@ web/        Vite + React + TypeScript. src/styles/tokens.css is the design syste
             Help, drawn at the page's root, takes the same one history entry in the phone layout, so Back closes it
             there and the tab under it stays (since the final review of pull request #50).
             "Add Orrery to your Home Screen" opens in it, from its line on MARKETS or from the menu.
+            public/tour/: the 1-minute tour, its film, still and page (see "The tour"); src/components/Tour.tsx
+            plays it over the Monitor from Help's first row.
             src/views/Portfolio.tsx, src/components/pf/, src/styles/pf.css: the paper portfolio's screens (P-1), a
             file of their own in every build, fetched only where the page draws the paper book (src/lib/paper.ts:
             the page's switch, or the preview the server grants an account).
@@ -114,11 +116,43 @@ Monitor's.
 The server (database changes and the functions) is deployed by the `deploy-server` workflow on a push to `main` that
 touches `supabase/`, once its two secrets exist; the set-up and the first-time steps are in `supabase/README.md`.
 
+## The tour (since 2026-11-23)
+
+The 1-minute tour is a film of the Monitor, tab by tab: what each tab shows and what you can set. It is 60.45 s long,
+1080 × 1350 (4:5) at 60 frames a second, H.264 with its captions in the picture and no sound; its screens are the local
+copy's sample data (real company names beside made-up figures, under a SAMPLE DATA mark). The owner accepted this cut on
+23 Nov 2026, and the same day a truth check of it required two corrections, which the film here carries: RATES & FX's
+line reads "Dotted curve: set by PERIOD." (the line before, "The dotted curve: PERIOD ago.", was false for PERIOD 1D
+and 1W, where the dotted curve is the curve of a month ago), and SAMPLE DATA is on in every frame that shows a screen
+(it came about 0.6 s late at the open and went about 0.2 s early at the end). Where it lives:
+- `web/public/tour/`: `orrery-tour.mp4` (the corrected cut's own bytes: `web/e2e/tour.cjs` holds its sha256), `poster.jpg`
+  (the player's still) and `index.html`, its page at `{site}tour/`: plain HTML on the Monitor's tokens and faces, with no
+  app code and no sign-in; the film, "Open the Monitor →", a line that the screens show sample data, and the captions as
+  text under "Read the tour instead". The film does not start by itself for a reader who has asked for less motion.
+- Help's first row, "Watch the 1-minute tour", whose PLAY plays the film over the Monitor (`web/src/components/Tour.tsx`),
+  in the Home Screen app's frame as well (`web/src/lib/scroller.ts`): the player and Help are drawn over the frame, close
+  as they do without it, and leave the page where it stood (neither moves the page's scroll).
+- `web/public/mail/tour.jpg`: the tour's picture for the welcome email, a file of the site that goes out before the
+  server that sends an email naming it.
+- The service worker leaves the tour to the network: it keeps and answers only the app's own page (`web/public/sw.js`).
+- On a dev server `{site}tour/` shows the Monitor (Vite's fallback page); there the tour's page is `{site}tour/index.html`.
+
+The film is made frame by frame from the local copy by the designer's scripts, which are not in this repository yet:
+bringing them in (as `web/tools/tour/`) is a slice of its own, later. Until then it is rendered again in the designer's
+workspace (`pdca/D/tour/`, outside the repository): `node render.cjs all` (Playwright, ffmpeg, and Python 3 with numpy
+and Pillow; 25 to 44 minutes on a machine of 4 processors) starts its own sample-data dev server, captures the screens
+at a set clock, renders and encodes every frame, runs its checks (the captions' reading rates, what must never be
+legible, the light, the smoothness and the cut's limits) and writes the film, the player's still, the email's picture
+and the page; `node repro.cjs run A`, `run B` and `compare A B` render it twice from nothing and list every difference.
+A new film goes into `web/public/tour/` (with `web/public/mail/tour.jpg`) only once the owner has accepted it, or as a
+correction of the accepted cut that a check requires, with the owner told what changed; its sha256 goes into
+`web/e2e/tour.cjs` with it.
+
 ## Tests
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,431 checks in 56 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24) and the Home Screen frame's `phone-frame` (111)): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,539 checks in 57 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24), the Home Screen frame's `phone-frame` (111), and slice 11's new suite `tour` (101) and 7 more in `offline`): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -177,12 +211,24 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   "Last print 08:40" in amber, the FX panel's "Next read 22:30 SGT: DXY"), the classic phone layout, the sign-in
   screen, creating an
   account by verification email, the manager's accounts list, the
-  home-screen line and the sheet it opens, the new-version bar, opening without a connection, notifications (with the kinds a device receives and its σ line), a tab that fails
+  home-screen line and the sheet it opens, the new-version bar, opening without a connection (the tour's page and film
+  left to the network, the app's own page still the one kept, also after the first visit that brings a new worker, the
+  app's or the tour's), notifications (with the kinds a device receives and its σ line), a tab that fails
   while it is drawn (it says so in its own space; the header and the other tabs stay), the welcome email as its
   reader sees it, a price feed that has stopped (the bar and the DATA chip say so) and an answer kept long after it
   came (`stale-feed`: a row called live then carries no LIVE mark now, its line on a phone follows its market's session,
   and since 23 Nov 2026 every chart tile says the same as its line: MARKETS' tiles, a phone's opened row, a stock's
-  page and an instrument's page, never LIVE beside an opening or an old price), and the opening.
+  page and an instrument's page, never LIVE beside an opening or an old price), the opening, and the 1-minute tour
+  (`tour`: the film's bytes, the corrected cut's, and its own boxes, H.264 High, 1080 × 1350, every frame 1/60 s, 58 to
+  62 s, no sound, its index first; its page on the dev server and on the built site, on a phone and a computer, edge to
+  edge on the phone and up to 560 px on the computer, the captions as text, in a much wider face too, and not starting by
+  itself for a reader who has asked for less motion; Help's first row and its PLAY, the film over the Monitor whole
+  inside the window at eleven windows and layouts (text S, AUTO and XL, the one-screen layout's floor and XL's least
+  window, phones of 320 to 390 px, one on its side, the classic phone layout), Esc and on a phone Back closing the
+  player first and Help after it, with no navigation; in the Home Screen app's frame, for the preview account, Back,
+  Esc, CLOSE and a tap outside closing the player first and Help after it, with the bar on the window's foot and the
+  frame where it stood, also scrolled down and with Help opened at a row, and the page scrolling again after, no
+  overflow left on html, body or #pscroll).
   The **layout guard** (`layout-guard`) opens all eight screens at five computer sizes (1280×720 to 2560×1440, and
   1440×900 with small text), at 1440×900 with large text (every screen but EQUITIES, which joins once it is fixed
   there) and on two phones, and a stock's two pages at three more windows (1366×768 and 1536×864 at text L,
@@ -328,10 +374,12 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   no line, or no tab and no screens' file, in the other two states.
   `cd web && npm run e2e` starts the test servers it needs and runs them all, up to three suites at a time (two of
   the dev servers' and one of the built site's, whose suites queue behind each other): about
-  28 minutes on the engineer's machine (the whole run for the 56 suites and 3,431 checks of P-2.1 and the Home Screen
-  frame together is not yet timed in one run, `phone-frame` 120 to 129 s; P-2.1's 55 suites and 3,319 checks, `pf-ticket` then 23,
-  took 2,421 s with the browser's own letter placement and other work on the machine, before three suites' lines
-  were brought to the ticket's door, `pf-ticket` 30 s; slice 9's 53 suites and 3,290 checks took 2,061 s as installed,
+  28 minutes on the engineer's machine (the whole run for the 57 suites and 3,539 checks of P-2.1, the Home Screen
+  frame and slice 11 together is not timed in one run: GitHub runs every suite in both placements (since slice 8), and
+  since that was calibrated (pull request #55) the engineer runs only the suites a slice touches; `phone-frame` takes
+  120 to 129 s and slice 11's new suite, `tour`, 85 to 88 s; the whole run of P-2.1's 55 suites and 3,319 checks,
+  `pf-ticket` then 23, took 2,421 s with the browser's own letter placement and other work on the machine, before three
+  suites' lines were brought to the ticket's door, `pf-ticket` 30 s; slice 9's 53 suites and 3,290 checks took 2,061 s as installed,
   its new suite, `pf-preview`, 40 to 50 s; slice 8's 53 suites and 3,277 checks 1,987 s, its new suite, `letter-placement`, 5 to
   11 s; both with other work on the machine; batch 7a's `source-lines-min` took 101 to 107 s beside the others;
   1,631 s as installed and 1,677 s with GitHub's letter placement on 23 Nov 2026 for 51 suites and 3,230 checks, after the check of fix
