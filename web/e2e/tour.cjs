@@ -1,7 +1,9 @@
 // The 1-minute tour (slice 11, 23 Nov 2026; the designer's work order D/tour-storyboard.md §5.3, §7.3, §7.5): its page
 // (web/public/tour/index.html: plain HTML on the Monitor's tokens and faces, no app code, no sign-in), its film and
 // poster, and Help's first row, which plays the film over the Monitor. The film is the cut the owner accepted on 23 Nov
-// 2026 ("intro video good to go"): its bytes are held to that cut, and its own boxes are read here, so that no ffprobe
+// 2026 ("intro video good to go") with the two corrections a truth check of it required the same day (the work order's
+// revision 6: RATES & FX's line on the dotted curve, and SAMPLE DATA on in every frame that shows a screen): its bytes
+// are held to that cut, and its own boxes are read here, so that no ffprobe
 // and no browser that decodes H.264 is needed for what the file is. On a dev server {base}tour/ is answered with the
 // app's page (Vite's fallback), so the page is asked for as {base}tour/index.html there; on the built site as
 // {base}tour/ itself, as GitHub Pages serves it. Nothing here reads the machine's clock or depends on a face's width.
@@ -9,8 +11,8 @@
 const { chromium, devices } = require("playwright"); const fs = require("fs"), path = require("path"), crypto = require("crypto");
 const MOCK = "http://localhost:5179/orrery-market-monitor/", PREVIEW = "http://localhost:5187/orrery-market-monitor/";
 const PUB = path.join(__dirname, "..", "public");
-// the accepted cut (pdca/D/tour/accepted/SHA256 in the designer's workspace): a new film is a new decision, and this line with it
-const ACCEPTED = "c0cd7ac47df359ff4395a0583a60a14322a9f61ff160d9cf5d27f3f01718c974";
+// the accepted cut as corrected (pdca/D/tour/accepted-r2/SHA256 in the designer's workspace): a new film is a new decision, and this line with it
+const ACCEPTED = "18e7ad76cdc695a5297f62c396b607f910efc838aa677c4757aae80a2e659cd9";
 // the transcript's sections, in the film's order: a kicker each, then the end line
 const SECTIONS = ["MARKETS", "SETTINGS · COMPUTER", "NEWS", "RESEARCH", "EQUITIES", "RATES & FX", "SEARCH · ANY COMPANY", "WATCHLIST", "SETTINGS · PHONE", "Orrery Monitor"];
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d)}`); };
@@ -70,7 +72,7 @@ const started = async (p) => { await p.waitForFunction(() => { const v = documen
 (async () => {
   console.log("\n[the film and its poster, as files (web/public/tour)]");
   { const mp4 = read("tour/orrery-tour.mp4"), sha = mp4 ? crypto.createHash("sha256").update(mp4).digest("hex") : null;
-    ck(`the film is the cut the owner accepted on 23 Nov 2026 (sha256 ${ACCEPTED.slice(0, 12)}…, ${mp4 ? mp4.length.toLocaleString("en-US") : "no"} bytes, at most 16 MB)`, sha === ACCEPTED && mp4.length <= 16e6, { sha, bytes: mp4?.length });
+    ck(`the film is the cut the owner accepted on 23 Nov 2026, with its two corrections of that day (sha256 ${ACCEPTED.slice(0, 12)}…, ${mp4 ? mp4.length.toLocaleString("en-US") : "no"} bytes, at most 16 MB)`, sha === ACCEPTED && mp4.length <= 16e6, { sha, bytes: mp4?.length });
     const m = mp4 ? film(mp4) : null, v = m?.tracks.find((t) => t.handler === "vide");
     ck(`its boxes: one track, video, H.264 High (avc1, profile ${v?.profile}), ${v?.w}x${v?.h}, ${v?.frames} frames each 1/${v?.fps} s, ${v ? v.seconds.toFixed(2) : "?"} s; no sound track; the index (moov) before the pictures (mdat), so a player starts before the whole file has come`,
       !!m && m.moovFirst && m.tracks.length === 1 && !!v && v.codec === "avc1" && v.profile === 100 && v.w === 1080 && v.h === 1350 && v.fps === 60 && v.seconds >= 58 && v.seconds <= 62 && Math.abs(v.frames / 60 - v.seconds) < 1e-6 && !m.tracks.some((t) => t.handler === "soun"), m && { order: m.order, tracks: m.tracks });

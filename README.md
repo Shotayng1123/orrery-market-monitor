@@ -121,8 +121,11 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 The 1-minute tour is a film of the Monitor, tab by tab: what each tab shows and what you can set. It is 60.45 s long,
 1080 × 1350 (4:5) at 60 frames a second, H.264 with its captions in the picture and no sound; its screens are the local
 copy's sample data (real company names beside made-up figures, under a SAMPLE DATA mark). The owner accepted this cut on
-23 Nov 2026. Where it lives:
-- `web/public/tour/`: `orrery-tour.mp4` (the accepted cut's own bytes: `web/e2e/tour.cjs` holds its sha256), `poster.jpg`
+23 Nov 2026, and the same day a truth check of it required two corrections, which the film here carries: RATES & FX's
+line reads "Dotted curve: set by PERIOD." (the line before, "The dotted curve: PERIOD ago.", was false for PERIOD 1D
+and 1W, where the dotted curve is the curve of a month ago), and SAMPLE DATA is on in every frame that shows a screen
+(it came about 0.6 s late at the open and went about 0.2 s early at the end). Where it lives:
+- `web/public/tour/`: `orrery-tour.mp4` (the corrected cut's own bytes: `web/e2e/tour.cjs` holds its sha256), `poster.jpg`
   (the player's still) and `index.html`, its page at `{site}tour/`: plain HTML on the Monitor's tokens and faces, with no
   app code and no sign-in; the film, "Open the Monitor →", a line that the screens show sample data, and the captions as
   text under "Read the tour instead". The film does not start by itself for a reader who has asked for less motion.
@@ -139,8 +142,9 @@ and Pillow; 25 to 44 minutes on a machine of 4 processors) starts its own sample
 at a set clock, renders and encodes every frame, runs its checks (the captions' reading rates, what must never be
 legible, the light, the smoothness and the cut's limits) and writes the film, the player's still, the email's picture
 and the page; `node repro.cjs run A`, `run B` and `compare A B` render it twice from nothing and list every difference.
-A new film goes into `web/public/tour/` (with `web/public/mail/tour.jpg`) only once the owner has accepted it, and its
-sha256 in `web/e2e/tour.cjs` with it.
+A new film goes into `web/public/tour/` (with `web/public/mail/tour.jpg`) only once the owner has accepted it, or as a
+correction of the accepted cut that a check requires, with the owner told what changed; its sha256 goes into
+`web/e2e/tour.cjs` with it.
 
 ## Tests
 
@@ -213,7 +217,7 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   came (`stale-feed`: a row called live then carries no LIVE mark now, its line on a phone follows its market's session,
   and since 23 Nov 2026 every chart tile says the same as its line: MARKETS' tiles, a phone's opened row, a stock's
   page and an instrument's page, never LIVE beside an opening or an old price), the opening, and the 1-minute tour
-  (`tour`: the film's bytes, the accepted cut's, and its own boxes, H.264 High, 1080 × 1350, every frame 1/60 s, 58 to
+  (`tour`: the film's bytes, the corrected cut's, and its own boxes, H.264 High, 1080 × 1350, every frame 1/60 s, 58 to
   62 s, no sound, its index first; its page on the dev server and on the built site, on a phone and a computer, edge to
   edge on the phone and up to 560 px on the computer, the captions as text, in a much wider face too, and not starting by
   itself for a reader who has asked for less motion; Help's first row and its PLAY, the film over the Monitor whole
