@@ -151,7 +151,7 @@ correction of the accepted cut that a check requires, with the owner told what c
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,556 checks in 57 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24), the Home Screen frame's `phone-frame` (111), slice 11's new suite `tour` (101) and 7 more in `offline`, and the night review's fixes of 23 Nov (8 more in `pf-ticket` and 9 in `pf-preview`)): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,559 checks in 57 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24), the Home Screen frame's `phone-frame` (111), slice 11's new suite `tour` (101) and 7 more in `offline`, and the night review's fixes of 23 Nov (8 more in `pf-ticket`, 9 in `pf-preview` and 3 in `tour`)): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -227,7 +227,9 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   player first and Help after it, with no navigation; in the Home Screen app's frame, for the preview account, Back,
   Esc, CLOSE and a tap outside closing the player first and Help after it, with the bar on the window's foot and the
   frame where it stood, also scrolled down and with Help opened at a row, and the page scrolling again after, no
-  overflow left on html, body or #pscroll).
+  overflow left on html, body or #pscroll; and the page's two small taps, "Read the tour instead" and the mark with the
+  name, 44 px to the finger on an iPhone 13, an SE and an iPhone 13 on its side, a tap at the top of the first's reach
+  opening the words).
   The **layout guard** (`layout-guard`) opens all eight screens at five computer sizes (1280×720 to 2560×1440, and
   1440×900 with small text), at 1440×900 with large text (every screen but EQUITIES, which joins once it is fixed
   there) and on two phones, and a stock's two pages at three more windows (1366×768 and 1536×864 at text L,

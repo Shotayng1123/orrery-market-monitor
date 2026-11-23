@@ -9,6 +9,8 @@
 // and no browser that decodes H.264 is needed for what the file is. On a dev server {base}tour/ is answered with the
 // app's page (Vite's fallback), so the page is asked for as {base}tour/index.html there; on the built site as
 // {base}tour/ itself, as GitHub Pages serves it. Nothing here reads the machine's clock or depends on a face's width.
+// The page's two small taps, "Read the tour instead" and the mark with the name, take a finger's 44 px on a phone, upright
+// and on its side (L2-3 of the night review of 23 Nov 2026), with the page drawn as before.
 // Run from web/:  node e2e/run.cjs tour   (the runner starts the servers this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright"); const fs = require("fs"), path = require("path"), crypto = require("crypto");
 const MOCK = "http://localhost:5179/orrery-market-monitor/", PREVIEW = "http://localhost:5187/orrery-market-monitor/";
@@ -113,6 +115,33 @@ const started = async (p) => { await p.waitForFunction(() => { const v = documen
     console.log(`\n[a reader who asked for less motion, on ${name} (the built site)]`);
     const ctx = await b.newContext({ ...opts, reducedMotion: "reduce" }), p = await ctx.newPage(); await p.goto(PREVIEW + "tour/", { waitUntil: "load" });
     const pl = await playing(p, 2500); ck(`the film does not start by itself (autoplay ${pl.autoplay}, paused ${pl.paused}, at ${pl.t} s); its controls start it`, pl.paused && !pl.autoplay && pl.t === 0, pl); await ctx.close();
+  }
+
+  // ---- the page's two small taps (L2-3 of the night review of 23 Nov 2026: "Read the tour instead", the only way to the
+  // text, was 15 px tall on a phone and the mark with the name 26 px): each takes a finger's 44 px, measured as the
+  // layout guard measures a tap (the element's box and a ::before or ::after laid over it), and the point at the top and
+  // at the foot of that reach is the tap's own; a tap at the top edge of "Read the tour instead" opens the words ----
+  for (const [name, opts] of [["iPhone 13", { ...devices["iPhone 13"] }], ["iPhone SE", { ...devices["iPhone SE (3rd gen)"] }], ["iPhone 13 on its side", { ...devices["iPhone 13 landscape"] }]]) {
+    console.log(`\n[the tour page's two small taps on ${name} (the built site)]`);
+    const ctx = await b.newContext(opts), p = await ctx.newPage(); await p.goto(PREVIEW + "tour/", { waitUntil: "load" }); await p.evaluate(() => document.querySelector("video").pause());
+    const taps = await p.evaluate(() => [["a.brand", "the mark with the name"], ["details > summary", "Read the tour instead"]].map(([sel, what]) => {
+      const el = document.querySelector(sel); el.scrollIntoView({ block: "center" }); const r = el.getBoundingClientRect(); let T = r.top, B = r.bottom, L = r.left, Rr = r.right;
+      for (const ps of ["::before", "::after"]) {
+        const st = getComputedStyle(el, ps); if (!st.content || st.content === "none" || st.content === "normal" || st.position !== "absolute" || st.display === "none") continue;
+        let cb = el; if (getComputedStyle(el).position === "static") { cb = el.parentElement; while (cb && cb !== document.body && getComputedStyle(cb).position === "static") cb = cb.parentElement; }
+        const c = (cb || el).getBoundingClientRect(), v = (x) => (x && x !== "auto" ? parseFloat(x) : null), t = v(st.top), bo = v(st.bottom), l = v(st.left), ri = v(st.right);
+        if (t != null && bo != null) { T = Math.min(T, c.top + t); B = Math.max(B, c.bottom - bo); }
+        if (l != null && ri != null) { L = Math.min(L, c.left + l); Rr = Math.max(Rr, c.right - ri); }
+      }
+      const x = (L + Rr) / 2, own = (y) => { const h = document.elementFromPoint(x, y); return !!h && el.contains(h); };
+      return { what, w: Math.round(Rr - L), h: Math.round((B - T) * 10) / 10, box: Math.round(r.height * 10) / 10, top: own(T + 1), foot: own(B - 1), mid: own((T + B) / 2), edge: Math.round(T + 2) , x: Math.round(x) };
+    }));
+    const [brand, sum] = taps;
+    await p.touchscreen.tap(sum.x, sum.edge); await p.waitForTimeout(200);
+    const opened = await p.evaluate(() => document.querySelector("details").open);
+    ck(`${taps.map((t) => `${t.what}: ${t.w} x ${t.h} px to the finger (its box ${t.box} px tall), the tap's own at its top, middle and foot`).join("; ")}; a tap at the top of the second's reach (y ${sum.edge}) opens the words`,
+      taps.every((t) => t.w >= 44 && t.h >= 44 && t.top && t.mid && t.foot) && opened, { taps, opened });
+    await ctx.close();
   }
 
   // ---- Help's row ----

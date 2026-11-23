@@ -14,6 +14,10 @@ html,body{margin:0;background:var(--bg);color:var(--txt);font-family:"IBM Plex S
 main{max-width:600px;margin:0 auto;padding:22px 16px 48px}
 .brand{display:flex;align-items:center;gap:10px;font-family:"Cormorant Garamond",Georgia,serif;font-weight:600;font-size:22px;letter-spacing:.04em;color:var(--txt);text-decoration:none}
 .brand svg{width:26px;height:26px}
+/* the page's two small taps take a finger's 44 px (the Monitor's own rule on a phone): a reach laid over each one's own
+   space, the page drawn as before */
+.brand,summary{position:relative}
+.brand::before,summary::before{content:"";position:absolute;left:0;right:0;top:calc(50% - 23px);bottom:calc(50% - 23px)}
 h1{font-family:"Cormorant Garamond",Georgia,serif;font-weight:600;font-size:clamp(30px,8vw,44px);line-height:1.05;margin:22px 0 6px}
 .k{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:12px;letter-spacing:.2em;color:var(--coral);text-transform:uppercase;margin:0 0 16px}
 .film{position:relative;width:100%;max-width:min(560px,calc((100svh - 140px) * 0.8));margin:0 auto;aspect-ratio:4/5;background:var(--bg);border:1px solid var(--bord);border-radius:14px;overflow:hidden}
