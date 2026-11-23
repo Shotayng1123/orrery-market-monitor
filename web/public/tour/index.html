@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>The 1-minute tour · Orrery Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans+JP:wght@400;500&family=Cormorant+Garamond:wght@600&display=swap">
+<style>
+:root{--bg:#050505;--panel:#0c0c0c;--bord:#26272b;--bord2:#3a3b40;--coral:#ff6f61;--txt:#e8e5de;--txt2:#c6c2b7;--mut:#b3afa4;--warn:#ffc53d}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--txt);font-family:"IBM Plex Sans JP","IBM Plex Mono",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+main{max-width:600px;margin:0 auto;padding:22px 16px 48px}
+.brand{display:flex;align-items:center;gap:10px;font-family:"Cormorant Garamond",Georgia,serif;font-weight:600;font-size:22px;letter-spacing:.04em;color:var(--txt);text-decoration:none}
+.brand svg{width:26px;height:26px}
+h1{font-family:"Cormorant Garamond",Georgia,serif;font-weight:600;font-size:clamp(30px,8vw,44px);line-height:1.05;margin:22px 0 6px}
+.k{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:12px;letter-spacing:.2em;color:var(--coral);text-transform:uppercase;margin:0 0 16px}
+.film{position:relative;width:100%;max-width:min(560px,calc((100svh - 140px) * 0.8));margin:0 auto;aspect-ratio:4/5;background:var(--bg);border:1px solid var(--bord);border-radius:14px;overflow:hidden}
+video{display:block;width:100%;height:100%;object-fit:contain;background:var(--bg)}
+/* on a phone the film runs edge to edge: its captions are then at their full size (390 px wide: body 14.4 px) */
+@media (max-width:600px){.film{width:auto;max-width:none;margin:0 -16px;border-radius:0;border-left:0;border-right:0}}
+.go{display:inline-block;margin:22px 0 0;padding:14px 26px;border-radius:9px;background:var(--coral);color:var(--bg);font-weight:700;font-size:16px;text-decoration:none}
+.note{color:var(--mut);font-size:13.5px;line-height:1.55;margin:16px 0 0}
+details{margin:26px 0 0;border-top:1px solid var(--bord);padding-top:16px}
+summary{cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.16em;color:var(--txt2);text-transform:uppercase}
+details h2{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:11.5px;letter-spacing:.18em;color:var(--coral);margin:18px 0 6px;text-transform:uppercase}
+details p{margin:0 0 6px;color:var(--txt2);font-size:15px;line-height:1.55}
+</style>
+</head>
+<body>
+<main>
+<a class="brand" href="../"><svg viewBox="0 0 200 200" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" aria-hidden="true"><circle cx="100" cy="92" r="70"/><ellipse cx="100" cy="92" rx="70" ry="22"/><ellipse cx="100" cy="92" rx="70" ry="46" transform="rotate(-32 100 92)"/><circle cx="100" cy="92" r="7" fill="currentColor" stroke="none"/><circle cx="114.1" cy="38.8" r="5.25" fill="currentColor" stroke="none"/><line x1="100" y1="162" x2="100" y2="182"/><path d="M72 186 Q100 176 128 186"/></svg>Orrery Monitor</a>
+<h1>The one-minute tour</h1>
+<p class="k">1:00 · tab by tab · captions · no sound</p>
+<div class="film"><video id="tour" src="orrery-tour.mp4" poster="poster.jpg" controls playsinline muted autoplay preload="metadata" aria-label="The 1-minute tour of Orrery Monitor, tab by tab: what each tab shows and what you can set; a video with captions and no sound; the same words are below"></video></div>
+<a class="go" href="../">Open the Monitor&nbsp;&rarr;</a>
+<p class="note">The screens in the tour show sample data: every figure, headline and alert in it is made up. Every column, colour and badge of the Monitor is explained behind the ? in its header (on a phone, in the menu under &#8801;).</p>
+<details><summary>Read the tour instead</summary>
+<h2>MARKETS</h2>
+<p>Equities to commodities, one table.</p>
+<p>MOVERS IN σ: what moved, how unusual.</p>
+<h2>SETTINGS · COMPUTER</h2>
+<p>Text size, one screen, full screen.</p>
+<p>TEXT SIZE, COMPACT, then ≡ › FULL.</p>
+<h2>NEWS</h2>
+<p>Economic calendar and headlines, in SGT.</p>
+<p>TYPE › Results; REGION, MKT CAP.</p>
+<h2>RESEARCH</h2>
+<p>The Morning Note: what moved, and why.</p>
+<p>Filter by KIND, or search.</p>
+<h2>EQUITIES</h2>
+<p>Drivers, sector performance, flow by sector.</p>
+<p>INDEX picks one of seven.</p>
+<h2>RATES &amp; FX</h2>
+<p>FX, FX charts and the yield curves.</p>
+<p>The dotted curve: PERIOD ago.</p>
+<h2>SEARCH · ANY COMPANY</h2>
+<p>Search any name or ticker.</p>
+<p>Its page: chart, key data, news.</p>
+<h2>WATCHLIST</h2>
+<p>Star a name to follow it.</p>
+<p>Or type it in MY NAMES and pick it.</p>
+<p>Results ahead, alerts, headlines.</p>
+<h2>SETTINGS · PHONE</h2>
+<p>Alerts and help, on your phone.</p>
+<p>≡ › ADD TO HOME SCREEN, ?, NOTIFICATIONS.</p>
+<p>All or your watchlist; kinds; σ line.</p>
+<h2>Orrery Monitor</h2>
+<p>A model of the markets, small enough to see whole.</p>
+</details>
+</main>
+<script>
+// a reader who has asked for less motion starts it themselves
+if (matchMedia("(prefers-reduced-motion: reduce)").matches) { const v = document.getElementById("tour"); v.removeAttribute("autoplay"); v.pause(); }
+</script>
+</body>
+</html>

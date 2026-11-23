@@ -5,6 +5,8 @@ const { chromium, devices } = require("playwright"); const fs = require("fs"); c
 // (PAPER_ON_LIVE_SITE in src/lib/paper.ts, read as local-copy.cjs reads it: PC-8, DC-2 of the second review of P-1)
 const BAR_ITEMS = /^export const PAPER_ON_LIVE_SITE = true;/m.test(require("fs").readFileSync(require("path").join(__dirname, "..", "src", "lib", "paper.ts"), "utf8")) ? 7 : 6;
 const PREVIEW = "http://localhost:5187/orrery-market-monitor/", MOCK = "http://localhost:5179/orrery-market-monitor/", INDEX = require("path").join(__dirname, ".dist", "index.html");
+// the worker's cache, by the worker's own name (public/sw.js): its name changes with what a new worker must drop (slice 11)
+const CACHE = /const CACHE = "([^"]+)"/.exec(fs.readFileSync(require("path").join(__dirname, "..", "public", "sw.js"), "utf8"))[1];
 let fails = 0; const ck = (name, ok, d) => { if (!ok) fails++; console.log(`  ${ok ? "✓" : "✗"} ${name}${ok ? "" : "  -> " + JSON.stringify(d)}`); };
 const token = Buffer.from(JSON.stringify({ id: "reader@example.com" })).toString("base64") + ".sig";
 // a stand-in market table whose first level rises by one with every answer, so a fresh answer can be told from a kept one
@@ -28,7 +30,7 @@ const keptCount = (p) => p.evaluate(() => new Promise((res) => { const r = index
   const ctx = await b.newContext({ ...devices["iPhone 13"] }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message)); await api(p);
   await p.goto(PREVIEW, { waitUntil: "networkidle" }); await p.waitForSelector(".gatewrap .modal");
   await p.locator("#g-id").fill("reader@example.com"); await p.locator("#g-pw").fill("a-password"); await p.locator(".gatewrap button.go").tap(); await p.waitForSelector(".mp-row"); await p.waitForTimeout(2500);
-  const sw = await p.evaluate(async () => ({ controlled: !!navigator.serviceWorker.controller, kept: (await (await caches.open("om-shell-v1")).keys()).map((r) => r.url.replace(location.origin + "/orrery-market-monitor/", "/")) }));
+  const sw = await p.evaluate(async (CACHE) => ({ controlled: !!navigator.serviceWorker.controller, kept: (await (await caches.open(CACHE)).keys()).map((r) => r.url.replace(location.origin + "/orrery-market-monitor/", "/")) }), CACHE);
   ck("the service worker is in control and holds the page, its script and its stylesheet", sw.controlled && sw.kept.includes("/") && sw.kept.some((u) => /^\/assets\/index-.*\.js$/.test(u)) && sw.kept.some((u) => /^\/assets\/index-.*\.css$/.test(u)), sw);
   const fonts = await p.evaluate(() => ({ loaded: performance.getEntriesByType("resource").filter((e) => /fonts\.(googleapis|gstatic)\.com/.test(e.name)).length }));
   const keptFonts = sw.kept.filter((u) => /fonts\.(googleapis|gstatic)\.com/.test(u)).length;
@@ -87,6 +89,25 @@ const keptCount = (p) => p.evaluate(() => new Promise((res) => { const r = index
     net.mode = "down"; await c2.setOffline(true); await q.reload({ waitUntil: "load" }); await q.waitForSelector("#topbar"); await q.waitForTimeout(1200); const d2 = await level(q), bb = await bars(q);
     const pos = await q.evaluate(() => { const r = document.querySelector("#footbars").getBoundingClientRect(); return { mid: Math.round((r.left + r.right) / 2), vw: innerWidth, bottom: Math.round(r.bottom), vh: innerHeight }; }); await q.screenshot({ path: "off-laptop.png" });
     ck("the desktop table opens without a connection with its last data, the bar centred at the foot of the window", d1 != null && d2 === d1 && /^No connection\. Data from /.test(bb.net ?? "") && Math.abs(pos.mid - pos.vw / 2) <= 2 && pos.bottom <= pos.vh && e2.length === 0, { d1, d2, bb, pos, e2 }); net.mode = "ok"; await c2.close(); }
+
+  // The 1-minute tour (slice 11, the designer's work order §7.4): a page of the worker's scope that is not the app's. The
+  // worker before it answered every page of its scope from the network and kept the answer under the app's own key, so
+  // the tour's page, once opened, was what the device showed for the Monitor without a connection.
+  console.log(`\n[the tour's page and its film are the network's: the app's key keeps the app (cache ${CACHE})]`);
+  { const c4 = await b.newContext({ viewport: { width: 1280, height: 800 } }); await c4.addInitScript((t) => { try { if (!localStorage.getItem("om_token")) localStorage.setItem("om_token", t); } catch {} }, token); const q = await c4.newPage(); const e4 = []; q.on("pageerror", (e) => e4.push(e.message)); await api(q);
+    await q.goto(PREVIEW, { waitUntil: "networkidle" }); await q.waitForSelector("table.mkt tbody tr:not(.cls)");
+    const keptApp = (pg) => pg.evaluate(async (CACHE) => { const c = await caches.open(CACHE), page = await c.match(location.origin + "/orrery-market-monitor/"); return { page: page ? await page.text() : null, keys: (await c.keys()).map((r) => r.url.replace(location.origin + "/orrery-market-monitor/", "/")) }; }, CACHE);
+    for (let i = 0; i < 20 && !(await keptApp(q)).page; i++) await q.waitForTimeout(250);   // the page sends the worker its files once it has loaded
+    const before = await keptApp(q), ctl = await q.evaluate(() => !!navigator.serviceWorker.controller);
+    const t1 = await q.goto(PREVIEW + "tour/", { waitUntil: "load" }), tour = await q.evaluate(() => ({ h1: document.querySelector("h1")?.textContent ?? null, controlled: !!navigator.serviceWorker.controller }));
+    const t2 = await q.goto(PREVIEW + "tour/orrery-tour.mp4", { waitUntil: "commit" }).then((r) => r.status(), (e) => String(e.message).slice(0, 80)); await q.waitForTimeout(400);
+    await q.goto(PREVIEW + "tour/", { waitUntil: "load" }); const after = await keptApp(q);
+    ck(`the app's page kept under its key (${before.keys.length} entries); then the tour's page (${t1.status()}, "${tour.h1}") and its film (${t2}) opened by address: the key still holds the app's page, and nothing of the tour is kept`,
+      ctl && /<div id="root">/.test(before.page ?? "") && t1.status() === 200 && tour.h1 === "The one-minute tour" && t2 === 200 && /<div id="root">/.test(after.page ?? "") && !/one-minute tour/.test(after.page ?? "") && !after.keys.some((k) => /^\/tour\//.test(k)), { ctl, tour, t2, before: before.keys, after: after.keys, page: (after.page ?? "").slice(0, 120) });
+    await c4.setOffline(true); await q.goto(PREVIEW, { waitUntil: "load" }).catch(() => undefined); await q.waitForSelector("#topbar", { timeout: 8000 }).catch(() => undefined); await q.waitForTimeout(800);
+    const off = await q.evaluate(() => ({ app: !!document.querySelector("#topbar"), h1: document.querySelector("h1")?.textContent ?? null }));
+    ck("offline, the app's address opens the Monitor (from the device), not the tour", off.app && off.h1 !== "The one-minute tour" && e4.length === 0, { off, e4 });
+    await c4.setOffline(false); await c4.close(); }
 
   console.log("\n[the dev servers]");
   { const c3 = await b.newContext({ ...devices["iPhone 13"] }); const q = await c3.newPage(); await q.goto(MOCK, { waitUntil: "networkidle" }); await q.waitForSelector(".mp-row"); await q.waitForTimeout(800);

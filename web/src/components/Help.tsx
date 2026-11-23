@@ -4,6 +4,7 @@ import { usePaper, type PaperState } from "../lib/paper";
 import { NOT_USED_TEXT, PERSONAL_USE_READ, PERSONAL_USE_TEXT } from "../lib/labels";
 import { HELP_EVENT, HELP_PERSONAL_USE } from "./PersonalUse";
 import { backEntry } from "./Sheet";
+import { TourPlay } from "./Tour";
 
 /** The legend behind the "?" in the header: what every column, colour and badge on the Monitor means, in one
  *  place and readable on a phone (the same explanations otherwise sit in hover tooltips, which a phone lacks). */
@@ -23,6 +24,10 @@ const PORTFOLIO_ROWS: Row[] = [
   ["Fixed · changes · history", "Fixed at creation: the start, the base currency, the starting NAV, the Reference, the ladder and the house margin multiple. A limit or an assumption changes with a reason of 10 to 500 characters, in force from the session that opens next: on an equity book a change made before Tokyo or New York opens counts for that day's sessions, on the macro book from the next day. The value in force typed again takes back a change still waiting. HISTORY keeps every row with its reason. The targets may be re-set only from 1 Dec, 06:00 SGT (17:00 New York on 30 Nov), to a January reset, under a yearly base, and not in the January of a book's first year. A book holds at most 500 notes, 500 changes, 50 renamings and 20 entries of a year's targets (README). An amber A marks an assumption."],
 ];
 const SECTIONS: Array<{ title: string; rows: Row[] }> = [
+  // the 1-minute tour first (slice 11, the designer's work order §5.3): PLAY under the row plays it over the Monitor
+  { title: "Start here", rows: [
+    ["Watch the 1-minute tour", "What each tab shows and what you can set, in one minute, with captions and no sound.", "tour"],
+  ] },
   { title: "Markets table", rows: [
     ["1D to 36M", "Change from the close at the start of that window to the last print. Per cent for prices, basis points (bp) for yields."],
     ["1D in σ", "Today's change divided by the standard deviation (σ) of the instrument's own daily changes in the 63 sessions before it: bp for a yield, % for the rest. +2.7σ is a rise of 2.7 times that σ. Worked out † by the Monitor from its stored daily closes; the cell's tooltip names them. An official-curve yield counts once its day is booked: a JGB's, a Bund's, a Gilt's and Canada's are published a day late, a US Treasury's on the day itself. Click the header to sort each bar by it; click again for the table's order."],
@@ -177,7 +182,7 @@ export function Help() {
                 {sectionsFor(paper).map((s) => (
                   <div key={s.title} className="helpsec">
                     <h4>{s.title}</h4>
-                    <dl>{s.rows.map(([k, v, id]) => <div key={k} id={id ? `help-${id}` : undefined} className={id && id === at ? "at" : undefined}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
+                    <dl>{s.rows.map(([k, v, id]) => <div key={k} id={id ? `help-${id}` : undefined} className={id && id === at ? "at" : undefined}><dt>{k}</dt><dd>{v}{id === "tour" ? <TourPlay /> : null}</dd></div>)}</dl>
                   </div>
                 ))}
               </div>

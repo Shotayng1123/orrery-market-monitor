@@ -2,12 +2,16 @@
 // the foot of this file), and it keeps the app's own files on the device so the Monitor opens without a
 // connection; the data itself is kept by the page (src/lib/keep.ts). Rules for the files:
 //   the page         network first, asked past the browser's cache, so a new version is never held back here;
-//                    the kept copy answers only when the network does not (or takes more than four seconds)
+//                    the kept copy answers only when the network does not (or takes more than four seconds).
+//                    Only the app's own page: another page in scope (the 1-minute tour, tour/) is the network's,
+//                    never kept and never answered from here (slice 11, the designer's work order §7.4)
 //   assets/*         kept forever: their names change with every build
 //   icons, manifest  network first, the kept copy as a fallback
 //   fonts            kept, refreshed in the background (Google Fonts: the stylesheet and the font files)
-//   version.json, the API and everything else: never touched
-const CACHE = "om-shell-v1";
+//   version.json, the API and everything else (the tour's film among it): never touched
+// The name's v2 came with the tour (slice 11): the worker before it kept any page of its scope under the app's own key,
+// the tour's page too, and the activation of this one deletes that older cache (v1).
+const CACHE = "om-shell-v2";
 const SCOPE = new URL(self.registration.scope).pathname;   // "/orrery-market-monitor/"
 const PAGE = self.registration.scope;                       // the key the page is kept under, whatever its query
 const SLOW_MS = 4000;
@@ -84,8 +88,9 @@ self.addEventListener("fetch", (e) => {
   const u = new URL(req.url);
   if (u.origin === self.location.origin) {
     if (!u.pathname.startsWith(SCOPE)) return;
-    if (req.mode === "navigate") { e.respondWith(page(e)); return; }
     const rel = u.pathname.slice(SCOPE.length);
+    // only the app's own page is kept and answered from here; another page in scope (the tour, tour/) is the network's
+    if (req.mode === "navigate") { if (rel === "" || rel === "index.html") e.respondWith(page(e)); return; }
     if (rel.startsWith("assets/")) { e.respondWith(forever(req)); return; }
     if (rel.startsWith("icons/") || rel === "manifest.webmanifest") { e.respondWith(networkFirst(req)); return; }
     return;
