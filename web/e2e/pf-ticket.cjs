@@ -5,8 +5,9 @@
 //   [1] a computer: BUY / SELL on the book's strip opens the ticket at the right of Overview, under the preview line;
 //       a Tokyo name by shares (1,050 → 1,000, 50 not placed) and by % of capital, with the price, its time, age and
 //       source; the sides a book with no position allows; the line that placing comes next
-//   [2] a US name by an amount (USD 1,000,000 at 187.30 → 5,339 shares, USD 5.30 not placed); a print too old to size
-//       an amount on (shares still size, with no money beside them); a future refused in words; a server of before
+//   [2] a US name by an amount (USD 1,000,000 at 187.30 → 5,339 shares, USD 5.30 not placed); a share count that is
+//       not whole refused in words (10.5, 0.5), 10 sized; a print too old to size an amount on (shares still size,
+//       with no money beside them); a future refused in words; a server of before
 //   [3] a phone: Buy / Sell in the book's head (44 px), the ticket as a page of the book, the preview line first, 16-px
 //       inputs and 44-px taps, nothing cut and no sideways scroll, on a weekend's dated print, once with a wide font
 // Run from web/:  node e2e/run.cjs pf-ticket   (the runner starts the server this needs; see e2e/run.cjs)
@@ -88,6 +89,12 @@ const fit = (p) => p.evaluate(() => {
     await size(p, "base", "1000000");
     const q = await text(p, "#pf-t-qty"), l = await text(p, "#pf-t-left"), pr = await text(p, "#pf-t-print"), nm = await text(p, "#pf-t-name");
     ck(`NVDA, filled in from the address: USD 1,000,000 at 187.30 is "${q}", "${l}" (the print: "${pr}", New York's Monday close; "${nm}")`, /NVIDIA · New York · closed · lot 1 share/.test(nm ?? "") && q === "→ Buy 5,339 shares" && l === "USD 5.30 not placed · USD 999,994.70 at 187.30" && /^last 187\.30 USD · 24 Nov 05:00 SGT · 4 h 30 min old · Yahoo Finance, unofficial$/.test(pr), { q, l, pr, nm });
+    // P21-1 (the check of P-2.1): "10.5" read "→ Buy 10 shares · 1 shares not placed"; a share is not split, so a count
+    // that is not whole is refused in words, with no size and no part not placed beside it
+    await size(p, "shares", "10.5"); const f1 = await text(p, "#pf-t-why"), f1sized = !!(await p.$("#pf-t-qty")) || !!(await p.$("#pf-t-left"));
+    await size(p, "shares", "0.5"); const f2 = await text(p, "#pf-t-why");
+    await size(p, "shares", "10"); const q10 = await text(p, "#pf-t-qty"), l10 = await text(p, "#pf-t-left");
+    ck(`a share count that is not whole is refused in words ("${f1}"; 0.5: "${f2}"), with no size and no part not placed beside it; 10 shares are "${q10}", "${l10}"`, f1 === "Shares are whole numbers: 10.5 is not one." && !f1sized && f2 === "Shares are whole numbers: 0.5 is not one." && q10 === "→ Buy 10 shares" && l10 === "0 shares not placed · USD 1,873 at 187.30", { f1, f1sized, f2, q10, l10 });
     // a read that fails for the next name leaves nothing of the last one's size on screen
     await p.evaluate(() => localStorage.setItem("om_mock_pf_ticket", "0"));
     await look(p, "AAPL", true);

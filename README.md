@@ -111,7 +111,7 @@ touches `supabase/`, once its two secrets exist; the set-up and the first-time s
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,319 checks in 55 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6) and P-2.1's `pf-ticket` (23)): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,320 checks in 55 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6) and P-2.1's `pf-ticket` (24)): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -273,10 +273,11 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   `pf-ticket` (P-2.1, 23 Nov 2026, with the stand-in preview account and the page's clock set): BUY / SELL on a book's
   strip opens the order ticket at the right of Overview, under the preview line, at C1 and at XL; a Tokyo name by shares
   (1,050 → 1,000, 50 not placed) and by % of capital, a US one by an amount (USD 1,000,000 at 187.30 → 5,339 shares,
-  USD 5.30 not placed), each with its last print's time, age and source; the sides a book with no position allows; a
-  stopped feed's print too old to size an amount on; a future refused in words; a server of before the ticket; and on
-  an iPhone 13 and an SE the ticket as a page of the book, 16-px inputs and 44-px taps, on a weekend's dated print and
-  with a wide font, nothing cut.
+  USD 5.30 not placed), each with its last print's time, age and source; a share count that is not whole (10.5, 0.5)
+  refused in words, with no size beside it; the sides a book with no position allows; a stopped feed's print too old
+  to size an amount on; a future refused in words; a server of before the ticket; and on an iPhone 13 and an SE the
+  ticket as a page of the book, 16-px inputs and 44-px taps, on a weekend's dated print and with a wide font, nothing
+  cut.
   `source-lines` (round 3b, the designer's B.0.3 and B.1): every panel head's source line drawn whole or in its short
   form, never cut, at six windows and in a wider face, also as the window is resized; "personal use" whole, opening
   Help at its paragraph (in FULL too), and on a phone a space on each side of its dot; JPX's calendar named with
@@ -310,10 +311,10 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   no line, or no tab and no screens' file, in the other two states.
   `cd web && npm run e2e` starts the test servers it needs and runs them all, up to three suites at a time (two of
   the dev servers' and one of the built site's, whose suites queue behind each other): about
-  28 minutes on the engineer's machine (the whole run for the 55 suites and 3,315 checks of P-2.1 took 2,421 s with
-  the browser's own letter placement and other work on the machine, before three suites' lines were brought to the
-  ticket's door, `pf-ticket` 30 s; slice 9's 53 suites and 3,290 checks took 2,061 s as installed, its new suite,
-  `pf-preview`, 40 to 50 s; slice 8's 53 suites and 3,277 checks 1,987 s, its new suite, `letter-placement`, 5 to
+  28 minutes on the engineer's machine (the whole run for the 55 suites and 3,319 checks of P-2.1, `pf-ticket` then 23,
+  took 2,421 s with the browser's own letter placement and other work on the machine, before three suites' lines
+  were brought to the ticket's door, `pf-ticket` 30 s; slice 9's 53 suites and 3,290 checks took 2,061 s as installed,
+  its new suite, `pf-preview`, 40 to 50 s; slice 8's 53 suites and 3,277 checks 1,987 s, its new suite, `letter-placement`, 5 to
   11 s; both with other work on the machine; batch 7a's `source-lines-min` took 101 to 107 s beside the others;
   1,631 s as installed and 1,677 s with GitHub's letter placement on 23 Nov 2026 for 51 suites and 3,230 checks, after the check of fix
   part 4; 1,666 s and 1,659 s for the 49 suites and
@@ -793,18 +794,22 @@ name. Since P-2.1 (23 Nov 2026) BUY / SELL opens an order ticket that works out 
   before it was in force", ACTIVITY the same, and the value in force keeps its own BY and SINCE before and after the
   day the pending one would have come into force.
 - **The order ticket** (P-2.1, 23 Nov 2026; `_shared/pf/size.ts`, the route `pf_ticket`). BUY / SELL on a book (on
-  a computer a 460-px panel at the right of Overview, on a phone a page of the book) takes a symbol, a side and a size:
-  % or bp of capital (an RR book's NAV once one is offered), an amount in the book's currency or the name's own, or
-  shares. It says what the order comes to in whole lots (100 shares in Tokyo, 1 in New York), always down, and the part
-  not placed, on the sizing price: Yahoo Finance's last print as the server reads it for the ticket (the quote a stock's
-  page shows, one request per look-up and one a minute while the ticket is open), with its time, its age and its source;
-  a dollar amount of a yen name goes through USD/JPY's last print, named with its time. A print too old to size on says
-  so: in a session, more than the feed's delay and 30 minutes old (Tokyo 50 minutes, New York 30), except in a
+  a phone, Buy / Sell in its head) opens the ticket, on a computer a 460-px panel at the right of Overview and on a
+  phone a page of the book. It takes a symbol, a side and a size: % or bp of capital (an RR book's NAV once one is
+  offered), an amount in the book's currency or the name's own, or a whole number of shares (a count with a fraction
+  is refused in words, by the page and the server alike). It says what the order comes to in whole lots (100 shares
+  in Tokyo, 1 in New York), always down, and the part not placed, on the sizing price: Yahoo Finance's last print as
+  the server reads it for the ticket (the quote a stock's page shows, one request per look-up and one a minute while
+  the ticket is open), with its time, its age and its source; a dollar amount of a yen name goes through USD/JPY's
+  last print, named with its time. A print too old to size on says so: in a session, more than the feed's delay and
+  30 minutes old (Tokyo 50 minutes, New York 30), except in a
   session's first such minutes, when the session before's still stands; outside one, from before the market's last
   session (the Monitor's holidays and New York's early closes). Then only shares are sized, with no money beside them.
   Only US and Tokyo stocks and ETFs are sized; a future, an index, a currency or a name listed elsewhere is refused in
-  words. The engine also sizes to a weight or an active weight (RR), Close and Reduce by x% (on a position, from the
-  fills of a later step), and never across zero. The route reads the book and the quotes and writes nothing.
+  words. The engine also sizes to a weight or an active weight (RR) by the difference from the weight held: a target
+  below it is a sale, whether an underweight, the benchmark's own weight or 0%; one equal to it is nothing to do; and
+  no weight goes below 0% (a relative-return book holds no shorts). It sizes Close and Reduce by x% (on a position,
+  from the fills of a later step), and never across zero. The route reads the book and the quotes and writes nothing.
 - **Notes held.** A book holds at most 500 notes (a removed one counts); from 450 a line under the box says how many
   are left ("50 notes left: every note is kept"). Raising the bound waits for the notes to be read in pages (PM A asks
   for 5,000, PM B for 2,500).

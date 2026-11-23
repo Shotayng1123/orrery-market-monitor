@@ -94,8 +94,10 @@ export type SizeOut =
 
 const NO_PRICE = "No price to size an amount on: size by shares, or wait for a fresh print.";
 /** What an order comes to (§2.1): `q = floor(A_l ÷ (P_size × m × lot)) × lot`, always down; the remainder `A_l − q ×
- *  P_size × m` shown; by shares, the part below a lot shown as not placed; Close the whole position; Reduce by x%
- *  `floor(x × |q| ÷ lot) × lot`; never across zero ("close and reverse" is two orders, each checked). */
+ *  P_size × m` shown; by shares (a whole number: a fraction is refused), the part below a lot shown as not placed; to
+ *  a weight or an active weight (RR), the difference from the weight held, a sale where the target is below it, nothing
+ *  where they are equal, and never below 0%; Close the whole position; Reduce by x% `floor(x × |q| ÷ lot) × lot`; never
+ *  across zero ("close and reverse" is two orders, each checked). */
 export function sizeOrder(i: SizeIn): SizeOut {
   if (!SIZE_BYS.includes(i.by) || !SIDES.includes(i.side)) return { ok: false, text: "No such way to size an order." };
   const m = i.mult ?? 1, held = i.position, s = SIGN[i.side];
@@ -109,8 +111,13 @@ export function sizeOrder(i: SizeIn): SizeOut {
       : held > 0 ? `A long of ${sharesWords(held)} is held: Sell it, or close and reverse.` : `A short of ${sharesWords(held)} is held: buy it back with Cover.`;
     return { ok: false, text };
   }
-  if (i.by !== "close" && !(typeof i.value === "number" && Number.isFinite(i.value) && i.value > 0)) return { ok: false, text: "Enter a figure above zero." };
+  // a weight may be 0% and an active weight below zero (an underweight) or zero (the benchmark's weight); every other
+  // figure is above zero
+  const toWeight = i.by === "weight" || i.by === "active";
+  if (i.by !== "close" && !(typeof i.value === "number" && Number.isFinite(i.value) && (toWeight || i.value > 0))) return { ok: false, text: toWeight ? "Enter a figure." : "Enter a figure above zero." };
   const v = i.value ?? 0;
+  // a share is not split: a count that is not whole is refused, not rounded (nor its remainder)
+  if (i.by === "shares" && !Number.isInteger(v)) return { ok: false, text: `Shares are whole numbers: ${v} is not one.` };
   let qty: number, askedBase: number | null = null, askedLocal: number | null = null, leftShares: number | null = null;
   if (i.by === "close") qty = Math.abs(held);
   else if (i.by === "reduce") {
@@ -120,11 +127,17 @@ export function sizeOrder(i: SizeIn): SizeOut {
     qty = down(v / i.lot) * i.lot;
     leftShares = v - qty;
   } else {
-    if ((i.by === "weight" || i.by === "active") && i.kind !== "RR") return { ok: false, text: "A book of absolute return sizes by amount, % or bp of capital, or shares: it has no weights to size to." };
-    if (i.by === "weight" || i.by === "active") {
-      if (i.weight == null || (i.by === "active" && i.bench == null)) return { ok: false, text: "No weight to size from: the name's weight or its benchmark weight is not known." };
-      const target = i.by === "weight" ? v : i.bench! + v / 100, d = target - i.weight;
-      if (d * s <= 0) return { ok: false, text: `To ${target.toFixed(2)}% from ${i.weight.toFixed(2)}% is ${d < 0 ? "a sale" : "a purchase"}, not ${NOUN[i.side]}.` };
+    if (toWeight && i.kind !== "RR") return { ok: false, text: "A book of absolute return sizes by amount, % or bp of capital, or shares: it has no weights to size to." };
+    if (toWeight) {
+      const w = i.weight ?? Number.NaN, wb = i.bench ?? Number.NaN;
+      if (!Number.isFinite(w) || (i.by === "active" && !Number.isFinite(wb))) return { ok: false, text: "No weight to size from: the name's weight or its benchmark weight is not known." };
+      // §2.1: A_b = (w* − w) × NAV, w* = w_bench + a* for an active weight. A relative-return book is long-only, so its
+      // lowest weight is 0%; a weight a hair from the one held (a figure's last bit) is that weight
+      const asked = i.by === "weight" ? v : wb + v / 100;
+      if (asked < -1e-9) return { ok: false, text: `A weight below 0%${i.by === "active" ? ` (the benchmark's ${wb.toFixed(2)}% less ${-v} bp)` : ""} would be a short: a relative-return book holds none, so 0% is its lowest weight.` };
+      const target = Math.max(0, asked), d = target - w;
+      if (Math.abs(d) < 1e-9) return { ok: false, text: `The name is held at ${w.toFixed(2)}%, the weight asked: nothing to do.` };
+      if (d * s < 0) return { ok: false, text: `To ${target.toFixed(2)}% from ${w.toFixed(2)}% is ${d < 0 ? "a sale" : "a purchase"}, not ${NOUN[i.side]}.` };
       askedBase = (Math.abs(d) / 100) * i.capital;
     } else if (i.by === "pct") askedBase = (v / 100) * i.capital;
     else if (i.by === "bps") askedBase = (v / 10000) * i.capital;
@@ -147,11 +160,11 @@ export function sizeOrder(i: SizeIn): SizeOut {
   return { ok: true, qty, after, askedBase: askedBase == null ? null : toUnit(i.base, askedBase), askedLocal: askedLocal == null ? null : toUnit(i.ccy, askedLocal), placedLocal, leftLocal, leftShares };
 }
 
-/** How long ago a print was, in words: "20 min", "1 h 35 min", "3 days". */
+/** How long ago a print was, in words: "20 min", "1 h", "1 h 35 min", "3 days". */
 export function ageWords(min: number): string {
   const m = Math.max(0, Math.round(min));
   if (m < 60) return `${m} min`;
-  if (m < 48 * 60) return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`.replace(/ 0(\d) min$/, " $1 min");
+  if (m < 48 * 60) return `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`;
   return `${Math.floor(m / 1440)} days`;
 }
 /** A print in session may be at most this many minutes older than the feed's delay. */
