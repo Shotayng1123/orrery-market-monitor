@@ -344,13 +344,18 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   same way (`E2E_PLACEMENT=installed` adds the switches the launcher already adds). `test` and `test-2`: the same
   command with the browser started with `--font-render-hinting=full`, by a preload loaded with
   `NODE_OPTIONS="--require <its absolute path>"` that adds it to every `chromium.launch()` (the engineer keeps one
-  outside the repository; `letter-placement` writes a small one of its own); measured there, every line is then on
-  whole px. With `E2E_PLACEMENT=installed` such a preload has to come after `placement.cjs` in `NODE_OPTIONS`, or
-  `placement.cjs` stops the run: the switch given last is the one the browser keeps. One difference no switch
-  removes: a letter drawn in a font of the machine itself (one the page's faces lack, such as σ, or a check that
-  forces `monospace`) follows that machine's own font settings in both placements, and the engineer's machine has
-  every system font set unhinted. Should that machine stop reaching fonts.googleapis.com, its runs draw in fallback
-  faces and are no longer GitHub's: the faces then have to be served to its browser from copies.
+  outside the repository; `letter-placement` writes a small one of its own); measured there, every line in the page's
+  own faces is then on whole px. With `E2E_PLACEMENT=installed` such a preload has to come after `placement.cjs` in
+  `NODE_OPTIONS`, or `placement.cjs` stops the run: the switch given last is the one the browser keeps. One difference
+  no switch removes: a letter drawn in a font of the machine itself (one the page's faces lack, such as σ, or a check
+  that forces `monospace`) follows that machine's own font settings in both placements, and the engineer's machine has
+  every system font set unhinted. So there the page's faces follow the switch alone: the browser's own binary (the one
+  behind the launcher script) started without the launcher draws them on whole px, as GitHub's runner does (240 px for
+  the line `letter-placement` measures in DejaVu Sans Mono loaded by the page), and `--font-render-hinting=none` alone
+  gives the launcher's widths again (234.813 px), while the same line in DejaVu Sans Mono as a font of the machine
+  measures 234.813 px every way (measured on 23 Nov 2026, the check of slice 8). Should that machine stop reaching
+  fonts.googleapis.com, its runs draw in fallback faces and are no longer GitHub's: the faces then have to be served
+  to its browser from copies.
   **The widths each job prints.** After its run, passed or failed, each of the four jobs prints into its own log the
   widths that `portfolio` (part 1), `letter-placement` and `header` (part 2) measured, so that a leg can be set beside
   a run of the same placement on the engineer's machine line by line (GitHub keeps `e2e/.out` only when a job fails):

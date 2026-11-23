@@ -107,7 +107,8 @@ console.log("\n[AK] what the README says of the checks is what the repository ho
   // The check of slice 8 (23 Nov 2026), V8-2: GitHub's four browser jobs passed in both letter placements, but whether a
   // leg draws what the engineer's machine draws showed nowhere, since a job keeps web/e2e/.out only when it fails. Since
   // slice 10 each job prints the widths its suites measured (web/e2e/widths.cjs), and the README says how to print the
-  // same block here.
+  // same block here. V8-1 and V8-3: two sentences said more than was measured (the browser started without the
+  // launcher, and "every line" on whole px, where a line in a font of the machine itself is not).
   const readme = readText(new URL("../README.md", import.meta.url), "utf8"), flat = readme.replace(/\s+/g, " ");
   const widths = (() => { try { return readText(new URL("../web/e2e/widths.cjs", import.meta.url), "utf8"); } catch { return ""; } })(), wf = readText(new URL("../.github/workflows/deploy-web.yml", import.meta.url), "utf8");
   const watched = [...(/const WATCHED = \[([^\]]*)\]/.exec(widths)?.[1] ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]), max = /\bMAX = (\d+)/.exec(widths)?.[1] ?? "";
@@ -115,6 +116,8 @@ console.log("\n[AK] what the README says of the checks is what the repository ho
   const runs = (wf.match(/^ {8}run: node e2e\/widths\.cjs$/gm) ?? []).length;
   ck(`V8-2: the README says each of the four browser jobs prints, passed or failed, the widths of ${named.join(", ") || "no suite"} (web/e2e/widths.cjs watches ${watched.join(", ")}), at most ${max || "?"} lines a job, and how to print the same block from a local run (cd web && node e2e/widths.cjs); deploy-web.yml runs it ${runs} times`,
     watched.length === 3 && JSON.stringify(named) === JSON.stringify(watched) && max !== "" && said.includes(`at most ${max} lines`) && said.includes("`cd web && node e2e/widths.cjs`") && /passed or failed/.test(said) && runs === 4, { watched, named, max, runs, said: said.slice(0, 200) });
+  ck("V8-1 and V8-3: the README says that the engineer's machine, its launcher left out, draws the page's faces on whole px as GitHub's runner does, a line in a font of the machine itself keeping its widths either way, and that with --font-render-hinting=full every line in the page's own faces (not every line) is on whole px",
+    !/every line is then on whole px/.test(flat) && /every line in the page's own faces is then on whole px/.test(flat) && /without the launcher[^.]*? draws them on whole px/.test(flat), { full: /every line is then on whole px/.test(flat) });
 }
 
 console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");
