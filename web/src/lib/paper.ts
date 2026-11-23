@@ -52,3 +52,7 @@ export const paperShown = (): boolean => paperState() !== "off";
 const subscribe = (f: () => void): (() => void) => { subs.add(f); return () => { subs.delete(f); }; };
 /** The state, for a component that draws by it: it is drawn again when the server's word arrives or changes. */
 export const usePaper = (): PaperState => useSyncExternalStore(subscribe, paperState, paperState);
+/** Whether this account is in the server's preview list, whatever the switch says: the Home Screen app's frame is
+ *  tried by these accounts first (lib/scroller.ts). The local copy stands in for one with `om_paper = "preview"`. */
+export const previewAccount = (): boolean => serverPreview || (import.meta.env.DEV && devState() === "preview");
+export const usePreviewAccount = (): boolean => useSyncExternalStore(subscribe, previewAccount, previewAccount);

@@ -8,6 +8,7 @@
 // buttons stand in its sheet's foot (UI-13).
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from "react";
 import { zoomNow } from "../../lib/prefs";
+import { viewBottom } from "../../lib/scroller";
 import { Panel } from "../Panel";
 import { JumpPick, Section } from "../PhoneKit";
 import { Sheet } from "../Sheet";
@@ -251,10 +252,10 @@ function useInView(root: RefObject<HTMLDivElement | null>, bar: RefObject<HTMLDi
       const cross = secs.filter((x) => x.r.top <= line && x.r.bottom > line);
       // at the end of the page the last sections cannot reach the line: the last row in view is the one in view
       const sc = scrollerOf(box), end = sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 2 && sc.scrollTop > 0;
-      const lastRow = end ? secs.filter((x) => x.r.top >= line && x.r.top < window.innerHeight) : [];
+      const foot = viewBottom(), lastRow = end ? secs.filter((x) => x.r.top >= line && x.r.top < foot) : [];
       const last = lastRow.length ? lastRow.filter((x) => Math.abs(x.r.top - lastRow[lastRow.length - 1].r.top) < 2) : [];
       // the section the address names, wherever it stands in view, before the rule (a chip pressed is the chip lit)
-      const named = secs.find((x) => x.k === want.current && x.r.bottom > line && x.r.top < window.innerHeight);
+      const named = secs.find((x) => x.k === want.current && x.r.bottom > line && x.r.top < foot);
       const pick = (end ? named ?? last[0] : null) ?? cross.find((x) => x.k === want.current) ?? cross[0] ?? secs.find((x) => x.r.bottom > line) ?? secs[secs.length - 1];
       if (pick) setSeen(pick.k);
     };

@@ -9,6 +9,7 @@ import { FinTable } from "../components/FinTable";
 import { JumpPick, Section, Stat } from "../components/PhoneKit";
 import { StockNews } from "../components/StockNews";
 import { useApi } from "../lib/useApi";
+import { pageY, scrollToY } from "../lib/scroller";
 import { fmtNum, fmtPct, signCls } from "../lib/fmt";
 import { fmtDate, fmtStamp } from "../lib/time";
 import { avgTurnover, avgVolume, JPX_REPORTS_FILE, LARGEST_FALL, MKT_CAP, NEWS, NEXT_RESULTS, PERIOD, REALISED_VOL, SIGMA_WINDOW } from "../lib/labels";
@@ -58,7 +59,7 @@ export function AssetPhone({ symbol, tick }: { symbol: string; tick: number }) {
   // A-25: the move opens on the chart. The chart is brought up under the pinned head first; then PERIOD and the card.
   const onChart = (m: MoveRow) => {
     const hero = document.querySelector<HTMLElement>(".mp-hero"), head = document.querySelector<HTMLElement>(".mp-head")?.getBoundingClientRect().height ?? 0;
-    if (hero) window.scrollTo({ top: hero.getBoundingClientRect().top + window.scrollY - head - 8 });
+    if (hero) scrollToY(pageY(hero) - head - 8);
     setPeriod(periodHolding(m.t, Date.now() / 1000));
     setFocus((x) => ({ t: m.t, n: (x?.n ?? 0) + 1 }));
   };

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useState, type ReactNode, type RefObject } from "react";
 import { signCls } from "../lib/fmt";
 import { Pick } from "./Pick";
+import { pageY, scrollToY } from "../lib/scroller";
 
 /** The building blocks of the phone layout (preview, lib/phone.ts; Shota, 17 Nov 2026), shared by every tab so they
  *  read as one app: a screen whose title stays at the top, sections as cards, the coloured change, small statistics. */
@@ -81,7 +82,7 @@ export function JumpPick({ dep }: { dep?: string }) {
     const h2 = [...document.querySelectorAll<HTMLElement>(".mp .mp-sec > h2")].find((e) => e.querySelector("span")?.textContent === name);
     if (!h2) return;
     const head = document.querySelector<HTMLElement>(".mp-head")?.getBoundingClientRect().height ?? 0;
-    window.scrollTo({ top: h2.getBoundingClientRect().top + window.scrollY - head - 8 });
+    scrollToY(pageY(h2) - head - 8);
   };
   if (names.length < 3) return null;
   return <Pick label="Go to" value="" options={[{ value: "", label: "Section" }, ...names.map((n) => ({ value: n }))]} onChange={go} title="Jump to a section of this screen" />;

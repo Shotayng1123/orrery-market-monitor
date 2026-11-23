@@ -28,6 +28,7 @@
 // on GitHub, where React is not installed and this file, which imports it for useEntryState, cannot be loaded.
 import { useCallback, useState } from "react";
 import { opensAtTop, type NavRoute } from "./pagetop";
+import { pageScroll, scroller, scrollToY } from "./scroller";
 
 const KEY = "omNav", HOLD_MS = 5000, QUIET_MS = 300;
 /** A view draws an element with this attribute until the answers that set the height above its list have come
@@ -60,7 +61,7 @@ export function navChanged(route: NavRoute): void {
   const k = keyOf();
   if (k == null) {   // a new entry: a link, a name in a list, search, a tab
     const top = opensAtTop(shown, route);
-    if (current) { if (top) leftAt.set(current, window.scrollY); else leftAt.delete(current); }
+    if (current) { if (top) leftAt.set(current, pageScroll()); else leftAt.delete(current); }
     current = stamp();
     pending = top ? { top: true } : null;
   } else {           // Back or Forward to a page seen before
@@ -86,7 +87,7 @@ export function navDrawn(): void {
   const p = pending;
   pending = null;
   if (!p) return;
-  if ("top" in p) window.scrollTo(0, 0);
+  if ("top" in p) scrollToY(0);
   else hold(p.y);
 }
 
@@ -105,21 +106,23 @@ function hold(y: number): void {
   };
   const settled = () => {
     if (done) return;
-    if (Math.abs(window.scrollY - y) > 1 || document.querySelector(`[${NAV_WAIT}]`)) { place(); return; }   // moved meanwhile, or a list still awaited
+    if (Math.abs(pageScroll() - y) > 1 || document.querySelector(`[${NAV_WAIT}]`)) { place(); return; }   // moved meanwhile, or a list still awaited
     end();
   };
   // called when the page is first drawn, whenever it changes height, and whenever it moves without the reader's doing
   // (the reader's own first touch, wheel or key has ended the hold before it moves anything)
   const place = () => {
     if (done) return;
-    if (Math.abs(window.scrollY - y) > 1) window.scrollTo(0, y);
+    if (Math.abs(pageScroll() - y) > 1) scrollToY(y);
     clearTimeout(quiet);
     quiet = setTimeout(settled, QUIET_MS);
   };
   const timer = setTimeout(end, HOLD_MS);
   for (const e of INPUT) window.addEventListener(e, end, { capture: true, passive: true });
   window.addEventListener("scroll", place, { capture: true, passive: true });
-  ro?.observe(document.body);
+  // the page's height: the body's, or in the Home Screen app's frame that of what scrolls in it (lib/scroller.ts)
+  const s = scroller();
+  if (s) for (const c of s.children) ro?.observe(c); else ro?.observe(document.body);
   stopHold = end;
   place();
 }

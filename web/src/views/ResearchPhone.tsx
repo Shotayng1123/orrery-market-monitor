@@ -5,6 +5,7 @@ import { Pick } from "../components/Pick";
 import { Overnight, WeeklyTables, type Pack, type WeeklyPack } from "../components/NoteTables";
 import { Screen } from "../components/PhoneKit";
 import { useApi } from "../lib/useApi";
+import { pageScroll, scrollToY } from "../lib/scroller";
 import type { Note, Report } from "../lib/types";
 import { fmtStampSafe } from "./shared";
 import { kindOf, KINDS, pieceDate, type Item, type Kind } from "./Research";
@@ -30,10 +31,10 @@ export function ResearchPhone({ tick, sub, onSub }: { tick: number; sub?: string
   const reading = !!sel;
   const listY = useRef(0), viaList = useRef(false);   // where the list was left, and whether the piece was opened from it
   const [last, setLast] = useState<string | null>(null);
-  const openRow = (key: string) => { listY.current = window.scrollY; viaList.current = true; onSub(key); };
+  const openRow = (key: string) => { listY.current = pageScroll(); viaList.current = true; onSub(key); };
   const back = () => { if (viaList.current) history.back(); else onSub(""); };
   useEffect(() => { if (sel) setLast(sel.key); }, [sel?.key]);
-  useLayoutEffect(() => { window.scrollTo(0, reading ? 0 : listY.current); if (!reading) viaList.current = false; }, [reading]);
+  useLayoutEffect(() => { scrollToY(reading ? 0 : listY.current); if (!reading) viaList.current = false; }, [reading]);
   const rep = useApi<{ report: Report }>(sel?.src === "report" ? "report" : null, { id: sel?.id }, Math.floor(tick / 10));
   const note = useApi<{ note: (Note & { pack?: Pack | WeeklyPack }) | null }>(sel?.src === "note" ? "note" : null, { d: sel?.d }, Math.floor(tick / 10));
   // never the piece opened before under this title (a refresh keeps the last payload until the new one lands)
