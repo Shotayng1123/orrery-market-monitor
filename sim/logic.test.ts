@@ -78,9 +78,12 @@ import type { BookFull as PfBook, PfStore, StartId as PfStart } from "../supabas
 import { opensAtTop as pfOpensAtTop, portfolioPage } from "../web/src/lib/pagetop.ts";
 import { MEMBERS_SOURCE, PERSONAL_USE, PERSONAL_USE_READ, PERSONAL_USE_TEXT, PORTFOLIO as PORTFOLIO_WORD } from "../web/src/lib/labels.ts";
 import { readFileSync, readdirSync, statSync as fileStat } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { createDecipheriv, createECDH, generateKeyPairSync, hkdfSync } from "node:crypto";
 import { builtinModules, createRequire } from "node:module";
-import { dirname, resolve as resolvePath } from "node:path";
+import { dirname, join as joinPath, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Every file and folder this file reads as it runs, so that [AL] can hold logic-tests' paths to them: this file stops a
@@ -2860,6 +2863,77 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
         !!zn && zn.roll === null && near(zn.pct.d1, pct(112.1, 112)) && near(zn.z1d, pct(112.1, 112) / 0.3) && zn.ls?.from === before && near(zn.ls?.base, 111) && near(zn.ls?.chg, pct(112, 111)) && zn.ls?.roll?.to === "ZNH27.CBT" && zn.ls?.roll?.from === "ZNZ26.CBT" && near(zn.ls?.roll?.step ?? null, pct(111, 113)) && near(zn.ls?.z, pct(112, 111) / 0.45) && zn.contract === "ZNH27.CBT"
         && !!gap && gap.ls?.from === "2026-11-09" && near(gap.ls?.base, 50.5) && near(gap.ls?.z, pct(51, 50.5) / 1.2) && near(gap.z1d, pct(51.2, 51) / 1) && nt.asOf === NOW.toISOString(), { zn: zn && { roll: zn.roll, ls: zn.ls }, gap: gap?.ls });
     }
+  }
+
+  console.log("\n[AM] the browser jobs print the widths their suites measured, passed or failed (slice 10, 23 Nov 2026: V8-2 of the check of slice 8)");
+  {
+    // GitHub runs the browser checks in both letter placements (deploy-web.yml, web/e2e/placement.cjs). Whether a leg
+    // draws what the engineer's machine draws in the same placement shows in the widths portfolio, letter-placement and
+    // header measure, which they write to web/e2e/.out; GitHub keeps that folder only when a job fails. So each of the
+    // four browser jobs runs web/e2e/widths.cjs after its run, and the same command over a local run prints the same
+    // block. Here the script runs as a job runs it, over records written as web/e2e/run.cjs writes them, in folders of
+    // its own: nothing of the repository's own web/e2e/.out is read.
+    const script = fileURLToPath(new URL("../web/e2e/widths.cjs", import.meta.url));
+    const wf = readText(new URL("../.github/workflows/deploy-web.yml", import.meta.url), "utf8");
+    let source = "";
+    try { source = readText(script, "utf8"); } catch { /* no script: the checks below say so */ }
+    const tmp = mkdtempSync(joinPath(tmpdir(), "orrery-widths-"));
+    const INSTALLED = ["--font-render-hinting=none", "--disable-lcd-text"];
+    const folder = (name: string, run: unknown, logs: Record<string, string>) => {
+      const d = joinPath(tmp, name); mkdirSync(d);
+      if (run !== null) writeFileSync(joinPath(d, "run.json"), JSON.stringify(run));
+      for (const [f, text] of Object.entries(logs)) writeFileSync(joinPath(d, f), text);
+      return d;
+    };
+    const print = (d: string, job?: string) => {
+      const env: NodeJS.ProcessEnv = { ...process.env }; delete env.GITHUB_JOB; if (job) env.GITHUB_JOB = job;
+      const r = spawnSync(process.execPath, [script, d], { env, encoding: "utf8", timeout: 30e3 });
+      return { status: r.status, lines: (r.stdout || "").replace(/\n$/, "").split("\n"), err: (r.stderr || "").slice(0, 300) };
+    };
+    // an address and a token, put together here so that no such string stands in the repository
+    const ADDRESS = ["a.person", "example.com"].join("@"), TOKEN = ["eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiIxIn0", "c2lnbmVk"].join(".");
+    try {
+      // 1. test-2-installed: header failed its first try and passed its second; letter-placement passed; header-sizes,
+      // which it does not watch, ran beside them
+      const two = folder("part2", { placement: "installed", switches: INSTALLED, preloads: [], part: "2",
+        suites: [{ name: "header-sizes", part: 2 }, { name: "header", part: 2 }, { name: "letter-placement", part: 2 }],
+        done: { "header-sizes": { ok: true, checks: 1, tries: 1, log: "header-sizes.log" }, header: { ok: true, checks: 4, tries: 2, log: "header.try2.log" }, "letter-placement": { ok: true, checks: 2, tries: 1, log: "letter-placement.log" } } }, {
+        "header.log": "  ✗ 1179x800: (c) the line's holder 480.1 px  -> {}\n",
+        "header.try2.log": `\n[(a) a label of 12 px]\n  ✓ 1179x800, seven tabs: (a) one row, 22.7 px tall\n  ✓ 1179x800, seven tabs: (e) the menu: 07:10:08 SGT, nothing cut\n  ✓ 1179x800: (c) the line's holder 486.5 px, read by ${ADDRESS} with ${TOKEN}\n  ✓ a 13-px line\n196 s\n`,
+        "header-sizes.log": "  ✓ 1440x900 L: one row, 33.3 px tall\n",
+        "letter-placement.log": "  ✓ with no preload a 13-px line measures 240 px in DejaVuSansMono.ttf\n  ✓ E2E_PLACEMENT unset or github: no switch added\n",
+      });
+      const a = print(two, "test-2-installed");
+      const wantA = ["letter-placement | ✓ with no preload a 13-px line measures 240 px in DejaVuSansMono.ttf", "header | ✓ 1179x800, seven tabs: (a) one row, 22.7 px tall",
+        "header | ✓ 1179x800: (c) the line's holder 486.5 px, read by [an address] with [a token]", "header | ✓ a 13-px line"];
+      ck(`a job's block: its first line names the job, its letter placement and part, and what the suites it watches did ("${a.lines[0]}"); then every check line with a px figure of letter-placement and of header, in that order, from the try that decided each (header's second), an address and a token masked; nothing of a suite it does not watch, no line without px, no label`,
+        a.status === 0 && a.lines.length === 5 && /^\[widths\] test-2-installed \(GitHub\) · E2E_PLACEMENT=installed \(--font-render-hinting=none --disable-lcd-text\) · part 2: letter-placement ✓ 2 checks, header ✓ 4 checks, second try$/.test(a.lines[0])
+        && JSON.stringify(a.lines.slice(1)) === JSON.stringify(wantA) && !a.lines.some((l) => /480\.1|33\.3|@|eyJ/.test(l)), a);
+      // 2. a local run of part 1 GitHub's way with portfolio's 100 lines: at most 80 lines, the last saying how many more
+      const many = Array.from({ length: 100 }, (_, i) => `  ✓ C${i}: the header is ${80 + i / 10} px tall`).join("\n");
+      const one = folder("part1", { placement: "github", switches: [], preloads: ["github-like-browser.cjs"], part: "1",
+        suites: [{ name: "portfolio", part: 1 }, { name: "portfolio-fixes", part: 1 }], done: { portfolio: { ok: false, checks: 99, tries: 2, log: "portfolio.try2.log" } } }, { "portfolio.try2.log": `${many}\n  ✗ C100: the form is 1101 px wide  -> {"w":1101}\n` });
+      const b = print(one);
+      ck(`a block is at most 80 lines, the 80th saying how many more lines with px figures the log holds; a run on this machine says so and names another preload it loaded ("${b.lines[0]}")`,
+        b.status === 0 && b.lines.length === 80 && /^\[widths\] this machine · E2E_PLACEMENT=github \(the browser's own\), also loaded: github-like-browser\.cjs · part 1: portfolio ✗ 99 checks, second try$/.test(b.lines[0])
+        && b.lines[1] === "portfolio | ✓ C0: the header is 80 px tall" && b.lines[78] === "portfolio | ✓ C77: the header is 87.7 px tall" && /^… 23 more lines with px figures/.test(b.lines[79]), { status: b.status, n: b.lines.length, first: b.lines.slice(0, 2), last: b.lines.slice(-2) });
+      // 3. a local run of all suites that stopped before header ended, and a folder with no run recorded
+      const all = folder("all", { placement: "installed", switches: INSTALLED, preloads: [], part: "",
+        suites: [{ name: "header", part: 2 }, { name: "portfolio", part: 1 }], done: { portfolio: { ok: true, checks: 1, tries: 1, log: "portfolio.log" } } }, { "portfolio.log": "  ✓ C1: the header is 80.6 px tall\n", "header.log": "  ✓ 1179x800: one row, 22.7 px tall\n" });
+      const c = print(all), d = print(folder("none", null, {}));
+      ck(`a run of both parts prints a block per part, part 1 first, and a watched suite with no finished try says so (no line of an unfinished log); a folder with no run recorded prints one line; the script exits with 0 every time: it prints, it checks nothing`,
+        c.status === 0 && c.lines.length === 4 && /· part 1: portfolio ✓ 1 check$/.test(c.lines[0]) && c.lines[1] === "portfolio | ✓ C1: the header is 80.6 px tall" && /· part 2: header not finished$/.test(c.lines[2]) && c.lines[3] === "header | no finished try in this run"
+        && d.status === 0 && d.lines.length === 1 && /^\[widths\] no run of e2e\/run\.cjs is recorded/.test(d.lines[0]), { c, d });
+    } catch (e) { ck(`the script ran over its folders (${(e as Error).message})`, false); }
+    rmSync(tmp, { recursive: true, force: true });
+    ck("web/e2e/widths.cjs needs nothing but Node's own modules, so that a job prints its widths even when its install failed", source !== "" && [...source.matchAll(/require\("([^"]+)"\)/g)].every((m) => builtinModules.includes(m[1].replace(/^node:/, ""))), [...source.matchAll(/require\("([^"]+)"\)/g)].map((m) => m[1]));
+    // 4. deploy-web.yml: each of the four browser jobs prints the block right after its run, passed or failed, and a
+    // failure of the print never stops a publish
+    const jobs = [...wf.matchAll(/^  ([\w-]+):\n((?:(?: {4}.*)?\n)+)/gm)].map((m) => ({ name: m[1], steps: m[2].split(/\n(?=      - )/).map((s) => Object.fromEntries([...s.matchAll(/^ {6}(?:- | {2})([\w-]+): (.+)$/gm)].map((x) => [x[1], x[2].trim()]))) }));
+    const legs = jobs.map((j) => { const i = j.steps.findIndex((s) => /^node e2e\/run\.cjs --part=[12]$/.test(s.run ?? "")); return { name: j.name, run: j.steps[i]?.run, after: i >= 0 ? j.steps[i + 1] : undefined }; }).filter((j) => j.run);
+    const printed = legs.filter((j) => j.after?.if === "always()" && j.after?.run === "node e2e/widths.cjs" && j.after?.["working-directory"] === "web" && j.after?.["continue-on-error"] === "true");
+    ck(`deploy-web.yml: each of the four browser jobs (${legs.map((j) => j.name).join(", ")}) runs node e2e/widths.cjs in web/ in the step right after its run, with if: always() and continue-on-error (${printed.length} of ${legs.length})`,
+      legs.length === 4 && printed.length === 4 && JSON.stringify(legs.map((j) => j.name)) === JSON.stringify(["test", "test-2", "test-installed", "test-2-installed"]), legs);
   }
 
   // [AK], what the READMEs say, is in sim/readme.test.ts since 23 Nov 2026: this file stops a deploy of the server or the

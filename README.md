@@ -344,13 +344,31 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   same way (`E2E_PLACEMENT=installed` adds the switches the launcher already adds). `test` and `test-2`: the same
   command with the browser started with `--font-render-hinting=full`, by a preload loaded with
   `NODE_OPTIONS="--require <its absolute path>"` that adds it to every `chromium.launch()` (the engineer keeps one
-  outside the repository; `letter-placement` writes a small one of its own); measured there, every line is then on
-  whole px. With `E2E_PLACEMENT=installed` such a preload has to come after `placement.cjs` in `NODE_OPTIONS`, or
-  `placement.cjs` stops the run: the switch given last is the one the browser keeps. One difference no switch
-  removes: a letter drawn in a font of the machine itself (one the page's faces lack, such as σ, or a check that
-  forces `monospace`) follows that machine's own font settings in both placements, and the engineer's machine has
-  every system font set unhinted. Should that machine stop reaching fonts.googleapis.com, its runs draw in fallback
-  faces and are no longer GitHub's: the faces then have to be served to its browser from copies.
+  outside the repository; `letter-placement` writes a small one of its own); measured there, every line in the page's
+  own faces is then on whole px. With `E2E_PLACEMENT=installed` such a preload has to come after `placement.cjs` in
+  `NODE_OPTIONS`, or `placement.cjs` stops the run: the switch given last is the one the browser keeps. One difference
+  no switch removes: a letter drawn in a font of the machine itself (one the page's faces lack, such as σ, or a check
+  that forces `monospace`) follows that machine's own font settings in both placements, and the engineer's machine has
+  every system font set unhinted. So there the page's faces follow the switch alone: the browser's own binary (the one
+  behind the launcher script) started without the launcher draws them on whole px, as GitHub's runner does (240 px for
+  the line `letter-placement` measures in DejaVu Sans Mono loaded by the page), and `--font-render-hinting=none` alone
+  gives the launcher's widths again (234.813 px), while the same line in DejaVu Sans Mono as a font of the machine
+  measures 234.813 px every way (measured on 23 Nov 2026, the check of slice 8). Should that machine stop reaching
+  fonts.googleapis.com, its runs draw in fallback faces and are no longer GitHub's: the faces then have to be served
+  to its browser from copies.
+  **The widths each job prints.** After its run, passed or failed, each of the four jobs prints into its own log the
+  widths that `portfolio` (part 1), `letter-placement` and `header` (part 2) measured, so that a leg can be set beside
+  a run of the same placement on the engineer's machine line by line (GitHub keeps `e2e/.out` only when a job fails):
+  a first line that names the job, its letter placement, its part and what those suites did, then every check line
+  of theirs that carries a figure in px, suite by suite in that order and each in its own order, as the suite wrote
+  it, from the try that decided it; at most 80 lines a job. `web/e2e/widths.cjs` prints it from the record `run.cjs`
+  keeps of its run (`e2e/.out/run.json`: the placement, the part, and each suite's part and deciding try); the suites
+  run on stand-in data, and an address or a token in a line would be masked. The same command after a run on the
+  engineer's machine prints the same block: `cd web && node e2e/widths.cjs` (or `node e2e/widths.cjs <another copy's
+  web/e2e/.out>`), a block for each part the run held, its first line naming this machine and any other preload
+  loaded (such as the one that draws GitHub's placement there). So `E2E_PLACEMENT=installed node e2e/run.cjs portfolio
+  letter-placement header` and then that command print the two blocks to set beside those of `test-installed` and
+  `test-2-installed`, line for line (their first lines name the job).
   A suite that fails once is tried again; when the second try passes, the lines that failed the first time are
   printed all the same, so a check that fails only now and then can be found from the publish job's log.
   Needs Playwright's browser once: `npx playwright install chromium`.
@@ -391,7 +409,9 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   request #50 named), and the market table itself against a stand-in database that cuts every answer at 1,000 rows and
   gives rows with equal keys in a fresh order each time (section [AJ]: the paged read and its order, a yield in points,
   a future's roll today with and without the new contract's close and one between its last two closes, which σ window
-  a print and a booked close are set against).
+  a print and a booked close are set against), and the widths the browser jobs print (section [AM]: `web/e2e/widths.cjs`
+  run as a job runs it, over records written as `run.cjs` writes them, and its step after the run in each of
+  `deploy-web`'s four browser jobs, which never fails the job).
   `cd jobs && npx tsx ../sim/logic.test.ts`.
   The same command checks the file itself, in its last two sections. GitHub installs `jobs/` alone before it runs the
   logic checks (`logic-tests`, and `deploy-server` before a deploy), so nothing the file imports, directly or through
@@ -414,7 +434,8 @@ Three sets, none of which needs the real API, the live database or a sign-in:
 - **The README's own checks** (`sim/readme.test.ts`, section [AK]): what this file says of the checks is what the
   repository holds (the number of browser suites in `web/e2e/run.cjs`, the paper portfolio's suites by name, the suites
   described here by name, which suites check the "personal use" lines, the windows of the morning check, what `pf_jpx`
-  asks, the terms gate's examples put to the gate itself), and the sentences of the two READMEs that name the code
+  asks, the terms gate's examples put to the gate itself, the widths block's suites, length and command against
+  `web/e2e/widths.cjs` and `deploy-web`), and the sentences of the two READMEs that name the code
   (the "personal use" paragraph word for word, the paper portfolio's two switches and how its preview is given and
   taken back, with the page's three states as `web/src/lib/paper.ts` names them, the account statement as
   `supabase/README.md` quotes it). The logic checks stop a deploy of the server and of the site; until 23 Nov 2026 they

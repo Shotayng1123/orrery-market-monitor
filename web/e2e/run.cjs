@@ -23,7 +23,9 @@
 //   gate     5183  dev server with the real sign-in screen; API calls answered by the suite
 //   built    5187  the site as published (a build in e2e/.dist), for what only a built site has: the service
 //                  worker, version.json. Suites that rewrite its files run one after another.
-// A dev server already answering on its port is used as it is. Logs and screenshots go to e2e/.out (git-ignored).
+// A dev server already answering on its port is used as it is. Logs and screenshots go to e2e/.out (git-ignored),
+// with e2e/.out/run.json, this run's record (its placement and part, each suite's part and the try that decided it),
+// from which e2e/widths.cjs prints the widths the suites measured (each of GitHub's browser jobs does after its run).
 const { spawn, spawnSync } = require("child_process"), fs = require("fs"), http = require("http"), path = require("path");
 // the letter placement: read and held to "installed", "github" or none here, before any server starts, and loaded
 // into every suite below (a misspelt E2E_PLACEMENT stops the run at once)
@@ -134,6 +136,14 @@ async function start(id) {
   throw new Error(`the ${id} server did not come up on ${s.port} (see e2e/.out/server-${id}.log)`);
 }
 const stopAll = () => { for (const c of started) { try { c.kill("SIGTERM"); } catch { /* gone */ } } };
+// this run's record for e2e/widths.cjs, written at the start and again as each suite ends: the placement in force,
+// any other preload in NODE_OPTIONS (by its file's name only), the part, each suite's part, and the try that decided it
+const record = {
+  placement: placed.mode, switches: placed.switches,
+  preloads: [...(process.env.NODE_OPTIONS || "").matchAll(/(?:--require|-r)(?:=|\s+)("[^"]+"|'[^']+'|\S+)/g)].map((m) => path.basename(m[1].replace(/^["']|["']$/g, ""))).filter((f) => f !== "placement.cjs"),
+  part, suites: chosen.map((s) => ({ name: s.name, part: PART_ONE.includes(s.name) ? 1 : 2 })), done: {},
+};
+const keep = () => { try { fs.writeFileSync(path.join(OUT, "run.json"), JSON.stringify(record, null, 1) + "\n"); } catch { /* the record only feeds e2e/widths.cjs: no run stops for it */ } };
 process.on("SIGINT", () => { stopAll(); process.exit(130); });
 
 function runOnce(suite, attempt) {
@@ -141,7 +151,7 @@ function runOnce(suite, attempt) {
     const t0 = Date.now(), file = path.join(OUT, `${suite.name}${attempt > 1 ? `.try${attempt}` : ""}.log`), out = fs.openSync(file, "w");
     const c = spawn(process.execPath, ["--require", PLACEMENT, path.join(__dirname, `${suite.name}.cjs`)], { cwd: OUT, env: process.env, stdio: ["ignore", out, out] });
     const timer = setTimeout(() => { try { c.kill("SIGKILL"); } catch { /* gone */ } }, 6 * 60e3);
-    c.on("exit", (code) => { clearTimeout(timer); fs.closeSync(out); const text = fs.readFileSync(file, "utf8"); res({ ok: code === 0, secs: Math.round((Date.now() - t0) / 1000), passed: (text.match(/^\s*✓ (?!all checks)/gm) || []).length, failed: (text.match(/^\s*✗ (?!\d+ check)/gm) || []), text }); });
+    c.on("exit", (code) => { clearTimeout(timer); fs.closeSync(out); const text = fs.readFileSync(file, "utf8"); res({ file, ok: code === 0, secs: Math.round((Date.now() - t0) / 1000), passed: (text.match(/^\s*✓ (?!all checks)/gm) || []).length, failed: (text.match(/^\s*✗ (?!\d+ check)/gm) || []), text }); });
   });
 }
 // The lines of a try that say what failed: its ✗ checks and any error with where it was thrown; for a suite that
@@ -153,6 +163,7 @@ const failLines = (r) => {
 async function run(suite) {
   const first = await runOnce(suite, 1);
   const r = first.ok ? first : await runOnce(suite, 2), retried = r !== first;
+  record.done[suite.name] = { ok: r.ok, checks: r.passed, tries: retried ? 2 : 1, log: path.basename(r.file) }; keep();
   console.log(`${r.ok ? "✓" : "✗"} ${suite.name}: ${r.passed} checks${r.ok ? "" : `, ${r.failed.length || "the suite stopped;"} failed`} in ${r.secs}s${retried ? (r.ok ? " (passed on the second try)" : " (failed twice)") : ""}`);
   // A check that fails once and passes on the retry is a flaky check: what failed is printed here too, so it can be
   // found from the publish job's log alone (GitHub's machines keep e2e/.out only as an artifact; 20 Nov 2026).
@@ -162,7 +173,7 @@ async function run(suite) {
 }
 
 (async () => {
-  fs.mkdirSync(OUT, { recursive: true });
+  fs.mkdirSync(OUT, { recursive: true }); keep();
   const t0 = Date.now(); let results = [];
   try {
     console.log(`letter placement: ${placed.mode === "installed" ? `installed (every browser a suite starts gets ${placed.switches.join(" ")}: e2e/placement.cjs)` : "the browser's own (E2E_PLACEMENT is github or unset)"}\n`);
