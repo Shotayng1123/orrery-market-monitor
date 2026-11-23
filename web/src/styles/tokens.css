@@ -547,6 +547,14 @@ body.term .phead .aux:has(.chips){display:inline-flex;flex-wrap:wrap;white-space
 .phead .aux.src-fit>.src-long{display:contents}
 .phead .aux.src-fit>.src-short,.phead .aux.src-fit>.src-compact,.phead .aux.src-fit>.src-min{display:none}
 .phead .aux.src-fit.src-drop{display:block;text-align:right}
+/* in a layout that wraps the line (the classic one on a phone, the scrolling one), a stock's line beside a title that
+   leaves it less room than its longest part takes a row of its own under the title, the head's whole width, and flows
+   there as text (`wrap`, Panel.tsx useSourceFit; N5-1 of the check of fix part 5: as a block beside a title that left
+   it next to no room, its text ran off the panel and the screen); the title keeps the first row */
+body:not(.term) .phead:has(>.aux.src-fit.src-drop.wrap){flex-wrap:wrap;row-gap:1px}
+body:not(.term) .phead>.aux.src-fit.src-drop.wrap{flex:1 1 100%;margin-left:0;order:2}
+body:not(.term) .phead:has(>.aux.src-fit.src-drop.wrap)>.t{flex:1 1 0;min-width:0}
+body:not(.term) .phead:has(>.aux.src-fit.src-drop.wrap)>.csvbtn{order:1}
 body.term .phead .aux.src-fit{display:block;flex:1 1 0;min-width:0;text-align:right;overflow:visible;text-overflow:clip}
 body.term .phead .aux.src-fit>.src-long{display:inline;white-space:nowrap}
 body.term .phead .aux.src-fit.short>.src-long{display:none}

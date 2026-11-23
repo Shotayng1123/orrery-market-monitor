@@ -64,11 +64,22 @@ function useSourceFit(ref: RefObject<HTMLSpanElement | null>, on: boolean, drop:
       credit.style.display = "none"; const bare = tall(); credit.style.display = "";
       for (const n of [0, ...levels]) { a.classList.remove("d1", "d2", "d3"); if (n) a.classList.add(`d${n}`); if (tall() - bare <= line + 0.5) return; }
     };
+    // In a layout that wraps the line, a line drawn once beside a title that leaves it less room than its longest part
+    // takes a row of its own under the title (`wrap`, tokens.css), the head's whole width, and flows there as text
+    // (N5-1 of the check of fix part 5: as a block beside a title that left it next to no room, its text ran off the
+    // panel and the screen, "Yahoo Finance" and "personal use" with it). Each part is measured on one line.
+    const ownRow = () => {
+      if (!drop) return;
+      a.style.whiteSpace = "nowrap";
+      const widest = Math.max(0, ...[...long.querySelectorAll<HTMLElement>(".sp")].filter((e) => e.getClientRects().length > 0).map(drawn)), r = room();
+      a.style.whiteSpace = "";
+      if (widest > r + 0.5) a.classList.add("wrap");
+    };
     const fit = () => {
       a.classList.remove("short", "compact", "min", "wrap", "d1", "d2", "d3");
       // a title wider than its head's whole line is cut at its end (tokens.css): its tooltip holds it whole
       const cut = () => { if (!title) return; if (title.scrollWidth > title.clientWidth + 0.5) title.title = (title.textContent ?? "").trim(); else title.removeAttribute("title"); };
-      if (!document.body.classList.contains("term")) { creditFit(); return cut(); }
+      if (!document.body.classList.contains("term")) { ownRow(); creditFit(); return cut(); }
       if (drawn(long) <= room()) return cut();
       if (drop) {
         // one line, drawn once: its descriptive parts left out, the industry first, then the sector, then the exchange

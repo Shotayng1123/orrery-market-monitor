@@ -11,7 +11,10 @@
 //       left out before the sector and the sector before the exchange; the whole line its tooltip, and a title cut only
 //       where it is wider than its head's whole line, with the whole name as its own; in the scrolling layout and the
 //       classic phone layout (where the computer's page is drawn on a touch screen) the credit adds at most one line
-//       to the head; a US stock's line carries no credit; "personal use" opens Help at its paragraph
+//       to the head; a US stock's line carries no credit; "personal use" opens Help at its paragraph; in the classic
+//       phone layout, names of 37 to 51 characters at 320 and 390 px: the line on a row of its own under a title that
+//       leaves it less room than its longest part, every part that is never left out whole inside the window and the
+//       panel (N5-1 of the check of fix part 5: it ran off the screen)
 // It must pass as installed and GitHub's way (letters on whole px).
 // Run from web/:  node e2e/run.cjs stock-line   (the runner starts the server this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
@@ -155,6 +158,59 @@ const face = async (p, css) => { if (!css) return; await p.addStyleTag({ content
         await ctx.close();
       }
       console.log(`    the stock's head in the classic phone layout: ${heights.join("; ")}`);
+
+      // N5-1 of the check of fix part 5: in the classic phone layout a long name (about 31 characters at 320 px, 42 at
+      // 390) left the line next to no room beside the title, and the line, drawn as a block, ran off the panel and the
+      // screen ("Yahoo Finance", the credit and "personal use" with it; 7203.T's 24 characters never showed it). Where
+      // the title leaves it less room than its longest part, the line takes a row of its own under the title, the
+      // head's whole width, and flows there as text. Real-world names of 37 to 51 characters, in both letter placements
+      // and once in a wide face: the symbol, the memberships, their credit, "personal use" and Yahoo Finance each lie
+      // whole inside the window, the panel and the head; no sideways scroll
+      const LONGER = [
+        ["9501.T", "Tokyo Electric Power Company Holdings, Incorporated", "Utilities", "Utilities - Regulated Electric"],
+        ["9503.T", "The Kansai Electric Power Company, Incorporated", "Utilities", "Utilities - Regulated Electric"],
+        ["9509.T", "Hokkaido Electric Power Company, Incorporated", "Utilities", "Utilities - Regulated Electric"],
+        ["9506.T", "Tohoku Electric Power Company, Incorporated", "Utilities", "Utilities - Regulated Electric"],
+        ["9432.T", "Nippon Telegraph and Telephone Corporation", "Communication Services", "Telecom Services"],
+        ["9502.T", "Chubu Electric Power Company, Incorporated", "Utilities", "Utilities - Regulated Electric"],
+        ["8316.T", "Sumitomo Mitsui Financial Group, Inc.", "Financials", "Banks - Diversified"],
+        ["4502.T", "Takeda Pharmaceutical Company Limited", "Health Care", "Drug Manufacturers - Specialty & Generic"],
+      ];
+      const longer = Object.fromEntries(LONGER.map(([s, n, se, i]) => [s, [n, se, i]]));
+      // each part that is never left out, and "personal use", as a person sees it: every rect of its text inside the
+      // window, the panel and the head
+      const seen = (p) => p.evaluate(() => {
+        const pn = document.querySelector(".panel[data-k='st-chart']"), hd = pn?.querySelector(":scope > .phead"), a = hd?.querySelector(":scope > .aux");
+        if (!pn || !hd || !a) return null;
+        const R = (e) => e.getBoundingClientRect(), hr = R(hd), pr = R(pn), z = Number(document.body.style.zoom) || 1;
+        const left = Math.max(hr.left, pr.left, 0), right = Math.min(hr.right, pr.right, innerWidth);
+        const whole = (e) => { if (!e || !e.getClientRects().length) return false; const rg = document.createRange(); rg.selectNodeContents(e); const rs = [...rg.getClientRects()].filter((r) => r.width > 0.5); return rs.length > 0 && rs.every((r) => r.left >= left - 0.5 && r.right <= right + 0.5 && r.top >= hr.top - 0.5 && r.bottom <= hr.bottom + 0.5); };
+        const keep = [...a.querySelectorAll(":scope > .src-long .sp")].filter((e) => !e.closest("[data-drop]") && !e.parentElement.closest(".sp"));
+        const parts = keep.map((e) => ({ text: e.textContent.replace(/\s+/g, " ").trim(), whole: whole(e) }));
+        const pu = a.querySelector("#st-members-by .puse"), t = hd.querySelector(":scope > .t");
+        return { parts, pu: whole(pu), form: (["d1", "d2", "d3"].find((c) => a.classList.contains(c)) ?? "whole") + (a.classList.contains("wrap") ? "+own row" : ""), headH: Math.round((hr.height / z) * 10) / 10, title: t?.textContent ?? "", sideways: document.documentElement.scrollWidth - innerWidth };
+      });
+      for (const [w, h, css] of [[320, 568, ""], [390, 844, ""], [320, 568, DEJAVU], [390, 844, DEJAVU]]) {
+        const ctx = await b.newContext({ ...devices["iPhone 13"], viewport: { width: w, height: h }, deviceScaleFactor: 1 });
+        await ctx.addInitScript(([at, names]) => { try { localStorage.setItem("om_mock_now", at); localStorage.setItem("om_a2hs_hide", "1"); localStorage.setItem("om_paper", "0"); localStorage.setItem("om_phone_v2", "0"); localStorage.setItem("om_mock_names", JSON.stringify(names)); } catch {} }, [TOKYO_OPEN, longer]);
+        const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+        // attached, not visible: a line that a title leaves no room has no size (as at 2d28d6e), and that is a failed check, not a stop
+        await p.goto(`${MOCK}#asset/${LONGER[0][0]}`, { waitUntil: "networkidle" }); await p.waitForSelector(".panel[data-k='st-chart'] .phead .aux", { state: "attached", timeout: 20000 });
+        await p.addStyleTag({ content: "#mockbar{display:none!important}" }); await settle(p, 300); await face(p, css);
+        const got = [], bad = [];
+        for (const [sym, name] of LONGER) {
+          await p.evaluate((s) => { location.hash = `asset/${s}`; }, sym);
+          await p.waitForFunction(([s, nm]) => (document.querySelector(".panel[data-k='st-chart'] .phead .aux")?.textContent ?? "").includes(` ${s}`) && (document.querySelector(".panel[data-k='st-chart'] .phead .t")?.textContent ?? "") === nm.toUpperCase(), [sym, name], { timeout: 10000 }).catch(() => {});
+          await frames(p); await p.waitForTimeout(60); await frames(p);
+          const r = await seen(p);
+          got.push(`${sym} (${name.length}) ${r ? `${r.form} ${r.headH} px` : "?"}`);
+          const miss = r ? r.parts.filter((x) => !x.whole).map((x) => x.text) : ["no line"];
+          const need = r ? ["Yahoo Finance", sym, "NK225, TOPIX", "(Nikkei, JPX · personal use)"].filter((x) => !r.parts.some((y) => y.text === x)) : [];
+          if (!r || miss.length || need.length || !r.pu || r.sideways > 0 || r.title !== name.toUpperCase()) bad.push({ sym, miss, need, pu: r?.pu, sideways: r?.sideways, title: r?.title });
+        }
+        ck(`the classic phone layout at ${w} px${css ? " in DejaVu Sans" : ""}: ${LONGER.length} Tokyo stocks of 37 to 51 characters (${got.join("; ")}): the symbol, "NK225, TOPIX", "(Nikkei, JPX · personal use)", "personal use" and "Yahoo Finance" each whole inside the window, the panel and the head; no sideways scroll`, bad.length === 0 && errs.length === 0, { bad, got, errs });
+        await ctx.close();
+      }
     }
   } finally { await b.close(); }
   console.log(fails ? `\n✗ ${fails} check(s) failed` : "\n✓ all checks passed");
