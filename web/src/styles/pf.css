@@ -483,3 +483,40 @@ body.pv2 .pf-err .pf-link{display:inline-flex;align-items:center;min-height:44px
 .pfp .mp-sec h2{flex-wrap:wrap;row-gap:0}
 .pfp .mp-sec h2>span:first-child{white-space:nowrap}
 .pfp .mp-sec h2>.aux{margin-left:auto;flex:0 1 auto;text-align:right}
+/* the order ticket (P-2.1): on a computer a 460-px panel at the right of the book, beside Overview, under the preview
+   line; on a phone a page of the book. 16-px inputs and 44-px taps on a phone */
+.pf-withticket{display:flex;align-items:flex-start;gap:var(--gap,10px)}
+.pf-withticket>.pf-main{flex:1 1 auto;min-width:0}
+.pf-withticket .pf-cols{grid-template-columns:minmax(0,1fr)}
+.pf-ticket{flex:0 0 460px;width:460px;max-width:100%;position:sticky;top:var(--pf-top,0px);border-top:2px solid var(--cyan)}
+.pf-strip #pf-buysell{margin-left:6px}
+.pf-ticket-form{display:flex;flex-direction:column;gap:8px;font-size:12px}
+.pf-t-row{display:flex;align-items:center;gap:10px}
+.pf-t-row .k{flex:0 0 44px;color:var(--mut);font-family:var(--mono);font-size:11px;text-transform:uppercase}
+.pf-t-name,.pf-t-size{display:flex;align-items:center;gap:6px;min-width:0;flex:1 1 auto}
+.pf-t-name input{flex:1 1 auto;min-width:0;padding:4px 6px;font-size:12px;text-transform:uppercase}
+.pf-t-name .pf-go{background:transparent;color:var(--cyan)}
+.pf-t-name .pf-go:hover{background:rgba(79,224,210,.12)}
+.pf-t-size input{width:120px;padding:4px 6px;font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+.pf-t-size .u{color:var(--mut)}
+.pf-t-sides{display:flex;gap:4px;flex-wrap:wrap}
+.pf-t-sides button{min-width:64px;padding:4px 8px;border:1px solid var(--bord2);border-radius:3px;background:transparent;color:var(--txt);font-family:var(--mono);font-size:11px;cursor:pointer}
+.pf-t-sides button.on{border-color:var(--amber);background:var(--sel);color:var(--amber)}
+.pf-t-sides button:disabled{opacity:.45;cursor:not-allowed}
+.pf-t-lines{margin-left:54px;line-height:1.55;overflow-wrap:anywhere}
+.pf-t-lines .m{color:var(--mut)}
+.pf-t-lines .q{font-size:14px;font-weight:600;color:var(--txt)}
+.pf-t-lines .warn{color:var(--warn)}
+.pf-ticket-form>.pf-err,.pf-ticket-form>.pf-mut:not(.pf-t-note){margin-left:54px}
+.pf-t-note{margin-top:4px;padding-top:6px;border-top:1px solid var(--bord)}
+.pfp-buysell{display:inline-flex;align-items:center;justify-content:center;min-height:44px;box-sizing:border-box;margin:6px 0 2px;padding:0 18px;border:1px solid var(--cyan);border-radius:11px;color:var(--cyan);font-size:15px;text-decoration:none}
+.pf-ticket-form.ph{gap:10px;font-size:14px}
+.pf-ticket-form.ph .pf-t-row{flex-direction:column;align-items:stretch;gap:4px}
+.pf-ticket-form.ph .pf-t-row .k{flex:none;font-family:var(--sans);font-size:12px;text-transform:none}
+.pf-ticket-form.ph input,.pf-ticket-form.ph select{min-height:48px;box-sizing:border-box;padding:8px 10px;border-radius:10px;font-size:16px}
+.pf-ticket-form.ph .pf-t-size input{width:auto;flex:1 1 auto;min-width:0}
+.pf-ticket-form.ph .pf-go{min-height:48px;border-radius:10px;font-size:15px}
+.pf-ticket-form.ph .pf-t-sides{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.pf-ticket-form.ph .pf-t-sides button{min-width:0;min-height:48px;border-radius:10px;font-family:var(--sans);font-size:15px}
+.pf-ticket-form.ph .pf-t-lines,.pf-ticket-form.ph>.pf-err,.pf-ticket-form.ph>.pf-mut:not(.pf-t-note){margin-left:0}
+.pf-ticket-form.ph .pf-t-lines .q{font-size:16px}

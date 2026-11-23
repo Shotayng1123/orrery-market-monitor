@@ -14,13 +14,14 @@ import { pushState, pushSubscribe, pushTest, pushUnsubscribe } from "../_shared/
 import { stockPage } from "../_shared/stock.ts";
 import { liveRows } from "../_shared/intraday.ts";
 import { watchRowFromQuote, watchRowFromTable, type TableLike } from "../_shared/watchrow.ts";
-import { HOLIDAY_SOURCES, localDate, type Holidays } from "../_shared/sessions.ts";
+import { EARLY_CLOSES, HOLIDAY_SOURCES, localDate, type Holidays } from "../_shared/sessions.ts";
 import { feedState } from "../_shared/feedhealth.ts";
 import { beatFresh, type Reading, type RelayNote } from "../_shared/relay.ts";
 import { LISTED_ALERTS } from "../_shared/sigma.ts";
 import { isPfAction, pfRoute, type PfFacts } from "../_shared/pf/route.ts";
 import { PAPER_ON_SERVER, paperOpen, previewFor, previewList } from "../_shared/pf/switch.ts";
 import { sqlStore } from "../_shared/pfstore.ts";
+import type { TicketQuote } from "../_shared/pf/size.ts";
 
 
 Deno.serve(async (req) => {
@@ -55,7 +56,7 @@ Deno.serve(async (req) => {
     if (isPfAction(action)) {
       const open = paperOpen(PAPER_ON_SERVER, previewList(Deno.env.get("PF_PREVIEW_EMAILS")), account.email);
       const body = open && req.method === "POST" ? ((await req.json().catch(() => ({}))) as Record<string, unknown>) : {};
-      const r = await pfRoute({ on: open, store: sqlStore((fn, args) => db.rpc(fn, args)), now: () => new Date(), facts: paperFacts }, action, account.email, req.method, q, body);
+      const r = await pfRoute({ on: open, store: sqlStore((fn, args) => db.rpc(fn, args)), now: () => new Date(), facts: paperFacts, quotes: ticketQuotes }, action, account.email, req.method, q, body);
       return json(req, r.body, r.status);
     }
     switch (action) {
@@ -177,7 +178,17 @@ async function paperFacts(): Promise<PfFacts> {
   // how far the holiday rows reach (the sources' own "through"): a change dated past it, or with no rows read, is
   // refused, never dated as if no market were shut (EN-15)
   const through = calError ? null : [HOLIDAY_SOURCES.TSE?.through, HOLIDAY_SOURCES.NYSE?.through].filter((x): x is string => !!x).sort()[0] ?? null;
-  return { rates: { USD: null, JPY: null }, usdjpy: fx && Number(fx.close) > 0 ? { rate: Number(fx.close), d: fx.d as string, source: "Yahoo Finance, unofficial" } : null, holidays: { TSE: days("TSE"), NYSE: days("NYSE"), through } };
+  // and New York's early closes as the session table holds them, for how old a ticket's print may be (P-2.1)
+  return { rates: { USD: null, JPY: null }, usdjpy: fx && Number(fx.close) > 0 ? { rate: Number(fx.close), d: fx.d as string, source: "Yahoo Finance, unofficial" } : null, holidays: { TSE: days("TSE"), NYSE: days("NYSE"), through, early: { NYSE: EARLY_CLOSES.NYSE ?? {} } } };
+}
+/** The order ticket's prints (P-2.1): Yahoo Finance's quote, the one a stock's page shows, in one request per ticket
+ *  read; the print's own time (regularMarketTime). Asked only by pf_ticket, for an account the routes admit. */
+async function ticketQuotes(symbols: string[]): Promise<Record<string, TicketQuote | null>> {
+  const got = await quotes(symbols);
+  return Object.fromEntries(symbols.map((s) => {
+    const r = got[s];
+    return [s, r ? { symbol: s, name: r.name, price: r.price, at: r.time != null ? new Date(r.time * 1000).toISOString() : null, currency: r.currency, exchange: r.exchange, quoteType: r.quoteType, source: "Yahoo Finance, unofficial" } : null];
+  }));
 }
 
 // ---------- sign-in ----------

@@ -11,7 +11,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, getToken, onSignInEnd, remembered, tokenId } from "./api";
 import { keepDel, keepGet, keepKey, keepSet, type Kept } from "./keep";
-import type { BookFull, BookRow, CashRate, ConsentState, FormFacts, Refusal, Base } from "./pf/types.ts";
+import type { BookFull, BookRow, CashRate, ConsentState, FormFacts, Refusal, Base, Kind, StartId } from "./pf/types.ts";
+import type { Side, SizeOut } from "./pf/size.ts";
 import type { Venue } from "./pf/calendar.ts";
 import { NOT_YET } from "./pf/words.ts";
 
@@ -81,6 +82,22 @@ export const pfNoteAdd = (id: string, body: string): Promise<unknown> => call("p
 export const pfNoteRemove = (id: string, note: number): Promise<unknown> => call("pf_note_remove", undefined, { id, note });
 export const pfDelete = (id: string, name: string): Promise<unknown> => call("pf_delete", undefined, { id, name }).then((r) => { forgetBook(id); return r; });
 export const consentAgree = (version: number): Promise<ConsentState> => call("consent_agree", undefined, { version });
+/** The order ticket's read (P-2.1): the name's latest print with its time, age and source, USD/JPY where the currencies
+ *  differ, the book's capital and the sides its position allows. It places nothing. A server of before 23 Nov 2026 has
+ *  no such route: it answers 400 "unknown action". */
+export interface TicketAnswer {
+  book: { id: string; name: string; base: Base; kind: Kind; start: StartId; capital: number };
+  symbol: string; position: number; sides: Side[]; note: string; asked: string;
+  /** `market`: the market now by the Monitor's session table (a server of before 23 Nov 2026 15:00 UTC sends none) */
+  instrument: { name: string | null; exchange: string | null; venue: Venue; ccy: Base; lot: number; market?: "open" | "break" | "closed" | "holiday" } | null;
+  refusal: string | null;
+  print: { price: number; at: string; source: string; ageMin: number; tooOld: boolean; why: string | null } | null;
+  fx: { rate: number; at: string; source: string } | null;
+  sized: SizeOut | null;
+}
+export const pfTicket = (id: string, s: string): Promise<TicketAnswer> => call("pf_ticket", { id, s });
+/** Whether a failure is a server of before the ticket (no pf_ticket route). */
+export const noTicketRoute = (e: unknown): boolean => e instanceof PfError && e.status === 400 && /unknown action/i.test(e.message);
 
 /** The server's words as part of a sentence of the page's: without the full stop they may end in. */
 export const serverWords = (e: unknown): string => (e instanceof Error ? e.message : String(e)).trim().replace(/\.+$/, "");

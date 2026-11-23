@@ -40,3 +40,7 @@ export const CALENDAR_UNREAD = "the holiday calendar could not be read, so the s
 /** The status a store's refusal travels with: a portfolio that is not the account's is not found; a missing
  *  agreement asks for the statement; the rest are the asker's to put right. */
 export const refusalStatus = (message: string): number => (message === NO_SUCH ? 404 : message === NEEDS_STATEMENT ? 409 : 400);
+/** The order ticket's line while it only sizes (P-2.1, 23 Nov 2026): placing an order is the next step's. */
+export const TICKET_NOTE = "Placing orders comes next: for now the ticket works out an order's size and places nothing.";
+/** The ticket's words when the server has no pf_ticket yet (a page newer than its server). */
+export const TICKET_NOT_ON_SERVER = "The order ticket is not on the Monitor's server yet: it comes with the server's next update.";

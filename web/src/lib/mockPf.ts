@@ -12,11 +12,14 @@
 //                      "offline"   … fails as without a connection; "signedout" … as with an expired sign-in
 //   om_mock_pf_delay = "400"       every write is answered after that many milliseconds (a slow connection)
 //   om_mock_pf_off = "1"           the stand-in server's paper switch is off: every route answers "not available yet"
+//   om_mock_pf_ticket = "0"        a stand-in server of before the order ticket: pf_ticket is an unknown action
 // The page's clock (om_mock_now, lib/mockclock.ts) is this store's clock: 2026-12-15T02:00:00Z opens the targets' window.
 import { pfRoute, type PfAnswer } from "./pf/route.ts";
 import { emptyState, memStore, type MemState } from "./pf/memstore.ts";
 import { buildCreate, checkForm, defaultRaw, type Raw } from "./pf/form.ts";
-import { changeDays, valuationDay, venuesOf } from "./pf/calendar.ts";
+import { bookDayStarts, changeDays, FEED_DELAY_MIN, nyDate, SEGMENTS, valuationDay, venueNow, VENUE_TZ, venuesOf, ymdIn, type Venue } from "./pf/calendar.ts";
+import type { TicketQuote } from "./pf/size.ts";
+import { EARLY_CLOSES } from "./sessions";
 import { STATEMENT_VERSION } from "./pf/statement.ts";
 import type { PfStore, StartId } from "./pf/types.ts";
 import { bookedDays, mockHolidays } from "./mock";
@@ -47,8 +50,47 @@ const FX_RATE = 158.4, FX_SOURCE = "Yahoo Finance, unofficial";
 const facts = () => Promise.resolve({
   rates: { USD: { name: "EFFR", rate: 3.88, d: "2026-11-18", source: "New York Fed", standIn: false }, JPY: { name: "TONA", rate: 1.227, d: "2026-11-18", source: "Bank of Japan", standIn: false } },
   // the holiday rows reach as the Monitor's do (supabase/functions/_shared/sessions.ts HOLIDAY_SOURCES, "through")
-  usdjpy: { rate: FX_RATE, d: fxDay(), source: FX_SOURCE }, holidays: { ...mockHolidays(), through: "2027-12-31" },
+  usdjpy: { rate: FX_RATE, d: fxDay(), source: FX_SOURCE }, holidays: { ...mockHolidays(), through: "2027-12-31", early: { NYSE: EARLY_CLOSES.NYSE ?? {} } },
 });
+
+// ---- the order ticket's stand-in prints (P-2.1): made-up prices, timed by the page's clock as the feed would time them:
+// in a session the feed's delay old (Tokyo 20 minutes), in Tokyo's lunch the morning's last, else the last session's
+// close. 9984.T's feed has stopped (its print is from before its last session: too old to size on). ----
+const PRINTS: Record<string, { name: string; price: number; type: string; exchange: string; stopped?: boolean }> = {
+  "7203.T": { name: "Toyota Motor", price: 2987, type: "EQUITY", exchange: "Tokyo" },
+  "6758.T": { name: "Sony Group", price: 3412, type: "EQUITY", exchange: "Tokyo" },
+  "1306.T": { name: "NEXT FUNDS TOPIX ETF", price: 3150.5, type: "ETF", exchange: "Tokyo" },
+  "9984.T": { name: "SoftBank Group", price: 18000, type: "EQUITY", exchange: "Tokyo", stopped: true },
+  "NVDA": { name: "NVIDIA", price: 187.3, type: "EQUITY", exchange: "NasdaqGS" },
+  "AAPL": { name: "Apple", price: 231.45, type: "EQUITY", exchange: "NasdaqGS" },
+  "SPY": { name: "SPDR S&P 500 ETF Trust", price: 671.2, type: "ETF", exchange: "NYSEArca" },
+  "ESZ26.CME": { name: "E-Mini S&P 500 Dec 26", price: 6712.25, type: "FUTURE", exchange: "CME" },
+  "^N225": { name: "Nikkei 225", price: 49500, type: "INDEX", exchange: "Osaka" },
+};
+function printTime(venue: Venue, now: number): number {
+  const hol = { ...mockHolidays(now), early: { NYSE: EARLY_CLOSES.NYSE ?? {} } }, v = venueNow(venue, new Date(now), hol), segs = SEGMENTS[venue];
+  if (v.state === "open") return now - (FEED_DELAY_MIN[venue] + 1) * 60e3;
+  if (v.state === "break") return v.lastOpen! + (segs[0][1] - segs[0][0]) * 60e3;
+  const day = ymdIn(VENUE_TZ[venue], new Date(v.lastOpen ?? now)), end = (venue === "NYSE" ? EARLY_CLOSES.NYSE?.[day] : undefined) ?? segs[segs.length - 1][1];
+  return (v.lastOpen ?? now) + (end - segs[0][0]) * 60e3;
+}
+/** USD/JPY's stand-in print: a minute old while the currency market trades, Friday's 17:00 New York over a weekend. */
+function fxTime(now: number): number {
+  const ny = nyDate(new Date(now)), wd = new Date(`${ny}T00:00:00Z`).getUTCDay(), fri17 = (sat: string) => Date.parse(bookDayStarts(sat));
+  const plus = (d: string, k: number) => new Date(Date.parse(`${d}T00:00:00Z`) + k * 86400e3).toISOString().slice(0, 10);
+  const shut = wd === 6 ? fri17(ny) : wd === 0 ? (now < Date.parse(bookDayStarts(plus(ny, 1))) ? fri17(plus(ny, -1)) : null) : wd === 5 && now >= fri17(plus(ny, 1)) ? fri17(plus(ny, 1)) : null;
+  return shut ?? now - 60e3;
+}
+const standInQuotes = (symbols: string[]): Promise<Record<string, TicketQuote | null>> => {
+  const now = Date.now();
+  return Promise.resolve(Object.fromEntries(symbols.map((s) => {
+    if (s === "USDJPY=X") return [s, { symbol: s, name: "USD/JPY", price: FX_RATE, at: new Date(fxTime(now)).toISOString(), currency: "JPY", exchange: "CCY", quoteType: "CURRENCY", source: FX_SOURCE }];
+    const p = PRINTS[s];
+    if (!p) return [s, null];
+    const venue: Venue = s.endsWith(".T") ? "TSE" : "NYSE", at = p.type === "EQUITY" || p.type === "ETF" ? printTime(venue, now) - (p.stopped ? 7 * 86400e3 : 0) : now - 10 * 60e3;
+    return [s, { symbol: s, name: p.name, price: p.price, at: new Date(at).toISOString(), currency: venue === "TSE" ? "JPY" : "USD", exchange: p.exchange, quoteType: p.type, source: FX_SOURCE }];
+  })));
+};
 
 // ---- the stand-in books (the designer's hard cases, D/p1-design.md §8) ----
 const LONG_NAME = "Global long/short on a yen base, every region through an ETF";   // 60 characters: the most a name may hold
@@ -106,5 +148,7 @@ export async function mockPf(action: string, method: string, query: Record<strin
   if (method === "POST" && delay > 0) await new Promise((r) => setTimeout(r, Math.min(delay, 10_000)));
   if (method === "POST" && refuse) return refuse === "offline" ? { status: 0, body: { error: "No connection to the Monitor's server" } } : refuse === "signedout" ? { status: 401, body: { error: "Signed out" } } : { status: 500, body: { error: "stand-in failure" } };
   const store: PfStore = memStore({ load, save, now: () => new Date(), newId });
-  return pfRoute({ on: pref("om_mock_pf_off") !== "1", store, now: () => new Date(), facts }, action, account(), method, (k) => query[k] ?? null, body);
+  // a stand-in server of before the ticket (om_mock_pf_ticket = "0"): pf_ticket is an unknown action there
+  if (action === "pf_ticket" && pref("om_mock_pf_ticket") === "0") return { status: 400, body: { error: "unknown action" } };
+  return pfRoute({ on: pref("om_mock_pf_off") !== "1", store, now: () => new Date(), facts, quotes: standInQuotes }, action, account(), method, (k) => query[k] ?? null, body);
 }
