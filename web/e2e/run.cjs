@@ -23,6 +23,7 @@
 //   gate     5183  dev server with the real sign-in screen; API calls answered by the suite
 //   built    5187  the site as published (a build in e2e/.dist), for what only a built site has: the service
 //                  worker, version.json. Suites that rewrite its files run one after another.
+//   (offline starts one more server of its own, on 5189: an update of the worker, live's and then this site's, on one origin)
 // A dev server already answering on its port is used as it is. Logs and screenshots go to e2e/.out (git-ignored),
 // with e2e/.out/run.json, this run's record (its placement and part, each suite's part and the try that decided it),
 // from which e2e/widths.cjs prints the widths the suites measured (each of GitHub's browser jobs does after its run).

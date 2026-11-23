@@ -130,6 +130,7 @@ copy's sample data (real company names beside made-up figures, under a SAMPLE DA
 - `web/public/mail/tour.jpg`: the tour's picture for the welcome email, a file of the site that goes out before the
   server that sends an email naming it.
 - The service worker leaves the tour to the network: it keeps and answers only the app's own page (`web/public/sw.js`).
+- On a dev server `{site}tour/` shows the Monitor (Vite's fallback page); there the tour's page is `{site}tour/index.html`.
 
 The film is made frame by frame from the local copy by the designer's scripts, which are not in this repository yet:
 bringing them in (as `web/tools/tour/`) is a slice of its own, later. Until then it is rendered again in the designer's
@@ -145,7 +146,7 @@ sha256 in `web/e2e/tour.cjs` with it.
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,520 checks in 57 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24), the Home Screen frame's `phone-frame` (111), and slice 11's new suite `tour` (87) and 2 more in `offline`): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,525 checks in 57 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24), the Home Screen frame's `phone-frame` (111), and slice 11's new suite `tour` (87) and 7 more in `offline`): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -205,7 +206,8 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   screen, creating an
   account by verification email, the manager's accounts list, the
   home-screen line and the sheet it opens, the new-version bar, opening without a connection (the tour's page and film
-  left to the network, the app's own page still the one kept), notifications (with the kinds a device receives and its σ line), a tab that fails
+  left to the network, the app's own page still the one kept, also after the first visit that brings a new worker, the
+  app's or the tour's), notifications (with the kinds a device receives and its σ line), a tab that fails
   while it is drawn (it says so in its own space; the header and the other tabs stay), the welcome email as its
   reader sees it, a price feed that has stopped (the bar and the DATA chip say so) and an answer kept long after it
   came (`stale-feed`: a row called live then carries no LIVE mark now, its line on a phone follows its market's session,
@@ -363,7 +365,7 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   no line, or no tab and no screens' file, in the other two states.
   `cd web && npm run e2e` starts the test servers it needs and runs them all, up to three suites at a time (two of
   the dev servers' and one of the built site's, whose suites queue behind each other): about
-  28 minutes on the engineer's machine (the whole run for the 57 suites and 3,520 checks of P-2.1, the Home Screen
+  28 minutes on the engineer's machine (the whole run for the 57 suites and 3,525 checks of P-2.1, the Home Screen
   frame and slice 11 together is not timed in one run: GitHub runs every suite in both placements (since slice 8), and
   since that was calibrated (pull request #55) the engineer runs only the suites a slice touches; `phone-frame` takes
   120 to 129 s and slice 11's new suite, `tour`, 66 to 87 s; the whole run of P-2.1's 55 suites and 3,319 checks,
