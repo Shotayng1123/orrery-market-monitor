@@ -504,8 +504,8 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   run as a job runs it, over records written as `run.cjs` writes them, and its step after the run in each of
   `deploy-web`'s four browser jobs, which never fails the job), and Tokyo's daily price limits (section [AO], since 24 Nov
   2026; `_shared/rules/pricelimit.ts`, which no screen uses yet: JPX's 34 bands as `pf_jpx` printed them and every
-  band's edge, the worked bases, a print at a limit, one tick inside it and each reason for no chip, and the page's
-  copy).
+  band's edge, the worked bases, a print at a limit, one tick inside it and each reason for no chip, the page's copy,
+  and `pf_jpx`'s compare run).
   `cd jobs && npx tsx ../sim/logic.test.ts`.
   The same command checks the file itself, in its last two sections. GitHub installs `jobs/` alone before it runs the
   logic checks (`logic-tests`, and `deploy-server` before a deploy), so nothing the file imports, directly or through
@@ -763,7 +763,10 @@ nothing held there). On JPX the owner's answers of
 volume pages, the 決算発表予定日 workbook), as without Cboe's and Nomura's; and, asked whether that covers the rest of
 JPX's site, "(c) all": its rule pages, its market-holiday calendar and two statistics may be read. Its list of ETFs was
 not asked about and stays held. Only `pf_jpx` lifts the helper's hold on `jpx.co.jp`, for its own run, behind three
-switches: rules and calendar on, etfList off. It asks only addresses on `jpx.co.jp` that the log of 20 Nov gave or that
+switches: rules and calendar on, etfList off. Since 24 Nov 2026 its run is `compare` unless a commit sets `all`: it asks
+JPX's `robots.txt` and the daily price limits page alone and sets the page's table against the Monitor's own
+(`supabase/functions/_shared/rules/pricelimit.ts`) row by row, in values: "same", or each row that differs; `all`
+reads every part the owner released, as before. It asks only addresses on `jpx.co.jp` that the log of 20 Nov gave or that
 a JPX page links by name, never one from memory; of a page taken by its link's name whose own title or first heading
 names a list, figures or a report it prints the address, the status and the title and nothing else (a title is known
 only once the page is asked). It prints only values: a table's cells under its heading or the short label before it,

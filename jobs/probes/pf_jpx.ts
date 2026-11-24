@@ -57,18 +57,27 @@
 //     and 20261107000010), both ways: a row the page does not give, and a weekday holiday of the page the Monitor has
 //     no row for. (The first version looked for the month and the day alone, so 2027-01-01 was "named" by 2026's line:
 //     PR-3.) This was section 3 of sessions_check until 21 Nov 2026.
+// WHICH RUN (`RUN` below, since the limit chip's L-1, 24 Nov 2026): "compare", the file's run, asks JPX's robots.txt and
+// the daily price limits page only, and sets the page's table against the Monitor's own (supabase/functions/_shared/
+// rules/pricelimit.ts), row by row, in values: "same", or each row that differs; the table's head in full, through the
+// guard; the page's other table by its size and its figures alone. It is the second read of the bands the Monitor holds
+// from one read (P-L1), and the weekly re-read. "all" reads every part the owner released, as before, and sets the
+// table against the Monitor's there too. To run "all", set it in a commit; the logic checks run both.
 // Requests: at most 11, all to jpx.co.jp, 3 s apart (its robots.txt first): rules 7, etfList 1, calendar 2; its
-// robots.txt is asked once more if it answers 429 (so 12 at the very most). With etfList held: at most 10.
+// robots.txt is asked once more if it answers 429 (so 12 at the very most). With etfList held: at most 10. compare: 2.
 // Runtime: deno (the document on tick classes may be a PDF; under node it is only measured).
 //   Actions > source-probe > Run workflow: probe = pf_jpx, runtime = deno
 import { readFileSync } from "node:fs";
 import { bytes, head, liftJpxHold, linksOf, masked, page, pause, pdfPages, requestsMade, robots, tablesOf, textLines, titleOf, type Page, type Robots } from "./lib.ts";
 import { calendarCheck, calendarDays, cellOut, figureTables, linkedOnJpx, notRulePage, onJpx, otherTables, sayable, shortOtherLinks, shortRuleLink, valueBits } from "./jpx_read.ts";
+import { compareLimitTable, LIMIT_TABLE, readLimitTable } from "../../supabase/functions/_shared/rules/pricelimit.ts";
 
 /** THE OWNER'S ANSWER, part by part. rules and calendar: "(c) all", 21 Nov 2026, about 18:00 SGT. etfList: not asked yet. */
 const OWNER_HAS_RELEASED = { rules: true, etfList: false, calendar: true };
+/** WHICH RUN (the header above): "compare" unless a commit sets "all" (the logic checks name theirs on globalThis). */
+const RUN: "compare" | "all" = (globalThis as { __pfJpxRun?: string }).__pfJpxRun === "all" ? "all" : "compare";
 
-const MAX = 11, GAP = 3000, JPX = "https://www.jpx.co.jp";
+const MAX = RUN === "compare" ? 2 : 11, GAP = 3000, JPX = "https://www.jpx.co.jp";
 const DOMESTIC = `${JPX}/english/equities/trading/domestic`;
 const ADDR = {
   index: `${DOMESTIC}/index.html`, hours: `${DOMESTIC}/01.html`, limits: `${DOMESTIC}/06.html`, ticks: `${DOMESTIC}/07.html`,
@@ -78,7 +87,7 @@ const ADDR = {
 const t0 = Date.now();
 const cut = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n)}…` : s);
 console.log(`run at ${new Date(t0).toISOString().slice(0, 16).replace("T", " ")} UTC`);
-console.log(`the owner's answer, as this file holds it: rules ${OWNER_HAS_RELEASED.rules ? "released" : "HELD"}, etfList ${OWNER_HAS_RELEASED.etfList ? "released" : "HELD"}, calendar ${OWNER_HAS_RELEASED.calendar ? "released" : "HELD"}`);
+console.log(`the owner's answer, as this file holds it: rules ${OWNER_HAS_RELEASED.rules ? "released" : "HELD"}, etfList ${OWNER_HAS_RELEASED.etfList ? "released" : "HELD"}, calendar ${OWNER_HAS_RELEASED.calendar ? "released" : "HELD"}; this run: ${RUN === "compare" ? "compare (the daily price limits table against the Monitor's)" : "all"}`);
 
 // the Monitor's Tokyo rows, read from the two migrations that write them (no request)
 const mine: string[] = [];
@@ -90,7 +99,7 @@ mine.sort();
 const FROM = "2026-11-01", TO = "2027-01-31";
 const window = mine.filter((x) => x.slice(0, 10) >= FROM && x.slice(0, 10) <= TO);
 
-const any = OWNER_HAS_RELEASED.rules || OWNER_HAS_RELEASED.etfList || OWNER_HAS_RELEASED.calendar;
+const any = RUN === "compare" ? OWNER_HAS_RELEASED.rules : OWNER_HAS_RELEASED.rules || OWNER_HAS_RELEASED.etfList || OWNER_HAS_RELEASED.calendar;
 if (!any) {
   head("HELD FOR THE OWNER: nothing is asked of jpx.co.jp");
   console.log("  what this probe would read, once the owner says yes to a part:");
@@ -134,6 +143,24 @@ const printValues = (lines: string[], want: RegExp, max = 30): void => {
   for (const b of bits) console.log(`  | ${b}`);
   console.log(bits.length ? `  ${bits.length} value(s), values only` : "  no such value on the page");
 };
+/** The daily price limits table set against the Monitor's (pricelimit.ts), values only: "same", or each row that
+ *  differs; the table's head in full, through the guard; the page's other tables by their size and figures alone. */
+const FIGURE = /\(\d+\)|\d[\d,]*(?:\.\d+)?/;
+const compareLimits = (html: string): void => {
+  const tables = tablesOf(html), at = tables.findIndex((t) => readLimitTable(t.rows).length > 0);
+  if (at < 0) { console.log("  NO TABLE OF DAILY PRICE LIMITS on the page: the Monitor's table is not set against it"); return; }
+  const t = tables[at], read = readLimitTable(t.rows), diff = compareLimitTable(read), rest = t.rows.filter((r) => readLimitTable([r]).length === 0);
+  console.log(`  the table's head: ${rest.length ? rest[0].map((c) => piece(c) ?? "(not printed)").join(" | ") : "none"}`);
+  if (rest.length > 1) console.log(`  ${rest.length - 1} other row(s) not read as a band: ${rest.slice(1, 6).map((r) => r.map((c) => piece(cellOut(c)) ?? "(not printed)").join(" | ")).join(" · ")}`);
+  const once = LIMIT_TABLE.flatMap((b, k) => (b.confirmed ? [] : [k + 1]));
+  if (!diff.length) console.log(`  same: the page's ${read.length} rows are the Monitor's ${LIMIT_TABLE.length}, each band's bound and width; so this is a second read of the rows the Monitor holds from one read: ${once.join(", ")}`);
+  else { console.log(`  DIFFERS from the Monitor's table in ${diff.length} line(s):`); for (const d of diff) console.log(`    ${d}`); }
+  tables.forEach((o, k) => {
+    if (k === at) return;
+    const cs = o.rows.flat().filter((c) => c !== ""), figs = valueBits(cs, FIGURE, 12).map(piece).filter((b): b is string => b !== null);
+    console.log(`  table ${k + 1} of the page: ${o.rows.length} row(s), ${cs.length} cell(s), values only (its text is not printed); its figures: ${figs.join(" · ") || "none"}`);
+  });
+};
 /** A page taken by its link's name whose own title or first heading names a list, figures or a report (jpx_read.ts
  *  notRulePage): its address, status and title are printed, and nothing else of it. */
 const NOT_PRINTED = "  that page's own title or first heading names a list, figures or a report, not a rule: nothing of it is printed";
@@ -144,11 +171,17 @@ const DATED = /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+
 if (any) {
   liftJpxHold({ etfList: OWNER_HAS_RELEASED.etfList });   // the ruled-out files and the list of triggered stocks stay held (lib.ts)
   head("JPX's robots.txt");
-  rb = await robots(JPX, ["/english/equities/trading/domestic/", "/english/markets/equities/", "/equities/products/etfs/issues/", "/english/corporate/about-jpx/calendar/", "/corporate/about-jpx/calendar/"]);
+  rb = await robots(JPX, RUN === "compare" ? ["/english/equities/trading/domestic/"] : ["/english/equities/trading/domestic/", "/english/markets/equities/", "/equities/products/etfs/issues/", "/english/corporate/about-jpx/calendar/", "/corporate/about-jpx/calendar/"]);
   await pause(GAP);
 }
 
-if (OWNER_HAS_RELEASED.rules) {
+if (RUN === "compare" && OWNER_HAS_RELEASED.rules) {
+  head("limits compare. Daily price limits: the page's table set against the Monitor's (supabase/functions/_shared/rules/pricelimit.ts), values only");
+  const lm = await get(ADDR.limits);
+  if (lm) compareLimits(lm.html);
+}
+
+if (RUN === "all" && OWNER_HAS_RELEASED.rules) {
   const CLOSING = /closing auction|order acceptance|pre-closing/i;
   const shortSeen: string[] = [];   // links that name short selling and are not the rule page: their addresses, for a person
   head("rules 1. The pages on domestic stock trading (the index's own links, addresses only)");
@@ -186,7 +219,7 @@ if (OWNER_HAS_RELEASED.rules) {
 
   head("rules 3. Daily price limits: the table's values");
   const lm = await get(ADDR.limits);
-  if (lm) printTables(lm.html);
+  if (lm) { printTables(lm.html); compareLimits(lm.html); }
 
   head("rules 4. Trading hours, and the closing auction's order period (X-5): the clock times");
   const hr = await get(ADDR.hours);
@@ -209,7 +242,7 @@ if (OWNER_HAS_RELEASED.rules) {
   if (others.length) console.log(`  links that name short selling and were not read (figures, lists or reports by their names; addresses only): ${others.slice(0, 8).map((h) => masked(h)).join(" · ")}`);
 }
 
-if (OWNER_HAS_RELEASED.etfList) {
+if (RUN === "all" && OWNER_HAS_RELEASED.etfList) {
   head("etfList. JPX's list of listed ETFs: the row of 2559, and the rows whose index is MSCI Japan");
   const p = await get(ADDR.etfs);
   if (p) {
@@ -225,7 +258,7 @@ if (OWNER_HAS_RELEASED.etfList) {
   }
 }
 
-if (OWNER_HAS_RELEASED.calendar) {
+if (RUN === "all" && OWNER_HAS_RELEASED.calendar) {
   head("calendar. JPX's market-holiday calendar page beside the Tokyo rows the Monitor holds (O-3)");
   const mineDays = mine.map((x) => x.slice(0, 10));
   console.log(`  the Monitor holds ${mine.length} Tokyo rows (2026 and 2027); those from 1 Nov 2026 to 31 Jan 2027: ${window.join(" · ")}`);

@@ -2542,10 +2542,11 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
       const asked: string[] = [], lines: string[] = [], log = console.log;
       globalThis.fetch = (async (input: unknown) => { const u = String(input); asked.push(u); const a = pageFor(scen, u), body = scen === "N" ? nPage(u, a.body) : a.body; return new Response(a.status >= 300 && a.status < 400 ? null : body, { status: a.status, headers: { "content-type": a.type, ...(a.location ? { location: a.location } : {}) } }); }) as typeof fetch;
       (globalThis as { __probeOffline?: boolean }).__probeOffline = true;
+      (globalThis as { __pfJpxRun?: string }).__pfJpxRun = "all";   // every part the owner released: the run these nine ways were written for (since L-1 the file's default is "compare", [AO])
       console.log = (...a: unknown[]) => { lines.push(a.map(String).join(" ")); };
       try { if (scen === "A") await import("../jobs/probes/pf_jpx.ts"); else await import(`../jobs/probes/pf_jpx.ts?scen=${scen}`); }
       catch (e) { lines.push(`THE PROBE STOPPED: ${e instanceof Error ? e.message : String(e)}`); }
-      finally { console.log = log; globalThis.fetch = real; delete (globalThis as { __probeOffline?: boolean }).__probeOffline; probe.restoreHolds(); }
+      finally { console.log = log; globalThis.fetch = real; delete (globalThis as { __probeOffline?: boolean }).__probeOffline; delete (globalThis as { __pfJpxRun?: string }).__pfJpxRun; probe.restoreHolds(); }
       runs[scen] = { out: lines.join("\n"), asked };
     }
     const all = Object.values(runs), offSite = all.flatMap((r) => r.asked.filter((u) => !jpxRead.onJpx(u)));
@@ -3066,7 +3067,7 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck(`another account's book is no such portfolio (${otherAcct.status}), a symbol that is not one is refused (${badSym.status} "${badSym.body.error}"), no book named is no such portfolio (${noId.status}); a server with no quote reader says so (${noQuotes.status})`, otherAcct.status === 404 && otherAcct.body.error === pfWords.NO_SUCH && badSym.status === 400 && noId.status === 404 && noQuotes.status === 503);
   }
 
-  console.log("\n[AO] Tokyo's daily price limits (the limit chip, slice L-1, 24 Nov 2026): JPX's 34 bands and every edge, the worked bases, a print's state and each reason for no chip, the page's copy");
+  console.log("\n[AO] Tokyo's daily price limits (the limit chip, slice L-1, 24 Nov 2026): JPX's 34 bands and every edge, the worked bases, a print's state and each reason for no chip, the page's copy, pf_jpx's compare mode");
   {
     // The rule of C/limit-chip-plan.md §1, one pure file (supabase/functions/_shared/rules/pricelimit.ts) that the page
     // gets a copy of. Every figure is from a read: the table as pf_jpx printed JPX's page on 21 Nov 2026 (the 34 lines
@@ -3149,6 +3150,26 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const cp = pageCopy("rules");
     ck(`the page's copy of the rules (web/src/lib/rules/, ${cp.copies.length} file) is the server's files (supabase/functions/_shared/rules/) under one line that says so, as the paper engine's is: the stand-in rows and the server reach the same state`, cp.files.join() === "pricelimit.ts" && cp.copies.join() === cp.files.join() && cp.differs.length === 0, cp);
 
+    // pf_jpx's compare mode (P-L1, and the weekly re-read once L-1 merges): JPX's robots.txt and the daily price limits
+    // page, nothing else, run offline with its fetch replaced. The page carries the table as JPX printed it on 21 Nov,
+    // and a table of one row of prose before it, as JPX's has (its words here are the test's own)
+    const PROSE = "A line of prose stands here as on the page, with its references (1) and (2) only.";
+    const realFetch = globalThis.fetch;
+    const compareRun = async (tag: string, rows: string[]): Promise<{ out: string; asked: string[] }> => {
+      const html = `<html><head><title>Daily Price Limits | Trading Rules of Domestic Stocks | Japan Exchange Group</title></head><body><table><tr><td>${PROSE}</td><td></td></tr></table><table><tr><th>Previous Day's Closing Price/Special Quote (yen)</th><th>Daily Price Limits (yen)</th></tr>${rows.map((l) => `<tr>${cells(l).map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</table></body></html>`;
+      const asked: string[] = [], lines: string[] = [], log = console.log;
+      globalThis.fetch = (async (input: unknown) => { const u = String(input), p = u.replace("https://www.jpx.co.jp", ""); asked.push(u); const body = p === "/robots.txt" ? "User-agent: *\nDisallow:\n" : p === "/english/equities/trading/domestic/06.html" ? html : null; return new Response(body ?? "not found", { status: body ? 200 : 404, headers: { "content-type": p === "/robots.txt" ? "text/plain" : "text/html" } }); }) as typeof fetch;
+      (globalThis as { __probeOffline?: boolean }).__probeOffline = true;
+      console.log = (...a: unknown[]) => { lines.push(a.map(String).join(" ")); };
+      try { await import(`../jobs/probes/pf_jpx.ts?compare=${tag}`); } catch (e) { lines.push(`THE PROBE STOPPED: ${e instanceof Error ? e.message : String(e)}`); }
+      finally { console.log = log; globalThis.fetch = realFetch; delete (globalThis as { __probeOffline?: boolean }).__probeOffline; probe.restoreHolds(); }
+      return { out: lines.join("\n"), asked };
+    };
+    const same = await compareRun("same", LOGGED), moved = await compareRun("moved", changed), gone = await compareRun("gone", dropped);
+    const LIMITS_PAGE = "https://www.jpx.co.jp/english/equities/trading/domestic/06.html", allAsked = [same, moved, gone].flatMap((r) => r.asked);
+    ck(`pf_jpx's compare mode (the file's default since L-1) asks JPX's robots.txt and the daily price limits page only (${same.asked.length} requests: ${same.asked.map((u) => u.replace("https://www.jpx.co.jp", "")).join(", ")}), prints the table's head in full and "same" when the page's 34 rows are the module's, with the one-read rows this read confirms`,
+      JSON.stringify(same.asked) === JSON.stringify(["https://www.jpx.co.jp/robots.txt", LIMITS_PAGE]) && allAsked.every((u) => jpxRead.onJpx(u)) && /Previous Day's Closing Price\/Special Quote \(yen\) \| Daily Price Limits \(yen\)/.test(same.out) && /\bsame\b/.test(same.out) && /13, 14, 16, 18, 19, 21, 22, 24/.test(same.out) && /requests made:/.test(same.out) && !/THE PROBE STOPPED|DIFFERS/.test(same.out), same.out.split("\n").slice(-12));
+    ck("and where the page differs, each row that differs, values only (a width changed: row 13, 4,500 on the page against the Monitor's 4,000; a row gone: 33 rows against 34); the prose of the page's other table is not printed, only its size and figures", /DIFFERS/.test(moved.out) && /row 13[^\n]*20,000[^\n]*4,500[^\n]*4,000/.test(moved.out) && !/\bsame\b/.test(moved.out) && /DIFFERS/.test(gone.out) && /33[^\n]*34/.test(gone.out) && ![same, moved, gone].some((r) => r.out.includes("A line of prose") || r.out.includes("stands here")) && /\(1\) and \(2\)|\(1\)/.test(same.out), { moved: moved.out.split("\n").filter((l) => /DIFFERS|row 13/.test(l)), gone: gone.out.split("\n").filter((l) => /DIFFERS|33/.test(l)) });
   }
 
   // [AK], what the READMEs say, is in sim/readme.test.ts since 23 Nov 2026: this file stops a deploy of the server or the
