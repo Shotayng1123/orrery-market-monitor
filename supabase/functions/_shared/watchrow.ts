@@ -2,6 +2,7 @@
 // findings D-01 and D-24). A yield's change is the change of its level, which the page prints in basis points as
 // MARKETS does, never a per cent of the level; and every row says what its figures are as of, and whose they are.
 // Pure: the `api` function's watch_list route uses it, and sim/logic.test.ts checks it.
+import { freshQuote } from "./intraday.ts";
 
 /** What a row's figures are as of: a booked daily close, a print with its time, or an official publisher's daily
  *  figure (a yield read from a stored curve). */
@@ -75,6 +76,54 @@ export function watchRowFromQuote(symbol: string, listedName: string | null, q: 
     vs50: null, vs200: null, pos52: null, mcap: y ? null : q?.marketCap ?? null,
     earningsAt: !y && q?.earningsAt ? new Date(q.earningsAt * 1000).toISOString() : null, earningsEst: y ? null : q?.earningsEst ?? null, isYield: y,
     decimals: null,   // no instruments row: the page's own rule for a stock, three decimals for a yield
+  };
+}
+
+/** An index member's row of its list's statistics (constituent_stats), as far as a watchlist row needs it. The quote's
+ *  columns (q_price, q_prev, q_time) are kept since migration 20261119000001; a database from before it has none. */
+export interface StatLike {
+  idx: string; symbol: string; name: string; sector: string | null; d: string; close: number;
+  pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct12m: number | null;
+  dma50: number | null; dma200: number | null; hi52: number | null; lo52: number | null; mcap: number | null;
+  earnings_at: string | null; earnings_est: boolean | null;
+  q_price?: number | null; q_prev?: number | null; q_time?: string | null;
+}
+/** The lists in the order that gives a name in two of them its name and sector: the order of INDEX_IDS in
+ *  constituents.ts (not imported: that file loads the workbook reader), each market's flagship index first. */
+export const NAME_ORDER = ["SP500", "NK225", "NDX", "TOPIX", "KOSPI200", "HSI", "SSE180"];
+/** Of a name's rows in two lists (the Nikkei 225 and TOPIX, the S&P 500 and the Nasdaq-100): the figures of the one
+ *  with the newest booked close, then the newest quote (each list's quotes are read at its own minutes, the Nikkei
+ *  225's every 10 and TOPIX's every 20), and the name and sector of the one whose list comes first in NAME_ORDER, so
+ *  they do not change with whichever list was read last (W-1's check, F2-1). Each list's row takes them from its own
+ *  row of `constituents`, filled by symbol from the same sources (Yahoo's English name; the GICS sector, official for
+ *  the S&P 500's names, Yahoo's mapped for the rest), so they differ only where those two rows were filled differently
+ *  (one not yet filled). Until 24 Nov 2026 the route took the first row the database returned, ordered by symbol alone. */
+export function newestStats<T extends Pick<StatLike, "idx" | "symbol" | "name" | "sector" | "d" | "q_time">>(rows: T[]): Map<string, T> {
+  const by = new Map<string, T>(), named = new Map<string, T>();
+  const rank = (idx: string) => { const i = NAME_ORDER.indexOf(idx); return i < 0 ? NAME_ORDER.length : i; };
+  for (const r of rows) {
+    const o = by.get(r.symbol); if (!o || r.d > o.d || (r.d === o.d && (r.q_time ?? "") > (o.q_time ?? ""))) by.set(r.symbol, r);
+    const n = named.get(r.symbol); if (!n || rank(r.idx) < rank(n.idx) || (rank(r.idx) === rank(n.idx) && r.idx < n.idx)) named.set(r.symbol, r);
+  }
+  for (const [s, r] of by) { const n = named.get(s) as T; if (n !== r) by.set(s, { ...r, name: n.name, sector: n.sector }); }
+  return by;
+}
+/** The watchlist's row for an index member (W-1, PM A's finding 1.3a, 24 Nov 2026; until then always its booked close).
+ *  While its quote printed on a later session than its booked close it is at that quote, as EQUITIES reads the same row
+ *  (intraday.ts freshQuote, one row at a time): the quote's time, its 1D against the quote's previous close, its
+ *  distances from the 50- and 200-day averages and its 52-week place at that price, as EQUITIES' screener draws them;
+ *  its longer periods stay measured to the last close, as there. Otherwise it is at the booked close, by its session's
+ *  date, as before. `sessionDate` gives the list's exchange's date of an instant. */
+export function watchRowFromStat(s: StatLike, ccy: string | null, sessionDate: (iso: string) => string) {
+  const q = freshQuote(s, sessionDate), last = q ? (s.q_price as number) : s.close;
+  const pctOf = (b: number | null) => (b ? (last / b - 1) * 100 : null);
+  return {
+    symbol: s.symbol, name: s.name, kind: "Stock", sector: s.sector, ccy, last,
+    asOf: q ? (s.q_time as string) : s.d, asOfKind: (q ? "print" : "close") as AsOfKind, source: "Yahoo Finance",
+    pct1d: q ? (last / (s.q_prev as number) - 1) * 100 : s.pct1d, pct1w: s.pct1w, pct1m: s.pct1m, pct3m: s.pct3m, pct12m: s.pct12m,
+    chg1d: null, chg1w: null, chg1m: null, chg3m: null, chg12m: null, vs200chg: null,   // a stock's changes are in per cent only
+    vs50: pctOf(s.dma50), vs200: pctOf(s.dma200), pos52: s.hi52 != null && s.lo52 != null && s.hi52 > s.lo52 ? ((last - s.lo52) / (s.hi52 - s.lo52)) * 100 : null,
+    mcap: s.mcap, earningsAt: s.earnings_at, earningsEst: s.earnings_est, isYield: false,
   };
 }
 

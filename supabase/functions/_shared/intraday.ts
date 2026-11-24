@@ -8,13 +8,19 @@
 // periods (1W, 1M, ...) stay as measured to the last close; the page says so.
 export interface DayRow { d: string; close: number; prev: number | null; pct1d: number | null; q_price?: number | null; q_prev?: number | null; q_time?: string | null }
 
+/** Whether a row's quote printed on a later session than its last booked close, with a price and a previous close: the
+ *  row is then today's at that quote. One rule for EQUITIES (liveRows, below) and a watchlist's index member
+ *  (watchrow.ts watchRowFromStat, row by row: a watchlist is not ranked). `sessionDate` gives the exchange's date of an instant. */
+export const freshQuote = (r: Pick<DayRow, "d" | "q_price" | "q_prev" | "q_time">, sessionDate: (iso: string) => string): boolean =>
+  r.q_price != null && r.q_price > 0 && r.q_prev != null && r.q_prev > 0 && !!r.q_time && sessionDate(r.q_time) > r.d;
+
 /** The rows as they stand now. When at least half of them have a quote from a session later than their last
  *  close, each such row takes its quote: `close` = the last price, `prev` = the quote's previous close, `pct1d` =
  *  the move so far today; `live` says when the newest of those quotes printed and how many rows carry one. With
  *  fewer (a holiday for most names, a feed that stopped), nothing is changed: half a list at today's prices and
  *  half at yesterday's would rank and count wrongly. `sessionDate` gives the exchange's date of an instant. */
 export function liveRows<T extends DayRow>(rows: T[], sessionDate: (iso: string) => string): { rows: T[]; live: { asOf: string; n: number } | null } {
-  const fresh = (r: T): boolean => r.q_price != null && r.q_price > 0 && r.q_prev != null && r.q_prev > 0 && !!r.q_time && sessionDate(r.q_time) > r.d;
+  const fresh = (r: T): boolean => freshQuote(r, sessionDate);
   const n = rows.filter(fresh).length;
   if (!n || n * 2 < rows.length) return { rows, live: null };
   let asOf = "";

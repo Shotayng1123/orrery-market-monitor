@@ -1,7 +1,8 @@
 // Units and labels (19 Nov 2026; the designer's D-01, D-02, D-04, D-11, D-24 and D-30, and B-04's watchlist line):
 // a yield on the watchlist moves in bp, the same figures as MARKETS; every phone change pill says its window; MOVERS
 // has headed columns; σ is never a capital Σ and the 52-week column is a range in %, under one name everywhere; every
-// watchlist row says what it is as of; the phone's EQUITIES figures carry labels. Also: the page still reads a server
+// watchlist row says what it is as of (an index member at today's print while its market trades, at a set clock: W-1,
+// 24 Nov 2026); the phone's EQUITIES figures carry labels. Also: the page still reads a server
 // older than these changes (it never shows a yield's change in per cent). And σ is never a capital Σ where a σ move is
 // the newest alert: the header's line and its list, as painted (innerText), on a computer, in the one-screen layout and
 // on a phone (the reviewer's F2, 20 Nov 2026).
@@ -67,6 +68,65 @@ async function tnxBoth(p) {
     const t = await p.evaluate(() => { const heads = [...document.querySelectorAll('.panel[data-k="wl"] thead th')].map((h) => h.textContent), tr = [...document.querySelectorAll('.panel[data-k="wl"] tbody tr')].find((r) => r.querySelector("td.nm .mut").textContent === "^TNX"), c = [...tr.children].map((x) => x.textContent); return { last: c[heads.indexOf("Last")], cells: ["1D", "1W", "1M", "3M", "12M", "vs 200D"].map((h) => c[heads.indexOf(h)]) }; });
     ck(`^TNX's changes end in "bp" (${t.cells.join(" ")}) and its LAST in "%" (${t.last})`, t.cells.every((c) => /bp$/.test(c)) && /%$/.test(t.last), t);
     ck("no page errors", errs.length === 0, errs); await ctx.close(); }
+
+  // W-1 (PM A's finding 1.3a, 24 Nov 2026): a Nikkei 225 or S&P 500 member on the watchlist is at today's quote while
+  // its market trades, by that quote's time, as its own page is (and EQUITIES, whose rule it shares: supabase/functions/
+  // _shared/intraday.ts freshQuote); otherwise at its booked close, by that session's date. Until then a member's row was
+  // its booked close at every hour: Toyota read "close 23 Nov" (a holiday in Tokyo) while Tokyo traded and its page read
+  // LIVE 09:30 SGT. The local copy at a set clock (om_mock_now), as the server reads its rows (_shared/watchrow.ts
+  // watchRowFromStat); on a computer, on a phone and in the Home Screen app's frame (opened as phone-frame.cjs opens it).
+  // The words beside a row are its market's session's (lib/opens.ts, as the R1 rule draws a row): "market closed" only
+  // where that market is shut, a midday break included, with a print of today then by its time.
+  console.log("\n[WATCHLIST at a set clock: an index member at today's quote while its market trades, as its own page (W-1)]");
+  {
+    // [what, om_mock_now, the names at a print of today, the names at a booked close with that session's date, the print's market shut]
+    const CLOCKS = [
+      ["Tue 24 Nov 10:50 JST, Tokyo open, New York shut", "2026-11-24T01:50:00Z", ["7203.T", "6758.T", "7182.T"], { NVDA: "23 Nov", AVGO: "23 Nov" }, false],
+      ["Tue 24 Nov 11:50 JST, Tokyo's midday break", "2026-11-24T02:50:00Z", ["7203.T", "6758.T"], { NVDA: "23 Nov" }, true],
+      ["Mon 23 Nov 10:40 ET, New York open, Tokyo shut (a holiday there)", "2026-11-23T15:40:00Z", ["NVDA", "AVGO"], { "7203.T": "20 Nov", "6758.T": "20 Nov", "7182.T": "20 Nov" }, false],
+    ];
+    const LAYOUTS = [["computer 1440x900", { viewport: { width: 1440, height: 900 } }, false], ["iPhone 13", { ...devices["iPhone 13"] }, false], ["the Home Screen app's frame, iPhone 15 Pro", { ...devices["iPhone 15 Pro"], viewport: { width: 393, height: 852 } }, true]];
+    // the clock's day in Singapore as a tooltip writes it ("24 Nov 2026"), and the minutes of a time "09:30"
+    const dm = (iso) => { const d = new Date(Date.parse(iso) + 8 * 3600e3); return `${d.getUTCDate()} ${d.toUTCString().slice(8, 11)} ${d.getUTCFullYear()}`; };
+    const mins = (t) => { const m = /(\d\d):(\d\d)/.exec(t ?? ""); return m ? Number(m[1]) * 60 + Number(m[2]) : NaN; };
+    for (const [lname, opts, home] of LAYOUTS) for (const [what, at, printed, closed, shut] of home ? CLOCKS.slice(0, 1) : CLOCKS) {
+      const ctx = await b.newContext({ ...opts, deviceScaleFactor: 1 });
+      await ctx.addInitScript(([at, home]) => {
+        try { localStorage.setItem("om_mock_now", at); localStorage.setItem("om_a2hs_hide", "1"); if (home) localStorage.setItem("om_paper", "preview"); } catch {}
+        if (home) {   // the Home Screen app, as an iPhone reports it (phone-frame.cjs)
+          Object.defineProperty(Navigator.prototype, "standalone", { get: () => true, configurable: true });
+          const mm = window.matchMedia.bind(window);
+          window.matchMedia = (q) => { const m = mm(q); return /display-mode:\s*standalone/.test(q) ? Object.create(m, { matches: { value: true }, media: { value: q }, addEventListener: { value() {} }, removeEventListener: { value() {} } }) : m; };
+        }
+      }, [at, home]);
+      const p = await ctx.newPage(), errs = []; p.on("pageerror", (e) => errs.push(e.message));
+      const phone = lname !== "computer 1440x900";
+      await p.goto(MOCK + "#watch", { waitUntil: "networkidle" }); await p.waitForSelector(phone ? ".mp-row.starred" : '.panel[data-k="wl"] tbody tr'); await p.waitForTimeout(500);
+      // each row: its as-of as drawn (the AS OF cell, or the phone line's words after the symbol), the tooltip, whether it is whole
+      const rows = await p.evaluate((phone) => Object.fromEntries(phone
+        ? [...document.querySelectorAll(".mp-row.starred")].map((r) => { const st = r.querySelector(".mp-st"), [sym, ...rest] = st.textContent.split(" · "); return [sym, { as: rest.join(" · "), tip: r.title.replace(/^.*? \([^)]*\) · /, ""), whole: st.scrollWidth <= st.clientWidth + 1 }]; })
+        : [...document.querySelectorAll('.panel[data-k="wl"] tbody tr')].map((tr) => { const c = tr.querySelector("td.asof"); return [tr.querySelector("td.nm .mut").textContent, { as: c.textContent, tip: c.title, whole: c.scrollWidth <= c.clientWidth + 1 }]; })), phone);
+      const frame = home ? await p.evaluate(() => ({ on: document.documentElement.classList.contains("pframe"), box: document.getElementById("pscroll") ? getComputedStyle(document.getElementById("pscroll")).display : null })) : null;
+      // the stock page of the first of each kind, each loaded afresh, so that its clock starts at the same moment again
+      const page = {};
+      for (const s of [printed[0], Object.keys(closed)[0]]) {
+        await p.goto(MOCK + "#asset/" + s); await p.reload({ waitUntil: "networkidle" });
+        await p.waitForFunction(() => document.querySelector(".asof .st")?.textContent, null, { timeout: 15000 }); await p.waitForTimeout(400);
+        page[s] = await p.evaluate(() => { const e = document.querySelector(".asof .st").parentElement; return { label: e.querySelector(".st").textContent, text: e.textContent, tip: e.title }; });
+      }
+      const day = dm(at), pg = page[printed[0]];
+      const asPrint = (r) => !!r && /^\d\d:\d\d$/.test(r.as) && r.whole && (shut ? new RegExp(`^Yahoo Finance · last print ${day} ${r.as} SGT · market closed · opens \\d\\d:\\d\\d SGT$`).test(r.tip) : r.tip === `Yahoo Finance · last print ${day} ${r.as} SGT`);
+      const badP = printed.filter((s) => !asPrint(rows[s])), t0 = mins(rows[printed[0]]?.as), t1 = mins(pg.text);
+      ck(`${lname}, ${what}: ${printed.join(", ")} at today's print by its time ("${printed.map((s) => rows[s]?.as).join('", "')}"; "${rows[printed[0]]?.tip}"), as ${printed[0]}'s page reads it ("${pg.text}")`,
+        badP.length === 0 && pg.label === (shut ? "CLOSED" : "LIVE") && pg.tip.startsWith(`Yahoo Finance · last print ${day} `) && t1 - t0 >= 0 && t1 - t0 <= 1, { badP: badP.map((s) => [s, rows[s]]), page: pg });
+      const badC = Object.entries(closed).filter(([s, d]) => { const r = rows[s]; return !r || r.as !== (phone ? `close ${d}` : d) || !r.whole || !new RegExp(`^Yahoo Finance · close of ${d} \\d{4} · market closed · opens `).test(r.tip); });
+      const pc = page[Object.keys(closed)[0]];
+      ck(`${lname}, ${what}: ${Object.keys(closed).join(", ")} at their booked close by its session's date, their market shut ("${Object.keys(closed).map((s) => rows[s]?.as).join('", "')}"; "${rows[Object.keys(closed)[0]]?.tip}"), as ${Object.keys(closed)[0]}'s page ("${pc.text}")`,
+        badC.length === 0 && pc.label === "CLOSED", { badC: badC.map(([s]) => [s, rows[s]]), page: pc });
+      ck(`${lname}, ${what}: ${home ? `the frame is on (pframe ${frame?.on}, #pscroll ${frame?.box}); ` : ""}no page errors`, (!home || (frame.on && frame.box === "block")) && errs.length === 0, { frame, errs });
+      await ctx.close();
+    }
+  }
 
   console.log("\n[EQUITIES, computer: MOVERS headed; the screener's 52-week column]");
   for (const [name, prefs] of [["1440x900", null], ["1440x900 XL", XL]]) {

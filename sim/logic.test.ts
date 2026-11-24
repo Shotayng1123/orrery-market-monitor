@@ -23,7 +23,7 @@ import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabas
 import { ALERTS, COMPANY, FIRST, HELP, PHILOSOPHY, PHONE, TABS, TOUR, TOUR_ALT, TOUR_LINK, WELCOME_SUBJECT, welcomeMail } from "../supabase/functions/_shared/welcome.ts";
 import { FEED_LATE_MIN, OWN_SHORT_MIN, barDayEnd, barSettled, feedState, fxTrading, silence, stoppedBeforeClose, weekFirstPrint, type Print } from "../supabase/functions/_shared/feedhealth.ts";
 import { OWN_FRESH_MIN, RELAY_BEAT_MAX_S, RELAY_CRON, RELAY_JOBS, RELAY_LATE_MIN, RELAY_OK_RUN, RELAY_WAIT_MIN, beatFresh, cronDue, current, newerOnly, reading, relayAct, relayJobsDue, usable, type RelayView } from "../supabase/functions/_shared/relay.ts";
-import { CBOE_YIELDS, closeDay, isYieldQuote, isYieldRow, sourceName, watchRowFromQuote, watchRowFromTable, type QuoteLike } from "../supabase/functions/_shared/watchrow.ts";
+import { CBOE_YIELDS, closeDay, isYieldQuote, isYieldRow, NAME_ORDER, newestStats, sourceName, watchRowFromQuote, watchRowFromStat, watchRowFromTable, type QuoteLike } from "../supabase/functions/_shared/watchrow.ts";
 import { alertFigWord, alertHeadline, sigmaNoteLine } from "../web/src/lib/alertline.ts";
 import { asOfCell, asOfLine, asOfOf, asOfTitle, rowAsOfTitle, rowSource, tileStamp } from "../web/src/lib/time.ts";
 import { finBack, finFit, finRest } from "../web/src/lib/finscroll.ts";
@@ -1080,6 +1080,49 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const bare = watchRowFromQuote("ZZZZ", "Typed in", undefined), half = watchRowFromQuote("^IRX", null, quote({ quoteType: "INDEX", price: 3.85 }));
     ck("^FVX, ^TNX and ^TYX are the same yields when they come as quotes; a yield with no previous close has no 1D; no quote leaves the name and dashes", CBOE_YIELDS.every((x) => isYieldQuote(x, null, null)) && !isYieldQuote("SHV", "iShares Short Treasury Bond ETF", "ETF") && half.isYield && half.chg1d === null && half.pct1d === null && bare.name === "Typed in" && bare.last === null && bare.pct1d === null && bare.chg1d === null && bare.asOfKind === null && bare.source === null && !bare.isYield, { half, bare });
     ck("the route builds a plain quote's row with this mapping", /return watchRowFromQuote\(w\.symbol, w\.name, q\);/.test(readText(new URL("../supabase/functions/api/index.ts", import.meta.url), "utf8")));
+
+    // W-1 (PM A's finding 1.3a, 24 Nov 2026): an index member's row, read from its list's statistics, was its booked close
+    // at every hour, while EQUITIES read the same row at its quote. Now each row is read on its own by EQUITIES' rule
+    // (intraday.ts freshQuote; a watchlist is not ranked, so liveRows' half-the-list rule has no place here): at the quote
+    // while it printed on a later session than the booked close, by its time; otherwise at the close, by its date.
+    // Made-up rows in constituent_stats' shape: Toyota's close booked for Fri 20 Nov (Mon 23 Nov a holiday in Tokyo).
+    const nr = (a: number | null | undefined, b: number) => a != null && Math.abs(a - b) < 1e-9;
+    const tokyo = (iso: string) => srv.localDate("Asia/Tokyo", Date.parse(iso) / 1000), nyDay = (iso: string) => srv.localDate("America/New_York", Date.parse(iso) / 1000);
+    const member = { idx: "NK225", symbol: "7203.T", name: "Toyota Motor Corp", sector: "Transportation Equipment", d: "2026-11-20", close: 3456, prev: 3415, pct1d: 1.2, pct1w: 3.1, pct1m: -4.2, pct3m: 7.5, pct12m: 17.7, dma50: 3300, dma200: 3000, hi52: 4000, lo52: 2500, mcap: 4.5e13, earnings_at: "2027-02-05T06:00:00+00:00", earnings_est: true,
+      q_price: 3500 as number | null | undefined, q_prev: 3456 as number | null | undefined, q_time: "2026-11-24T01:30:00+00:00" as string | null | undefined };   // a quote of Tue 24 Nov, 10:30 JST
+    const lv = watchRowFromStat(member, "JPY", tokyo), eq = liveRows([member], tokyo).rows[0];
+    ck("W-1: a member whose quote printed on a later session than its booked close is at that quote, by its time: its last, its 1D from the quote's previous close, a print", lv.last === 3500 && lv.asOf === "2026-11-24T01:30:00+00:00" && lv.asOfKind === "print" && nr(lv.pct1d, (3500 / 3456 - 1) * 100) && lv.source === "Yahoo Finance" && lv.kind === "Stock" && lv.ccy === "JPY" && lv.symbol === "7203.T" && lv.earningsEst === true, lv);
+    ck("W-1: its last and 1D are EQUITIES' own for the same row (liveRows); its longer periods stay measured to the last close, as there; its distances from the averages and its 52-week place are at the quote, as EQUITIES' screener draws them", lv.last === eq.close && nr(lv.pct1d, eq.pct1d ?? NaN) && lv.pct1w === 3.1 && lv.pct12m === 17.7 && nr(lv.vs50, (3500 / 3300 - 1) * 100) && nr(lv.vs200, (3500 / 3000 - 1) * 100) && nr(lv.pos52, ((3500 - 2500) / 1500) * 100) && lv.chg1d === null && lv.vs200chg === null && !lv.isYield, { lv, eq });
+    const booked = watchRowFromStat({ ...member, q_time: "2026-11-20T06:30:00+00:00", q_price: 3456, q_prev: 3415 }, "JPY", tokyo);
+    ck("W-1: a quote of the booked session itself (before the next session's first print the Monitor reads) leaves the row at its close, by its date, as before", booked.last === 3456 && booked.asOf === "2026-11-20" && booked.asOfKind === "close" && booked.pct1d === 1.2 && nr(booked.vs50, (3456 / 3300 - 1) * 100), booked);
+    const after = watchRowFromStat({ ...member, q_price: 3520, q_time: "2026-11-24T06:30:00+00:00" }, "JPY", tokyo), bookedNow = watchRowFromStat({ ...member, d: "2026-11-24", close: 3520, pct1d: 1.85, q_price: 3520, q_time: "2026-11-24T06:30:00+00:00" }, "JPY", tokyo);
+    ck("W-1: after the close the session's last print stands until the daily job books the session; then the row is at that close", after.asOfKind === "print" && after.last === 3520 && after.asOf === "2026-11-24T06:30:00+00:00" && bookedNow.asOfKind === "close" && bookedNow.asOf === "2026-11-24" && bookedNow.pct1d === 1.85 && bookedNow.last === 3520, { after, bookedNow });
+    const nvda = { ...member, idx: "SP500", symbol: "NVDA", name: "NVIDIA Corporation", d: "2026-11-23", close: 182.44, q_price: 181, q_prev: 182.44 };
+    ck("W-1: a session's date is its exchange's: a print at 20:30 New York time on the 23rd is still that session, though it is the 24th in UTC", watchRowFromStat({ ...nvda, q_time: "2026-11-24T01:30:00+00:00" }, "USD", nyDay).asOfKind === "close" && watchRowFromStat({ ...nvda, q_time: "2026-11-24T14:31:00+00:00" }, "USD", nyDay).asOfKind === "print");
+    const noQuote = [watchRowFromStat({ ...member, q_prev: null }, "JPY", tokyo), watchRowFromStat({ ...member, q_time: null }, "JPY", tokyo), watchRowFromStat({ ...member, q_price: 0 }, "JPY", tokyo), watchRowFromStat({ ...member, q_price: undefined, q_prev: undefined, q_time: undefined }, "JPY", tokyo)];
+    ck("W-1: a quote without a price, its previous close or a time is not used, nor is there one from a database before the quote's columns: the row is at its close", noQuote.every((r) => r.asOfKind === "close" && r.last === 3456 && r.pct1d === 1.2 && r.asOf === "2026-11-20"), noQuote);
+    // a name in two lists (the Nikkei 225 and TOPIX) has a row in each, and each list's quotes are read at its own minutes
+    // (every 10 and every 20): the row read is the one with the newest close, then the newest quote
+    const two = newestStats([{ ...member, idx: "TOPIX", q_time: "2026-11-24T01:23:00+00:00" }, member, { ...nvda }, { ...member, idx: "OLD", d: "2026-11-19", q_time: "2026-11-24T01:40:00+00:00" }]);
+    ck("W-1: of a name's rows in two lists the one with the newest close, then the newest quote, is read", two.get("7203.T")?.idx === "NK225" && two.get("NVDA")?.symbol === "NVDA" && two.size === 2, [...two.values()].map((r) => [r.idx, r.symbol]));
+    // W-1's check (F2-1): the Nikkei 225's quotes (read at :x0) and TOPIX's (:03, :23, :43) take turns at being the newest
+    // during Tokyo's session, and the two lists' rows can carry different names and sectors (each list's own, until the
+    // sector job fills its row). The figures stay the newest row's; the name and sector are the first list's of a fixed
+    // order (NAME_ORDER, as INDEX_IDS in constituents.ts: the S&P 500, the Nikkei 225, the Nasdaq-100, TOPIX, ...), so a
+    // row is not renamed or moved to another sector between refreshes, in whichever order the database returns the rows
+    const nk = { ...member, name: "TOYOTA MOTOR CORP.", sector: "Technology" }, tp = { ...member, idx: "TOPIX", name: "トヨタ自動車", sector: "自動車・輸送機" };
+    const quoteAt = (r: typeof member, t: string, px: number) => ({ ...r, q_time: t, q_price: px });
+    const turns = [[quoteAt(nk, "2026-11-24T01:30:00+00:00", 3500), quoteAt(tp, "2026-11-24T01:43:00+00:00", 3510)], [quoteAt(tp, "2026-11-24T01:43:00+00:00", 3510), quoteAt(nk, "2026-11-24T01:50:00+00:00", 3520)]];
+    const seen = turns.flatMap((rows) => [rows, [...rows].reverse()].map((rs) => { const s = newestStats(rs).get("7203.T")!, w = watchRowFromStat(s, "JPY", tokyo); return { idx: s.idx, name: w.name, sector: w.sector, last: w.last, asOf: w.asOf }; }));
+    const usBy = newestStats([{ ...nvda, idx: "NDX", name: "NVIDIA Corp", sector: "Technology", q_time: "2026-11-24T15:10:00+00:00", q_price: 183 }, { ...nvda, sector: "Information Technology", q_time: "2026-11-24T15:00:00+00:00" }]).get("NVDA");
+    const consts = readText(new URL("../supabase/functions/_shared/constituents.ts", import.meta.url), "utf8"), ids = /export const INDEX_IDS: IndexId\[\] = \[([^\]]*)\]/.exec(consts)?.[1].replace(/[\s"]/g, "").split(",") ?? [];
+    ck("W-1 (F2-1): a name in two lists keeps one name and sector whichever list's quote is the newer (the Nikkei 225's before TOPIX's, the S&P 500's before the Nasdaq-100's: the order of constituents.ts INDEX_IDS), with the newest row's figures, in either order of the rows",
+      seen.every((r) => r.name === "TOYOTA MOTOR CORP." && r.sector === "Technology") && seen.map((r) => `${r.idx} ${r.last} ${r.asOf}`).join() === ["TOPIX 3510 2026-11-24T01:43:00+00:00", "TOPIX 3510 2026-11-24T01:43:00+00:00", "NK225 3520 2026-11-24T01:50:00+00:00", "NK225 3520 2026-11-24T01:50:00+00:00"].join()
+        && usBy?.idx === "NDX" && usBy.q_price === 183 && usBy.name === "NVIDIA Corporation" && usBy.sector === "Information Technology" && JSON.stringify(ids) === JSON.stringify(NAME_ORDER), { seen, usBy, ids, NAME_ORDER });
+    const api = readText(new URL("../supabase/functions/api/index.ts", import.meta.url), "utf8");
+    ck("W-1: the route reads the quote's columns where the database has them (else the closes, as index_stats does), the newest row of each name, and builds a member's row with this mapping, dated by its list's exchange",
+      /try \{ return await selectAll<StatLike>\(\(\) => db\.from\("constituent_stats"\)\.select\(COLS \+ ",q_price,q_prev,q_time"\)\.in\("symbol", syms\)/.test(api) && /catch \{ return await selectAll<StatLike>\(\(\) => db\.from\("constituent_stats"\)\.select\(COLS\)\.in\("symbol", syms\)/.test(api)
+        && /const sBy = newestStats\(stats\);/.test(api) && /if \(s\) return watchRowFromStat\(s, CCY\[s\.idx\] \?\? null, \(iso\) => localDate\(LIST_TZ\[s\.idx\] \?\? "UTC", Date\.parse\(iso\) \/ 1000\)\);/.test(api));
   }
 
   console.log("\n[the header's alert line: what its figure is, from the server's own words (the reviewer's R2A-05)]");

@@ -731,3 +731,16 @@ What the Monitor does about it:
   three, as before. A page older than this ignores the field.
 - EQUITIES while a market is open (19 Nov 2026): the flow job keeps each constituent's quote price, its previous close and the time it printed (`constituent_stats.q_price`, `q_prev`, `q_time`). `api?action=index_stats` reads a row at its quote when the quote is from a later session than the row's booked close (`_shared/intraday.ts`), for the whole list or not at all: at least half the names must have such a quote. The 1D figures (movers, breadth, sectors, heat map) are then today's moves so far, at most ten to twenty minutes old, and the answer carries `live: { asOf, n }`; changes over longer periods stay measured to the last close, and the page says so.
 - Closing levels are held until the next session's first print: the quote is used only while its exchange-local date is newer than the last booked close.
+- WATCHLIST's index members while their market trades (24 Nov 2026; PM A's finding 1.3a): until then
+  `api?action=watch_list` sent a member's row of `constituent_stats` at its booked close at every hour, while
+  `index_stats` read the same row at its quote. Each member's row is now read by the same rule (`freshQuote` in
+  `_shared/intraday.ts`), row by row: a watchlist is not ranked, so the half-the-list rule does not apply
+  (`watchRowFromStat` in `_shared/watchrow.ts`). While its quote printed on a later session than its booked close it is
+  at that quote: `last` is `q_price`, `pct1d` is measured against `q_prev`, `vs50`, `vs200` and `pos52` are at that
+  price, and `asOfKind` is `print` with `q_time` as `asOf`; its longer periods stay measured to the last close.
+  Otherwise it is at its close, as before. A name in two lists (the Nikkei 225 and TOPIX, the S&P 500 and the
+  Nasdaq-100) takes its figures from the row with the newest close, then the newest quote, and its name and sector from
+  the first of its lists in a fixed order (`NAME_ORDER`, that of `INDEX_IDS`: the S&P 500, the Nikkei 225, the
+  Nasdaq-100, TOPIX, …), so that they do not change with whichever list's quotes were read last (`newestStats`; the
+  route took the first row the database returned, ordered by symbol alone, until W-1's check). A database without the
+  quote's columns is read at the closes, as `index_stats` is; a page of any age reads such a row as it reads any print.

@@ -398,6 +398,16 @@ function tableWatchRow(t: TableRow): WatchRow {
 /** The server's rule for a quote that is a yield (supabase/functions/_shared/watchrow.ts isYieldQuote; a search hit
  *  carries no quote type, so the name alone stands for an index's). */
 const yieldQuote = (symbol: string, name: string | null): boolean => ["^IRX", "^FVX", "^TNX", "^TYX"].includes(symbol) || /\btreasury (?:yield|bill)/i.test(name ?? "");
+/** W-1 at a set clock (om_mock_now): a stock at a booked close, as the server reads an index member's row
+ *  (supabase/functions/_shared/watchrow.ts watchRowFromStat): at the session table's print while that print is of a
+ *  later session than the newest close its market has booked (bookedDays, above), by its time; otherwise at that close,
+ *  by its date. Its figures stay the stand-in's. Without the clock the row keeps its fixed close, so that the browser
+ *  checks see the same rows at any hour. */
+function memberAt(r: WatchRow, now: number): WatchRow {
+  const mk = marketOf(stockMarket(r.symbol)), pr = mk ? printAt(mk.id, now) : null, days = mk ? bookedDays(mk.id, now, 1) : null;
+  if (!mk || !pr || !days?.length) return r;
+  return Date.parse(pr.lastAt) > sessionEndMs(mk, days[0]) ? { ...r, asOf: pr.lastAt, asOfKind: "print" } : { ...r, asOf: days[0], asOfKind: "close" };
+}
 /** watch_list: a market instrument from the mock table, as the server reads its table; a stand-in row where there
  *  is one; a name the page offered (it came with a name) gets made-up figures; a symbol typed in that the mock does
  *  not know comes back as the server's row without a quote (dashes). */
@@ -406,15 +416,16 @@ function watchList(): { rows: WatchRow[] } {
   const known = new Map(S.watch.rows.map((r) => [r.symbol, r as unknown as WatchRow]));
   const table = list.some((w) => MASTER.some((m) => m.symbol === w.symbol)) ? new Map(mockTable().rows.map((t) => [t.symbol, t])) : new Map<string, TableRow>();
   const day = new Date(Date.now() - 12 * HOUR + 8 * HOUR).toISOString().slice(0, 10);
+  const atClock = clockSet(), now = Date.now(), member = (r: WatchRow): WatchRow => (atClock && r.kind === "Stock" && r.asOfKind === "close" ? memberAt(r, now) : r);
   return { rows: list.map((w): WatchRow => {
     const t = table.get(w.symbol); if (t) return tableWatchRow(t);
-    const k = known.get(w.symbol); if (k) return k;
+    const k = known.get(w.symbol); if (k) return member(k);
     const none = { sector: null, vs50: null, vs200: null, pos52: null, mcap: null, earningsAt: null, earningsEst: null, isYield: false, chg1d: null, chg1w: null, chg1m: null, chg3m: null, chg12m: null, vs200chg: null };
     if (!w.name) return { ...none, symbol: w.symbol, name: w.symbol, kind: "–", ccy: null, last: null, asOf: null, asOfKind: null, source: null, pct1d: null, pct1w: null, pct1m: null, pct3m: null, pct12m: null };
     const r = rng(seedOf(w.symbol)), jp = /\.T$/.test(w.symbol), p = Math.round((r() - 0.5) * 600) / 100;
     // a Treasury yield index outside the table (^IRX), as the server's watchRowFromQuote reads it: its 1D in points
     if (yieldQuote(w.symbol, w.name)) return { ...none, symbol: w.symbol, name: w.name, kind: "Fixed income", ccy: "USD", last: Math.round((3.6 + r() * 0.5) * 1000) / 1000, asOf: new Date(Date.now() - 20 * 60e3).toISOString(), asOfKind: "print", source: "Yahoo Finance", pct1d: null, pct1w: null, pct1m: null, pct3m: null, pct12m: null, chg1d: Math.round((r() - 0.5) * 80) / 1000, isYield: true };
-    return { ...none, symbol: w.symbol, name: w.name, kind: "Stock", ccy: jp ? "JPY" : "USD", last: Math.round((jp ? 800 + r() * 6000 : 20 + r() * 400) * 100) / 100, asOf: day, asOfKind: "close", source: "Yahoo Finance", pct1d: p, pct1w: p * 1.7, pct1m: p * -2.3, pct3m: p * 4.1, pct12m: p * 9.6, vs50: p * 1.2, vs200: p * 3, pos52: 50 + p * 10 };
+    return member({ ...none, symbol: w.symbol, name: w.name, kind: "Stock", ccy: jp ? "JPY" : "USD", last: Math.round((jp ? 800 + r() * 6000 : 20 + r() * 400) * 100) / 100, asOf: day, asOfKind: "close", source: "Yahoo Finance", pct1d: p, pct1w: p * 1.7, pct1m: p * -2.3, pct3m: p * 4.1, pct12m: p * 9.6, vs50: p * 1.2, vs200: p * 3, pos52: 50 + p * 10 });
   }) };
 }
 /** The lists everyone reads show a σ move from 2.5σ, as the server's routes ask for them (LISTED_ALERTS in

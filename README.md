@@ -99,10 +99,12 @@ set, each stand-in row's daily closes also end at the last session its market ha
 exchange's at its last bell, a currency's and a CME future's 35 minutes after 17:00 New York; `bookedDays` in
 `web/src/lib/mock.ts`), so MOVERS IN σ's LAST SESSION and the dates beside figures can be looked at for any hour:
 `2026-11-23T23:10:00Z` is Tue 24 Nov 07:10 SGT, an hour after the FX day of the 23rd ended, with USD/JPY's stand-in
-last session at -2.2σ. Three things differ from the live Monitor there: the local copy shows a future live from
+last session at -2.2σ. WATCHLIST's stand-in stocks follow the clock as the server reads an index member's row (W-1,
+24 Nov 2026): at the session table's print, by its time, from their market's first print of a session until that
+session is booked, and at that booked close, by its date, otherwise; their figures stay the stand-in's. Three things differ from the live Monitor there: the local copy shows a future live from
 18:00 New York (on the live Monitor, in New York's winter, a future's row is its booked close until midnight in New
 York, so "last session" under a future's figure is seen there on a Monday morning only; in New York's summer, from
-Tuesday to Friday until 15:05 SGT, it is the live print with its 1D from the close before, over two sessions); its rows are prints, never a booked close with its
+Tuesday to Friday until 15:05 SGT, it is the live print with its 1D from the close before, over two sessions); its market rows are prints, never a booked close with its
 date; and it books a day at the moment above, where the server books it at its history job's next run (07:05, 17:05
 and 22:35 UTC: Hong Kong's close of 16:00 there is booked at 01:05 SGT unless GitHub's catch-up run of 19:20 SGT has
 it first, New York's 95 minutes after its bell in its winter, and in New York's summer a CME future's only at 15:05
@@ -157,10 +159,11 @@ correction of the accepted cut that a check requires, with the owner told what c
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,559 checks in 57 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24), the Home Screen frame's `phone-frame` (111), slice 11's new suite `tour` (101) and 7 more in `offline`, and the night review's fixes of 23 Nov (8 more in `pf-ticket`, 9 in `pf-preview` and 3 in `tour`)): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,584 checks in 57 suites on 24 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24), the Home Screen frame's `phone-frame` (111), slice 11's new suite `tour` (101) and 7 more in `offline`, the night review's fixes of 23 Nov (8 more in `pf-ticket`, 9 in `pf-preview` and 3 in `tour`), slice W-1's 21 more in `units-labels` and 4 in `phone-rates-watchlist-stock`): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
-  units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
-  window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
+  units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of, and at
+  three set clocks an index member at today's print while its market trades, by the time its own page gives, and at its
+  booked close by that session's date otherwise, on a computer, a phone and in the Home Screen frame; the window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
   format (`one-format`: USD/JPY with the same decimals in nine places on both layouts, a yield's level in "%", no
   "11/19", "16-Nov-26", "2026-11-19" or "−0.0" on any screen or tooltip, the glossary's words alike on both layouts), the
   stock page (chart marks, performance, statements; its NEWS of headlines and alerts, the document behind each

@@ -13,7 +13,7 @@ import { quotes } from "../_shared/yahoo.ts";
 import { pushState, pushSubscribe, pushTest, pushUnsubscribe } from "../_shared/push.ts";
 import { stockPage } from "../_shared/stock.ts";
 import { liveRows } from "../_shared/intraday.ts";
-import { watchRowFromQuote, watchRowFromTable, type TableLike } from "../_shared/watchrow.ts";
+import { newestStats, watchRowFromQuote, watchRowFromStat, watchRowFromTable, type StatLike, type TableLike } from "../_shared/watchrow.ts";
 import { EARLY_CLOSES, HOLIDAY_SOURCES, localDate, type Holidays } from "../_shared/sessions.ts";
 import { feedState } from "../_shared/feedhealth.ts";
 import { beatFresh, type Reading, type RelayNote } from "../_shared/relay.ts";
@@ -486,35 +486,39 @@ async function earnings(days: number) {
 }
 
 // ---------- watchlist ----------
-interface WatchStat { idx: string; symbol: string; name: string; sector: string | null; d: string; close: number; pct1d: number | null; pct1w: number | null; pct1m: number | null; pct3m: number | null; pct12m: number | null; dma50: number | null; dma200: number | null; hi52: number | null; lo52: number | null; mcap: number | null; earnings_at: string | null; earnings_est: boolean | null }
 async function watchSymbols(userId: string): Promise<Array<{ symbol: string; name: string | null }>> {
   const { data } = await db.from("watchlists").select("symbol,name,added_at").eq("user_id", userId).order("added_at");
   return (data ?? []).map((r) => ({ symbol: r.symbol as string, name: (r.name as string | null) ?? null }));
 }
 /** The user's names with the figures the Monitor holds for them: the market table for its instruments (as MARKETS
  *  shows them: a yield's changes in level, never in per cent of it; `_shared/watchrow.ts`), the constituent
- *  statistics for index members, a plain quote for anything else (a Treasury yield index such as ^IRX moving in points,
+ *  statistics for index members (at today's quote while it is from a later session than the booked close, as EQUITIES
+ *  reads them: `watchRowFromStat`), a plain quote for anything else (a Treasury yield index such as ^IRX moving in points,
  *  `watchRowFromQuote`). Each row says what its figures are as of
  *  (`asOfKind`: a close, a print or an official publisher's daily figure) and whose they are (`source`). */
 async function watchList(userId: string) {
   const wl = await watchSymbols(userId);
   if (!wl.length) return { rows: [] };
   const syms = wl.map((w) => w.symbol);
+  // a member's quote is kept since migration 20261119000001; a database from before it has no such columns, and then the
+  // rows are read at their closes as they always were (as indexStats does)
+  const COLS = "idx,symbol,name,sector,d,close,pct1d,pct1w,pct1m,pct3m,pct12m,dma50,dma200,hi52,lo52,mcap,earnings_at,earnings_est";
+  const members = async (): Promise<StatLike[]> => {
+    try { return await selectAll<StatLike>(() => db.from("constituent_stats").select(COLS + ",q_price,q_prev,q_time").in("symbol", syms).order("symbol")); }
+    catch { return await selectAll<StatLike>(() => db.from("constituent_stats").select(COLS).in("symbol", syms).order("symbol")); }
+  };
   const [{ data: snap }, stats] = await Promise.all([
     db.from("snapshots").select("payload").eq("key", "table").maybeSingle(),
-    selectAll<WatchStat>(() => db.from("constituent_stats").select("idx,symbol,name,sector,d,close,pct1d,pct1w,pct1m,pct3m,pct12m,dma50,dma200,hi52,lo52,mcap,earnings_at,earnings_est").in("symbol", syms).order("symbol")),
+    members(),
   ]);
   const tBy = new Map((((snap?.payload as { rows?: TableLike[] } | null)?.rows) ?? []).map((r) => [r.symbol, r]));
-  const sBy = new Map<string, WatchStat>();
-  for (const s of stats) if (!sBy.has(s.symbol)) sBy.set(s.symbol, s);
+  const sBy = newestStats(stats);   // a name in two lists: the newest row's figures, the name and sector of a fixed list order
   const missing = syms.filter((s) => !tBy.has(s) && !sBy.has(s));
   const qBy = missing.length ? await quotes(missing).catch(() => ({} as Awaited<ReturnType<typeof quotes>>)) : {};
-  const pctOf = (a: number | null, b: number | null) => (a != null && b ? (a / b - 1) * 100 : null);
-  const noLevel = { chg1d: null, chg1w: null, chg1m: null, chg3m: null, chg12m: null, vs200chg: null };   // a stock's changes are in per cent only
   const rows = wl.map((w) => {
     const t = tBy.get(w.symbol), s = sBy.get(w.symbol), q = qBy[w.symbol];
     if (t) return { ...watchRowFromTable(t), symbol: w.symbol };
-    if (s) return { symbol: w.symbol, name: s.name, kind: "Stock", sector: s.sector, ccy: CCY[s.idx] ?? null, last: s.close, asOf: s.d, asOfKind: "close", source: "Yahoo Finance", pct1d: s.pct1d, pct1w: s.pct1w, pct1m: s.pct1m, pct3m: s.pct3m, pct12m: s.pct12m, ...noLevel, vs50: pctOf(s.close, s.dma50), vs200: pctOf(s.close, s.dma200), pos52: s.hi52 != null && s.lo52 != null && s.hi52 > s.lo52 ? ((s.close - s.lo52) / (s.hi52 - s.lo52)) * 100 : null, mcap: s.mcap, earningsAt: s.earnings_at, earningsEst: s.earnings_est, isYield: false };
+    if (s) return watchRowFromStat(s, CCY[s.idx] ?? null, (iso) => localDate(LIST_TZ[s.idx] ?? "UTC", Date.parse(iso) / 1000));
     return watchRowFromQuote(w.symbol, w.name, q);   // a plain quote; a Treasury yield index (^IRX) moves in points
   });
   return { rows };
