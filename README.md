@@ -535,7 +535,18 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   host's 3 s apart (10 s before an address asked again), and the log names none of the sentinels planted in titles, sentences, headings, links, attributes,
   `<noscript>`, scripts, headers, cookies, redirect targets, `robots.txt`, `swagger.json`, the PDF's text and error
   messages, no date of the server's and no word that is not the probe's own or a number; with each world's verdicts, 20
-  pages read alone, and the file itself: no import but unpdf's, pinned at 2.2.1, no address but the design's).
+  pages read alone, and the file itself: no import but unpdf's, pinned at 2.2.1, no address but the design's), and SOX's
+  list from Nasdaq (section [AS], since IDX-0e2: `ix_sox` run offline in twenty worlds: its `robots.txt` allowing both
+  lists, then answering each of the ten ways above, disallowing for every reader, for Mozilla alone (a product the
+  Monitor's User-Agent names) or SOX's list alone, and asking a Crawl-delay of 7 s or of 45 s; a list answering 429 (asked
+  again in the budget's one place more, then none left), 429 with a Retry-After given as a date or of 60 s, a redirect,
+  an HTML page, 403 and no answer. In each the requests are its three addresses in its order and nothing else, each a GET
+  with redirect `manual`, `robots.txt` with the Monitor's User-Agent and the lists with exactly the headers
+  `fetchNasdaq100` sends (read from `_shared/constituents.ts` and `_shared/http.ts`), 3 s apart, and the log names none
+  of the sentinels planted in `robots.txt`, headers, cookies, redirect targets, error messages and every field of the
+  JSON, no date of the server's and no word but its own, a number or a ticker the world served; with its shape check
+  held to `fetchNasdaq100`'s own read in 17 answers, its ticker form in 12 values, and the file itself: one import,
+  `ix_terms`' rules for `robots.txt`, no address but its three and the two header values).
   `cd jobs && npx tsx ../sim/logic.test.ts`.
   The same command checks the file itself, in its last two sections. GitHub installs `jobs/` alone before it runs the
   logic checks (`logic-tests`, and `deploy-server` before a deploy), so nothing the file imports, directly or through
@@ -568,7 +579,8 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   three sentences that name the code at the check of fix part 4), so no sentence of either README can stop a deploy.
   Since 24 Nov 2026 the README's own checks hold the entry of the probe `ix_terms` to `jobs/probes/ix_terms.ts` as
   well: the addresses it asks, in its order, its budget of requests and the Crawl-delay over which it holds a host's
-  pages. These run in `logic-tests` only, which runs on a change to either README as well.
+  pages; and since IDX-0e2 the entry of `ix_sox` to `jobs/probes/ix_sox.ts`: its three addresses in its order, its
+  budget, the form of a ticker it prints and the owner's release. These run in `logic-tests` only, which runs on a change to either README as well.
   `cd jobs && npx tsx ../sim/readme.test.ts`.
 - **Database checks** (`sim/sql`): the rules that live in database functions (the limits on verification emails;
   the queue for the reasons of big moves; the request for the second path),
@@ -721,7 +733,7 @@ name: the input `sec_user_agent` = true gives the probe's own step, and no other
 contact the SEC asks automated readers to declare), which a probe of sec.gov (`pf_sec`) sends only as its User-Agent
 and never prints.
 
-One probe asks a fixed list of addresses and nothing else (since 24 Nov 2026):
+Two probes ask a fixed list of addresses and nothing else (since 24 Nov 2026):
 
 - `ix_terms` (IDX-0e; run with runtime `deno`): the terms of the index candidates, read before any list of SOX or
   TAIEX is built. It asks these 13 addresses, all https, in this order: `www.nasdaq.com` `/robots.txt` and `/legal`;
@@ -765,13 +777,39 @@ One probe asks a fixed list of addresses and nothing else (since 24 Nov 2026):
   read and passes (for TAIEX, with both licence pages naming the licence and `swagger.json`'s licence url exactly
   it), else NOT READ; then the requests made out of 14. It imports no file of the repository, since the helpers of
   `jobs/probes/lib.ts` print what they read; its one import is unpdf's, for the PDF, pinned at 2.2.1 (since IDX-0e2;
-  the version its checks read PDFs with).
+  the version its checks read PDFs with). Its rules for `robots.txt` are exported, and `ix_sox` reads its own by them.
+- `ix_sox` (IDX-0e2; run with runtime `deno`): SOX's members from Nasdaq's own list, released by the owner on 24 Nov 2026
+  after `ix_terms`' run held `nasdaq.com/legal`: Nasdaq's lists are read for personal use (the Nasdaq-100 kept as the
+  Monitor reads it, SOX from Nasdaq; Invesco's holdings are not used), and the log's first lines state that release. It asks these 3
+  addresses, all https, in this order: `api.nasdaq.com` `/robots.txt`, `/api/quote/list-type/nasdaq100` and
+  `/api/quote/list-type/sox`. Its `robots.txt` comes first, read by `ix_terms`' rules (above); since the probe sends the
+  Monitor's User-Agent and names no product of its own, a list is asked only when the group for every reader allows its
+  path and so does each group the file has for a product that User-Agent names (Mozilla, AppleWebKit, Chrome, Safari).
+  The Nasdaq-100's list is the address `fetchNasdaq100` (`supabase/functions/_shared/constituents.ts`) reads every day
+  (the server's constituents job, 00:40 UTC), asked as the control with the headers that function sends (the Monitor's User-Agent from
+  `_shared/http.ts`, `accept: application/json`, and `www.nasdaq.com` as `origin` and `referer`); SOX's is asked with the
+  same. The requests are 3 s apart, or the file's Crawl-delay where that is longer (one over 30 s holds both lists),
+  each a GET with redirect `manual`: no redirect of a list is followed, and no address is built. At most 4 requests: an
+  address that answered 429 is asked once more, after 10 s, only where the site asked for no longer wait, and the
+  `robots.txt` again where it redirected to itself, each only where the budget keeps a place for every address still
+  to come. A list's answer (any 2xx, as `fetchText` takes one) is read as JSON, as `fetchNasdaq100` reads it, and the log
+  gives for each list the status, the type (html, pdf, json, text or other), the bytes, whether it has the shape
+  `fetchNasdaq100` parses (`data.data.rows`, one row or more, each with `symbol` and `companyName` as text, `marketCap` as
+  text or a number, and `sector`, where given, as text or null), the number of rows, how many rows carry each of those four
+  columns, and how many other keys the rows carry (counted, not named); for SOX's list also its member symbols that have
+  a ticker's form (`^[A-Z][A-Z0-9.]{0,6}$`, after trimming; any other value is counted, not printed), and how many rows
+  have a weight-like field (a key that names a weight) and how many of those hold a number; and then the requests made
+  out of 4. Nothing else of an answer is printed: never a header's value, a cookie, a server's date, a company's name, a
+  sector, a cap, another column's name or value, an address from an answer or an error's message. Its one import is
+  from `ix_terms`: the rules for `robots.txt` and the helpers that read an answer, none of which prints anything.
+
 Since 21 Nov 2026 (the paper portfolio's second run of probes, `pf_*`) a probe reads a site's `robots.txt` before any
 page or file of it, does not ask a path that file holds, and says what it read and what it did not (`robots()` in
 `jobs/probes/lib.ts`: a `robots.txt` that answers 404 or another 4xx, or with an HTML page in its place, is "no
 robots.txt read", never a file that allows, and the probe reads on, as RFC 9309 reads a 4xx; a file of directives is
 the site's rules whatever type it is served as; one that answers 5xx holds every path; one that answers 429 is asked
-once more; a Crawl-delay longer than the probe's own pace is kept, up to thirty seconds). Whether a site whose
+once more; a Crawl-delay longer than the probe's own pace is kept, up to thirty seconds; the two probes above read
+theirs as their entries say). Whether a site whose
 `robots.txt` answers 401, 403 or 418 should be read at all is a question put to the owner: until it is answered a probe
 still reads such a site's pages and says so, and sends it no form (`pf_rates` holds its one POST there). The probes of
 publishers' files (`pf_bench`, `pf_borrow`) also read the site's terms, by its own link, before any data file of it

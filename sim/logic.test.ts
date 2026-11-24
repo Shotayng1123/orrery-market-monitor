@@ -3712,6 +3712,231 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck(`under Node the default PDF reader gives no text (the PDF is then NOT READ) and prints nothing (${quiet.length} lines)`, nodePdf === null && quiet.length === 0, { nodePdf, quiet });
   }
 
+  console.log("\n[AS] SOX's members from Nasdaq's own list (IDX-0e2, 24 Nov 2026; released by the owner as personal use): jobs/probes/ix_sox.ts run offline on a stand-in fetch: api.nasdaq.com's robots.txt by ix_terms' RFC 9309 rules first, then the Nasdaq-100's list as fetchNasdaq100 asks for it (the control) and SOX's, and a public log of numbers, yes or no, the Monitor's column names and SOX's tickers alone");
+  {
+    // Why: after ix_terms' run 45384712261 held nasdaq.com/legal, the owner kept the Nasdaq-100 as personal use and
+    // released SOX from Nasdaq as personal use (24 Nov 2026). Before IDX-1 builds a SOX list, one run says whether
+    // Nasdaq's list endpoint has a SOX type that parses as fetchNasdaq100 parses the Nasdaq-100's, beside that list asked
+    // the same way as the control. Every world answers by address and records each request; its answers carry sentinels
+    // (Zq…Xs) in robots.txt, headers, cookies, redirect targets, error messages and every field of the JSON (names,
+    // sectors, caps, other columns and their names, the answer's own fields, symbols that are no ticker), none of which
+    // may reach the log; SOX's symbols of a ticker's form may, and only they.
+    type SoxMod = typeof import("../jobs/probes/ix_sox.ts");
+    let sx: SoxMod | null = null, loadErr = "";
+    const onLoad: string[] = [], realFetch = globalThis.fetch, saidOnLoad: string[] = [], logOnLoad = console.log;
+    globalThis.fetch = (async (u: unknown) => { onLoad.push(String(u)); throw new Error("offline"); }) as typeof fetch;
+    console.log = (...a: unknown[]) => { saidOnLoad.push(a.map(String).join(" ")); };
+    try { sx = await import("../jobs/probes/ix_sox.ts"); } catch (e) { loadErr = String(e).slice(0, 160); } finally { globalThis.fetch = realFetch; console.log = logOnLoad; }
+    const SRC = (() => { try { return readText(new URL("../jobs/probes/ix_sox.ts", import.meta.url), "utf8") as string; } catch { return ""; } })();
+    // the probe's own words: its file's and those of the robots.txt rules it takes from ix_terms (ROBOTS_SAYS)
+    const OWN = SRC + (readText(new URL("../jobs/probes/ix_terms.ts", import.meta.url), "utf8") as string);
+    ck(`the probe loads offline, and on loading asks nothing and prints nothing (${loadErr || `${onLoad.length} requests, ${saidOnLoad.length} lines`}): it runs only as the program run (deno run probes/ix_sox.ts)`, sx !== null && onLoad.length === 0 && saidOnLoad.length === 0, { loadErr, onLoad, saidOnLoad });
+
+    // the Monitor's own read of the Nasdaq-100 (fetchNasdaq100), as constituents.ts writes it: its address, the headers
+    // it gives fetchText (over fetchText's own, the browser User-Agent and accept */*: http.ts), the path to its rows,
+    // the fields its rows are typed with and how it reads each
+    const cons = readText(new URL("../supabase/functions/_shared/constituents.ts", import.meta.url), "utf8") as string, httpSrc = readText(new URL("../supabase/functions/_shared/http.ts", import.meta.url), "utf8") as string;
+    const ndxFn = cons.slice(cons.indexOf("export async function fetchNasdaq100"), cons.indexOf("export async function fetchNikkei225"));
+    const call = /await fetchText\("([^"]+)", \{ headers: \{ ([^}]*) \} \}, \d+\);/.exec(ndxFn);
+    const given: Record<string, string> = Object.fromEntries([...(call?.[2] ?? "").matchAll(/"?([a-z-]+)"?: "([^"]*)"/g)].map((m) => [m[1], m[2]]));
+    const ua = /^export const BROWSER_UA = "([^"]+)";$/m.exec(httpSrc)?.[1] ?? "", fetchTextOwn = /headers: \{ "user-agent": BROWSER_UA, accept: "\*\/\*", \.\.\.\(init\.headers as Record<string, string> \| undefined\) \}/.test(httpSrc);
+    const MONITOR: Record<string, string> = { "user-agent": ua, accept: "*/*", ...given };
+    const typed = /JSON\.parse\(text\) as \{ data\?: \{ data\?: \{ rows\?: Array<\{ ([^}]*) \}> \} \} \};/.exec(ndxFn)?.[1] ?? "", fields = [...typed.matchAll(/(\w+)\??: string/g)].map((m) => m[1]);
+    const readsAs = /const rows = j\.data\?\.data\?\.rows \?\? \[\];/.test(ndxFn) && /r\.symbol\.trim\(\)/.test(ndxFn) && /r\.companyName\.replace\(/.test(ndxFn) && /String\(r\.marketCap\)/.test(ndxFn) && /sector: r\.sector \|\| sectorOf\(symbol\)/.test(ndxFn);
+    const S_ROB = "https://api.nasdaq.com/robots.txt", S_NDX = "https://api.nasdaq.com/api/quote/list-type/nasdaq100", S_SOX = "https://api.nasdaq.com/api/quote/list-type/sox", S_ALL = [S_ROB, S_NDX, S_SOX];
+    ck(`its fixed list is api.nasdaq.com's robots.txt, the Nasdaq-100's list (the address fetchNasdaq100 reads: ${call?.[1] ?? "–"}) and SOX's, in that order, all https; its budget is 4 requests; its User-Agent is the Monitor's (http.ts' BROWSER_UA, which fetchText sends); and the columns it reads are the four fetchNasdaq100's rows are typed with (${fields.join(", ")})`,
+      !!sx && JSON.stringify(sx.FIXED.map((f) => f.url)) === JSON.stringify(S_ALL) && call?.[1] === S_NDX && sx.BUDGET === 4 && ua !== "" && sx.UA === ua && fetchTextOwn && readsAs && JSON.stringify(fields) === JSON.stringify(["symbol", "companyName", "marketCap", "sector"]) && JSON.stringify(sx.COLS) === JSON.stringify(fields),
+      { fixed: sx?.FIXED.map((f) => f.url), call: call?.slice(1), budget: sx?.BUDGET, ua: sx?.UA === ua, fetchTextOwn, readsAs, fields, cols: sx?.COLS });
+
+    // ---- the stand-in world ----
+    const SZ: string[] = [], zs = (k: string): string => { const t = `Zq${k}Xs`; SZ.push(t); return t; };
+    type SA = { status: number; type?: string | null; body?: string; headers?: Record<string, string>; throws?: string };
+    type SWorld = Record<string, SA | SA[]>;
+    const SDATES = ["07 Mar 1998", "08:09:10", "08 Mar 1998", "09:10:11"];
+    const sh = (k: string): Record<string, string> => ({ server: zs(`Srv${k}`), "set-cookie": `ak_bmsc=${zs(`Ck${k}`)}; Path=/; HttpOnly`, "x-request-id": zs(`Req${k}`), "last-modified": "Sat, 07 Mar 1998 08:09:10 GMT", date: "Sun, 08 Mar 1998 09:10:11 GMT", link: `<https://${zs(`Lk${k}`)}.example/>; rel="preload"` });
+    const sok = (type: string | null, body: string, k: string): SA => ({ status: 200, type, body, headers: sh(k) });
+    const srob = (k: string, rules = "User-agent: *\nAllow: /\n"): SA => sok("text/plain; charset=utf-8", `# ${zs(`Note${k}`)}\nUser-agent: ${zs(`Bot${k}`).toLowerCase()}\nDisallow: /${zs(`Path${k}`)}\n\n${rules}\nSitemap: https://${zs(`Map${k}`)}.example/sitemap.xml\n`, `R${k}`);
+    const sst = (s: number, k: string): SA => ({ status: s, type: "text/html", body: `<html><title>${zs(`St${s}${k}`)}</title></html>`, headers: { ...sh(`St${s}${k}`), "retry-after": "1" } });
+    const sre = (s: number, location: string, k: string): SA => ({ status: s, type: "text/html", body: `<a href="${location}">${zs(`Mv${k}`)}</a>`, headers: { ...sh(`Mv${k}`), location } });
+    const listBody = (rows: unknown[], k: string): string => JSON.stringify({ data: { data: { headers: { symbol: zs(`H1${k}`), companyName: zs(`H2${k}`) }, rows }, totalrecords: rows.length, asOf: zs(`AsOf${k}`), date: zs(`Date${k}`) }, message: zs(`Msg${k}`), status: { rCode: 200, bCodeMessage: [{ code: 1, errorMessage: zs(`Err${k}`) }], developerMessage: zs(`Dev${k}`) } });
+    // the Nasdaq-100's list: 101 rows with the four columns fetchNasdaq100 reads and five others (one whose name is a sentinel)
+    const ndxRows = Array.from({ length: 101 }, (_, i) => ({ symbol: `N${String(i).padStart(3, "0")}`, sector: zs(`NdSec${i % 11}`), companyName: `${zs(`NdName${i}`)} Common Stock`, marketCap: i === 0 ? zs("NdCap") : `${101 - i},${String(i).padStart(3, "0")},000,000`, lastSalePrice: `$${zs(`NdPx${i}`)}`, netChange: "1.25", percentageChange: "0.5%", deltaIndicator: "up", [zs("NdKey")]: zs(`NdVal${i}`) }));
+    // SOX's: 30 rows, 28 symbols of a ticker's form (one with a dot, one with spaces round it) and two that are not; no
+    // sector; 25 rows with a weight as a number, 2 with a weight-like field holding a sentinel, 3 with none
+    const TICK = ["NVDA", "AVGO", "AMD", "TSM", "ASML", "QCOM", "TXN", "INTC", "MU", "ADI", "AMAT", "LRCX", "KLAC", "MRVL", "NXPI", "MCHP", "ON", "MPWR", "TER", "ENTG", "SWKS", "QRVO", "ARM", "GFS", "COHR", "STM", "AB.C", " LSCC "];
+    SZ.push("zqlowsymxs");
+    const soxRows: unknown[] = [...TICK.map((s, i) => ({ symbol: s, companyName: zs(`SxName${i}`), marketCap: i === 0 ? zs("SxCap") : `${30 - i},100,000,000`, lastSalePrice: zs(`SxPx${i}`), ...(i < 25 ? { weight: `${(30 - i) / 10}` } : i < 27 ? { indexWeight: zs(`SxW${i}`) } : {}) })),
+      { symbol: zs("SxSym"), companyName: zs("SxName28"), marketCap: "1,000", lastSalePrice: zs("SxPx28") }, { symbol: "zqlowsymxs", companyName: zs("SxName29"), marketCap: "2,000", lastSalePrice: zs("SxPx29") }];
+    const S_BASE: SWorld = { [S_ROB]: srob("Base"), [S_NDX]: sok("application/json; charset=utf-8", listBody(ndxRows, "Ndx"), "Ndx"), [S_SOX]: sok("application/json; charset=utf-8", listBody(soxRows, "Sox"), "Sox") };
+    const sAnswer = (a: SA): Response => { const h = new Headers(a.headers ?? {}); if (a.type) h.set("content-type", a.type); return new Response(a.body === undefined ? null : new TextEncoder().encode(a.body), { status: a.status, headers: h }); };
+    type SEv = { fetch: string } | { wait: number };
+    type SRun = { asked: Array<{ url: string; init: RequestInit | undefined }>; events: SEv[]; lines: string[]; out: string; said: string[]; result: Awaited<ReturnType<SoxMod["ixSox"]>> | null; threw: string };
+    const runSox = async (world: SWorld): Promise<SRun> => {
+      const run: SRun = { asked: [], events: [], lines: [], out: "", said: [], result: null, threw: "" };
+      if (!sx) return run;
+      const turn = new Map<string, number>(), keep = { log: console.log, info: console.info, warn: console.warn, error: console.error, debug: console.debug };
+      const io = {
+        fetch: async (url: string, init?: RequestInit): Promise<Response> => {
+          run.asked.push({ url, init }); run.events.push({ fetch: url });
+          const k = turn.get(url) ?? 0; turn.set(url, k + 1);
+          const w = world[url] ?? { status: 404, type: "text/html", body: `<html><title>${zs("Nowhere")}</title></html>` }, a = Array.isArray(w) ? w[Math.min(k, w.length - 1)] : w;
+          if (a.throws) throw new TypeError(`fetch failed: ${a.throws}`, { cause: new Error(`${a.throws} at ${url}`) });
+          return sAnswer(a);
+        },
+        print: (l: string) => { run.lines.push(l); },
+        wait: async (ms: number) => { run.events.push({ wait: ms }); },
+      };
+      for (const k of Object.keys(keep) as Array<keyof typeof keep>) console[k] = (...a: unknown[]) => { run.said.push(a.map(String).join(" ")); };
+      try { run.result = await sx.ixSox(io); } catch (e) { run.threw = String(e).slice(0, 200); } finally { Object.assign(console, keep); }
+      run.out = run.lines.join("\n");
+      return run;
+    };
+    // what holds in every world: the requests are `want` exactly, each a GET with redirect "manual"; robots.txt asked with
+    // the Monitor's User-Agent and an accept for text and nothing else, each list with exactly the headers fetchNasdaq100
+    // sends; each request `gap` ms or more after the last (10 s or more when it asks the same address again); the log
+    // names no sentinel and no date of the server's, every word in it is the probe's own, a number or a ticker the world
+    // served, nothing was withheld, nothing reached the console, and its last line counts the requests out of 4
+    const served = new Set(TICK.flatMap((t) => t.trim().split(/[^\p{L}\p{N}*'’_-]+/u)));
+    const sOutside = (out: string): string[] => [...new Set(out.split(/[^\p{L}\p{N}*'’_-]+/u).filter((w) => w !== "" && !/^\d+$/.test(w) && !OWN.includes(w) && !served.has(w)))];
+    const sHolds = (name: string, r: SRun, want: string[], gap = 3_000): void => {
+      const urls = r.asked.map((a) => a.url);
+      const bad = r.asked.filter((a) => {
+        const i = a.init ?? {}, h = new Headers(i.headers as HeadersInit | undefined), exp: Record<string, string> = a.url === S_ROB ? { "user-agent": ua, accept: "text/plain,*/*;q=0.1" } : MONITOR;
+        return i.redirect !== "manual" || (i.method ?? "GET") !== "GET" || i.body != null || JSON.stringify([...h.keys()].sort()) !== JSON.stringify(Object.keys(exp).sort()) || Object.entries(exp).some(([k, v]) => h.get(k) !== v);
+      }).map((a) => a.url);
+      const pace: string[] = [];
+      let since = 0, prev = "";
+      for (const e of r.events) {
+        if ("wait" in e) { since += e.wait; continue; }
+        if (prev !== "" && since < (e.fetch === prev ? 10_000 : gap)) pace.push(`${e.fetch} after ${since} ms`);
+        since = 0; prev = e.fetch;
+      }
+      const low = r.out.toLowerCase(), leaked = [...new Set(SZ)].filter((t) => low.includes(t.toLowerCase())), dates = SDATES.filter((d) => r.out.includes(d)), outside = sOutside(r.out), last = r.lines[r.lines.length - 1] ?? "";
+      ck(`${name}: the requests are ${want.length}, the probe's addresses in its order and nothing else (${urls.length} made), each a GET with redirect "manual"; robots.txt with the Monitor's User-Agent and an accept for text alone, each list with exactly the headers fetchNasdaq100 sends (${Object.keys(MONITOR).join(", ")}); each request ${gap / 1000} s or more after the last (10 s or more when an address is asked again)`,
+        !!sx && JSON.stringify(urls) === JSON.stringify(want) && bad.length === 0 && pace.length === 0, { urls, bad, pace });
+      ck(`${name}: the log (${r.lines.length} lines) names none of the ${new Set(SZ).size} sentinels and no date of the server's, every word in it is the probe's own, a number or a ticker the world served (${outside.length} others), nothing reached the console (${r.said.length}), nothing was withheld, and its last line is "requests made: ${urls.length} of 4"`,
+        !!sx && r.lines.length > 0 && leaked.length === 0 && dates.length === 0 && outside.length === 0 && r.said.length === 0 && !r.out.includes("(withheld)") && last === `requests made: ${urls.length} of 4` && r.threw === "", { leaked: leaked.slice(0, 8), dates, outside: outside.slice(0, 12), said: r.said.slice(0, 4), last, threw: r.threw });
+    };
+    const sline = (r: SRun, re: RegExp): boolean => r.lines.some((l) => re.test(l));
+
+    // (a) robots.txt allows both lists: what the log says of each
+    const sBase = await runSox(S_BASE);
+    sHolds("robots.txt allows both lists", sBase, S_ALL);
+    const nd = sBase.result?.lists[S_NDX], so = sBase.result?.lists[S_SOX];
+    ck(`robots.txt allows both: the Nasdaq-100's list (the control) has the shape fetchNasdaq100 parses, 101 rows, the four columns in every row and 5 other keys (counted, not named); SOX's has the shape, 30 rows, no sector, 3 other keys, its 28 symbols of a ticker's form printed in their order (trimmed, as fetchNasdaq100 trims), its 2 others counted, and 27 rows with a weight-like field, 25 of them holding a number; nothing of the sort for the Nasdaq-100's`,
+      sBase.result?.robots === "file" && nd?.shape === true && nd.rows === 101 && nd.cols.symbol === 101 && nd.cols.companyName === 101 && nd.cols.marketCap === 101 && nd.cols.sector === 101 && nd.others === 5
+      && so?.shape === true && so.rows === 30 && so.cols.sector === 0 && so.others === 3 && JSON.stringify(so.tickers) === JSON.stringify(TICK.map((t) => t.trim())) && so.otherSymbols === 2 && so.weightRows === 27 && so.weightNumbers === 25
+      && sline(sBase, /^GET https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/nasdaq100: 200, json, \d+ bytes$/) && sline(sBase, /^ {2}data\.data\.rows: a list of 101 rows; the shape fetchNasdaq100 parses: yes$/) && sline(sBase, /^ {2}data\.data\.rows: a list of 30 rows; the shape fetchNasdaq100 parses: yes$/)
+      && sline(sBase, /^ {2}the columns fetchNasdaq100 reads, by the rows that carry them: symbol 101, companyName 101, marketCap 101, sector 101; other keys: 5$/) && sline(sBase, /^ {2}the columns fetchNasdaq100 reads, by the rows that carry them: symbol 30, companyName 30, marketCap 30, sector 0; other keys: 3$/)
+      && sline(sBase, new RegExp(`^ {2}member symbols of a ticker's form \\(28\\): ${TICK.map((t) => t.trim().replace(".", "\\.")).join(", ")}; other values: 2$`)) && sline(sBase, /^ {2}a weight-like field \(a key that names a weight\): yes, in 27 rows \(holding a number: 25\)$/)
+      && sBase.lines.filter((l) => /^ {2}(?:member symbols|a weight-like)/.test(l)).length === 2,
+      { robots: sBase.result?.robots, nd, so: so && { ...so, tickers: so.tickers.length }, lines: sBase.lines.filter((l) => /^ {2}|^GET/.test(l)) });
+    ck("the log's first lines state the owner's release: Nasdaq's lists, read for personal use (the Nasdaq-100 kept; SOX from Nasdaq), on 24 Nov 2026",
+      sBase.lines.slice(0, 3).some((l) => /released by the owner on 24 Nov 2026/i.test(l) && /Nasdaq/.test(l) && /personal use/.test(l)), sBase.lines.slice(0, 4));
+
+    // (a) robots.txt by RFC 9309 §2.3.1, as ix_terms reads it, outcome by outcome
+    const S_READ = "200, text, \\d+ bytes\\. robots\\.txt read: yes; a group for every reader: yes; a group for a product its User-Agent names: no; a crawl-delay over 3 s: no";
+    const S_ELSEWHERE = "robots\\.txt: unreadable \\(a redirect elsewhere is not followed\\): complete disallow";
+    const S_OUT: Array<{ name: string; a: SA | SA[]; want: string[]; re: string }> = [
+      { name: "200", a: srob("Ok"), want: S_ALL, re: S_READ },
+      { name: "301 to this same address, then 200", a: [sre(301, "https://api.nasdaq.com/robots.txt", "Self"), srob("After")], want: [S_ROB, S_ROB, S_NDX, S_SOX], re: S_READ },
+      { name: "302 to another path of its host", a: sre(302, "/robots/robots.txt", "Path"), want: [S_ROB], re: `302, redirected \\(not followed\\) to the same host; the target's path is the asked path give or take a trailing slash: no\\. ${S_ELSEWHERE}` },
+      { name: "302 to another host", a: sre(302, `https://${zs("ElseHost")}.example/robots.txt`, "Host"), want: [S_ROB], re: `302, redirected \\(not followed\\) to another host; the target's path is the asked path give or take a trailing slash: yes\\. ${S_ELSEWHERE}` },
+      { name: "404", a: sst(404, "a"), want: S_ALL, re: "404\\. robots\\.txt: none \\(4xx\\): every path allowed by RFC 9309" },
+      { name: "410", a: sst(410, "b"), want: S_ALL, re: "410\\. robots\\.txt: none \\(4xx\\): every path allowed by RFC 9309" },
+      { name: "429, asked once more, 429 again", a: [sst(429, "c"), sst(429, "d")], want: [S_ROB, S_ROB], re: "429\\. robots\\.txt: unreachable \\(429\\): complete disallow" },
+      { name: "500", a: sst(500, "e"), want: [S_ROB], re: "500\\. robots\\.txt: unreachable \\(5xx\\): complete disallow by RFC 9309" },
+      { name: "503", a: sst(503, "f"), want: [S_ROB], re: "503\\. robots\\.txt: unreachable \\(5xx\\): complete disallow by RFC 9309" },
+      { name: "no answer (a network error)", a: { status: 200, throws: zs("NetErr") }, want: [S_ROB], re: "no answer \\(an error of the network or no answer within 30 s\\)\\. robots\\.txt: unreachable \\(no answer\\): complete disallow by RFC 9309" },
+    ];
+    for (const o of S_OUT) {
+      const r = await runSox({ ...S_BASE, [S_ROB]: o.a });
+      sHolds(`robots.txt ${o.name}`, r, o.want);
+      const open = o.want.includes(S_SOX);
+      ck(`robots.txt ${o.name} (RFC 9309 §2.3.1, as ix_terms reads it): its line says what the rule makes of it, and the two lists are ${open ? "asked and read" : "not asked (complete disallow), each saying so"}`,
+        sline(r, new RegExp(`^GET https://api\\.nasdaq\\.com/robots\\.txt: ${o.re}$`)) && (open ? r.result?.lists[S_NDX]?.shape === true && r.result?.lists[S_SOX]?.shape === true : r.result?.lists[S_SOX] === null && r.lines.filter((l) => /: not asked \(this host's robots\.txt was not read\)$/.test(l)).length === 2)
+        && (o.name.startsWith("301") ? sline(r, /^GET https:\/\/api\.nasdaq\.com\/robots\.txt: 301, redirected to this same address \(https, this host, the path \/robots\.txt, no query\): asked again after 10 s, redirect 1 of at most 5 followed$/) : true),
+        r.lines.filter((l) => /robots|not asked|allowed/.test(l)));
+    }
+
+    // (a) robots.txt that disallows: for every reader; for Mozilla, a product the Monitor's User-Agent names, though every
+    // reader is allowed; SOX's list alone, by a pattern with $; a Crawl-delay of 7 s is kept, one over 30 s holds both
+    const sDis = await runSox({ ...S_BASE, [S_ROB]: srob("Dis", "User-agent: *\nDisallow: /api/\n") });
+    sHolds("robots.txt disallows /api/ for every reader", sDis, [S_ROB]);
+    const sMoz = await runSox({ ...S_BASE, [S_ROB]: srob("Moz", "User-agent: Mozilla\nDisallow: /api/quote/\n\nUser-agent: *\nAllow: /\n") });
+    sHolds("robots.txt disallows the lists for Mozilla and allows every reader", sMoz, [S_ROB]);
+    const sOne = await runSox({ ...S_BASE, [S_ROB]: srob("One", "User-agent: *\nDisallow: /api/quote/list-type/sox$\n") });
+    sHolds("robots.txt disallows SOX's list alone", sOne, [S_ROB, S_NDX]);
+    const sSlow = await runSox({ ...S_BASE, [S_ROB]: srob("Slow", "User-agent: *\nAllow: /\nCrawl-delay: 7\n") });
+    sHolds("robots.txt asks a Crawl-delay of 7 s", sSlow, S_ALL, 7_000);
+    const sHold = await runSox({ ...S_BASE, [S_ROB]: srob("Hold", "User-agent: *\nAllow: /\nCrawl-delay: 45\n") });
+    sHolds("robots.txt asks a Crawl-delay of 45 s", sHold, [S_ROB]);
+    ck("robots.txt that disallows: for every reader (Disallow: /api/) both lists are not asked; for Mozilla, a product the Monitor's User-Agent names, both are not asked though every reader is allowed (the group is said to be there); SOX's alone (a pattern with $) leaves the Nasdaq-100's asked and read; a Crawl-delay of 7 s is waited before each list, one of 45 s holds both; each list not asked says why",
+      sDis.lines.filter((l) => /: not asked \(robots\.txt disallows it\)$/.test(l)).length === 2 && sline(sMoz, /a group for a product its User-Agent names: yes/) && sMoz.lines.filter((l) => /: not asked \(robots\.txt disallows it\)$/.test(l)).length === 2
+      && sline(sOne, /^ {2}https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/sox: not asked \(robots\.txt disallows it\)$/) && sOne.result?.lists[S_NDX]?.shape === true && sSlow.events.filter((e) => "wait" in e && e.wait === 7_000).length === 2
+      && sHold.lines.filter((l) => /: not asked \(robots\.txt asks for more than 30 s between requests\)$/.test(l)).length === 2,
+      { dis: sDis.lines.filter((l) => /not asked|robots/.test(l)), moz: sMoz.lines.filter((l) => /not asked|robots/.test(l)), slow: sSlow.events });
+
+    // (a) the lists' own answers: a 429 asked again in the budget's one place more, then none left; a redirect, not
+    // followed; an HTML page in a list's place; a 403; no answer
+    const busy = (k: string, ra?: string): SA => ({ status: 429, type: "application/json", body: `{"message":"${zs(`Busy${k}`)}"}`, headers: { ...sh(`Busy${k}`), ...(ra === undefined ? {} : { "retry-after": ra }) } });
+    const s429 = await runSox({ ...S_BASE, [S_NDX]: [busy("N", "5"), S_BASE[S_NDX] as SA], [S_SOX]: [busy("S"), S_BASE[S_SOX] as SA] });
+    sHolds("the Nasdaq-100's list answers 429 once, then SOX's", s429, [S_ROB, S_NDX, S_NDX, S_SOX]);
+    ck("429: the Nasdaq-100's list is asked once more after 10 s (the budget's one place more) and read; SOX's 429 is not asked again (no place left), so its list is not read",
+      s429.result?.lists[S_NDX]?.shape === true && s429.result?.lists[S_SOX] === null && sline(s429, /^GET https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/nasdaq100: 429\. Asked once more after 10 s\.$/)
+      && sline(s429, /^GET https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/sox: 429\. Not asked again: the budget of 4 has no place left \(one is kept for every address still to come\)\. NOT READ$/), s429.lines.filter((l) => /429|again/.test(l)));
+    const sWait = await runSox({ ...S_BASE, [S_NDX]: [busy("W", "Sun, 08 Mar 1998 09:10:11 GMT"), S_BASE[S_NDX] as SA], [S_SOX]: [busy("V", "60"), S_BASE[S_SOX] as SA] });
+    sHolds("the lists answer 429 asking for a wait given as a date, or of 60 s", sWait, S_ALL);
+    ck("429 with a Retry-After given as a date, or of 60 s: not asked again (the site asks for a wait given as a date or longer than 10 s), NOT READ",
+      sWait.lines.filter((l) => /: 429\. Not asked again: the site asks for a wait given as a date or longer than 10 s\. NOT READ$/.test(l)).length === 2, sWait.lines.filter((l) => /429/.test(l)));
+    const sOdd = await runSox({ ...S_BASE, [S_NDX]: sre(302, `https://www.nasdaq.com/${zs("Moved")}?${zs("Tok")}=1`, "Nd"), [S_SOX]: sok("text/html; charset=utf-8", `<!doctype html><html><head><title>${zs("Blocked")}</title></head><body>${zs("BlockText")} Access Denied</body></html>`, "Html") });
+    sHolds("the Nasdaq-100's list redirects, SOX's answers an HTML page", sOdd, S_ALL);
+    ck("a list that redirects is not followed (NOT READ: the log says only to which host, and whether to the same path); one that answers an HTML page does not parse as JSON, so it has not the shape fetchNasdaq100 parses",
+      sOdd.result?.lists[S_NDX] === null && sOdd.result?.lists[S_SOX]?.json === false && sOdd.result?.lists[S_SOX]?.shape === false
+      && sline(sOdd, /^GET https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/nasdaq100: 302, redirected \(not followed\) to another host; the target's path is the asked path give or take a trailing slash: no\. NOT READ$/) && sline(sOdd, /^GET https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/sox: 200, html, \d+ bytes$/)
+      && sline(sOdd, /^ {2}NOT JSON: the answer does not parse as JSON, so it has not the shape fetchNasdaq100 parses$/), sOdd.lines);
+    const sFail = await runSox({ ...S_BASE, [S_NDX]: { status: 403, type: "text/html", body: zs("Forbidden"), headers: sh("F") }, [S_SOX]: { status: 200, throws: zs("SoxNet") } });
+    sHolds("the Nasdaq-100's list answers 403, SOX's gives no answer", sFail, S_ALL);
+    ck("403 and no answer: each list NOT READ, with its status or \"no answer\" and no word of the error", sline(sFail, /^GET https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/nasdaq100: 403\. NOT READ$/) && sline(sFail, /^GET https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/sox: no answer \(an error of the network or no answer within 30 s\)\. NOT READ$/) && sFail.result?.lists[S_SOX] === null, sFail.lines);
+
+    // (b) the shape check alone, held to fetchNasdaq100 (its rows at j.data?.data?.rows, typed with the four fields read
+    // above, symbol.trim(), companyName.replace(), String(marketCap), sector || sectorOf): a list of those fields alone
+    // has it; each change that would make that function throw or misread a row has it not
+    const row: Record<string, unknown> = Object.fromEntries(fields.map((f) => [f, f === "marketCap" ? "1,234,567" : f === "symbol" ? "ABCD" : `${f} text`]));
+    const wrap = (rows: unknown): string => JSON.stringify({ data: { data: { rows } } });
+    const shapeOf = (t: string): boolean | null => (sx ? sx.readList(t).shape : null);
+    const SHAPES: Array<[string, string, boolean]> = [
+      ["the rows fetchNasdaq100 is typed with, every field given", wrap([row, row]), true],
+      ["sector left out (it is optional: sectorOf fills it)", wrap([{ ...row, sector: undefined }]), true],
+      ["sector null", wrap([{ ...row, sector: null }]), true],
+      ["marketCap a number (String() reads it)", wrap([{ ...row, marketCap: 1234567 }]), true],
+      ["other keys beside them", wrap([{ ...row, lastSalePrice: "$1", weight: "1.5" }]), true],
+      ["no rows (an empty list)", wrap([]), false],
+      ["rows not a list", JSON.stringify({ data: { data: { rows: { a: row } } } }), false],
+      ["no data.data", JSON.stringify({ data: { rows: [row] } }), false],
+      ["data null", JSON.stringify({ data: null, message: "x" }), false],
+      ["the answer null", "null", false],
+      ["the answer a list", JSON.stringify([row]), false],
+      ["a row's symbol a number", wrap([row, { ...row, symbol: 5 }]), false],
+      ["a row without companyName", wrap([row, { ...row, companyName: undefined }]), false],
+      ["a row without marketCap", wrap([{ ...row, marketCap: undefined }]), false],
+      ["a row's sector a number", wrap([{ ...row, sector: 7 }]), false],
+      ["a row that is not an object", wrap([row, "ABCD"]), false],
+      ["not JSON", "<html>Access Denied</html>", false],
+    ];
+    const shapeWrong = SHAPES.filter(([, t, want]) => shapeOf(t) !== want).map(([n, t, want]) => `${n}: ${shapeOf(t)}, not ${want}`);
+    ck(`(b) the shape check, held to fetchNasdaq100's own read (rows at j.data?.data?.rows, typed { ${typed} }): ${SHAPES.length} answers, each yes or no as that function reads it (${shapeWrong.length} wrong)`, !!sx && readsAs && fields.length === 4 && shapeWrong.length === 0, shapeWrong);
+    const TICK_CASES: Array<[unknown, boolean]> = [["NVDA", true], ["AB.C", true], ["A", true], ["ABCDEFG", true], ["ABCDEFGH", false], ["nvda", false], ["1ABC", false], ["AB-C", false], ["AB C", false], ["", false], [5, false], [null, false]];
+    const tickWrong = TICK_CASES.filter(([v, want]) => (sx ? sx.readList(wrap([{ ...row, symbol: v }])).tickers.length === 1 : null) !== want).map(([v]) => String(v));
+    ck(`(b) a symbol is printed only in a ticker's form (${sx?.TICKER.source ?? "–"}, after trimming): ${TICK_CASES.length} values, ${tickWrong.length} read otherwise`, !!sx && sx.TICKER.source === "^[A-Z][A-Z0-9.]{0,6}$" && tickWrong.length === 0, tickWrong);
+
+    // the file: one import, ix_terms' robots.txt rules and helpers (which print nothing); no dynamic import; no fetch but
+    // its io's; no address but its three and the two header values fetchNasdaq100 sends
+    const sLit = [...SRC.matchAll(/https?:\/\/[^\s"'`)\]]+/g)].map((m) => m[0].replace(/[.,;:]+$/, "")), sForeign = [...new Set(sLit.filter((u) => !S_ALL.includes(u) && u !== "https://www.nasdaq.com" && u !== "https://www.nasdaq.com/"))];
+    ck(`the file imports only ./ix_terms.ts (its robots.txt rules and helpers, which print nothing they read), has no dynamic import, calls no fetch but its io's, and writes no address but its three and the two header values fetchNasdaq100 sends (${sForeign.length} other: ${sForeign.slice(0, 4).join(", ")})`,
+      SRC !== "" && (SRC.match(/^\s*import\s/gm) ?? []).length === 1 && /^import \{[^}]+\} from "\.\/ix_terms\.ts";$/m.test(SRC) && !/\bimport\(/.test(SRC) && !/\bfetch\(/.test(SRC.replace(/io\.fetch\(|globalThis\.fetch\(/g, "")) && sForeign.length === 0, { sForeign });
+  }
+
   // [AK], what the READMEs say, is in sim/readme.test.ts since 23 Nov 2026: this file stops a deploy of the server or the
   // site when it fails, and since the check of fix part 4 it reads neither README, so no sentence of either can stop a
   // deploy (the check of fix part 3 found, by experiment, that a README change alone ran no check and would then stop the

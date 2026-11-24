@@ -129,7 +129,7 @@ console.log("\n[AK] what the README says of the checks is what the repository ho
   const list = /^export const FIXED: readonly Fixed\[\] = \[$([\s\S]*?)^\];$/m.exec(src)?.[1] ?? "";
   const fixed = [...list.matchAll(/\bF\("([^"]+)", "[a-z]+"\)/g)].map((m) => m[1]), entries = (list.match(/\bF\(/g) ?? []).length;
   const budget = /^export const BUDGET = (\d+);$/m.exec(src)?.[1] ?? "", crawl = /\bCRAWL_MAX_S = (\d+)[,;]/.exec(src)?.[1] ?? "";
-  const from = flat.indexOf("- `ix_terms` (IDX-0e"), to = flat.indexOf("Since 21 Nov 2026 (the paper portfolio's second run of probes", from), entry = from >= 0 && to > from ? flat.slice(from, to) : "";
+  const from = flat.indexOf("- `ix_terms` (IDX-0e"), next = flat.indexOf("- `ix_sox` (IDX-0e2", from), to = next > from ? next : flat.indexOf("Since 21 Nov 2026 (the paper portfolio's second run of probes", from), entry = from >= 0 && to > from ? flat.slice(from, to) : "";
   const order = /It asks these (\d+) addresses, all https, in this order: (.*?)\. Each host's `robots\.txt` comes first/.exec(entry), said: string[] = [];
   let host = "";
   for (const [, t] of (order?.[2] ?? "").matchAll(/`([^`]+)`/g)) { if (t.startsWith("/")) said.push(`https://${host}${t}`); else host = t; }
@@ -138,6 +138,24 @@ console.log("\n[AK] what the README says of the checks is what the repository ho
   ck(`T-2 of the check of IDX-0e: the README's entry for ix_terms names the ${fixed.length} addresses of FIXED in jobs/probes/ix_terms.ts in its order ("these ${order?.[1] ?? "–"} addresses", ${said.length} named, ${misplaced} not in their place), its budget, BUDGET = ${budget || "–"} ("At most ${most || "–"} requests", "out of ${outOf || "–"}"), and CRAWL_MAX_S = ${crawl || "–"} ("a Crawl-delay over ${over || "–"} s holds the host's pages")`,
     fixed.length > 0 && fixed.length === entries && fixed.every((u) => u.startsWith("https://")) && JSON.stringify(said) === JSON.stringify(fixed) && Number(order?.[1]) === fixed.length
       && budget !== "" && most === budget && outOf === budget && crawl !== "" && over === crawl, { fixed, said, budget, most, outOf, crawl, over });
+}
+
+{
+  // IDX-0e2 (24 Nov 2026): the README's entry for ix_sox, held to jobs/probes/ix_sox.ts as T-2 holds ix_terms' (the file
+  // read as text): the addresses it asks, in its order, its budget of requests, the form of a ticker it prints, and the
+  // owner's release its log's first lines state
+  const flat = readText(new URL("../README.md", import.meta.url), "utf8").replace(/\s+/g, " "), src = (() => { try { return readText(new URL("../jobs/probes/ix_sox.ts", import.meta.url), "utf8"); } catch { return ""; } })();
+  const list = /^export const FIXED: readonly Fixed\[\] = \[$([\s\S]*?)^\];$/m.exec(src)?.[1] ?? "";
+  const fixed = [...list.matchAll(/\bF\("([^"]+)", "[a-z]+"\)/g)].map((m) => m[1]), entries = (list.match(/\bF\(/g) ?? []).length;
+  const budget = /^export const BUDGET = (\d+);$/m.exec(src)?.[1] ?? "", ticker = /^export const TICKER = \/(.+)\/;$/m.exec(src)?.[1] ?? "";
+  const from = flat.indexOf("- `ix_sox` (IDX-0e2"), to = flat.indexOf("Since 21 Nov 2026 (the paper portfolio's second run of probes", from), entry = from >= 0 && to > from ? flat.slice(from, to) : "";
+  const order = /It asks these (\d+) addresses, all https, in this order: (.*?)\. Its `robots\.txt` comes first/.exec(entry), said: string[] = [];
+  let host = "";
+  for (const [, t] of (order?.[2] ?? "").matchAll(/`([^`]+)`/g)) { if (t.startsWith("/")) said.push(`https://${host}${t}`); else host = t; }
+  const most = /\bAt most (\d+) requests: an address that answered 429\b/.exec(entry)?.[1] ?? "", outOf = /\bthen the requests made out of (\d+)\./.exec(entry)?.[1] ?? "";
+  ck(`IDX-0e2: the README's entry for ix_sox names the ${fixed.length} addresses of FIXED in jobs/probes/ix_sox.ts in its order ("these ${order?.[1] ?? "–"} addresses", ${said.length} named), its budget, BUDGET = ${budget || "–"} ("At most ${most || "–"} requests", "out of ${outOf || "–"}"), the form of a ticker it prints (TICKER = /${ticker || "–"}/) and the owner's release of 24 Nov 2026`,
+    fixed.length > 0 && fixed.length === entries && fixed.every((u) => u.startsWith("https://")) && JSON.stringify(said) === JSON.stringify(fixed) && Number(order?.[1]) === fixed.length
+      && budget !== "" && most === budget && outOf === budget && ticker !== "" && entry.includes(`\`${ticker}\``) && /released by the owner on 24 Nov 2026/.test(entry) && /personal use/.test(entry), { fixed, said, budget, most, outOf, ticker });
 }
 
 console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");
