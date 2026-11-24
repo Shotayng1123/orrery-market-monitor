@@ -3846,7 +3846,9 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const sAnswer = (a: SA): Response => { const h = new Headers(a.headers ?? {}); if (a.type) h.set("content-type", a.type); return new Response(a.body === undefined ? null : new TextEncoder().encode(a.body), { status: a.status, headers: h }); };
     type SEv = { fetch: string } | { wait: number };
     type SRun = { asked: Array<{ url: string; init: RequestInit | undefined }>; events: SEv[]; lines: string[]; out: string; said: string[]; result: Awaited<ReturnType<SoxMod["ixSox"]>> | null; threw: string };
-    const runSox = async (world: SWorld): Promise<SRun> => {
+    // release: the owner's release of the two lists despite robots.txt (IDX-0e3); left out, the probe's own
+    // OWNER_RELEASED_DESPITE_ROBOTS holds, as on GitHub
+    const runSox = async (world: SWorld, release?: boolean): Promise<SRun> => {
       const run: SRun = { asked: [], events: [], lines: [], out: "", said: [], result: null, threw: "" };
       if (!sx) return run;
       const turn = new Map<string, number>(), keep = { log: console.log, info: console.info, warn: console.warn, error: console.error, debug: console.debug };
@@ -3862,7 +3864,7 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
         wait: async (ms: number) => { run.events.push({ wait: ms }); },
       };
       for (const k of Object.keys(keep) as Array<keyof typeof keep>) console[k] = (...a: unknown[]) => { run.said.push(a.map(String).join(" ")); };
-      try { run.result = await sx.ixSox(io); } catch (e) { run.threw = String(e).slice(0, 200); } finally { Object.assign(console, keep); }
+      try { run.result = await (release === undefined ? sx.ixSox(io) : sx.ixSox(io, release)); } catch (e) { run.threw = String(e).slice(0, 200); } finally { Object.assign(console, keep); }
       run.out = run.lines.join("\n");
       return run;
     };
@@ -3936,12 +3938,14 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
 
     // (a) robots.txt that disallows: for every reader; for Mozilla, a product the Monitor's User-Agent names, though every
     // reader is allowed; SOX's list alone, by a pattern with $; a Crawl-delay of 7 s is kept, one over 30 s holds both
-    const sDis = await runSox({ ...S_BASE, [S_ROB]: srob("Dis", "User-agent: *\nDisallow: /api/\n") });
-    sHolds("robots.txt disallows /api/ for every reader", sDis, [S_ROB]);
-    const sMoz = await runSox({ ...S_BASE, [S_ROB]: srob("Moz", "User-agent: Mozilla\nDisallow: /api/quote/\n\nUser-agent: *\nAllow: /\n") });
-    sHolds("robots.txt disallows the lists for Mozilla and allows every reader", sMoz, [S_ROB]);
-    const sOne = await runSox({ ...S_BASE, [S_ROB]: srob("One", "User-agent: *\nDisallow: /api/quote/list-type/sox$\n") });
-    sHolds("robots.txt disallows SOX's list alone", sOne, [S_ROB, S_NDX]);
+    // (with the owner's release off, as before IDX-0e3; the same files with it on are below)
+    const W_DIS = srob("Dis", "User-agent: *\nDisallow: /api/\n"), W_MOZ = srob("Moz", "User-agent: Mozilla\nDisallow: /api/quote/\n\nUser-agent: *\nAllow: /\n"), W_ONE = srob("One", "User-agent: *\nDisallow: /api/quote/list-type/sox$\n");
+    const sDis = await runSox({ ...S_BASE, [S_ROB]: W_DIS }, false);
+    sHolds("release off: robots.txt disallows /api/ for every reader", sDis, [S_ROB]);
+    const sMoz = await runSox({ ...S_BASE, [S_ROB]: W_MOZ }, false);
+    sHolds("release off: robots.txt disallows the lists for Mozilla and allows every reader", sMoz, [S_ROB]);
+    const sOne = await runSox({ ...S_BASE, [S_ROB]: W_ONE }, false);
+    sHolds("release off: robots.txt disallows SOX's list alone", sOne, [S_ROB, S_NDX]);
     const sSlow = await runSox({ ...S_BASE, [S_ROB]: srob("Slow", "User-agent: *\nAllow: /\nCrawl-delay: 7\n") });
     sHolds("robots.txt asks a Crawl-delay of 7 s", sSlow, S_ALL, 7_000);
     const sHold = await runSox({ ...S_BASE, [S_ROB]: srob("Hold", "User-agent: *\nAllow: /\nCrawl-delay: 45\n") });
@@ -3954,11 +3958,69 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     // a Sitemap line between every reader's User-agent line and Googlebot's does not split their group, so its
     // Disallow: /api/ holds every reader (B-1 of the adversary's check of IDX-0e2, 24 Nov 2026: the split left every
     // reader's group with no rule, and both lists were asked; RFC 9309 §2.1 as Google's reference parser reads it)
-    const sSplit = await runSox({ ...S_BASE, [S_ROB]: srob("Split", `User-agent: *\nSitemap: https://${zs("SmSox")}.example/sitemap.xml\nUser-agent: Googlebot\nDisallow: /api/\n`) });
-    sHolds("robots.txt with a Sitemap line between every reader's User-agent line and Googlebot's, then Disallow: /api/", sSplit, [S_ROB]);
+    const W_SPLIT = srob("Split", `User-agent: *\nSitemap: https://${zs("SmSox")}.example/sitemap.xml\nUser-agent: Googlebot\nDisallow: /api/\n`);
+    const sSplit = await runSox({ ...S_BASE, [S_ROB]: W_SPLIT }, false);
+    sHolds("release off: robots.txt with a Sitemap line between every reader's User-agent line and Googlebot's, then Disallow: /api/", sSplit, [S_ROB]);
     ck("robots.txt with a Sitemap line between every reader's User-agent line and Googlebot's: one group, whose Disallow: /api/ holds every reader, so neither list is asked, each saying so",
       sSplit.result?.robots === "file" && sSplit.lines.filter((l) => /: not asked \(robots\.txt disallows it\)$/.test(l)).length === 2 && sline(sSplit, /a group for every reader: yes/) && sSplit.result?.lists[S_NDX] === null && sSplit.result?.lists[S_SOX] === null,
       sSplit.lines.filter((l) => /not asked|robots/.test(l)));
+
+    // (a) IDX-0e3: the owner's release of 24 Nov 2026, about 13:30 UTC ("Keep both as personal use", after run 45402581634
+    // of this probe found api.nasdaq.com's robots.txt, 200, with a group for every reader that disallows both lists).
+    // For these two addresses alone, a robots.txt that was read and disallows them no longer holds them: robots.txt is
+    // still asked first and its line is the same; each list says robots.txt disallows it; one line states the release
+    // before the first list is asked; then both are asked as an allowed list is (the same headers, 3 s apart, the same
+    // reading). A robots.txt that could not be read (a 5xx, a 429, no answer, a redirect elsewhere, an HTML page in its
+    // place) still holds both, and so does a Crawl-delay over 30 s; with the release off, nothing changes from before.
+    const RELEASE_LINE = "the owner released these two addresses despite robots.txt (24 Nov 2026, personal use)";
+    const DIS_REL = /^ {2}https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/(?:nasdaq100|sox): robots\.txt disallows it; asked by the owner's release$/;
+    const relAt = (r: SRun): number[] => r.lines.flatMap((l, i) => (l === RELEASE_LINE ? [i] : []));
+    const firstList = (r: SRun): number => r.lines.findIndex((l) => /^GET https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\//.test(l));
+    const robLine = (r: SRun): string => r.lines.find((l) => l.startsWith(`GET ${S_ROB}: `)) ?? "";
+    ck(`the probe's switch OWNER_RELEASED_DESPITE_ROBOTS is ${String(sx?.OWNER_RELEASED_DESPITE_ROBOTS)} (true: the owner's release), a const with a comment that cites the owner's decision of 24 Nov 2026, about 13:30 UTC, and ixSox takes it as its default`,
+      sx?.OWNER_RELEASED_DESPITE_ROBOTS === true && /24 Nov 2026, about 13:30 UTC/.test(/\/\*\*((?:(?!\*\/)[\s\S])*)\*\/\nexport const OWNER_RELEASED_DESPITE_ROBOTS = true;$/m.exec(SRC)?.[1] ?? "") && /export async function ixSox\(io: Io, released = OWNER_RELEASED_DESPITE_ROBOTS\)/.test(SRC), { value: sx?.OWNER_RELEASED_DESPITE_ROBOTS });
+    const rDis = await runSox({ ...S_BASE, [S_ROB]: W_DIS });
+    sHolds("release on (the default): robots.txt disallows /api/ for every reader", rDis, S_ALL);
+    const rMoz = await runSox({ ...S_BASE, [S_ROB]: W_MOZ }, true);
+    sHolds("release on: robots.txt disallows the lists for Mozilla and allows every reader", rMoz, S_ALL);
+    const rOne = await runSox({ ...S_BASE, [S_ROB]: W_ONE }, true);
+    sHolds("release on: robots.txt disallows SOX's list alone", rOne, S_ALL);
+    const rSplit = await runSox({ ...S_BASE, [S_ROB]: W_SPLIT }, true);
+    sHolds("release on: robots.txt with a Sitemap line between every reader's User-agent line and Googlebot's, then Disallow: /api/", rSplit, S_ALL);
+    const rRead = (r: SRun): boolean => r.result?.robots === "file" && r.result.lists[S_NDX]?.shape === true && r.result.lists[S_SOX]?.shape === true && r.result.lists[S_SOX]?.rows === 30;
+    ck("release on, robots.txt read and disallowing both lists (for every reader, for Mozilla, every reader with Googlebot): its robots.txt line is the very line of the run with the release off; each list says robots.txt disallows it, then one line states the release, before the first list is asked; both lists are asked and read as allowed ones are; and none says it was not asked",
+      [[rDis, sDis], [rMoz, sMoz], [rSplit, sSplit]].every(([on, off]) => robLine(on) !== "" && robLine(on) === robLine(off) && on.lines.filter((l) => DIS_REL.test(l)).length === 2 && relAt(on).length === 1 && relAt(on)[0] < firstList(on) && on.lines.findIndex((l) => DIS_REL.test(l)) < relAt(on)[0] && rRead(on) && !on.lines.some((l) => /: not asked \(/.test(l))),
+      { dis: rDis.lines.filter((l) => /robots|asked|released/.test(l)), moz: rMoz.lines.filter((l) => /asked|released/.test(l)) });
+    ck("release on, robots.txt disallowing SOX's list alone: the Nasdaq-100's list is allowed (said so), SOX's says robots.txt disallows it, the release line comes once before the first list is asked, and both are read",
+      sline(rOne, /^ {2}https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/nasdaq100: robots\.txt allows it: yes$/) && sline(rOne, /^ {2}https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/sox: robots\.txt disallows it; asked by the owner's release$/) && relAt(rOne).length === 1 && relAt(rOne)[0] < firstList(rOne) && rRead(rOne) && robLine(rOne) === robLine(sOne),
+      rOne.lines.filter((l) => /asked|released|allows/.test(l)));
+    ck("release on, robots.txt that allows both (the base world): no release line, and each list says robots.txt allows it", relAt(sBase).length === 0 && sBase.lines.filter((l) => /: robots\.txt allows it: yes$/.test(l)).length === 2, sBase.lines.filter((l) => /allows|released/.test(l)));
+    ck("release off: robots.txt disallowing the lists holds them as before (each \"not asked (robots.txt disallows it)\"), and no line states a release",
+      [sDis, sMoz, sOne, sSplit].every((r) => relAt(r).length === 0 && !r.lines.some((l) => DIS_REL.test(l))) && sDis.lines.filter((l) => /: not asked \(robots\.txt disallows it\)$/.test(l)).length === 2 && sOne.result?.lists[S_SOX] === null && sDis.result?.lists[S_NDX] === null && sDis.result?.lists[S_SOX] === null,
+      sDis.lines.filter((l) => /asked|released/.test(l)));
+    // a robots.txt that could not be read holds both lists with the release on: 500 (and the rest of the outcomes above,
+    // which run with the probe's default), an HTML page in its place; a Crawl-delay over 30 s with a Disallow holds them too
+    const r500 = await runSox({ ...S_BASE, [S_ROB]: sst(500, "rel") }, true);
+    sHolds("release on: robots.txt answers 500", r500, [S_ROB]);
+    const rHtml = await runSox({ ...S_BASE, [S_ROB]: sok("text/plain", `<!doctype html><html><body>${zs("RobHtml")}</body></html>`, "RobHtml") }, true);
+    sHolds("release on: robots.txt answers an HTML page in its place", rHtml, [S_ROB]);
+    const rSlowDis = await runSox({ ...S_BASE, [S_ROB]: srob("SlowDis", "User-agent: *\nDisallow: /api/\nCrawl-delay: 45\n") }, true);
+    sHolds("release on: robots.txt disallows /api/ and asks a Crawl-delay of 45 s", rSlowDis, [S_ROB]);
+    const r503 = await runSox({ ...S_BASE, [S_ROB]: sst(503, "rel3") }, true);
+    sHolds("release on: robots.txt answers 503", r503, [S_ROB]);
+    const r429 = await runSox({ ...S_BASE, [S_ROB]: [sst(429, "rel1"), sst(429, "rel2")] }, true);
+    sHolds("release on: robots.txt answers 429, asked once more, 429 again", r429, [S_ROB, S_ROB]);
+    const S_OUT_HELD = [r503, r429];
+    ck("release on: a robots.txt that answers 500 or 503, 429 twice, or an HTML page in its place is not read, so neither list is asked (each \"not asked (this host's robots.txt was not read)\") and no line states a release; one that disallows and asks a Crawl-delay of 45 s holds both as before",
+      [r500, rHtml, ...S_OUT_HELD].every((r) => relAt(r).length === 0 && r.result?.robots === "disallow" && r.result.lists[S_NDX] === null && r.result.lists[S_SOX] === null && r.lines.filter((l) => /: not asked \(this host's robots\.txt was not read\)$/.test(l)).length === 2)
+      && sline(r500, /^GET https:\/\/api\.nasdaq\.com\/robots\.txt: 500\. robots\.txt: unreachable \(5xx\): complete disallow by RFC 9309$/)
+      && relAt(rSlowDis).length === 0 && rSlowDis.lines.filter((l) => /: not asked \(robots\.txt asks for more than 30 s between requests\)$/.test(l)).length === 2,
+      { r500: r500.lines.filter((l) => /robots|asked|released/.test(l)), html: rHtml.lines.filter((l) => /robots|asked/.test(l)), slow: rSlowDis.lines.filter((l) => /asked/.test(l)) });
+
+    const head = (r: SRun): string => r.lines.find((l) => l.startsWith("api.nasdaq.com's robots.txt first, read by RFC 9309")) ?? "";
+    ck("the header line says what the run does: with the release on, the two lists where robots.txt allows them, and, by the owner's release of 24 Nov 2026, where it was read and disallows them, never when it was not read; with it off, only the two lists it allows, as before",
+      /; then the two lists where it allows them and, by the owner's release of 24 Nov 2026 \(below\), where it was read and disallows them; neither when it was not read or asks for more than 30 s between requests; 3 s apart, with the headers the Monitor's fetchNasdaq100 sends\./.test(head(rDis)) && head(rDis) === head(sBase) && head(rDis) === head(r500)
+      && /; then only the two lists it allows, 3 s apart, with the headers the Monitor's fetchNasdaq100 sends\./.test(head(sDis)), { on: head(rDis), off: head(sDis) });
 
     // (a) the lists' own answers: a 429 asked again in the budget's one place more, then none left; a redirect, not
     // followed; an HTML page in a list's place; a 403; no answer

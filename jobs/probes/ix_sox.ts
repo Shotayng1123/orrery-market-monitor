@@ -11,7 +11,9 @@
 //     allowed; a 429, a 5xx, no answer and an unreadable file mean complete disallow). The probe names no product of its
 //     own (it sends the Monitor's User-Agent), so a path is asked only when the group for every reader ("*") allows it
 //     and so does each group for a product that User-Agent names (Mozilla, AppleWebKit, Chrome, Safari) where the file
-//     has one. Then, where allowed, exactly the two list addresses of FIXED: the Nasdaq-100's, which fetchNasdaq100
+//     has one, or, by the owner's release (OWNER_RELEASED_DESPITE_ROBOTS, IDX-0e3), when the file was read and
+//     disallows it; a robots.txt that could not be read, or that asks for more than 30 s between requests, still holds
+//     both. Then, where allowed or released, exactly the two list addresses of FIXED: the Nasdaq-100's, which fetchNasdaq100
 //     reads (supabase/functions/_shared/constituents.ts), as the control, and SOX's, each with the headers that function
 //     sends (its own over those of fetchText in _shared/http.ts), 3 s apart, or the Crawl-delay where it is longer (one
 //     over 30 s holds both). Every request is a GET with redirect "manual": no redirect of a list is followed, and no
@@ -40,6 +42,13 @@ export const FIXED: readonly Fixed[] = [
   F("https://api.nasdaq.com/api/quote/list-type/nasdaq100", "json"),
   F("https://api.nasdaq.com/api/quote/list-type/sox", "json"),
 ];
+/** The owner's release of 24 Nov 2026, about 13:30 UTC ("Keep both as personal use"; owner-decisions, "Nasdaq's lists
+ *  after robots.txt"), given after this probe's run 45402581634 read api.nasdaq.com's robots.txt (200) with a group for
+ *  every reader that disallows both list addresses: the two list addresses of FIXED, and no other address of any probe
+ *  or job, are asked although a robots.txt that was read disallows them. robots.txt is still asked first and its line
+ *  printed as before; a robots.txt that could not be read (a 5xx, a 429, no answer, a redirect elsewhere, an HTML page
+ *  in its place) or that asks for more than 30 s between requests still holds both. false: as before the release. */
+export const OWNER_RELEASED_DESPITE_ROBOTS = true;
 /** The most requests one run makes: the three, and one more. */
 export const BUDGET = 4;
 const GAP_MS = 3_000, RETRY_MS = 10_000, CRAWL_MAX_S = 30, TIMEOUT_MS = 30_000, ROBOTS_CAP = 512 * 1024, LIST_CAP = 4 * 1024 * 1024;
@@ -118,7 +127,7 @@ export interface SoxRun { made: number; robots: "file" | "none" | "disallow"; li
 const drop = async (r: Response): Promise<void> => { try { await r.body?.cancel(); } catch { /* already gone */ } };
 
 /** The probe: asks FIXED as (1) says, reads as (2) and prints as (3); returns what it found (for the logic checks). */
-export async function ixSox(io: Io): Promise<SoxRun> {
+export async function ixSox(io: Io, released = OWNER_RELEASED_DESPITE_ROBOTS): Promise<SoxRun> {
   const run: SoxRun = { made: 0, robots: "disallow", lists: {} };
   for (const f of FIXED) if (f.kind === "json") run.lists[f.url] = null;
   const say = sayer(io.print);
@@ -169,7 +178,8 @@ export async function ixSox(io: Io): Promise<SoxRun> {
   try {
     say`== ix_sox (IDX-0e2, 24 Nov 2026): SOX's members from Nasdaq's own list, beside the Nasdaq-100's list as the Monitor asks for it`;
     say`Released by the owner on 24 Nov 2026: Nasdaq's lists are read for personal use (the Nasdaq-100 kept as the Monitor reads it; SOX from Nasdaq).`;
-    say`api.nasdaq.com's robots.txt first, read by RFC 9309 §2.3.1 (a 4xx other than 429: no file, every path allowed; a 5xx or no answer: complete disallow) and, stricter than the RFC, a 429 as complete disallow too, for every reader and for each product of the User-Agent; then only the two lists it allows, 3 s apart, with the headers the Monitor's fetchNasdaq100 sends. No redirect of a list is followed; no other address is asked.`;
+    if (released) say`api.nasdaq.com's robots.txt first, read by RFC 9309 §2.3.1 (a 4xx other than 429: no file, every path allowed; a 5xx or no answer: complete disallow) and, stricter than the RFC, a 429 as complete disallow too, for every reader and for each product of the User-Agent; then the two lists where it allows them and, by the owner's release of 24 Nov 2026 (below), where it was read and disallows them; neither when it was not read or asks for more than 30 s between requests; 3 s apart, with the headers the Monitor's fetchNasdaq100 sends. No redirect of a list is followed; no other address is asked.`;
+    else say`api.nasdaq.com's robots.txt first, read by RFC 9309 §2.3.1 (a 4xx other than 429: no file, every path allowed; a 5xx or no answer: complete disallow) and, stricter than the RFC, a 429 as complete disallow too, for every reader and for each product of the User-Agent; then only the two lists it allows, 3 s apart, with the headers the Monitor's fetchNasdaq100 sends. No redirect of a list is followed; no other address is asked.`;
     say`At most 4 requests: an address that answered 429, or a robots.txt that redirected to itself, is asked once more, after 10 s, while the budget keeps a place for every address still to come.`;
     say`Printed: these addresses, status numbers, the type (html, pdf, json, text or other), bytes, yes or no, counts, the names of the four columns fetchNasdaq100 reads, and SOX's member symbols of a ticker's form. Nothing else of an answer.`;
     say`User-Agent: ${UA}`;
@@ -196,15 +206,22 @@ export async function ixSox(io: Io): Promise<SoxRun> {
     else if (rg.kind === "status" && robotsFate(rg.status) === "none") { allows = () => true; run.robots = "none"; say`GET ${rf.url}: ${rg.status}. ${ROBOTS_SAYS.none}`; }
     else answered(rf, rg, robotsEnd(rg));
     const slow = delay > CRAWL_MAX_S, gap = Math.max(GAP_MS, Math.round(delay * 1000));
+    let overruled = false;
     const go = [1, 2].filter((k) => {
       const f = FIXED[k];
       if (allows === null) { say`  ${f.url}: not asked (this host's robots.txt was not read)`; return false; }
       if (run.robots === "none") { say`  ${f.url}: no robots.txt, so every path is allowed: yes`; return true; }
       if (slow) { say`  ${f.url}: not asked (robots.txt asks for more than 30 s between requests)`; return false; }
-      if (!allows(f.path)) { say`  ${f.url}: not asked (robots.txt disallows it)`; return false; }
+      if (!allows(f.path)) {
+        if (!released) { say`  ${f.url}: not asked (robots.txt disallows it)`; return false; }
+        say`  ${f.url}: robots.txt disallows it; asked by the owner's release`;
+        overruled = true;
+        return true;
+      }
       say`  ${f.url}: robots.txt allows it: yes`;
       return true;
     });
+    if (overruled) say`the owner released these two addresses despite robots.txt (24 Nov 2026, personal use)`;
     for (const k of go) {
       const f = FIXED[k], g = await ask(k, gap);
       if (g.kind !== "ok" || g.over) { answered(f, g, "NOT READ"); continue; }
