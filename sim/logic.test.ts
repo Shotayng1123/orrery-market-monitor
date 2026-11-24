@@ -3393,7 +3393,8 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     // reviews of 24 Nov 2026 (check/IDX0/d-adversary-leaks.md, d-adversary-log.md) found data addresses asked and a
     // page's text, tokens and contacts printed, both ways. The design of ix_terms (the orchestrator's, 24 Nov 2026,
     // about 09:45 UTC): 13 fixed addresses in a fixed order, each host's robots.txt first; no link read, no redirect
-    // followed, no data address built; at most 14 requests (the one more only to ask a 429 once again); a log of the
+    // followed, no data address built; at most 14 requests (the one more only to ask a 429 once again, or, since IDX-0e2,
+    // to ask again a robots.txt that redirected to itself, as RFC 9309 §2.3.1 reads a robots.txt); a log of the
     // fixed addresses, status numbers, the type in one of five words, counts, yes or no and words of the probe's own
     // lists alone. Every world below answers by address and records each request; its pages and answers carry
     // sentinels (Zq…Xv) in titles, headings, sentences, links, alt and title attributes, <noscript>, scripts, headers,
@@ -3566,11 +3567,88 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
       && line(redirects, /indexdatapolicy\.pdf: 307, redirected \(not followed\) to another host; the target's path is the asked path give or take a trailing slash: yes\. NOT READ$/)
       && line(redirects, /^GET https:\/\/data\.gov\.tw\/en\/license: 302, redirected \(not followed\) to another host; the target's path is the asked path give or take a trailing slash: yes\. NOT READ$/), redirects.lines.filter((l) => /redirect/.test(l)));
 
-    // (a) robots.txt not read: 404, 403, served as HTML, a redirect, 500, an HTML page served as text: no page of that host is asked
+    // (a) robots.txt by RFC 9309 §2.3.1 (IDX-0e2, 24 Nov 2026: in ix_terms' run 45384712261 four hosts' robots.txt
+    // answered 404, 302, 500 and 404, and no page of those hosts was asked): a 2xx is the file, read when it is text that
+    // is not an HTML page (else unreadable); a 3xx is followed only to this same address (https, its host, the path
+    // /robots.txt, no query), at most 5 times, each while the budget keeps a place for every address still to come (else
+    // unreadable); a 4xx but 429 means no file, every path allowed; a 429, a 5xx, no answer and an unreadable file mean
+    // complete disallow. Each outcome is put to www.nasdaq.com's robots.txt, the other hosts as in the base world
+    const NQ_LINE = (re: string): RegExp => new RegExp(`^GET https://www\\.nasdaq\\.com/robots\\.txt: ${re}$`), NQ_REST = DESIGN.slice(2);
+    const st = (s: number, k: string): Ans => ({ status: s, type: "text/html", body: `<html><title>${z(`St${s}${k}`)}</title></html>`, headers: { ...hdr(`St${s}${k}`), "retry-after": "1" } });
+    const READ_RE = "200, text, \\d+ bytes\\. robots\\.txt read: yes; a group for this probe's own name: no; a crawl-delay over 3 s: no";
+    const ELSEWHERE_RE = "robots\\.txt: unreadable \\(a redirect elsewhere is not followed\\): complete disallow";
+    const OUTCOMES: Array<{ name: string; a: Ans | Ans[]; want: string[]; re: string; legal: "rules" | "none" | "no" }> = [
+      { name: "200", a: robots("Nq200"), want: DESIGN, re: READ_RE, legal: "rules" },
+      { name: "301 to this same address, then 200", a: [R(301, "https://www.nasdaq.com/robots.txt"), robots("Nq301")], want: [R_NQ, R_NQ, ...DESIGN.slice(1)], re: READ_RE, legal: "rules" },
+      { name: "302 to another path of its host", a: R(302, "/en/robots.txt"), want: [R_NQ, ...NQ_REST], re: `302, redirected \\(not followed\\) to the same host; the target's path is the asked path give or take a trailing slash: no\\. ${ELSEWHERE_RE}`, legal: "no" },
+      { name: "302 to another host", a: R(302, `https://${z("RobotsHost")}.example/robots.txt`), want: [R_NQ, ...NQ_REST], re: `302, redirected \\(not followed\\) to another host; the target's path is the asked path give or take a trailing slash: yes\\. ${ELSEWHERE_RE}`, legal: "no" },
+      { name: "404", a: st(404, "a"), want: DESIGN, re: "404\\. robots\\.txt: none \\(4xx\\): every path allowed by RFC 9309", legal: "none" },
+      { name: "410", a: st(410, "b"), want: DESIGN, re: "410\\. robots\\.txt: none \\(4xx\\): every path allowed by RFC 9309", legal: "none" },
+      { name: "429, asked once more, 429 again", a: [st(429, "c"), st(429, "d")], want: [R_NQ, R_NQ, ...NQ_REST], re: "429\\. robots\\.txt: unreachable \\(429\\): complete disallow", legal: "no" },
+      { name: "500", a: st(500, "e"), want: [R_NQ, ...NQ_REST], re: "500\\. robots\\.txt: unreachable \\(5xx\\): complete disallow by RFC 9309", legal: "no" },
+      { name: "503", a: st(503, "f"), want: [R_NQ, ...NQ_REST], re: "503\\. robots\\.txt: unreachable \\(5xx\\): complete disallow by RFC 9309", legal: "no" },
+      { name: "no answer (a network error)", a: { status: 200, throws: z("RobotsNetErr") }, want: [R_NQ, ...NQ_REST], re: "no answer \\(an error of the network or no answer within 30 s\\)\\. robots\\.txt: unreachable \\(no answer\\): complete disallow by RFC 9309", legal: "no" },
+    ];
+    for (const o of OUTCOMES) {
+      const r = await runIx({ ...BASE, [R_NQ]: o.a });
+      holds(`robots.txt ${o.name}`, r, o.want);
+      const pageLine = o.legal === "rules" ? /^ {2}https:\/\/www\.nasdaq\.com\/legal: robots\.txt allows it: yes$/ : o.legal === "none" ? /^ {2}https:\/\/www\.nasdaq\.com\/legal: no robots\.txt, so every path is allowed: yes$/ : /^ {2}https:\/\/www\.nasdaq\.com\/legal: not asked \(this host's robots\.txt was not read\)$/;
+      ck(`robots.txt ${o.name} (RFC 9309 §2.3.1): its line says what the rule makes of it, and nasdaq.com/legal is ${o.legal === "no" ? "not asked (complete disallow)" : o.legal === "none" ? "asked (no file: every path allowed) and HOLDs" : "asked (the file allows it) and HOLDs"}`,
+        line(r, NQ_LINE(o.re)) && line(r, pageLine) && pv(r, LEGAL) === (o.legal === "no" ? "NOT READ" : "HOLD")
+        && (o.name.startsWith("301") ? line(r, /^GET https:\/\/www\.nasdaq\.com\/robots\.txt: 301, redirected to this same address \(https, this host, the path \/robots\.txt, no query\): asked again after 10 s, redirect 1 of at most 5 followed$/) : true),
+        r.lines.filter((l) => /nasdaq\.com\/(?:robots\.txt|legal)/.test(l)));
+    }
+    // a redirect to an address that is not this same one is not followed, however close (over http, with a query, with a
+    // trailing slash, in other letter case, on another port); one to "/robots.txt" (relative) is this same address and is
+    // followed; two in a row to itself: the second finds no place left in the budget
+    const nearly = await runIx({ ...BASE, [R_NQ]: R(301, "http://www.nasdaq.com/robots.txt"), [R_GIW]: R(302, `https://indexes.nasdaqomx.com/robots.txt?${z("RobotsQuery")}=1`), [R_NT]: R(307, "https://www.nasdaqtrader.com/robots.txt/"),
+      [R_INV]: R(308, "https://www.invesco.com/Robots.txt"), [R_TW]: R(301, "https://data.gov.tw:8443/robots.txt"), [R_OA]: [R(302, "/robots.txt"), robots("OaAfter")] });
+    holds("robots.txt redirected nearly to itself (http, a query, a trailing slash, letter case, a port), and once to itself by a relative address", nearly, [R_NQ, R_GIW, R_NT, R_INV, R_TW, R_OA, R_OA, SWAG]);
+    ck(`robots.txt redirected nearly to itself: those five not followed (complete disallow: no page of their hosts asked), the relative one followed after 10 s and read, so swagger.json is asked and READ; the candidates: ${verdicts(nearly)}`,
+      nearly.lines.filter((l) => new RegExp(`\\. ${ELSEWHERE_RE}$`).test(l)).length === 5 && line(nearly, /^GET https:\/\/openapi\.twse\.com\.tw\/robots\.txt: 302, redirected to this same address \(https, this host, the path \/robots\.txt, no query\): asked again after 10 s, redirect 1 of at most 5 followed$/)
+      && pv(nearly, SWAG) === "READ" && verdicts(nearly) === "NOT READ / NOT READ / NOT READ", nearly.lines.filter((l) => /robots\.txt/.test(l)));
+    const twice = await runIx({ ...BASE, [R_NQ]: [R(301, "https://www.nasdaq.com/robots.txt"), R(302, "https://www.nasdaq.com/robots.txt"), robots("NqLate")] });
+    holds("robots.txt redirected to itself twice in a row", twice, [R_NQ, R_NQ, ...NQ_REST]);
+    ck("robots.txt redirected to itself twice in a row: the first followed, the second not (the budget's one place more is spent), so complete disallow and nasdaq.com/legal not asked",
+      line(twice, /^GET https:\/\/www\.nasdaq\.com\/robots\.txt: 302, redirected \(not followed\) to the same host; the target's path is the asked path give or take a trailing slash: yes\. robots\.txt: unreadable \(a redirect to itself not followed: at most 5 are, each while the budget keeps a place for every address still to come\): complete disallow$/)
+      && pv(twice, LEGAL) === "NOT READ" && twice.result?.made === 13, twice.lines.filter((l) => /nasdaq\.com\/robots/.test(l)));
+    // a robots.txt that redirects to itself every time, after hosts whose robots.txt held their pages: each page not
+    // asked leaves the budget one place more, so its redirects are followed while a place is kept for every address
+    // still to come, 5 at most (B-1 and T-1 of the check of IDX-0e2, 24 Nov 2026: no world followed more than one, the
+    // README said "a run asks one address again at most", and the loop cut to `hop <= 1` passed every check). Four
+    // pages held: 5 followed, 10 s apart, the sixth answer not followed (5 at most), 13 requests; two pages held: 3
+    // followed, the fourth answer not followed (no place left), 13 requests
+    const OA_FOLLOWED = /^GET https:\/\/openapi\.twse\.com\.tw\/robots\.txt: 30[12], redirected to this same address \(https, this host, the path \/robots\.txt, no query\): asked again after 10 s, redirect (\d+) of at most 5 followed$/;
+    const OA_NOT = /^GET https:\/\/openapi\.twse\.com\.tw\/robots\.txt: 30[12], redirected \(not followed\) to the same host; the target's path is the asked path give or take a trailing slash: yes\. robots\.txt: unreadable \(a redirect to itself not followed: at most 5 are, each while the budget keeps a place for every address still to come\): complete disallow$/;
+    const followed = (r: Run): number[] => r.lines.map((l) => OA_FOLLOWED.exec(l)?.[1]).filter((h): h is string => h !== undefined).map(Number);
+    const waitsBefore = (r: Run, url: string): number[] => {   // the waits before each request to `url` after its first
+      const out: number[] = [];
+      let w = 0, seen = false;
+      for (const e of r.events) { if ("wait" in e) { w += e.wait; continue; } if (e.fetch === url) { if (seen) out.push(w); seen = true; } w = 0; }
+      return out;
+    };
+    const itself = R(301, "https://openapi.twse.com.tw/robots.txt");
+    const held4 = await runIx({ ...BASE, [R_NQ]: st(500, "g"), [R_GIW]: st(500, "h"), [R_NT]: st(500, "i"), [R_INV]: st(500, "j"), [R_OA]: itself });
+    holds("four hosts' robots.txt 500, then openapi's robots.txt redirects to itself every time", held4, [R_NQ, R_GIW, R_NT, R_INV, R_TW, LIC, LIC_EN, R_OA, R_OA, R_OA, R_OA, R_OA, R_OA]);
+    ck(`four hosts' robots.txt 500 (four pages not asked), then a robots.txt that redirects to itself every time: redirects 1 to 5 followed (${followed(held4).join(", ") || "none"}), each 10 s after the last ask, the sixth answer not followed (5 at most): complete disallow, swagger.json not asked; 13 requests (${held4.result?.made ?? "–"}); the candidates: ${verdicts(held4)}`,
+      JSON.stringify(followed(held4)) === "[1,2,3,4,5]" && JSON.stringify(waitsBefore(held4, R_OA)) === "[10000,10000,10000,10000,10000]" && held4.lines.filter((l) => OA_NOT.test(l)).length === 1 && held4.result?.made === 13
+      && line(held4, /^ {2}https:\/\/openapi\.twse\.com\.tw\/v1\/swagger\.json: not asked \(this host's robots\.txt was not read\)$/) && pv(held4, SWAG) === "NOT READ" && verdicts(held4) === "NOT READ / NOT READ / HOLD", held4.lines.filter((l) => /openapi|robots\.txt: 500/.test(l)));
+    const held2 = await runIx({ ...BASE, [R_NQ]: st(500, "k"), [R_GIW]: st(500, "l"), [R_OA]: R(302, "https://openapi.twse.com.tw/robots.txt") });
+    holds("two hosts' robots.txt 500, then openapi's robots.txt redirects to itself every time", held2, [R_NQ, R_GIW, R_NT, PDF, R_INV, INV, R_TW, LIC, LIC_EN, R_OA, R_OA, R_OA, R_OA]);
+    ck(`two hosts' robots.txt 500 (two pages not asked), then a robots.txt that redirects to itself every time: redirects 1 to 3 followed (${followed(held2).join(", ") || "none"}), each 10 s after the last ask, the fourth answer not followed (no place left in the budget): complete disallow; 13 requests (${held2.result?.made ?? "–"}); the candidates: ${verdicts(held2)}`,
+      JSON.stringify(followed(held2)) === "[1,2,3]" && JSON.stringify(waitsBefore(held2, R_OA)) === "[10000,10000,10000]" && held2.lines.filter((l) => OA_NOT.test(l)).length === 1 && held2.result?.made === 13 && pv(held2, SWAG) === "NOT READ" && verdicts(held2) === "HOLD / PASS / HOLD",
+      held2.lines.filter((l) => /openapi|robots\.txt: 500/.test(l)));
+
+    // and the world of IDX-0e's first check: a 404 and a 403 are no file now (every path allowed), while a robots.txt
+    // served as HTML, one redirected to another host, a 500 and an HTML page served as text still hold their hosts' pages
     const noRobots = await runIx({ ...BASE, [R_NQ]: { status: 404, type: "text/html", body: z("R404"), headers: hdr("R404") }, [R_GIW]: { status: 403, type: "text/html", body: z("R403"), headers: hdr("R403") }, [R_NT]: robots("NtHtml", ROBOTS_OPEN, "text/html"),
       [R_INV]: R(301, `https://${z("RobotsElsewhere")}.example/robots.txt`), [R_TW]: { status: 500, type: "text/plain", body: z("R500"), headers: hdr("R500") }, [R_OA]: ok("text/plain", `<!DOCTYPE html><html><title>${z("RobotsAsHtml")}</title><body>User-agent: *</body></html>`, "OaHtml") });
-    holds("robots.txt not read (404, 403, HTML, a redirect, 500, a page served as text)", noRobots, [R_NQ, R_GIW, R_NT, R_INV, R_TW, R_OA]);
-    ck(`robots.txt not read: no page of those hosts is asked, each says so, and every candidate is NOT READ (${verdicts(noRobots)})`, verdicts(noRobots) === "NOT READ / NOT READ / NOT READ" && noRobots.lines.filter((l) => /: not asked \(this host's robots\.txt was not read\)$/.test(l)).length === 7, noRobots.lines.filter((l) => /not asked/.test(l)));
+    holds("robots.txt 404 and 403 (no file); served as HTML, redirected elsewhere, 500, an HTML page served as text (complete disallow)", noRobots, [R_NQ, LEGAL, R_GIW, DISC, R_NT, R_INV, R_TW, R_OA]);
+    ck(`robots.txt 404 and 403: no file, so the legal page and the disclaimer are asked (each HOLDs); served as HTML, redirected elsewhere, 500 and an HTML page as text: complete disallow, no page of those hosts asked, each says so; the candidates: ${verdicts(noRobots)}`,
+      verdicts(noRobots) === "HOLD / NOT READ / NOT READ" && pv(noRobots, LEGAL) === "HOLD" && pv(noRobots, DISC) === "HOLD" && noRobots.lines.filter((l) => /: not asked \(this host's robots\.txt was not read\)$/.test(l)).length === 5 && noRobots.lines.filter((l) => /: no robots\.txt, so every path is allowed: yes$/.test(l)).length === 2
+      && line(noRobots, /^GET https:\/\/indexes\.nasdaqomx\.com\/robots\.txt: 403\. robots\.txt: none \(4xx\): every path allowed by RFC 9309$/) && line(noRobots, /^GET https:\/\/www\.nasdaqtrader\.com\/robots\.txt: 200, html, \d+ bytes\. robots\.txt read: no \(it is not text\): complete disallow$/)
+      && line(noRobots, /^GET https:\/\/openapi\.twse\.com\.tw\/robots\.txt: 200, text, \d+ bytes\. robots\.txt read: no \(an HTML page in its place\): complete disallow$/) && line(noRobots, /^GET https:\/\/data\.gov\.tw\/robots\.txt: 500\. robots\.txt: unreachable \(5xx\): complete disallow by RFC 9309$/),
+      noRobots.lines.filter((l) => /robots|not asked|allowed/.test(l)));
 
     // (a) robots.txt that disallows: the path itself, a group for the probe's own name, a longer Allow, a pattern with *
     // and $, one of two paths; a crawl-delay over 3 s is kept, one over 30 s holds the host's pages
@@ -3581,6 +3659,55 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck(`robots.txt that disallows: /legal (its own Disallow), the PDF (Disallow: /*.pdf$), Invesco's terms (a group for the probe's own name, ${TOKEN}, in other letter case) and /en/license (Disallow: /en/) are not asked, the disclaimer is (its longer Allow) after the 7 s the site's crawl-delay asks, swagger.json is not (a crawl-delay over 30 s); the candidates: ${verdicts(disallow)}`,
       verdicts(disallow) === "HOLD / NOT READ / HOLD" && line(disallow, /^ {2}https:\/\/www\.nasdaq\.com\/legal: not asked \(robots\.txt disallows it\)$/) && line(disallow, /a group for this probe's own name: yes/) && line(disallow, /^ {2}https:\/\/openapi\.twse\.com\.tw\/v1\/swagger\.json: not asked \(robots\.txt asks for more than 30 s between requests\)$/)
       && disallow.events.some((e) => "wait" in e && e.wait === 7_000), disallow.lines.filter((l) => /robots|not asked/.test(l)));
+    // a record that is not Allow or Disallow (Sitemap, Crawl-delay, Host or one the RFC does not define) between two
+    // User-agent lines does not end the group's User-agent lines, so it does not split the group: Google's reference
+    // parser ends them only at an Allow or a Disallow (robots.cc), and its test ID_LineSyntax_Groups_OtherRules ("Group
+    // must not be closed by rules not explicitly defined in the REP RFC", RFC 9309 §2.1) reads both its files as
+    // disallowing every reader (B-1 of the adversary's check of IDX-0e2, 24 Nov 2026: such a line split the group, the
+    // probe's own group or every reader's was left with no rule, and the page was asked). Here the test's two files,
+    // each with this probe's own name in its first User-agent line and as written (the probe then reads by every
+    // reader's group), a Crawl-delay and a Host record: every page of the six hosts disallowed, none asked
+    const split = await runIx({ ...BASE,
+      [R_NQ]: robots("NqSm", `User-agent: ${TOKEN}\nSitemap: https://${z("SmNq")}.example/sitemap\nUser-agent: *\nDisallow: /\n`),
+      [R_GIW]: robots("GiwSm", `User-agent: BarBot\nSitemap: https://${z("SmGiw")}.example/sitemap\nUser-agent: *\nDisallow: /\n`),
+      [R_NT]: robots("NtUk", `User-agent: ${TOKEN}\nInvalid-Unknown-Line: unknown\nUser-agent: *\nDisallow: /\n`),
+      [R_INV]: robots("InvUk", "User-agent: FooBot\nInvalid-Unknown-Line: unknown\nUser-agent: *\nDisallow: /\n"),
+      [R_TW]: robots("TwCd", "User-agent: *\nCrawl-delay: 2\n\nUser-agent: AhrefsBot\nDisallow: /\n"),
+      [R_OA]: robots("OaHost", "User-agent: *\nHost: openapi.twse.com.tw\nUser-agent: Googlebot\nDisallow: /\n") });
+    holds("robots.txt with a Sitemap, an unknown record, a Crawl-delay or a Host line between two User-agent lines", split, [R_NQ, R_GIW, R_NT, R_INV, R_TW, R_OA]);
+    ck(`robots.txt with another record between two User-agent lines (RFC 9309 §2.1, as Google's reference parser reads it): the group is one, so the reference test's files (Sitemap; an unknown record), with this probe's own name first or as written, a Crawl-delay for every reader then a ban for AhrefsBot, and a Host record then a ban for Googlebot each disallow every page: none of the 7 asked, the probe's own group seen in the two files that name it; the candidates: ${verdicts(split)}`,
+      split.lines.filter((l) => /: not asked \(robots\.txt disallows it\)$/.test(l)).length === 7 && split.lines.filter((l) => /^GET https:\/\/[^ ]+\/robots\.txt: 200, text, \d+ bytes\. robots\.txt read: yes; a group for this probe's own name: yes; /.test(l)).length === 2
+      && line(split, /^GET https:\/\/www\.nasdaq\.com\/robots\.txt: 200, text, \d+ bytes\. robots\.txt read: yes; a group for this probe's own name: yes; /) && line(split, /^GET https:\/\/www\.nasdaqtrader\.com\/robots\.txt: 200, text, \d+ bytes\. robots\.txt read: yes; a group for this probe's own name: yes; /)
+      && verdicts(split) === "NOT READ / NOT READ / NOT READ", split.lines.filter((l) => /robots|not asked/.test(l)));
+    // a comment runs from # to the end of its line, and a line ends only at CR or LF (as Google's reference parser of
+    // RFC 9309 reads them: robots.cc splits lines at 0x0A and 0x0D alone and cuts a comment at its "#"): a comment that
+    // holds U+2028 or U+2029 does not cost its line its rule or its User-agent (B-2 of the adversary's check of
+    // IDX-0e2: in JavaScript "." matches neither, so the comment stayed, the line did not parse, and its Disallow, or
+    // its User-agent line, was dropped)
+    const lsps = await runIx({ ...BASE,
+      [R_NQ]: robots("NqLs", "User-agent: *\nDisallow: /legal # terms\u2028page\n"),
+      [R_GIW]: robots("GiwPs", "User-agent: Googlebot\nAllow: /\n\nUser-agent: * # every reader\u2029else\nDisallow: /Home/\n"),
+      [R_NT]: robots("NtLs", `User-agent: ${TOKEN} # this probe\u2028alone\nDisallow: /content/\n\nUser-agent: *\nAllow: /\n`),
+      [R_INV]: robots("InvPs", "User-agent: *\nDisallow: /us/ # the US site\u2029\n") });
+    holds("robots.txt whose comments hold U+2028 or U+2029", lsps, [R_NQ, R_GIW, R_NT, R_INV, R_TW, LIC, LIC_EN, R_OA, SWAG]);
+    ck(`robots.txt whose comments hold U+2028 or U+2029: a Disallow's comment (on /legal, on /us/), every reader's User-agent line after another group's, and this probe's own User-agent line each keep their line, so the legal page, the disclaimer, the PDF and Invesco's terms are not asked; the other hosts' pages are; the candidates: ${verdicts(lsps)}`,
+      lsps.lines.filter((l) => /: not asked \(robots\.txt disallows it\)$/.test(l)).length === 4 && [LEGAL, DISC, PDF, INV].every((u) => line(lsps, new RegExp(`^ {2}${u.replace(/[.?]/g, "\\$&")}: not asked \\(robots\\.txt disallows it\\)$`)))
+      && line(lsps, /^GET https:\/\/www\.nasdaqtrader\.com\/robots\.txt: 200, text, \d+ bytes\. robots\.txt read: yes; a group for this probe's own name: yes; /) && verdicts(lsps) === "NOT READ / NOT READ / HOLD", lsps.lines.filter((l) => /robots|not asked/.test(l)));
+    // the groups read alone, each file and reader as the reference parser's own tests put them (robots_test.cc
+    // ID_LineSyntax_Groups and ID_LineSyntax_Groups_OtherRules, saved in check/IDX0/e2adv/ref): a rule outside a group
+    // and blank lines change nothing, two groups for one reader are read as one, a record that is not a rule leaves the
+    // User-agent lines open; and an Allow ends them as a Disallow does (robots.cc sets its separator on both)
+    const GROUPS = "allow: /foo/bar/\n\nuser-agent: FooBot\ndisallow: /\nallow: /x/\nuser-agent: BarBot\ndisallow: /\nallow: /y/\n\n\nallow: /w/\nuser-agent: BazBot\n\nuser-agent: FooBot\nallow: /z/\ndisallow: /\n";
+    const OTHER_1 = "User-agent: BarBot\nSitemap: https://foo.bar/sitemap\nUser-agent: *\nDisallow: /\n", OTHER_2 = "User-agent: FooBot\nInvalid-Unknown-Line: unknown\nUser-agent: *\nDisallow: /\n";
+    const groupCases: Array<[string, string, string, string, boolean]> = [
+      ["Groups", GROUPS, "FooBot", "/x/b", true], ["Groups", GROUPS, "FooBot", "/z/d", true], ["Groups", GROUPS, "FooBot", "/y/c", false], ["Groups", GROUPS, "BarBot", "/y/c", true], ["Groups", GROUPS, "BarBot", "/w/a", true],
+      ["Groups", GROUPS, "BarBot", "/z/d", false], ["Groups", GROUPS, "BazBot", "/z/d", true], ["Groups", GROUPS, "FooBot", "/foo/bar/", false], ["Groups", GROUPS, "BarBot", "/foo/bar/", false], ["Groups", GROUPS, "BazBot", "/foo/bar/", false],
+      ["OtherRules 1", OTHER_1, "FooBot", "/", false], ["OtherRules 1", OTHER_1, "BarBot", "/", false], ["OtherRules 2", OTHER_2, "FooBot", "/", false], ["OtherRules 2", OTHER_2, "BarBot", "/", false],
+      ["an Allow ends every reader's User-agent lines", "User-agent: *\nAllow: /z\nUser-agent: Googlebot\nDisallow: /\n", TOKEN, "/legal", true],
+    ];
+    const groupRead = (t: string, who: string, path: string): boolean | null => { try { return ix ? ix.robotsAllows(ix.robotsRules(t, who).rules, path) : null; } catch { return null; } };
+    const groupWrong = groupCases.filter(([, t, who, path, want]) => groupRead(t, who, path) !== want).map(([n, , who, path, want]) => `${n}, ${who} ${path}: ${want ? "allowed" : "disallowed"} expected`);
+    ck(`robots.txt's groups read alone, as Google's reference parser's own tests read them (ID_LineSyntax_Groups, ID_LineSyntax_Groups_OtherRules), and an Allow ending every reader's User-agent lines: ${groupCases.length} cases, ${groupWrong.length} read otherwise`, !!ix && groupWrong.length === 0, groupWrong);
 
     // (a) pages that answer 403 and 404: asked once each, none read
     const refused = await runIx({ ...BASE, [LEGAL]: { status: 403, type: "text/html", body: page("L403", "Access Denied", HOLD_EN("L403")), headers: hdr("L403") }, [DISC]: { status: 404, type: "text/html", body: z("D404"), headers: hdr("D404") }, [PDF]: { status: 403, type: "text/html", body: z("P403"), headers: hdr("P403") },
@@ -3594,7 +3721,7 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const r429 = await runIx({ ...BASE, [DISC]: [busy, BASE[DISC] as Ans], [R_INV]: [{ status: 429, type: "text/plain", body: z("Busy2"), headers: hdr("Busy2") }, BASE[R_INV] as Ans], [LIC]: [{ status: 429, type: "text/html", body: z("Busy3"), headers: hdr("Busy3") }, BASE[LIC] as Ans] });
     holds("429 (one more ask after 10 s, inside the budget)", r429, [R_NQ, LEGAL, R_GIW, DISC, DISC, R_NT, PDF, R_INV, R_TW, LIC, LIC, LIC_EN, R_OA, SWAG]);
     ck(`429: the disclaimer and the licence read on their second ask (HOLD), Invesco's robots.txt not asked again, so its terms not asked; 14 requests of 14; the candidates: ${verdicts(r429)}`, pv(r429, DISC) === "HOLD" && pv(r429, LIC) === "HOLD" && pv(r429, INV) === "NOT READ" && r429.result?.made === 14 && verdicts(r429) === "HOLD / NOT READ / HOLD"
-      && line(r429, /^GET https:\/\/indexes\.nasdaqomx\.com\/Home\/Disclaimer: 429\. Asked once more after 10 s\.$/) && line(r429, /^GET https:\/\/www\.invesco\.com\/robots\.txt: 429\. Not asked again: the budget of 14 keeps a place for every address still to come\. robots\.txt read: no/), r429.lines.filter((l) => /429|again/.test(l)));
+      && line(r429, /^GET https:\/\/indexes\.nasdaqomx\.com\/Home\/Disclaimer: 429\. Asked once more after 10 s\.$/) && line(r429, /^GET https:\/\/www\.invesco\.com\/robots\.txt: 429\. Not asked again: the budget of 14 keeps a place for every address still to come\. robots\.txt: unreachable \(429\): complete disallow$/), r429.lines.filter((l) => /429|again/.test(l)));
     const longWait = await runIx({ ...BASE, [DISC]: [{ ...busy, headers: { ...hdr("Busy4"), "retry-after": "120" } }, BASE[DISC] as Ans], [LIC]: [{ ...busy, headers: { ...hdr("Busy5"), "retry-after": "Fri, 07 Mar 1997 05:06:07 GMT" } }, BASE[LIC] as Ans] });
     holds("429 with a longer Retry-After", longWait, DESIGN);
     ck("429 with Retry-After 120 or a date: not asked again (the site asked for a longer wait than 10 s), NOT READ", pv(longWait, DISC) === "NOT READ" && pv(longWait, LIC) === "NOT READ" && line(longWait, /^GET https:\/\/indexes\.nasdaqomx\.com\/Home\/Disclaimer: 429\. Not asked again: the site asks for a longer wait than 10 s\. NOT READ$/), longWait.lines.filter((l) => /429/.test(l)));
@@ -3651,13 +3778,246 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     // where a PDF is read under Deno, to keep pdf.js's warnings out of the log); it names no address but the design's
     // (and the licence's two, which it compares and asks only as fixed addresses); it builds none
     const literals = [...SRC.matchAll(/https?:\/\/[^\s"'`)\]]+/g)].map((m) => m[0].replace(/[.,;:]+$/, "")), foreign = [...new Set(literals.filter((u) => !DESIGN.includes(u) && !DESIGN.some((d) => d.startsWith(`${u}/`) || d === u)))];
-    ck(`the file imports nothing (one dynamic import, npm:unpdf, for a PDF's text under Deno), calls console only to print and to keep a PDF reader quiet, and writes no address but the design's (${foreign.length} other: ${foreign.slice(0, 4).join(", ")})`,
-      SRC !== "" && !/^\s*import\s/m.test(SRC) && (SRC.match(/\bimport\(/g) ?? []).length === 1 && /import\("npm:unpdf"\)/.test(SRC) && !/\bfetch\(/.test(SRC.replace(/io\.fetch\(|globalThis\.fetch\(/g, "")) && foreign.length === 0 && !/api\.nasdaq|ExportWeightings|product-detail|opendata\/|query[12]\.finance|\/Index\//.test(SRC), { foreign });
+    ck(`the file imports nothing (one dynamic import, npm:unpdf pinned at 2.2.1, the version its checks read PDFs with, for a PDF's text under Deno), calls console only to print and to keep a PDF reader quiet, and writes no address but the design's (${foreign.length} other: ${foreign.slice(0, 4).join(", ")})`,
+      SRC !== "" && !/^\s*import\s/m.test(SRC) && (SRC.match(/\bimport\(/g) ?? []).length === 1 && /import\("npm:unpdf@2\.2\.1"\)/.test(SRC) && !/\bfetch\(/.test(SRC.replace(/io\.fetch\(|globalThis\.fetch\(/g, "")) && foreign.length === 0 && !/api\.nasdaq|ExportWeightings|product-detail|opendata\/|query[12]\.finance|\/Index\//.test(SRC), { foreign });
     const quiet: string[] = [], keepLog = { log: console.log, warn: console.warn, error: console.error, info: console.info, debug: console.debug };
     for (const k of Object.keys(keepLog) as Array<keyof typeof keepLog>) console[k] = (...a: unknown[]) => { quiet.push(a.map(String).join(" ")); };
     let nodePdf: string | null | undefined;
     try { nodePdf = ix ? await ix.pdfText(PDF_BYTES) : undefined; } catch { nodePdf = undefined; } finally { Object.assign(console, keepLog); }
     ck(`under Node the default PDF reader gives no text (the PDF is then NOT READ) and prints nothing (${quiet.length} lines)`, nodePdf === null && quiet.length === 0, { nodePdf, quiet });
+  }
+
+  console.log("\n[AS] SOX's members from Nasdaq's own list (IDX-0e2, 24 Nov 2026; released by the owner as personal use): jobs/probes/ix_sox.ts run offline on a stand-in fetch: api.nasdaq.com's robots.txt by ix_terms' RFC 9309 rules first, then the Nasdaq-100's list as fetchNasdaq100 asks for it (the control) and SOX's, and a public log of numbers, yes or no, the Monitor's column names and SOX's tickers alone");
+  {
+    // Why: after ix_terms' run 45384712261 held nasdaq.com/legal, the owner kept the Nasdaq-100 as personal use and
+    // released SOX from Nasdaq as personal use (24 Nov 2026). Before IDX-1 builds a SOX list, one run says whether
+    // Nasdaq's list endpoint has a SOX type that parses as fetchNasdaq100 parses the Nasdaq-100's, beside that list asked
+    // the same way as the control. Every world answers by address and records each request; its answers carry sentinels
+    // (Zq…Xs) in robots.txt, headers, cookies, redirect targets, error messages and every field of the JSON (names,
+    // sectors, caps, other columns and their names, the answer's own fields, symbols that are no ticker), none of which
+    // may reach the log; SOX's symbols of a ticker's form may, and only they.
+    type SoxMod = typeof import("../jobs/probes/ix_sox.ts");
+    let sx: SoxMod | null = null, loadErr = "";
+    const onLoad: string[] = [], realFetch = globalThis.fetch, saidOnLoad: string[] = [], logOnLoad = console.log;
+    globalThis.fetch = (async (u: unknown) => { onLoad.push(String(u)); throw new Error("offline"); }) as typeof fetch;
+    console.log = (...a: unknown[]) => { saidOnLoad.push(a.map(String).join(" ")); };
+    try { sx = await import("../jobs/probes/ix_sox.ts"); } catch (e) { loadErr = String(e).slice(0, 160); } finally { globalThis.fetch = realFetch; console.log = logOnLoad; }
+    const SRC = (() => { try { return readText(new URL("../jobs/probes/ix_sox.ts", import.meta.url), "utf8") as string; } catch { return ""; } })();
+    // the probe's own words: its file's and those of the robots.txt rules it takes from ix_terms (ROBOTS_SAYS)
+    const OWN = SRC + (readText(new URL("../jobs/probes/ix_terms.ts", import.meta.url), "utf8") as string);
+    ck(`the probe loads offline, and on loading asks nothing and prints nothing (${loadErr || `${onLoad.length} requests, ${saidOnLoad.length} lines`}): it runs only as the program run (deno run probes/ix_sox.ts)`, sx !== null && onLoad.length === 0 && saidOnLoad.length === 0, { loadErr, onLoad, saidOnLoad });
+
+    // the Monitor's own read of the Nasdaq-100 (fetchNasdaq100), as constituents.ts writes it: its address, the headers
+    // it gives fetchText (over fetchText's own, the browser User-Agent and accept */*: http.ts), the path to its rows,
+    // the fields its rows are typed with and how it reads each
+    const cons = readText(new URL("../supabase/functions/_shared/constituents.ts", import.meta.url), "utf8") as string, httpSrc = readText(new URL("../supabase/functions/_shared/http.ts", import.meta.url), "utf8") as string;
+    const ndxFn = cons.slice(cons.indexOf("export async function fetchNasdaq100"), cons.indexOf("export async function fetchNikkei225"));
+    const call = /await fetchText\("([^"]+)", \{ headers: \{ ([^}]*) \} \}, \d+\);/.exec(ndxFn);
+    const given: Record<string, string> = Object.fromEntries([...(call?.[2] ?? "").matchAll(/"?([a-z-]+)"?: "([^"]*)"/g)].map((m) => [m[1], m[2]]));
+    const ua = /^export const BROWSER_UA = "([^"]+)";$/m.exec(httpSrc)?.[1] ?? "", fetchTextOwn = /headers: \{ "user-agent": BROWSER_UA, accept: "\*\/\*", \.\.\.\(init\.headers as Record<string, string> \| undefined\) \}/.test(httpSrc);
+    const MONITOR: Record<string, string> = { "user-agent": ua, accept: "*/*", ...given };
+    const typed = /JSON\.parse\(text\) as \{ data\?: \{ data\?: \{ rows\?: Array<\{ ([^}]*) \}> \} \} \};/.exec(ndxFn)?.[1] ?? "", fields = [...typed.matchAll(/(\w+)\??: string/g)].map((m) => m[1]);
+    const readsAs = /const rows = j\.data\?\.data\?\.rows \?\? \[\];/.test(ndxFn) && /r\.symbol\.trim\(\)/.test(ndxFn) && /r\.companyName\.replace\(/.test(ndxFn) && /String\(r\.marketCap\)/.test(ndxFn) && /sector: r\.sector \|\| sectorOf\(symbol\)/.test(ndxFn);
+    const S_ROB = "https://api.nasdaq.com/robots.txt", S_NDX = "https://api.nasdaq.com/api/quote/list-type/nasdaq100", S_SOX = "https://api.nasdaq.com/api/quote/list-type/sox", S_ALL = [S_ROB, S_NDX, S_SOX];
+    ck(`its fixed list is api.nasdaq.com's robots.txt, the Nasdaq-100's list (the address fetchNasdaq100 reads: ${call?.[1] ?? "–"}) and SOX's, in that order, all https; its budget is 4 requests; its User-Agent is the Monitor's (http.ts' BROWSER_UA, which fetchText sends); and the columns it reads are the four fetchNasdaq100's rows are typed with (${fields.join(", ")})`,
+      !!sx && JSON.stringify(sx.FIXED.map((f) => f.url)) === JSON.stringify(S_ALL) && call?.[1] === S_NDX && sx.BUDGET === 4 && ua !== "" && sx.UA === ua && fetchTextOwn && readsAs && JSON.stringify(fields) === JSON.stringify(["symbol", "companyName", "marketCap", "sector"]) && JSON.stringify(sx.COLS) === JSON.stringify(fields),
+      { fixed: sx?.FIXED.map((f) => f.url), call: call?.slice(1), budget: sx?.BUDGET, ua: sx?.UA === ua, fetchTextOwn, readsAs, fields, cols: sx?.COLS });
+
+    // ---- the stand-in world ----
+    const SZ: string[] = [], zs = (k: string): string => { const t = `Zq${k}Xs`; SZ.push(t); return t; };
+    type SA = { status: number; type?: string | null; body?: string; headers?: Record<string, string>; throws?: string };
+    type SWorld = Record<string, SA | SA[]>;
+    const SDATES = ["07 Mar 1998", "08:09:10", "08 Mar 1998", "09:10:11"];
+    const sh = (k: string): Record<string, string> => ({ server: zs(`Srv${k}`), "set-cookie": `ak_bmsc=${zs(`Ck${k}`)}; Path=/; HttpOnly`, "x-request-id": zs(`Req${k}`), "last-modified": "Sat, 07 Mar 1998 08:09:10 GMT", date: "Sun, 08 Mar 1998 09:10:11 GMT", link: `<https://${zs(`Lk${k}`)}.example/>; rel="preload"` });
+    const sok = (type: string | null, body: string, k: string): SA => ({ status: 200, type, body, headers: sh(k) });
+    const srob = (k: string, rules = "User-agent: *\nAllow: /\n"): SA => sok("text/plain; charset=utf-8", `# ${zs(`Note${k}`)}\nUser-agent: ${zs(`Bot${k}`).toLowerCase()}\nDisallow: /${zs(`Path${k}`)}\n\n${rules}\nSitemap: https://${zs(`Map${k}`)}.example/sitemap.xml\n`, `R${k}`);
+    const sst = (s: number, k: string): SA => ({ status: s, type: "text/html", body: `<html><title>${zs(`St${s}${k}`)}</title></html>`, headers: { ...sh(`St${s}${k}`), "retry-after": "1" } });
+    const sre = (s: number, location: string, k: string): SA => ({ status: s, type: "text/html", body: `<a href="${location}">${zs(`Mv${k}`)}</a>`, headers: { ...sh(`Mv${k}`), location } });
+    const listBody = (rows: unknown[], k: string): string => JSON.stringify({ data: { data: { headers: { symbol: zs(`H1${k}`), companyName: zs(`H2${k}`) }, rows }, totalrecords: rows.length, asOf: zs(`AsOf${k}`), date: zs(`Date${k}`) }, message: zs(`Msg${k}`), status: { rCode: 200, bCodeMessage: [{ code: 1, errorMessage: zs(`Err${k}`) }], developerMessage: zs(`Dev${k}`) } });
+    // the Nasdaq-100's list: 101 rows with the four columns fetchNasdaq100 reads and five others (one whose name is a sentinel)
+    const ndxRows = Array.from({ length: 101 }, (_, i) => ({ symbol: `N${String(i).padStart(3, "0")}`, sector: zs(`NdSec${i % 11}`), companyName: `${zs(`NdName${i}`)} Common Stock`, marketCap: i === 0 ? zs("NdCap") : `${101 - i},${String(i).padStart(3, "0")},000,000`, lastSalePrice: `$${zs(`NdPx${i}`)}`, netChange: "1.25", percentageChange: "0.5%", deltaIndicator: "up", [zs("NdKey")]: zs(`NdVal${i}`) }));
+    // SOX's: 30 rows, 28 symbols of a ticker's form (one with a dot, one with spaces round it) and two that are not; no
+    // sector; 25 rows with a weight as a number, 2 with a weight-like field holding a sentinel, 3 with none
+    const TICK = ["NVDA", "AVGO", "AMD", "TSM", "ASML", "QCOM", "TXN", "INTC", "MU", "ADI", "AMAT", "LRCX", "KLAC", "MRVL", "NXPI", "MCHP", "ON", "MPWR", "TER", "ENTG", "SWKS", "QRVO", "ARM", "GFS", "COHR", "STM", "AB.C", " LSCC "];
+    SZ.push("zqlowsymxs");
+    const soxRows: unknown[] = [...TICK.map((s, i) => ({ symbol: s, companyName: zs(`SxName${i}`), marketCap: i === 0 ? zs("SxCap") : `${30 - i},100,000,000`, lastSalePrice: zs(`SxPx${i}`), ...(i < 25 ? { weight: `${(30 - i) / 10}` } : i < 27 ? { indexWeight: zs(`SxW${i}`) } : {}) })),
+      { symbol: zs("SxSym"), companyName: zs("SxName28"), marketCap: "1,000", lastSalePrice: zs("SxPx28") }, { symbol: "zqlowsymxs", companyName: zs("SxName29"), marketCap: "2,000", lastSalePrice: zs("SxPx29") }];
+    const S_BASE: SWorld = { [S_ROB]: srob("Base"), [S_NDX]: sok("application/json; charset=utf-8", listBody(ndxRows, "Ndx"), "Ndx"), [S_SOX]: sok("application/json; charset=utf-8", listBody(soxRows, "Sox"), "Sox") };
+    const sAnswer = (a: SA): Response => { const h = new Headers(a.headers ?? {}); if (a.type) h.set("content-type", a.type); return new Response(a.body === undefined ? null : new TextEncoder().encode(a.body), { status: a.status, headers: h }); };
+    type SEv = { fetch: string } | { wait: number };
+    type SRun = { asked: Array<{ url: string; init: RequestInit | undefined }>; events: SEv[]; lines: string[]; out: string; said: string[]; result: Awaited<ReturnType<SoxMod["ixSox"]>> | null; threw: string };
+    const runSox = async (world: SWorld): Promise<SRun> => {
+      const run: SRun = { asked: [], events: [], lines: [], out: "", said: [], result: null, threw: "" };
+      if (!sx) return run;
+      const turn = new Map<string, number>(), keep = { log: console.log, info: console.info, warn: console.warn, error: console.error, debug: console.debug };
+      const io = {
+        fetch: async (url: string, init?: RequestInit): Promise<Response> => {
+          run.asked.push({ url, init }); run.events.push({ fetch: url });
+          const k = turn.get(url) ?? 0; turn.set(url, k + 1);
+          const w = world[url] ?? { status: 404, type: "text/html", body: `<html><title>${zs("Nowhere")}</title></html>` }, a = Array.isArray(w) ? w[Math.min(k, w.length - 1)] : w;
+          if (a.throws) throw new TypeError(`fetch failed: ${a.throws}`, { cause: new Error(`${a.throws} at ${url}`) });
+          return sAnswer(a);
+        },
+        print: (l: string) => { run.lines.push(l); },
+        wait: async (ms: number) => { run.events.push({ wait: ms }); },
+      };
+      for (const k of Object.keys(keep) as Array<keyof typeof keep>) console[k] = (...a: unknown[]) => { run.said.push(a.map(String).join(" ")); };
+      try { run.result = await sx.ixSox(io); } catch (e) { run.threw = String(e).slice(0, 200); } finally { Object.assign(console, keep); }
+      run.out = run.lines.join("\n");
+      return run;
+    };
+    // what holds in every world: the requests are `want` exactly, each a GET with redirect "manual"; robots.txt asked with
+    // the Monitor's User-Agent and an accept for text and nothing else, each list with exactly the headers fetchNasdaq100
+    // sends; each request `gap` ms or more after the last (10 s or more when it asks the same address again); the log
+    // names no sentinel and no date of the server's, every word in it is the probe's own, a number or a ticker the world
+    // served, nothing was withheld, nothing reached the console, and its last line counts the requests out of 4
+    const served = new Set(TICK.flatMap((t) => t.trim().split(/[^\p{L}\p{N}*'’_-]+/u)));
+    const sOutside = (out: string): string[] => [...new Set(out.split(/[^\p{L}\p{N}*'’_-]+/u).filter((w) => w !== "" && !/^\d+$/.test(w) && !OWN.includes(w) && !served.has(w)))];
+    const sHolds = (name: string, r: SRun, want: string[], gap = 3_000): void => {
+      const urls = r.asked.map((a) => a.url);
+      const bad = r.asked.filter((a) => {
+        const i = a.init ?? {}, h = new Headers(i.headers as HeadersInit | undefined), exp: Record<string, string> = a.url === S_ROB ? { "user-agent": ua, accept: "text/plain,*/*;q=0.1" } : MONITOR;
+        return i.redirect !== "manual" || (i.method ?? "GET") !== "GET" || i.body != null || JSON.stringify([...h.keys()].sort()) !== JSON.stringify(Object.keys(exp).sort()) || Object.entries(exp).some(([k, v]) => h.get(k) !== v);
+      }).map((a) => a.url);
+      const pace: string[] = [];
+      let since = 0, prev = "";
+      for (const e of r.events) {
+        if ("wait" in e) { since += e.wait; continue; }
+        if (prev !== "" && since < (e.fetch === prev ? 10_000 : gap)) pace.push(`${e.fetch} after ${since} ms`);
+        since = 0; prev = e.fetch;
+      }
+      const low = r.out.toLowerCase(), leaked = [...new Set(SZ)].filter((t) => low.includes(t.toLowerCase())), dates = SDATES.filter((d) => r.out.includes(d)), outside = sOutside(r.out), last = r.lines[r.lines.length - 1] ?? "";
+      ck(`${name}: the requests are ${want.length}, the probe's addresses in its order and nothing else (${urls.length} made), each a GET with redirect "manual"; robots.txt with the Monitor's User-Agent and an accept for text alone, each list with exactly the headers fetchNasdaq100 sends (${Object.keys(MONITOR).join(", ")}); each request ${gap / 1000} s or more after the last (10 s or more when an address is asked again)`,
+        !!sx && JSON.stringify(urls) === JSON.stringify(want) && bad.length === 0 && pace.length === 0, { urls, bad, pace });
+      ck(`${name}: the log (${r.lines.length} lines) names none of the ${new Set(SZ).size} sentinels and no date of the server's, every word in it is the probe's own, a number or a ticker the world served (${outside.length} others), nothing reached the console (${r.said.length}), nothing was withheld, and its last line is "requests made: ${urls.length} of 4"`,
+        !!sx && r.lines.length > 0 && leaked.length === 0 && dates.length === 0 && outside.length === 0 && r.said.length === 0 && !r.out.includes("(withheld)") && last === `requests made: ${urls.length} of 4` && r.threw === "", { leaked: leaked.slice(0, 8), dates, outside: outside.slice(0, 12), said: r.said.slice(0, 4), last, threw: r.threw });
+    };
+    const sline = (r: SRun, re: RegExp): boolean => r.lines.some((l) => re.test(l));
+
+    // (a) robots.txt allows both lists: what the log says of each
+    const sBase = await runSox(S_BASE);
+    sHolds("robots.txt allows both lists", sBase, S_ALL);
+    const nd = sBase.result?.lists[S_NDX], so = sBase.result?.lists[S_SOX];
+    ck(`robots.txt allows both: the Nasdaq-100's list (the control) has the shape fetchNasdaq100 parses, 101 rows, the four columns in every row and 5 other keys (counted, not named); SOX's has the shape, 30 rows, no sector, 3 other keys, its 28 symbols of a ticker's form printed in their order (trimmed, as fetchNasdaq100 trims), its 2 others counted, and 27 rows with a weight-like field, 25 of them holding a number; nothing of the sort for the Nasdaq-100's`,
+      sBase.result?.robots === "file" && nd?.shape === true && nd.rows === 101 && nd.cols.symbol === 101 && nd.cols.companyName === 101 && nd.cols.marketCap === 101 && nd.cols.sector === 101 && nd.others === 5
+      && so?.shape === true && so.rows === 30 && so.cols.sector === 0 && so.others === 3 && JSON.stringify(so.tickers) === JSON.stringify(TICK.map((t) => t.trim())) && so.otherSymbols === 2 && so.weightRows === 27 && so.weightNumbers === 25
+      && sline(sBase, /^GET https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/nasdaq100: 200, json, \d+ bytes$/) && sline(sBase, /^ {2}data\.data\.rows: a list of 101 rows; the shape fetchNasdaq100 parses: yes$/) && sline(sBase, /^ {2}data\.data\.rows: a list of 30 rows; the shape fetchNasdaq100 parses: yes$/)
+      && sline(sBase, /^ {2}the columns fetchNasdaq100 reads, by the rows that carry them: symbol 101, companyName 101, marketCap 101, sector 101; other keys: 5$/) && sline(sBase, /^ {2}the columns fetchNasdaq100 reads, by the rows that carry them: symbol 30, companyName 30, marketCap 30, sector 0; other keys: 3$/)
+      && sline(sBase, new RegExp(`^ {2}member symbols of a ticker's form \\(28\\): ${TICK.map((t) => t.trim().replace(".", "\\.")).join(", ")}; other values: 2$`)) && sline(sBase, /^ {2}a weight-like field \(a key that names a weight\): yes, in 27 rows \(holding a number: 25\)$/)
+      && sBase.lines.filter((l) => /^ {2}(?:member symbols|a weight-like)/.test(l)).length === 2,
+      { robots: sBase.result?.robots, nd, so: so && { ...so, tickers: so.tickers.length }, lines: sBase.lines.filter((l) => /^ {2}|^GET/.test(l)) });
+    ck("the log's first lines state the owner's release: Nasdaq's lists, read for personal use (the Nasdaq-100 kept; SOX from Nasdaq), on 24 Nov 2026",
+      sBase.lines.slice(0, 3).some((l) => /released by the owner on 24 Nov 2026/i.test(l) && /Nasdaq/.test(l) && /personal use/.test(l)), sBase.lines.slice(0, 4));
+
+    // (a) robots.txt by RFC 9309 §2.3.1, as ix_terms reads it, outcome by outcome
+    const S_READ = "200, text, \\d+ bytes\\. robots\\.txt read: yes; a group for every reader: yes; a group for a product its User-Agent names: no; a crawl-delay over 3 s: no";
+    const S_ELSEWHERE = "robots\\.txt: unreadable \\(a redirect elsewhere is not followed\\): complete disallow";
+    const S_OUT: Array<{ name: string; a: SA | SA[]; want: string[]; re: string }> = [
+      { name: "200", a: srob("Ok"), want: S_ALL, re: S_READ },
+      { name: "301 to this same address, then 200", a: [sre(301, "https://api.nasdaq.com/robots.txt", "Self"), srob("After")], want: [S_ROB, S_ROB, S_NDX, S_SOX], re: S_READ },
+      { name: "302 to another path of its host", a: sre(302, "/robots/robots.txt", "Path"), want: [S_ROB], re: `302, redirected \\(not followed\\) to the same host; the target's path is the asked path give or take a trailing slash: no\\. ${S_ELSEWHERE}` },
+      { name: "302 to another host", a: sre(302, `https://${zs("ElseHost")}.example/robots.txt`, "Host"), want: [S_ROB], re: `302, redirected \\(not followed\\) to another host; the target's path is the asked path give or take a trailing slash: yes\\. ${S_ELSEWHERE}` },
+      { name: "404", a: sst(404, "a"), want: S_ALL, re: "404\\. robots\\.txt: none \\(4xx\\): every path allowed by RFC 9309" },
+      { name: "410", a: sst(410, "b"), want: S_ALL, re: "410\\. robots\\.txt: none \\(4xx\\): every path allowed by RFC 9309" },
+      { name: "429, asked once more, 429 again", a: [sst(429, "c"), sst(429, "d")], want: [S_ROB, S_ROB], re: "429\\. robots\\.txt: unreachable \\(429\\): complete disallow" },
+      { name: "500", a: sst(500, "e"), want: [S_ROB], re: "500\\. robots\\.txt: unreachable \\(5xx\\): complete disallow by RFC 9309" },
+      { name: "503", a: sst(503, "f"), want: [S_ROB], re: "503\\. robots\\.txt: unreachable \\(5xx\\): complete disallow by RFC 9309" },
+      { name: "no answer (a network error)", a: { status: 200, throws: zs("NetErr") }, want: [S_ROB], re: "no answer \\(an error of the network or no answer within 30 s\\)\\. robots\\.txt: unreachable \\(no answer\\): complete disallow by RFC 9309" },
+    ];
+    for (const o of S_OUT) {
+      const r = await runSox({ ...S_BASE, [S_ROB]: o.a });
+      sHolds(`robots.txt ${o.name}`, r, o.want);
+      const open = o.want.includes(S_SOX);
+      ck(`robots.txt ${o.name} (RFC 9309 §2.3.1, as ix_terms reads it): its line says what the rule makes of it, and the two lists are ${open ? "asked and read" : "not asked (complete disallow), each saying so"}`,
+        sline(r, new RegExp(`^GET https://api\\.nasdaq\\.com/robots\\.txt: ${o.re}$`)) && (open ? r.result?.lists[S_NDX]?.shape === true && r.result?.lists[S_SOX]?.shape === true : r.result?.lists[S_SOX] === null && r.lines.filter((l) => /: not asked \(this host's robots\.txt was not read\)$/.test(l)).length === 2)
+        && (o.name.startsWith("301") ? sline(r, /^GET https:\/\/api\.nasdaq\.com\/robots\.txt: 301, redirected to this same address \(https, this host, the path \/robots\.txt, no query\): asked again after 10 s, redirect 1 of at most 5 followed$/) : true),
+        r.lines.filter((l) => /robots|not asked|allowed/.test(l)));
+    }
+
+    // (a) robots.txt that disallows: for every reader; for Mozilla, a product the Monitor's User-Agent names, though every
+    // reader is allowed; SOX's list alone, by a pattern with $; a Crawl-delay of 7 s is kept, one over 30 s holds both
+    const sDis = await runSox({ ...S_BASE, [S_ROB]: srob("Dis", "User-agent: *\nDisallow: /api/\n") });
+    sHolds("robots.txt disallows /api/ for every reader", sDis, [S_ROB]);
+    const sMoz = await runSox({ ...S_BASE, [S_ROB]: srob("Moz", "User-agent: Mozilla\nDisallow: /api/quote/\n\nUser-agent: *\nAllow: /\n") });
+    sHolds("robots.txt disallows the lists for Mozilla and allows every reader", sMoz, [S_ROB]);
+    const sOne = await runSox({ ...S_BASE, [S_ROB]: srob("One", "User-agent: *\nDisallow: /api/quote/list-type/sox$\n") });
+    sHolds("robots.txt disallows SOX's list alone", sOne, [S_ROB, S_NDX]);
+    const sSlow = await runSox({ ...S_BASE, [S_ROB]: srob("Slow", "User-agent: *\nAllow: /\nCrawl-delay: 7\n") });
+    sHolds("robots.txt asks a Crawl-delay of 7 s", sSlow, S_ALL, 7_000);
+    const sHold = await runSox({ ...S_BASE, [S_ROB]: srob("Hold", "User-agent: *\nAllow: /\nCrawl-delay: 45\n") });
+    sHolds("robots.txt asks a Crawl-delay of 45 s", sHold, [S_ROB]);
+    ck("robots.txt that disallows: for every reader (Disallow: /api/) both lists are not asked; for Mozilla, a product the Monitor's User-Agent names, both are not asked though every reader is allowed (the group is said to be there); SOX's alone (a pattern with $) leaves the Nasdaq-100's asked and read; a Crawl-delay of 7 s is waited before each list, one of 45 s holds both; each list not asked says why",
+      sDis.lines.filter((l) => /: not asked \(robots\.txt disallows it\)$/.test(l)).length === 2 && sline(sMoz, /a group for a product its User-Agent names: yes/) && sMoz.lines.filter((l) => /: not asked \(robots\.txt disallows it\)$/.test(l)).length === 2
+      && sline(sOne, /^ {2}https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/sox: not asked \(robots\.txt disallows it\)$/) && sOne.result?.lists[S_NDX]?.shape === true && sSlow.events.filter((e) => "wait" in e && e.wait === 7_000).length === 2
+      && sHold.lines.filter((l) => /: not asked \(robots\.txt asks for more than 30 s between requests\)$/.test(l)).length === 2,
+      { dis: sDis.lines.filter((l) => /not asked|robots/.test(l)), moz: sMoz.lines.filter((l) => /not asked|robots/.test(l)), slow: sSlow.events });
+    // a Sitemap line between every reader's User-agent line and Googlebot's does not split their group, so its
+    // Disallow: /api/ holds every reader (B-1 of the adversary's check of IDX-0e2, 24 Nov 2026: the split left every
+    // reader's group with no rule, and both lists were asked; RFC 9309 §2.1 as Google's reference parser reads it)
+    const sSplit = await runSox({ ...S_BASE, [S_ROB]: srob("Split", `User-agent: *\nSitemap: https://${zs("SmSox")}.example/sitemap.xml\nUser-agent: Googlebot\nDisallow: /api/\n`) });
+    sHolds("robots.txt with a Sitemap line between every reader's User-agent line and Googlebot's, then Disallow: /api/", sSplit, [S_ROB]);
+    ck("robots.txt with a Sitemap line between every reader's User-agent line and Googlebot's: one group, whose Disallow: /api/ holds every reader, so neither list is asked, each saying so",
+      sSplit.result?.robots === "file" && sSplit.lines.filter((l) => /: not asked \(robots\.txt disallows it\)$/.test(l)).length === 2 && sline(sSplit, /a group for every reader: yes/) && sSplit.result?.lists[S_NDX] === null && sSplit.result?.lists[S_SOX] === null,
+      sSplit.lines.filter((l) => /not asked|robots/.test(l)));
+
+    // (a) the lists' own answers: a 429 asked again in the budget's one place more, then none left; a redirect, not
+    // followed; an HTML page in a list's place; a 403; no answer
+    const busy = (k: string, ra?: string): SA => ({ status: 429, type: "application/json", body: `{"message":"${zs(`Busy${k}`)}"}`, headers: { ...sh(`Busy${k}`), ...(ra === undefined ? {} : { "retry-after": ra }) } });
+    const s429 = await runSox({ ...S_BASE, [S_NDX]: [busy("N", "5"), S_BASE[S_NDX] as SA], [S_SOX]: [busy("S"), S_BASE[S_SOX] as SA] });
+    sHolds("the Nasdaq-100's list answers 429 once, then SOX's", s429, [S_ROB, S_NDX, S_NDX, S_SOX]);
+    ck("429: the Nasdaq-100's list is asked once more after 10 s (the budget's one place more) and read; SOX's 429 is not asked again (no place left), so its list is not read",
+      s429.result?.lists[S_NDX]?.shape === true && s429.result?.lists[S_SOX] === null && sline(s429, /^GET https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/nasdaq100: 429\. Asked once more after 10 s\.$/)
+      && sline(s429, /^GET https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/sox: 429\. Not asked again: the budget of 4 has no place left \(one is kept for every address still to come\)\. NOT READ$/), s429.lines.filter((l) => /429|again/.test(l)));
+    const sWait = await runSox({ ...S_BASE, [S_NDX]: [busy("W", "Sun, 08 Mar 1998 09:10:11 GMT"), S_BASE[S_NDX] as SA], [S_SOX]: [busy("V", "60"), S_BASE[S_SOX] as SA] });
+    sHolds("the lists answer 429 asking for a wait given as a date, or of 60 s", sWait, S_ALL);
+    ck("429 with a Retry-After given as a date, or of 60 s: not asked again (the site asks for a wait given as a date or longer than 10 s), NOT READ",
+      sWait.lines.filter((l) => /: 429\. Not asked again: the site asks for a wait given as a date or longer than 10 s\. NOT READ$/.test(l)).length === 2, sWait.lines.filter((l) => /429/.test(l)));
+    const sOdd = await runSox({ ...S_BASE, [S_NDX]: sre(302, `https://www.nasdaq.com/${zs("Moved")}?${zs("Tok")}=1`, "Nd"), [S_SOX]: sok("text/html; charset=utf-8", `<!doctype html><html><head><title>${zs("Blocked")}</title></head><body>${zs("BlockText")} Access Denied</body></html>`, "Html") });
+    sHolds("the Nasdaq-100's list redirects, SOX's answers an HTML page", sOdd, S_ALL);
+    ck("a list that redirects is not followed (NOT READ: the log says only to which host, and whether to the same path); one that answers an HTML page does not parse as JSON, so it has not the shape fetchNasdaq100 parses",
+      sOdd.result?.lists[S_NDX] === null && sOdd.result?.lists[S_SOX]?.json === false && sOdd.result?.lists[S_SOX]?.shape === false
+      && sline(sOdd, /^GET https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/nasdaq100: 302, redirected \(not followed\) to another host; the target's path is the asked path give or take a trailing slash: no\. NOT READ$/) && sline(sOdd, /^GET https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/sox: 200, html, \d+ bytes$/)
+      && sline(sOdd, /^ {2}NOT JSON: the answer does not parse as JSON, so it has not the shape fetchNasdaq100 parses$/), sOdd.lines);
+    const sFail = await runSox({ ...S_BASE, [S_NDX]: { status: 403, type: "text/html", body: zs("Forbidden"), headers: sh("F") }, [S_SOX]: { status: 200, throws: zs("SoxNet") } });
+    sHolds("the Nasdaq-100's list answers 403, SOX's gives no answer", sFail, S_ALL);
+    ck("403 and no answer: each list NOT READ, with its status or \"no answer\" and no word of the error", sline(sFail, /^GET https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/nasdaq100: 403\. NOT READ$/) && sline(sFail, /^GET https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/sox: no answer \(an error of the network or no answer within 30 s\)\. NOT READ$/) && sFail.result?.lists[S_SOX] === null, sFail.lines);
+
+    // (b) the shape check alone, held to fetchNasdaq100 (its rows at j.data?.data?.rows, typed with the four fields read
+    // above, symbol.trim(), companyName.replace(), String(marketCap), sector || sectorOf): a list of those fields alone
+    // has it; each change that would make that function throw or misread a row has it not
+    const row: Record<string, unknown> = Object.fromEntries(fields.map((f) => [f, f === "marketCap" ? "1,234,567" : f === "symbol" ? "ABCD" : `${f} text`]));
+    const wrap = (rows: unknown): string => JSON.stringify({ data: { data: { rows } } });
+    const shapeOf = (t: string): boolean | null => (sx ? sx.readList(t).shape : null);
+    const SHAPES: Array<[string, string, boolean]> = [
+      ["the rows fetchNasdaq100 is typed with, every field given", wrap([row, row]), true],
+      ["sector left out (it is optional: sectorOf fills it)", wrap([{ ...row, sector: undefined }]), true],
+      ["sector null", wrap([{ ...row, sector: null }]), true],
+      ["marketCap a number (String() reads it)", wrap([{ ...row, marketCap: 1234567 }]), true],
+      ["other keys beside them", wrap([{ ...row, lastSalePrice: "$1", weight: "1.5" }]), true],
+      ["no rows (an empty list)", wrap([]), false],
+      ["rows not a list", JSON.stringify({ data: { data: { rows: { a: row } } } }), false],
+      ["no data.data", JSON.stringify({ data: { rows: [row] } }), false],
+      ["data null", JSON.stringify({ data: null, message: "x" }), false],
+      ["the answer null", "null", false],
+      ["the answer a list", JSON.stringify([row]), false],
+      ["a row's symbol a number", wrap([row, { ...row, symbol: 5 }]), false],
+      ["a row without companyName", wrap([row, { ...row, companyName: undefined }]), false],
+      ["a row without marketCap", wrap([{ ...row, marketCap: undefined }]), false],
+      ["a row's sector a number", wrap([{ ...row, sector: 7 }]), false],
+      ["a row that is not an object", wrap([row, "ABCD"]), false],
+      ["not JSON", "<html>Access Denied</html>", false],
+    ];
+    const shapeWrong = SHAPES.filter(([, t, want]) => shapeOf(t) !== want).map(([n, t, want]) => `${n}: ${shapeOf(t)}, not ${want}`);
+    ck(`(b) the shape check, held to fetchNasdaq100's own read (rows at j.data?.data?.rows, typed { ${typed} }): ${SHAPES.length} answers, each yes or no as that function reads it (${shapeWrong.length} wrong)`, !!sx && readsAs && fields.length === 4 && shapeWrong.length === 0, shapeWrong);
+    const TICK_CASES: Array<[unknown, boolean]> = [["NVDA", true], ["AB.C", true], ["A", true], ["ABCDEFG", true], ["ABCDEFGH", false], ["nvda", false], ["1ABC", false], ["AB-C", false], ["AB C", false], ["", false], [5, false], [null, false]];
+    const tickWrong = TICK_CASES.filter(([v, want]) => (sx ? sx.readList(wrap([{ ...row, symbol: v }])).tickers.length === 1 : null) !== want).map(([v]) => String(v));
+    ck(`(b) a symbol is printed only in a ticker's form (${sx?.TICKER.source ?? "–"}, after trimming): ${TICK_CASES.length} values, ${tickWrong.length} read otherwise`, !!sx && sx.TICKER.source === "^[A-Z][A-Z0-9.]{0,6}$" && tickWrong.length === 0, tickWrong);
+
+    // the file: one import, ix_terms' robots.txt rules and helpers (which print nothing); no dynamic import; no fetch but
+    // its io's; no address but its three and the two header values fetchNasdaq100 sends
+    const sLit = [...SRC.matchAll(/https?:\/\/[^\s"'`)\]]+/g)].map((m) => m[0].replace(/[.,;:]+$/, "")), sForeign = [...new Set(sLit.filter((u) => !S_ALL.includes(u) && u !== "https://www.nasdaq.com" && u !== "https://www.nasdaq.com/"))];
+    ck(`the file imports only ./ix_terms.ts (its robots.txt rules and helpers, which print nothing they read), has no dynamic import, calls no fetch but its io's, and writes no address but its three and the two header values fetchNasdaq100 sends (${sForeign.length} other: ${sForeign.slice(0, 4).join(", ")})`,
+      SRC !== "" && (SRC.match(/^\s*import\s/gm) ?? []).length === 1 && /^import \{[^}]+\} from "\.\/ix_terms\.ts";$/m.test(SRC) && !/\bimport\(/.test(SRC) && !/\bfetch\(/.test(SRC.replace(/io\.fetch\(|globalThis\.fetch\(/g, "")) && sForeign.length === 0, { sForeign });
   }
 
   // [AK], what the READMEs say, is in sim/readme.test.ts since 23 Nov 2026: this file stops a deploy of the server or the

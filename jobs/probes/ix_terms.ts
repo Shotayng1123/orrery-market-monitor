@@ -5,18 +5,27 @@
 // terms, and their redirects, and printed titles, clauses and addresses of those pages; its reviews of 24 Nov 2026
 // (check/IDX0/d-adversary-leaks.md, d-adversary-log.md) found data asked and a page's text, tokens and contacts
 // printed, both ways. So this probe asks a fixed list and nothing else, and prints nothing a page or a server wrote.
-// It imports nothing: the helpers of lib.ts print what they read. Its one dynamic import is the PDF reader below.
+// It imports nothing: the helpers of lib.ts print what they read. Its one dynamic import is the PDF reader below. Its
+// robots.txt rules are exported, and ix_sox (SOX's list from Nasdaq) reads its own robots.txt by them.
 //
-// (1) The requests: the 13 addresses of FIXED, all https, in that order; each host's robots.txt first. A page is asked
-//     only when its host's robots.txt answered 200 as text (not an HTML page) and allows the page's own path (the group
-//     for this probe's own name, else the one for every reader; the longest rule wins, an Allow on a tie). Requests to one host are 3 s
-//     apart, or the robots.txt's crawl-delay where it is longer; one over 30 s holds the host's pages. Every request is
-//     a GET with redirect "manual": a redirect is not followed, and the log says only that the answer redirected, to
-//     the same host or another, and whether the target's path is the asked path give or take a trailing slash. No link
-//     of a page is read or followed, and no address is built: each one asked is written out in FIXED. At most 14
-//     requests (BUDGET): an address that answered 429 is asked once more, after 10 s, only when the site asked for no
-//     longer wait (a Retry-After of 10 s or less, or none) and the budget still keeps a place for every address of
-//     FIXED after it. The User-Agent names a research probe and nothing else.
+// (1) The requests: the 13 addresses of FIXED, all https, in that order; each host's robots.txt first, read as RFC 9309
+//     §2.3.1 says (since IDX-0e2, 24 Nov 2026: robotsFate): a 2xx is the file, read when it is text and not an HTML page
+//     (else it is unreadable); a 3xx is followed only to this same address (https, its host, the path /robots.txt, no
+//     query), at most 5 times, each only while the budget keeps a place for every address still to come (else it is
+//     unreadable); a 4xx but 429 means there is no file, so every path is allowed; a 429 (where asked again, a second
+//     one), a 5xx, no answer and an unreadable file mean complete disallow: no page of that host is asked. Where a file
+//     was read, a page is asked only when it allows the page's own path (the group for this probe's own name, else the
+//     one for every reader; the longest rule wins, an Allow on a tie; a group's User-agent lines end only at an Allow
+//     or a Disallow line, so another record between two of them does not split it, and a line ends only at CR or LF,
+//     its comment running from "#" to its end: since the check of IDX-0e2). Requests to one host are 3 s apart, or the
+//     robots.txt's crawl-delay where it is longer; one over 30 s holds the host's pages. Every request is a GET with
+//     redirect "manual": a page's redirect is not followed, and the log says only that the answer redirected, to the
+//     same host or another, and whether the target's path is the asked path give or take a trailing slash. No link of a
+//     page is read or followed, and no address is built: each one asked is written out in FIXED (a robots.txt followed
+//     to itself is asked again at its own address). At most 14 requests (BUDGET): an address that answered 429 is asked
+//     once more, after 10 s, only when the site asked for no longer wait (a Retry-After of 10 s or less, or none), and a
+//     robots.txt that redirected to itself is asked again after 10 s, each only while the budget still keeps a place for
+//     every address of FIXED after it. The User-Agent names a research probe and nothing else.
 // (2) The reading: a page is NOT READ unless it answered 200 with the type expected (HTML, the PDF, JSON) and carries
 //     200 characters of text or more. An HTML page's text is its visible text: scripts, styles, templates and comments
 //     left out; the alt and title attributes and <noscript> read; entities decoded, letters as NFKC gives them, soft
@@ -197,25 +206,35 @@ export function readHtml(html: string): HtmlRead {
 
 // ---- robots.txt (RFC 9309, as far as this probe needs it) ----
 export interface Robots { own: boolean; rules: Array<{ allow: boolean; path: string }>; delay: number | null }
-/** The rules that apply to this probe: the groups for its own name, else those for every reader ("*"). */
-export function robotsRules(txt: string): Robots {
+/** The rules that apply to a reader named `token` (this probe's own name unless another is given): the groups for that
+ *  name, else those for every reader ("*"). A line ends only at CR or LF, and its comment runs from its first "#" to its
+ *  end, as Google's reference parser of RFC 9309 reads them (robots.cc splits lines at 0x0A and 0x0D alone and cuts a
+ *  comment at its "#"): U+2028 and U+2029 are characters of the line like any other. A group's User-agent lines end
+ *  only at an Allow or a Disallow line, so a Sitemap, Crawl-delay, Host or any other record between two of them does
+ *  not split the group (RFC 9309 §2.1, as that parser reads it: robots.cc ends them only there, and its test
+ *  ID_LineSyntax_Groups_OtherRules). Both since the check of IDX-0e2 (24 Nov 2026): until then such a record split the
+ *  group, and a comment holding U+2028 or U+2029 lost its line, each leaving a page asked that the file disallowed. A
+ *  line is cut at its first "#" and its first ":" and trimmed, in time in proportion to its length. */
+export function robotsRules(txt: string, token: string = TOKEN): Robots {
   type G = { agents: string[]; rules: Array<{ allow: boolean; path: string }>; delay: number | null };
   const groups: G[] = [];
-  let cur: G | null = null, agentLine = false;
+  // inAgents: the group being read is still in its User-agent lines (a User-agent line now adds a name to it)
+  let cur: G | null = null, inAgents = false;
   for (const raw of txt.split(/\r\n|\r|\n/)) {
-    const m = /^\s*([A-Za-z-]+)\s*:\s*(.*?)\s*$/.exec(raw.replace(/#.*$/, ""));
-    if (!m) continue;
-    const key = m[1].toLowerCase(), val = m[2];
+    const hash = raw.indexOf("#"), line = hash < 0 ? raw : raw.slice(0, hash), colon = line.indexOf(":");
+    if (colon < 0) continue;
+    const name = line.slice(0, colon).trim();
+    if (!/^[A-Za-z-]+$/.test(name)) continue;
+    const key = name.toLowerCase(), val = line.slice(colon + 1).trim();
     if (key === "user-agent") {
-      if (cur === null || !agentLine) { cur = { agents: [], rules: [], delay: null }; groups.push(cur); }
-      cur.agents.push(val.toLowerCase().split("/")[0].trim()); agentLine = true; continue;
+      if (cur === null || !inAgents) { cur = { agents: [], rules: [], delay: null }; groups.push(cur); }
+      cur.agents.push(val.toLowerCase().split("/")[0].trim()); inAgents = true; continue;
     }
-    agentLine = false;
     if (cur === null) continue;
-    if (key === "allow" || key === "disallow") cur.rules.push({ allow: key === "allow", path: val });
+    if (key === "allow" || key === "disallow") { cur.rules.push({ allow: key === "allow", path: val }); inAgents = false; }
     else if (key === "crawl-delay") { const d = Number(val); if (Number.isFinite(d) && d >= 0) cur.delay = Math.max(cur.delay ?? 0, d); }
   }
-  const own = groups.filter((g) => g.agents.includes(TOKEN)), use = own.length > 0 ? own : groups.filter((g) => g.agents.includes("*"));
+  const own = groups.filter((g) => g.agents.includes(token.toLowerCase())), use = own.length > 0 ? own : groups.filter((g) => g.agents.includes("*"));
   return { own: own.length > 0, rules: use.flatMap((g) => g.rules), delay: use.reduce<number | null>((d, g) => (g.delay === null ? d : Math.max(d ?? 0, g.delay)), null) };
 }
 const matches = (pattern: string, path: string): boolean => {
@@ -231,10 +250,33 @@ export function robotsAllows(rules: Robots["rules"], path: string): boolean {
   }
   return best === null ? true : best.allow;
 }
+/** RFC 9309 §2.3.1, as both index probes read a robots.txt's last answer (ix_sox imports it): a 2xx is the file; a 4xx
+ *  but 429 is no file, so every path is allowed; any other answer (a 3xx not followed, a 429, a 5xx) and no answer
+ *  (null) are complete disallow. A 2xx that is not text, is an HTML page or is over the size read is unreadable, which
+ *  the caller says, and that is complete disallow too. */
+export type RobotsFate = "file" | "none" | "disallow";
+export const robotsFate = (status: number | null): RobotsFate => (status !== null && status >= 200 && status < 300 ? "file" : status !== null && status >= 400 && status < 500 && status !== 429 ? "none" : "disallow");
+/** The most redirects of a robots.txt to its own address that a run follows (RFC 9309 §2.3.1.2 asks crawlers to follow
+ *  at least five, across hosts too; these probes follow none to another address). */
+export const REDIRECTS_MAX = 5;
+/** What the log says of a robots.txt's answer that leaves its host's pages unasked, or (none) lets them all be asked. */
+export const ROBOTS_SAYS = {
+  none: "robots.txt: none (4xx): every path allowed by RFC 9309",
+  serverError: "robots.txt: unreachable (5xx): complete disallow by RFC 9309",
+  noAnswer: "robots.txt: unreachable (no answer): complete disallow by RFC 9309",
+  busy: "robots.txt: unreachable (429): complete disallow",
+  elsewhere: "robots.txt: unreadable (a redirect elsewhere is not followed): complete disallow",
+  itself: "robots.txt: unreadable (a redirect to itself not followed: at most 5 are, each while the budget keeps a place for every address still to come): complete disallow",
+  unread: "robots.txt read: no: complete disallow",
+} as const;
+/** The end of a robots.txt's line for an answer that is neither a file read nor a 4xx but 429. */
+export const robotsEnd = (g: { kind: string; status?: number; self?: boolean }): string =>
+  g.kind === "none" ? ROBOTS_SAYS.noAnswer : g.kind === "redirect" ? (g.self === true ? ROBOTS_SAYS.itself : ROBOTS_SAYS.elsewhere)
+    : g.kind === "status" && g.status === 429 ? ROBOTS_SAYS.busy : g.kind === "status" && (g.status ?? 0) >= 500 ? ROBOTS_SAYS.serverError : ROBOTS_SAYS.unread;
 
 // ---- the answers ----
-type TypeClass = "html" | "pdf" | "json" | "text" | "other";
-const typeOf = (ct: string | null): TypeClass => {
+export type TypeClass = "html" | "pdf" | "json" | "text" | "other";
+export const typeOf = (ct: string | null): TypeClass => {
   const t = (ct ?? "").split(";")[0].trim().toLowerCase();
   if (t === "text/html" || t === "application/xhtml+xml") return "html";
   if (t === "application/pdf") return "pdf";
@@ -244,11 +286,11 @@ const typeOf = (ct: string | null): TypeClass => {
 type Got =
   | { kind: "budget" }
   | { kind: "none" }
-  | { kind: "redirect"; status: number; target: boolean; sameHost: boolean; samePath: boolean }
+  | { kind: "redirect"; status: number; target: boolean; sameHost: boolean; samePath: boolean; self: boolean }
   | { kind: "status"; status: number; retryAfter: string | null; again?: "wait" | "budget" }
-  | { kind: "ok"; type: TypeClass; contentType: string; lastModified: boolean; n: number; over: boolean; bytes: Uint8Array };
+  | { kind: "ok"; status: number; type: TypeClass; contentType: string; lastModified: boolean; n: number; over: boolean; bytes: Uint8Array };
 const drop = async (r: Response): Promise<void> => { try { await r.body?.cancel(); } catch { /* already gone */ } };
-const capped = async (r: Response, cap: number): Promise<{ n: number; over: boolean; bytes: Uint8Array }> => {
+export const capped = async (r: Response, cap: number): Promise<{ n: number; over: boolean; bytes: Uint8Array }> => {
   const reader = r.body?.getReader();
   if (reader === undefined) return { n: 0, over: false, bytes: new Uint8Array(0) };
   const parts: Uint8Array[] = [];
@@ -265,12 +307,15 @@ const capped = async (r: Response, cap: number): Promise<{ n: number; over: bool
   for (const p of parts) { bytes.set(p, at); at += p.byteLength; }
   return { n, over: false, bytes };
 };
-const whereTo = (location: string | null, f: Fixed): { target: boolean; sameHost: boolean; samePath: boolean } => {
+/** Where a redirect points, as the log tells it (the same host or another; the asked path, give or take a trailing
+ *  slash), and whether it is this same address (https, the same host and port, exactly the asked path, no query and no
+ *  user), the one redirect a robots.txt's is followed to. */
+export const whereTo = (location: string | null, f: Fixed): { target: boolean; sameHost: boolean; samePath: boolean; self: boolean } => {
   let t: URL | null = null;
   try { t = location === null ? null : new URL(location, f.url); } catch { t = null; }
-  if (t === null) return { target: false, sameHost: false, samePath: false };
-  const trim = (p: string): string => (p.length > 1 ? p.replace(/\/$/, "") : p);
-  return { target: true, sameHost: t.host.toLowerCase() === f.host, samePath: trim(t.pathname) === trim(f.path) };
+  if (t === null) return { target: false, sameHost: false, samePath: false, self: false };
+  const trim = (p: string): string => (p.length > 1 ? p.replace(/\/$/, "") : p), sameHost = t.host.toLowerCase() === f.host;
+  return { target: true, sameHost, samePath: trim(t.pathname) === trim(f.path), self: t.protocol === "https:" && sameHost && t.pathname === f.path && t.search === "" && t.username === "" && t.password === "" };
 };
 const textOf = (b: Uint8Array, contentType: string): string => {
   const head = new TextDecoder("latin1").decode(b.subarray(0, 4096));
@@ -298,7 +343,7 @@ export function licenceFields(spec: unknown): { present: boolean; exact: boolean
 // ---- the log: say() prints the probe's own strings, numbers and yes or no, and nothing else ----
 type Safe = { readonly safe: string };
 const SAID: ReadonlySet<string> = new Set([
-  UA, ...FIXED.map((f) => f.url), ...FIXED.map((f) => f.host), ...LABELS, ...Object.values(OGDL_NAME), ...CANDIDATES.map((c) => c.name),
+  UA, ...FIXED.map((f) => f.url), ...FIXED.map((f) => f.host), ...LABELS, ...Object.values(OGDL_NAME), ...CANDIDATES.map((c) => c.name), ...Object.values(ROBOTS_SAYS),
   "html", "pdf", "json", "text", "other", "the same host", "another host", "HOLD", "PASS", "NOT READ", "robots.txt read: no", "10 s", "its crawl-delay",
 ]);
 const listed = (r: Record<string, number>): Safe => ({ safe: Object.entries(r).map(([w, n]) => `${LABELS.has(w) ? w : "(withheld)"} (${Math.round(n)})`).join(", ") || "none" });
@@ -336,11 +381,13 @@ export async function ixTerms(io: Io): Promise<IxRun> {
     try { r = await io.fetch(f.url, { method: "GET", redirect: "manual", headers: { "user-agent": UA, accept: ACCEPT[f.kind] }, signal: AbortSignal.timeout(TIMEOUT_MS) }); } catch { return { kind: "none" }; }
     try {
       if (r.type === "opaqueredirect" || (r.status >= 300 && r.status < 400)) { const to = whereTo(r.headers.get("location"), f); await drop(r); return { kind: "redirect", status: r.status, ...to }; }
-      if (r.status !== 200) { const retryAfter = r.headers.get("retry-after"); await drop(r); return { kind: "status", status: r.status, retryAfter }; }
+      if (f.kind === "robots" ? robotsFate(r.status) !== "file" : r.status !== 200) { const retryAfter = r.headers.get("retry-after"); await drop(r); return { kind: "status", status: r.status, retryAfter }; }
       const contentType = r.headers.get("content-type") ?? "", lastModified = r.headers.get("last-modified") !== null;
-      return { kind: "ok", type: typeOf(contentType), contentType, lastModified, ...(await capped(r, CAP[f.kind])) };
+      return { kind: "ok", status: r.status, type: typeOf(contentType), contentType, lastModified, ...(await capped(r, CAP[f.kind])) };
     } catch { return { kind: "none" }; }
   };
+  /** Whether one request more for the address at k leaves a place for every address of FIXED after it. */
+  const kept = (k: number): boolean => run.made + 1 + (FIXED.length - 1 - k) <= BUDGET;
   /** One address of FIXED: after its host's gap when the host was asked before; a 429 asked once more as (1) says. */
   const ask = async (k: number, gap: number): Promise<Got> => {
     const f = FIXED[k];
@@ -350,14 +397,14 @@ export async function ixTerms(io: Io): Promise<IxRun> {
     if (g.kind !== "status" || g.status !== 429) return g;
     const ra = g.retryAfter === null ? null : g.retryAfter.trim();
     if (ra !== null && !(/^\d{1,9}$/.test(ra) && Number(ra) <= RETRY_MS / 1000)) return { ...g, again: "wait" };
-    if (run.made + 1 + (FIXED.length - 1 - k) > BUDGET) return { ...g, again: "budget" };
+    if (!kept(k)) return { ...g, again: "budget" };
     const wait = Math.max(RETRY_MS, gap);
     say`GET ${f.url}: 429. Asked once more after ${wait === RETRY_MS ? "10 s" : "its crawl-delay"}.`;
     await io.wait(wait);
     return once(f);
   };
   /** The answer's part of a GET line, for anything but a 200 that was read. */
-  const answered = (f: Fixed, g: Got, end: "NOT READ" | "robots.txt read: no"): void => {
+  const answered = (f: Fixed, g: Got, end: string): void => {
     if (g.kind === "budget") say`${f.url}: not asked (the budget of 14 requests is spent). ${end}`;
     else if (g.kind === "none") say`GET ${f.url}: no answer (an error of the network or no answer within 30 s). ${end}`;
     else if (g.kind === "redirect") {
@@ -367,15 +414,15 @@ export async function ixTerms(io: Io): Promise<IxRun> {
       if (g.again === "wait") say`GET ${f.url}: 429. Not asked again: the site asks for a longer wait than 10 s. ${end}`;
       else if (g.again === "budget") say`GET ${f.url}: 429. Not asked again: the budget of 14 keeps a place for every address still to come. ${end}`;
       else say`GET ${f.url}: ${g.status}. ${end}`;
-    } else if (g.over) say`GET ${f.url}: 200, ${g.type}, over ${CAP[f.kind]} bytes (more than this probe reads). ${end}`;
-    else say`GET ${f.url}: 200, ${g.type}, ${g.n} bytes. ${end}: ${f.kind} was expected`;
+    } else if (g.over) say`GET ${f.url}: ${g.status}, ${g.type}, over ${CAP[f.kind]} bytes (more than this probe reads). ${end}`;
+    else say`GET ${f.url}: ${g.status}, ${g.type}, ${g.n} bytes. ${end}: ${f.kind} was expected`;
   };
   const printWords = (v: Verdict, w: Words): void => { say`  ${v}. ${wordsLine(w)}`; };
 
   try {
     say`== ix_terms (IDX-0e, 24 Nov 2026): the index candidates' terms, from the 13 fixed addresses of 6 hosts`;
-    say`Each host's robots.txt first, then only the pages it allows, 3 s apart. No link of a page is read and no redirect is followed; no other address is asked.`;
-    say`At most 14 requests: an address that answered 429 is asked once more, after 10 s, while the budget keeps a place for every address still to come.`;
+    say`Each host's robots.txt first, read by RFC 9309 §2.3.1 (a 4xx other than 429: no file, every path allowed; a 5xx or no answer: complete disallow) and, stricter than the RFC, a 429 as complete disallow too, then only the pages it allows, 3 s apart. No link of a page is read and no redirect of a page is followed; no other address is asked.`;
+    say`At most 14 requests: an address that answered 429 is asked once more after 10 s, and a robots.txt that redirected to itself is followed up to 5 times, each only while the budget keeps a place for every address still to come.`;
     say`Printed: these addresses, status numbers, the type (html, pdf, json, text or other), counts, yes or no, and the words of the probe's own lists that matched, each once with its count.`;
     say`User-Agent: ${UA}`;
     for (let i = 0; i < FIXED.length;) {
@@ -383,18 +430,27 @@ export async function ixTerms(io: Io): Promise<IxRun> {
       for (i++; i < FIXED.length && FIXED[i].host === host; i++) pages.push(i);
       say``;
       say`== ${host}`;
-      // robots.txt: read only as 200 text that is not an HTML page
-      const rf = FIXED[robotsAt], rg = await ask(robotsAt, GAP_MS);
-      let rules: Robots | null = null;
+      // robots.txt by RFC 9309 §2.3.1 (robotsFate): a 2xx is the file, read only as text that is not an HTML page; a
+      // redirect to this same address is asked again, at most 5 times, each while the budget keeps a place for every
+      // address still to come; a 4xx but 429 is no file (every path allowed); anything else is complete disallow
+      const rf = FIXED[robotsAt];
+      let rg = await ask(robotsAt, GAP_MS);
+      for (let hop = 1; rg.kind === "redirect" && rg.self && hop <= REDIRECTS_MAX && kept(robotsAt); hop++) {
+        say`GET ${rf.url}: ${rg.status}, redirected to this same address (https, this host, the path /robots.txt, no query): asked again after 10 s, redirect ${hop} of at most 5 followed`;
+        rg = await ask(robotsAt, RETRY_MS);
+      }
+      let rules: Robots | null = null, open = false;
       if (rg.kind === "ok" && !rg.over && rg.type === "text") {
         const txt = new TextDecoder("utf-8").decode(rg.bytes);
-        if (/^\s*<|<html[\s>]|<!doctype/i.test(txt.slice(0, 2048))) say`GET ${rf.url}: 200, text, ${rg.n} bytes. robots.txt read: no (an HTML page in its place)`;
-        else { rules = robotsRules(txt); say`GET ${rf.url}: 200, text, ${rg.n} bytes. robots.txt read: yes; a group for this probe's own name: ${rules.own}; a crawl-delay over 3 s: ${(rules.delay ?? 0) > 3}`; }
-      } else if (rg.kind === "ok" && !rg.over) say`GET ${rf.url}: 200, ${rg.type}, ${rg.n} bytes. robots.txt read: no (it is not text)`;
-      else answered(rf, rg, "robots.txt read: no");
+        if (/^\s*<|<html[\s>]|<!doctype/i.test(txt.slice(0, 2048))) say`GET ${rf.url}: ${rg.status}, text, ${rg.n} bytes. robots.txt read: no (an HTML page in its place): complete disallow`;
+        else { rules = robotsRules(txt); say`GET ${rf.url}: ${rg.status}, text, ${rg.n} bytes. robots.txt read: yes; a group for this probe's own name: ${rules.own}; a crawl-delay over 3 s: ${(rules.delay ?? 0) > 3}`; }
+      } else if (rg.kind === "ok" && !rg.over) say`GET ${rf.url}: ${rg.status}, ${rg.type}, ${rg.n} bytes. robots.txt read: no (it is not text): complete disallow`;
+      else if (rg.kind === "status" && robotsFate(rg.status) === "none") { open = true; say`GET ${rf.url}: ${rg.status}. ${ROBOTS_SAYS.none}`; }
+      else answered(rf, rg, robotsEnd(rg));
       const slow = rules !== null && (rules.delay ?? 0) > CRAWL_MAX_S, gap = rules === null ? GAP_MS : Math.max(GAP_MS, Math.round((rules.delay ?? 0) * 1000));
       const go = pages.filter((k) => {
         const f = FIXED[k];
+        if (open) { say`  ${f.url}: no robots.txt, so every path is allowed: yes`; return true; }
         if (rules === null) { say`  ${f.url}: not asked (this host's robots.txt was not read)`; return false; }
         if (slow) { say`  ${f.url}: not asked (robots.txt asks for more than 30 s between requests)`; return false; }
         if (!robotsAllows(rules.rules, f.path)) { say`  ${f.url}: not asked (robots.txt disallows it)`; return false; }
@@ -456,13 +512,14 @@ const pdfWithin = async (io: Io, bytes: Uint8Array): Promise<string | null> => {
 };
 
 /** A PDF's text by unpdf (from npm, under Deno, as lib.ts's pdfPages and edinet_spec_pdf.ts read one), or null: under
- *  Node the import fails. The console is silent while pdf.js reads, so that none of its warnings reaches the log. */
+ *  Node the import fails. unpdf is pinned at 2.2.1, the version this probe's checks read PDFs with (IDX-0e2; until then
+ *  a run took npm's newest). The console is silent while pdf.js reads, so that none of its warnings reaches the log. */
 export async function pdfText(bytes: Uint8Array): Promise<string | null> {
   const keys = ["log", "info", "warn", "error", "debug"] as const, kept = keys.map((k) => console[k]);
   for (const k of keys) console[k] = () => undefined;
   try {
     // @ts-ignore: a Deno npm: specifier; under Node the import fails and the PDF is NOT READ
-    const m = (await import("npm:unpdf")) as unknown as { getDocumentProxy(d: Uint8Array, o?: Record<string, unknown>): Promise<unknown>; extractText(p: unknown, o: { mergePages: false }): Promise<{ text: string[] }> };
+    const m = (await import("npm:unpdf@2.2.1")) as unknown as { getDocumentProxy(d: Uint8Array, o?: Record<string, unknown>): Promise<unknown>; extractText(p: unknown, o: { mergePages: false }): Promise<{ text: string[] }> };
     const { text } = await m.extractText(await m.getDocumentProxy(new Uint8Array(bytes), { verbosity: 0 }), { mergePages: false });
     return text.join("\n");
   } catch { return null; } finally { keys.forEach((k, i) => { console[k] = kept[i]; }); }

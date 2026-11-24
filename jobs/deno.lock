@@ -3,6 +3,7 @@
   "specifiers": {
     "npm:@supabase/supabase-js@2": "2.119.0",
     "npm:pdfjs-dist@4.10.38": "4.10.38",
+    "npm:unpdf@2.2.1": "2.2.1_pdfjs-dist@4.10.38",
     "npm:xlsx@0.18.5": "0.18.5"
   },
   "npm": {
@@ -159,6 +160,15 @@
     },
     "tslib@2.8.1": {
       "integrity": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="
+    },
+    "unpdf@2.2.1_pdfjs-dist@4.10.38": {
+      "integrity": "sha512-tstQpe/fhxkDGY1ZtpejwnU14QZ9w0SYLo9lIZooB1zQ7QXVE4t+SBQUN/2a9+EBg9UrrO2bWlqdzV+UtoebHw==",
+      "dependencies": [
+        "pdfjs-dist"
+      ],
+      "optionalPeers": [
+        "pdfjs-dist"
+      ]
     },
     "wmf@1.0.2": {
       "integrity": "sha512-/p9K7bEh0Dj6WbXg4JG0xvLQmIadrner1bi45VMJTfnbVHsc7yIajZyoSoK60/dtVBs12Fm6WkUI5/3WAVsNMw=="
