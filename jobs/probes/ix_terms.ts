@@ -421,8 +421,8 @@ export async function ixTerms(io: Io): Promise<IxRun> {
 
   try {
     say`== ix_terms (IDX-0e, 24 Nov 2026): the index candidates' terms, from the 13 fixed addresses of 6 hosts`;
-    say`Each host's robots.txt first, read as RFC 9309 §2.3.1 says (a 4xx but 429: no file, every path allowed; a 429, a 5xx or no answer: complete disallow), then only the pages it allows, 3 s apart. No link of a page is read and no redirect of a page is followed; no other address is asked.`;
-    say`At most 14 requests: an address that answered 429, or a robots.txt that redirected to itself, is asked once more, after 10 s, while the budget keeps a place for every address still to come.`;
+    say`Each host's robots.txt first, read by RFC 9309 §2.3.1 (a 4xx other than 429: no file, every path allowed; a 5xx or no answer: complete disallow) and, stricter than the RFC, a 429 as complete disallow too, then only the pages it allows, 3 s apart. No link of a page is read and no redirect of a page is followed; no other address is asked.`;
+    say`At most 14 requests: an address that answered 429 is asked once more after 10 s, and a robots.txt that redirected to itself is followed up to 5 times, each only while the budget keeps a place for every address still to come.`;
     say`Printed: these addresses, status numbers, the type (html, pdf, json, text or other), counts, yes or no, and the words of the probe's own lists that matched, each once with its count.`;
     say`User-Agent: ${UA}`;
     for (let i = 0; i < FIXED.length;) {

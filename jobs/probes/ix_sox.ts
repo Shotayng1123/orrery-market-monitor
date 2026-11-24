@@ -169,7 +169,7 @@ export async function ixSox(io: Io): Promise<SoxRun> {
   try {
     say`== ix_sox (IDX-0e2, 24 Nov 2026): SOX's members from Nasdaq's own list, beside the Nasdaq-100's list as the Monitor asks for it`;
     say`Released by the owner on 24 Nov 2026: Nasdaq's lists are read for personal use (the Nasdaq-100 kept as the Monitor reads it; SOX from Nasdaq).`;
-    say`api.nasdaq.com's robots.txt first, read as RFC 9309 §2.3.1 says (a 4xx but 429: no file, every path allowed; a 429, a 5xx or no answer: complete disallow), for every reader and for each product of the User-Agent; then only the two lists it allows, 3 s apart, with the headers the Monitor's fetchNasdaq100 sends. No redirect of a list is followed; no other address is asked.`;
+    say`api.nasdaq.com's robots.txt first, read by RFC 9309 §2.3.1 (a 4xx other than 429: no file, every path allowed; a 5xx or no answer: complete disallow) and, stricter than the RFC, a 429 as complete disallow too, for every reader and for each product of the User-Agent; then only the two lists it allows, 3 s apart, with the headers the Monitor's fetchNasdaq100 sends. No redirect of a list is followed; no other address is asked.`;
     say`At most 4 requests: an address that answered 429, or a robots.txt that redirected to itself, is asked once more, after 10 s, while the budget keeps a place for every address still to come.`;
     say`Printed: these addresses, status numbers, the type (html, pdf, json, text or other), bytes, yes or no, counts, the names of the four columns fetchNasdaq100 reads, and SOX's member symbols of a ticker's form. Nothing else of an answer.`;
     say`User-Agent: ${UA}`;
