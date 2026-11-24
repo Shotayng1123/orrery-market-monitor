@@ -4,10 +4,11 @@
 // On a computer a 460-px panel at the right of the book, beside Overview, under the preview line; on a phone a page of
 // the book. The server reads the price (pf_ticket, asked when the name is looked up and again each minute); the size is
 // worked out here with the server's own rules (lib/pf/size.ts, the same file), so it follows every key at once.
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Panel } from "../Panel";
 import { Section } from "../PhoneKit";
-import { href } from "./shared";
+import { href, useHeaderTop } from "./shared";
+import { zoomNow } from "../../lib/prefs";
 import { failureWords, noTicketRoute, pfTicket, type TicketAnswer } from "../../lib/pf";
 import { ageWords, SIDE_WORD, SIDES, sizeOrder, toUnit, type Side, type SizeBy } from "../../lib/pf/size.ts";
 import { parseAmount } from "../../lib/pf/money.ts";
@@ -29,11 +30,30 @@ export function Ticket({ book, phone, init }: { book: BookFull; phone: boolean; 
   const [by, setBy] = useState<SizeBy>("pct"), [value, setValue] = useState("");
   const [got, setA] = useState<TicketAnswer | null>(null), [err, setErr] = useState<string | null>(null), [busy, setBusy] = useState(false), [minute, setMinute] = useState(0);
   useEffect(() => { const t = setInterval(() => setMinute((m) => m + 1), 60e3); return () => clearInterval(t); }, []);
+  // on a computer the panel stays in view as the book scrolls, under the header where the header stays at the top (the
+  // scrolling layout), as the book's other cards that stay in view do (L2-1 of the night review of 23 Nov 2026: at top 0
+  // it slid under the header, its head, ✕, NAME and LOOK UP hidden); on a phone there is no panel and this does nothing
+  const panel = useRef<HTMLElement>(null);
+  useHeaderTop(panel);
+  // and never taller than the window's room under it (--pf-room, in the page's own px): in a small window at a large text
+  // size (1280x720 at XL) its foot would otherwise stay below the window while the book scrolls; it then scrolls inside
+  useLayoutEffect(() => {
+    const box = panel.current, bar = document.getElementById("topbar");
+    if (!box) return;
+    const set = () => { const top = parseFloat(box.style.getPropertyValue("--pf-top")) || 0; box.style.setProperty("--pf-room", `${Math.max(240, Math.floor(innerHeight / zoomNow() - top - 8))}px`); };
+    set();
+    const ro = typeof ResizeObserver !== "undefined" && bar ? new ResizeObserver(set) : null;
+    if (bar) ro?.observe(bar);
+    window.addEventListener("resize", set);
+    return () => { ro?.disconnect(); window.removeEventListener("resize", set); };
+  }, []);
   useEffect(() => {
     if (!sym) { setA(null); setErr(null); return; }
     let alive = true;
     setBusy(true);
-    pfTicket(book.id, sym).then((r) => { if (alive) { setA(r); setErr(null); setSide((x) => (r.sides.includes(x) ? x : r.sides[0])); } })
+    // a way to size that the new name's menu does not offer (an amount in the currency of the name before) goes back to
+    // the menu's first, in the same step as the answer, so that the menu never shows one way while the size is read another
+    pfTicket(book.id, sym).then((r) => { if (alive) { setA(r); setErr(null); setSide((x) => (r.sides.includes(x) ? x : r.sides[0])); setBy((x) => (x !== "local" || (r.instrument != null && r.instrument.ccy !== book.base) ? x : "pct")); } })
       .catch((e: unknown) => { if (alive) { setErr(noTicketRoute(e) ? TICKET_NOT_ON_SERVER : failureWords(e, { offline: "Offline: the ticket's price needs the server.", signedOut: "Signed out: sign in again.", refused: (w) => `The price could not be read: ${w}.` })); } })
       .finally(() => { if (alive) setBusy(false); });
     return () => { alive = false; };
@@ -43,13 +63,19 @@ export function Ticket({ book, phone, init }: { book: BookFull; phone: boolean; 
   // the answer of the name now looked up only; none while a read fails
   const a = got && got.symbol === sym && !err ? got : null;
   const inst = a?.instrument ?? null, print = a?.print ?? null, cap = book.kind === "AR" ? "capital" : "NAV";
+  // an amount in the name's own currency is offered when it is not the book's; while the next name's price is being read,
+  // the menu keeps the currency of the name before it (nothing is sized meanwhile), so a way both offer stays shown
+  const menuCcy = inst?.ccy ?? (busy && !err ? got?.instrument?.ccy : undefined);
   const ways: Array<[SizeBy, string, string]> = [["pct", `% of ${cap}`, "%"], ["bps", `bp of ${cap}`, "bp"], ["base", `Amount in ${book.base}`, book.base]];
-  if (inst && inst.ccy !== book.base) ways.push(["local", `Amount in ${inst.ccy}`, inst.ccy]);
+  if (menuCcy && menuCcy !== book.base) ways.push(["local", `Amount in ${menuCcy}`, menuCcy]);
   ways.push(["shares", "Shares", "shares"]);
-  const unit = ways.find((w) => w[0] === by)?.[2] ?? "";
+  // the way the figure is read is always the one the menu shows: the way chosen while the menu offers it, else its first
+  // (N1-1 of the night review of 23 Nov 2026: the menu fell back to "% of capital" while "2" was still read as yen)
+  const way: SizeBy = ways.some((w) => w[0] === by) ? by : ways[0][0];
+  const unit = ways.find((w) => w[0] === way)![2];
   // an amount reads as the creation form reads one ("1m", "1.5bn", "1,000,000"), or as a plain figure; the rest as a figure
-  const num = (by === "base" || by === "local" ? parseAmount(value) : null) ?? Number(value.replace(/,/g, ""));
-  const sized = inst && print && value.trim() !== "" ? sizeOrder({ side, by, value: num, position: a!.position, lot: inst.lot, price: print.tooOld ? null : print.price, ccy: inst.ccy, base: book.base, usdjpy: a!.fx?.rate ?? null, kind: book.kind, capital: a!.book.capital }) : null;
+  const num = (way === "base" || way === "local" ? parseAmount(value) : null) ?? Number(value.replace(/,/g, ""));
+  const sized = inst && print && value.trim() !== "" ? sizeOrder({ side, by: way, value: num, position: a!.position, lot: inst.lot, price: print.tooOld ? null : print.price, ccy: inst.ccy, base: book.base, usdjpy: a!.fx?.rate ?? null, kind: book.kind, capital: a!.book.capital }) : null;
   // the print's age now: the server's figure at its read, plus the minutes since (the read is asked again each minute)
   const age = print && a ? print.ageMin + Math.max(0, Math.round((Date.now() - Date.parse(a.asked)) / 60e3)) : null;
 
@@ -88,7 +114,7 @@ export function Ticket({ book, phone, init }: { book: BookFull; phone: boolean; 
         })}</span>
       </div>
       <div className="pf-t-row"><span className="k">Size</span>
-        <span className="pf-t-size"><select id="pf-t-by" aria-label="Size by" value={by} onChange={(e) => setBy(e.target.value as SizeBy)}>{ways.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+        <span className="pf-t-size"><select id="pf-t-by" aria-label="Size by" value={way} onChange={(e) => setBy(e.target.value as SizeBy)}>{ways.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
           <input id="pf-t-value" inputMode="decimal" aria-label="Size" value={value} onChange={(e) => setValue(e.target.value)} /><span className="u">{unit}</span></span>
       </div>
       {result}
@@ -98,7 +124,7 @@ export function Ticket({ book, phone, init }: { book: BookFull; phone: boolean; 
   const title = `${book.name} (${book.kind} · ${book.base})`;
   if (phone) return <Section title="Paper order" aux={STARTS[book.start].short} pad><div id="pf-ticket" className="pfp-ticket">{form}</div></Section>;
   return (
-    <aside className="pf-ticket" id="pf-ticket" aria-label="Paper order" onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); location.hash = href(book.id); } }}>
+    <aside ref={panel} className="pf-ticket" id="pf-ticket" aria-label="Paper order" onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); location.hash = href(book.id); } }}>
       <Panel no="" title={`PAPER ORDER · ${title}`} k="pf-ticket" csv={false} aux={<a className="pf-link" id="pf-t-close" href={href(book.id)} aria-label="Close the ticket">&#10005;</a>}>{form}</Panel>
     </aside>
   );

@@ -113,8 +113,12 @@ Monitor's.
 2. Repository variable `VITE_API_URL` = the Monitor API URL.
 3. Push to `main` (or run the `deploy-web` workflow). The site is served at `https://shotayng1123.github.io/orrery-market-monitor/`.
 
-The server (database changes and the functions) is deployed by the `deploy-server` workflow on a push to `main` that
-touches `supabase/`, once its two secrets exist; the set-up and the first-time steps are in `supabase/README.md`.
+The server (database changes and the functions) is deployed by the `deploy-server` workflow, once its two secrets exist,
+on a push to `main` that changes a file under `supabase/migrations/` or `supabase/functions/`, `supabase/config.toml`,
+`jobs/tools/deploy_guard.jq` or the workflow itself (`.github/workflows/deploy-server.yml`): its `on.push.paths`. A push
+that changes only other files, `supabase/README.md` or `supabase/cron.sql` among them, deploys nothing. Run by hand, the
+workflow shows what a deploy would change (mode `check`) or deploys (mode `deploy`). The set-up and the first-time steps
+are in `supabase/README.md`.
 
 ## The tour (since 2026-11-23)
 
@@ -151,7 +155,7 @@ correction of the accepted cut that a check requires, with the owner told what c
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,539 checks in 57 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24), the Home Screen frame's `phone-frame` (111), and slice 11's new suite `tour` (101) and 7 more in `offline`): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,559 checks in 57 suites on 23 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24), the Home Screen frame's `phone-frame` (111), slice 11's new suite `tour` (101) and 7 more in `offline`, and the night review's fixes of 23 Nov (8 more in `pf-ticket`, 9 in `pf-preview` and 3 in `tour`)): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of; the
   window, or the day of a figure that is not today's, under every phone change; σ never shown as Σ; headed tables; an older server's answer still read), one
@@ -227,7 +231,9 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   player first and Help after it, with no navigation; in the Home Screen app's frame, for the preview account, Back,
   Esc, CLOSE and a tap outside closing the player first and Help after it, with the bar on the window's foot and the
   frame where it stood, also scrolled down and with Help opened at a row, and the page scrolling again after, no
-  overflow left on html, body or #pscroll).
+  overflow left on html, body or #pscroll; and the page's two small taps, "Read the tour instead" and the mark with the
+  name, 44 px to the finger on an iPhone 13, an SE and an iPhone 13 on its side, a tap at the top of the first's reach
+  opening the words).
   The **layout guard** (`layout-guard`) opens all eight screens at five computer sizes (1280×720 to 2560×1440, and
   1440×900 with small text), at 1440×900 with large text (every screen but EQUITIES, which joins once it is fixed
   there) and on two phones, and a stock's two pages at three more windows (1366×768 and 1536×864 at text L,
@@ -340,6 +346,12 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   to size an amount on; a future refused in words; a server of before the ticket; and on an iPhone 13 and an SE the
   ticket as a page of the book, 16-px inputs and 44-px taps, on a weekend's dated print and with a wide font, nothing
   of the ticket off the screen. (On a 320-px phone a long figure typed in the size box scrolls inside it: a later fix.)
+  Since the night review of 23 Nov 2026: the way a figure is sized is the way the menu shows, on a computer and an
+  iPhone 13 (N1-1: on the yen book, after "Amount in USD" for NVDA, 7203.T shows "% of capital" and sizes 2 as 2% of
+  capital, 66,900 shares, not as JPY 2; NVDA again keeps "% of capital"). On a computer, scrolled half-way and to the
+  end at 1440x900, 1280x720 and 1440x900 XL, the ticket stands under the header with its head, ✕, NAME and LOOK UP in
+  view and taking the click; at 1280x720 XL, where it is taller than the room under the header, it is held to that room
+  and scrolls inside (L2-1).
   `source-lines` (round 3b, the designer's B.0.3 and B.1): every panel head's source line drawn whole or in its short
   form, never cut, at six windows and in a wider face, also as the window is resized; "personal use" whole, opening
   Help at its paragraph (in FULL too), and on a phone a space on each side of its dot; JPX's calendar named with
@@ -370,7 +382,10 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   local copy (`om_paper = "preview"`): the line first on every screen of the tab, the whole sentence on a computer, one
   line in a 44-px tap on an iPhone 13 and an iPhone SE (and whole, in its tap, with a wide font forced) that opens the
   sentence in a sheet, the statement still asked at the first CREATE, Help's Preview row, the classic phone layout, and
-  no line, or no tab and no screens' file, in the other two states.
+  no line, or no tab and no screens' file, in the other two states; and on a computer in the scrolling
+  layout, the preview's seven-tab header as tall as everyone's six-tab one, the search box on the row it has with six
+  tabs, at 1280x720, 1366x768, 1440x900, 1536x864 and 1920x1080 and at text S, M, L and XL, with the stand-in's alert
+  and with the alert line at its longest, every tab name whole and the box and its words as everyone's (L2-2).
   `cd web && npm run e2e` starts the test servers it needs and runs them all, up to three suites at a time (two of
   the dev servers' and one of the built site's, whose suites queue behind each other): about
   28 minutes on the engineer's machine (the whole run for the 57 suites and 3,539 checks of P-2.1, the Home Screen

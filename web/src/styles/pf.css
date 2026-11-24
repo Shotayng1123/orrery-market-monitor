@@ -488,7 +488,7 @@ body.pv2 .pf-err .pf-link{display:inline-flex;align-items:center;min-height:44px
 .pf-withticket{display:flex;align-items:flex-start;gap:var(--gap,10px)}
 .pf-withticket>.pf-main{flex:1 1 auto;min-width:0}
 .pf-withticket .pf-cols{grid-template-columns:minmax(0,1fr)}
-.pf-ticket{flex:0 0 460px;width:460px;max-width:100%;position:sticky;top:var(--pf-top,0px);border-top:2px solid var(--cyan)}
+.pf-ticket{flex:0 0 460px;width:460px;max-width:100%;position:sticky;top:var(--pf-top,0px);max-height:var(--pf-room,none);overflow-y:auto;border-top:2px solid var(--cyan)}
 .pf-strip #pf-buysell{margin-left:6px}
 .pf-ticket-form{display:flex;flex-direction:column;gap:8px;font-size:12px}
 .pf-t-row{display:flex;align-items:center;gap:10px}

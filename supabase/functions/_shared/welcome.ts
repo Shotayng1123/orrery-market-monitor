@@ -21,13 +21,14 @@ export const PHILOSOPHY = [
   "Markets are a system of that kind: thousands of prices, rates and currencies moving with and against one another, around the clock. The Orrery Monitor is a model of it. The whole on one screen, each part in its place, so you can see what moved, by how much, and why.",
 ];
 
-/** The six tabs, in the order of the Monitor's own header: the address after the #, the name, and what is there. */
+/** The six tabs, in the order of the Monitor's own header and by its names (web/src/lib/labels.ts TAB, upper-cased as the
+ *  header draws them; sim/logic.test.ts holds them to it): the address after the #, the name, and what is there. */
 export const TABS: Array<[hash: string, name: string, what: string]> = [
-  ["market", "MARKET", "Equities, volatility, futures, currencies, bonds and commodities in one table: the change over one day to three years, how unusual today's level is against the past month, and where it sits in its 52-week range."],
+  ["market", "MARKETS", "Equities, volatility, futures, currencies, bonds and commodities in one table: the change over one day to three years, how unusual today's level is against the past month, and where it sits in its 52-week range."],
   ["news", "NEWS", "The economic calendar, company earnings dates and market headlines, in Singapore time."],
   ["research", "RESEARCH", "The Morning Note, Monday to Saturday around 07:00 SGT: what moved overnight, and why. The Weekly Strategy, Fridays at 15:00 SGT."],
   ["equities", "EQUITIES", "Seven indices from Tokyo to New York: breadth, sector performance and money flow, the movers, a heat map and a screener, with today's moves while the market is open."],
-  ["rates", "RATES & CURRENCY", "Government yield curves, policy rates and the major currency pairs."],
+  ["rates", "RATES & FX", "Government yield curves, policy rates and the major currency pairs."],
   ["watch", "WATCHLIST", "Your own names, with their earnings dates, headlines, research that mentions them, and alerts."],
 ];
 

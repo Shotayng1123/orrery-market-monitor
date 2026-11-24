@@ -10,6 +10,10 @@
 //       with no money beside them); a future refused in words; a server of before
 //   [3] a phone: Buy / Sell in the book's head (44 px), the ticket as a page of the book, the preview line first, 16-px
 //       inputs and 44-px taps, nothing cut and no sideways scroll, on a weekend's dated print, once with a wide font
+//   [4] the way a figure is sized is the way the menu shows (N1-1 of the night review of 23 Nov 2026: on the yen book,
+//       after "Amount in USD" for NVDA, a Tokyo name showed "% of capital" and sized "2" as JPY 2): a computer and a phone
+//   [5] a computer, the page scrolled: the ticket stays under the header, its head, ✕, NAME and LOOK UP in view and
+//       taking the click (L2-1 of the same review: it slid under the sticky header), at 1440x900 and 1280x720, and at XL
 // Run from web/:  node e2e/run.cjs pf-ticket   (the runner starts the server this needs; see e2e/run.cjs)
 const { chromium, devices } = require("playwright");
 const fs = require("fs"), path = require("path");
@@ -24,9 +28,9 @@ const words = fs.readFileSync(path.join(__dirname, "..", "src", "lib", "pf", "wo
 const word = (name) => { const m = new RegExp(`export const ${name} = "((?:[^"\\\\]|\\\\.)*)";`).exec(words); if (!m) throw new Error(`${name} not found in words.ts`); return JSON.parse(`"${m[1]}"`); };
 const NOTE = word("TICKET_NOTE"), NOT_ON_SERVER = word("TICKET_NOT_ON_SERVER");
 
-async function open(b, { phone = null, ls = {}, now = TOKYO_OPEN, size = null } = {}) {
+async function open(b, { phone = null, ls = {}, now = TOKYO_OPEN, size = null, view = [1440, 900] } = {}) {
   const dev = phone ? devices[PHONES[phone]] : null;
-  const ctx = await b.newContext(dev ? { ...dev, deviceScaleFactor: 1 } : { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+  const ctx = await b.newContext(dev ? { ...dev, deviceScaleFactor: 1 } : { viewport: { width: view[0], height: view[1] }, deviceScaleFactor: 1 });
   await ctx.addInitScript(([at, more, sz]) => { try { localStorage.setItem("om_mock_now", at); localStorage.setItem("om_a2hs_hide", "1"); localStorage.setItem("om_paper", "preview"); if (sz) localStorage.setItem("om_prefs", JSON.stringify({ size: sz, compact: false, v: 2 })); for (const [k, v] of Object.entries(more)) localStorage.setItem(k, v); } catch {} }, [now, ls, size]);
   const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
   return { ctx, p, errs };
@@ -132,6 +136,59 @@ const fit = (p) => p.evaluate(() => {
     const label = `${ph}${wide ? " (wide font)" : ""}${now === SATURDAY ? ", Saturday" : ""}`;
     ck(`${label}: Buy / Sell in the book's head is ${bs?.h} px tall; the ticket takes Overview's place under the preview line, neither of the book's two views lit; inputs at 16 px, the sides ${m.sides} px and Look up ${m.look} px tall`, !!bs && bs.h >= 44 && bs.text === "Buy / Sell" && !m.overview && m.lit === 0 && f.first && m.input === 16 && m.value === 16 && m.by === 16 && m.sides >= 44 && m.look >= 44, { bs, m, f });
     ck(`${label}: the print ("${pr}") and the size ("${q}") whole: nothing cut, no sideways scroll (${f.sideways})`, (now === SATURDAY ? /^last 2,987\.0 JPY · 20 Nov 14:30 SGT · 20 h 30 min old · Yahoo Finance, unofficial$/ : /21 min old/).test(pr ?? "") && q === "→ Buy 1,000 shares (100-share lots)" && f.cut.length === 0 && f.sideways <= 0 && f.inside && errs.length === 0, { pr, q, f, errs });
+    await ctx.close();
+  }
+
+  console.log("\n[4] the way a figure is sized is the way the menu shows: the yen book, NVDA by an amount in dollars, then a Tokyo name");
+  // the stand-in yen book (ID 2) has a capital of JPY 10bn: 2% is JPY 200,000,000, which at 2,987.0 a share in lots of
+  // 100 is 669 lots, 66,900 shares; read as yen ("2"), it would be no share at all
+  const menu = (p) => p.evaluate(() => { const s = document.querySelector("#pf-t-by"), t = (q) => document.querySelector(q)?.innerText.replace(/\s+/g, " ").trim() ?? null;
+    return { value: s.value, shown: s.options[s.selectedIndex]?.textContent ?? null, ways: [...s.options].map((o) => o.value).join(), unit: document.querySelector(".pf-t-size .u")?.textContent ?? null, conv: t("#pf-t-conv"), qty: t("#pf-t-qty"), why: t("#pf-t-why") }; });
+  for (const ph of [null, "P2"]) {
+    const { ctx, p, errs } = await open(b, { phone: ph });
+    const label = ph ? "P2" : "C1";
+    await go(p, `portfolio/${ID(2)}/ticket?s=NVDA&side=buy`, "#pf-ticket");
+    await p.waitForSelector(`.pf-ticket-form[data-asked="NVDA"]`, { timeout: 15000 }); await settle(p);
+    await size(p, "local", "1000"); const usd = await menu(p);
+    await look(p, "7203.T"); await p.fill("#pf-t-value", "2"); await settle(p, 150); const jp = await menu(p);
+    ck(`${label}: NVDA by "Amount in USD" 1000 is "${usd.qty}"; then 7203.T, whose currency is the book's, offers no amount in dollars (${jp.ways}): the menu shows "${jp.shown}" and "2" is sized as that: "${jp.conv}" → "${jp.qty}", the unit "${jp.unit}"`,
+      usd.shown === "Amount in USD" && usd.unit === "USD" && usd.qty === "→ Buy 5 shares" && jp.ways === "pct,bps,base,shares" && jp.value === "pct" && jp.shown === "% of capital" && jp.unit === "%" && /^= JPY 200,000,000$/.test(jp.conv ?? "") && jp.qty === "→ Buy 66,900 shares (100-share lots)", { usd, jp });
+    // back to a name that offers the dollar amount again: the menu keeps the way it last showed, and sizes by it
+    await look(p, "NVDA"); const back = await menu(p);
+    ck(`${label}: NVDA again: the menu keeps "${back.shown}" (it showed that last) and sizes "2" by it: "${back.conv}" → "${back.qty}"`, back.value === "pct" && back.shown === "% of capital" && back.unit === "%" && /^= JPY 200,000,000 = USD 1,262,626\.26 at USD\/JPY 158\.400/.test(back.conv ?? "") && /^→ Buy [1-9][\d,]* shares$/.test(back.qty ?? "") && errs.length === 0, { back, errs });
+    await ctx.close();
+  }
+
+  console.log("\n[5] a computer, the page scrolled: the ticket under the header, its head, ✕, NAME and LOOK UP in view");
+  // what stands at the ticket's head when the page has scrolled half-way and to its end: each part below the header's
+  // foot, and the part itself takes a click at its middle (not the header)
+  const underHeader = (p, where) => p.evaluate(async (where) => {
+    const s = document.scrollingElement; s.scrollTop = where === "end" ? s.scrollHeight : where === "middle" ? Math.round((s.scrollHeight - innerHeight) / 2) : 0;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const bar = document.querySelector("#topbar").getBoundingClientRect().bottom, t = document.querySelector("#pf-ticket").getBoundingClientRect();
+    const part = (sel) => { const e = document.querySelector(sel), r = e.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { top: Math.round(r.top * 10) / 10, takes: !!hit && e.contains(hit) }; };
+    const parts = { head: part("#pf-ticket .phead"), close: part("#pf-t-close"), name: part("#pf-t-symbol"), look: part("#pf-t-look") };
+    const note = document.querySelector("#pf-t-note").getBoundingClientRect(), inner = document.querySelector("#pf-ticket");
+    return { where, scrolled: Math.round(s.scrollTop), of: s.scrollHeight - innerHeight, bar: Math.round(bar * 10) / 10, top: Math.round(t.top * 10) / 10, bottom: Math.round(t.bottom * 10) / 10, window: innerHeight, parts,
+      ok: t.top >= bar - 0.5 && Object.values(parts).every((x) => x.top >= bar - 0.5 && x.takes), foot: t.bottom <= innerHeight + 0.5, noteIn: note.bottom <= t.bottom + 0.5, inside: inner.scrollHeight > inner.clientHeight + 0.5 };
+  }, where);
+  for (const [w, h, sz] of [[1440, 900, null], [1280, 720, null], [1440, 900, "XL"], [1280, 720, "XL"]]) {
+    const { ctx, p, errs } = await open(b, { view: [w, h], size: sz });
+    await go(p, `portfolio/${ID(1)}`, "#pf-overview");
+    await p.click("#pf-buysell"); await p.waitForSelector("#pf-ticket", { timeout: 15000 }); await settle(p);
+    // 2% of capital: the ticket at its tallest here, with the size in dollars, in yen and its rate under the box
+    await look(p, "7203.T"); await size(p, "pct", "2");
+    const at = [await underHeader(p, "middle"), await underHeader(p, "end")];
+    if (h === 720 && sz === "XL") {
+      // a window shorter than the panel's room under the header: the panel is held to that room and scrolls inside, so
+      // half-way down the book its head is in view and its foot is inside the window, the note reached by scrolling it
+      // (at the very end the book's own end lifts it, as any card that stays in view). 1050% of capital: the longest
+      // figures, which make the ticket taller than that room
+      await p.fill("#pf-t-value", "1050"); await settle(p, 150);
+      const m = await underHeader(p, "middle"); await p.evaluate(() => { const t = document.querySelector("#pf-ticket"); t.scrollTop = t.scrollHeight; }); await settle(p, 100);
+      const note = await p.evaluate(() => { const t = document.querySelector("#pf-ticket").getBoundingClientRect(), n = document.querySelector("#pf-t-note").getBoundingClientRect(); return n.top >= t.top - 0.5 && n.bottom <= t.bottom + 0.5 && n.bottom <= innerHeight + 0.5; });
+      ck(`${w}x${h}, text ${sz}: half-way (${m.scrolled} of ${m.of}) the ticket stands under the header (its top ${m.top}, the header's foot ${m.bar}), head, ✕, NAME and LOOK UP in view, its foot inside the window (${m.bottom} of ${m.window}); it scrolls inside itself and its last line comes into view`, m.scrolled > 0 && m.ok && m.foot && m.inside && note && errs.length === 0, { m, note, errs });
+    } else ck(`${w}x${h}${sz ? `, text ${sz}` : ""}: scrolled half-way (${at[0].scrolled} of ${at[0].of}) and to the end, the ticket stands under the header (its top ${at[0].top} and ${at[1].top}, the header's foot ${at[0].bar}); its head, ✕, NAME and LOOK UP in view and taking the click; the whole ticket inside the window, nothing of it scrolled away inside`, at.every((x) => x.scrolled > 0 && x.ok && x.foot && x.noteIn && !x.inside) && errs.length === 0, { at, errs });
     await ctx.close();
   }
 
