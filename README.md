@@ -159,7 +159,7 @@ correction of the accepted cut that a check requires, with the owner told what c
 
 Three sets, none of which needs the real API, the live database or a sign-in:
 
-- **Browser checks** (`web/e2e`, 3,580 checks in 57 suites on 24 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24), the Home Screen frame's `phone-frame` (111), slice 11's new suite `tour` (101) and 7 more in `offline`, the night review's fixes of 23 Nov (8 more in `pf-ticket`, 9 in `pf-preview` and 3 in `tour`) and slice W-1's 21 more in `units-labels`): every tab on a desktop and in the phone layout, the
+- **Browser checks** (`web/e2e`, 3,584 checks in 57 suites on 24 Nov 2026, counted from slice 9's run of 53 suites (3,290), slice 8's `letter-placement` (6), P-2.1's `pf-ticket` (24), the Home Screen frame's `phone-frame` (111), slice 11's new suite `tour` (101) and 7 more in `offline`, the night review's fixes of 23 Nov (8 more in `pf-ticket`, 9 in `pf-preview` and 3 in `tour`), slice W-1's 21 more in `units-labels` and 4 in `phone-rates-watchlist-stock`): every tab on a desktop and in the phone layout, the
   local stand-in feed (every tab filled, with the hard cases of length and state, and none of it in the built site),
   units and labels (a yield's changes in bp on the watchlist, the same figures as MARKETS; every row's as-of, and at
   three set clocks an index member at today's print while its market trades, by the time its own page gives, and at its

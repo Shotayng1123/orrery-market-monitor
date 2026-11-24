@@ -80,7 +80,7 @@ export function WatchlistPhone({ tick }: { tick: number }) {
             );
           }) : <Empty title={w.ready && list.data ? "Your watchlist is empty" : "Loading your watchlist"}>{list.error ?? (w.ready && list.data ? "Press the star beside a name on its page, in the screener or in the results calendar, or type part of a name or of a symbol above and choose from the list." : "")}</Empty>}
         </div>
-        {rows.length > 0 && <p className="mp-note" id="wl-src">{src ? `${/[,;]/.test(src) ? "Sources" : "Source"}: ${src}. ` : ""}A time is a last print's, a date a close's or an official yield's day; an index member is at its last print from its market's first quote of a session until that session's close is booked. A yield's changes are in bp.</p>}
+        {rows.length > 0 && <p className="mp-note" id="wl-src">{src ? `${/[,;]/.test(src) ? "Sources" : "Source"}: ${src}. ` : ""}A time is a print's, a date a close's or an official yield's day; a yield's changes are in bp.</p>}
       </Section>
       <Section title={RESULTS_AHEAD} aux="Yahoo Finance · dates only" card={false}>
         <div className="mp-card">

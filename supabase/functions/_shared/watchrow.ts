@@ -88,11 +88,24 @@ export interface StatLike {
   earnings_at: string | null; earnings_est: boolean | null;
   q_price?: number | null; q_prev?: number | null; q_time?: string | null;
 }
-/** Of a name's rows in two lists (the Nikkei 225 and TOPIX), the one with the newest booked close, then the newest quote:
- *  each list's quotes are read at its own minutes. */
-export function newestStats<T extends Pick<StatLike, "symbol" | "d" | "q_time">>(rows: T[]): Map<string, T> {
-  const by = new Map<string, T>();
-  for (const r of rows) { const o = by.get(r.symbol); if (!o || r.d > o.d || (r.d === o.d && (r.q_time ?? "") > (o.q_time ?? ""))) by.set(r.symbol, r); }
+/** The lists in the order that gives a name in two of them its name and sector: the order of INDEX_IDS in
+ *  constituents.ts (not imported: that file loads the workbook reader), each market's flagship index first. */
+export const NAME_ORDER = ["SP500", "NK225", "NDX", "TOPIX", "KOSPI200", "HSI", "SSE180"];
+/** Of a name's rows in two lists (the Nikkei 225 and TOPIX, the S&P 500 and the Nasdaq-100): the figures of the one
+ *  with the newest booked close, then the newest quote (each list's quotes are read at its own minutes, the Nikkei
+ *  225's every 10 and TOPIX's every 20), and the name and sector of the one whose list comes first in NAME_ORDER, so
+ *  they do not change with whichever list was read last (W-1's check, F2-1). Each list's row takes them from its own
+ *  row of `constituents`, filled by symbol from the same sources (Yahoo's English name; the GICS sector, official for
+ *  the S&P 500's names, Yahoo's mapped for the rest), so they differ only where those two rows were filled differently
+ *  (one not yet filled). Until 24 Nov 2026 the route took the first row the database returned, ordered by symbol alone. */
+export function newestStats<T extends Pick<StatLike, "idx" | "symbol" | "name" | "sector" | "d" | "q_time">>(rows: T[]): Map<string, T> {
+  const by = new Map<string, T>(), named = new Map<string, T>();
+  const rank = (idx: string) => { const i = NAME_ORDER.indexOf(idx); return i < 0 ? NAME_ORDER.length : i; };
+  for (const r of rows) {
+    const o = by.get(r.symbol); if (!o || r.d > o.d || (r.d === o.d && (r.q_time ?? "") > (o.q_time ?? ""))) by.set(r.symbol, r);
+    const n = named.get(r.symbol); if (!n || rank(r.idx) < rank(n.idx) || (rank(r.idx) === rank(n.idx) && r.idx < n.idx)) named.set(r.symbol, r);
+  }
+  for (const [s, r] of by) { const n = named.get(s) as T; if (n !== r) by.set(s, { ...r, name: n.name, sector: n.sector }); }
   return by;
 }
 /** The watchlist's row for an index member (W-1, PM A's finding 1.3a, 24 Nov 2026; until then always its booked close).

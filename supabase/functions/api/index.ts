@@ -512,7 +512,7 @@ async function watchList(userId: string) {
     members(),
   ]);
   const tBy = new Map((((snap?.payload as { rows?: TableLike[] } | null)?.rows) ?? []).map((r) => [r.symbol, r]));
-  const sBy = newestStats(stats);
+  const sBy = newestStats(stats);   // a name in two lists: the newest row's figures, the name and sector of a fixed list order
   const missing = syms.filter((s) => !tBy.has(s) && !sBy.has(s));
   const qBy = missing.length ? await quotes(missing).catch(() => ({} as Awaited<ReturnType<typeof quotes>>)) : {};
   const rows = wl.map((w) => {

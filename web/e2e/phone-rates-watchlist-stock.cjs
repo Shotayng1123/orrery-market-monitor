@@ -122,6 +122,24 @@ const measure = async (p, taps) => { await p.evaluate(() => { document.querySele
       const e = await p.evaluate(() => ({ sub: document.querySelector(".mp-asof").textContent, empties: [...document.querySelectorAll(".mp-sec .empty b")].map((x) => x.textContent) }));
       ck("an empty watchlist: every section says so and how to add names, nothing breaks", e.sub === "0 names" && e.empties.length === 5 && e.empties[0] === "Your watchlist is empty" && errs.length === 0, { e, errs }); await ctx.close(); }
   }
+  // The note under MY NAMES (W-1's check, 24 Nov 2026): when an index member came to show today's print, the note was
+  // made true at four lines (five at 375 px on whole px) where live's took two (three), and with one name RESULTS
+  // AHEAD's first day bar left an iPhone 13's first view. It says what a line's time and date are, its source and a
+  // yield's unit in no more lines than live's note: two at 390 and 375 px, three at 320 px, as installed and on whole
+  // px. The local copy at a set clock (Tue 24 Nov 10:50 JST, Tokyo open), one name; at 390 x 664 the day bar has 2 px
+  // to spare, as on live.
+  console.log("\n[WATCHLIST: the note under MY NAMES, one name]");
+  for (const [w, h, most] of [[390, 664, 2], [375, 667, 2], [320, 568, 3]]) {
+    const ctx = await b.newContext({ ...devices["iPhone 13"], viewport: { width: w, height: h } }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));
+    await ctx.addInitScript(() => { try { localStorage.setItem("om_mock_now", "2026-11-24T01:50:00Z"); localStorage.setItem("om_a2hs_hide", "1"); localStorage.setItem("om_mock_watch", JSON.stringify([{ symbol: "7203.T", name: null }])); } catch { /* the page's own default */ } });
+    await p.goto(MOCK + "?phone=new#watch", { waitUntil: "networkidle" }); await p.waitForSelector("#wl-src"); await p.waitForTimeout(800);
+    const m = await p.evaluate(() => { const n = document.getElementById("wl-src"), nav = document.getElementById("pnav").getBoundingClientRect().top;
+      const whole = (e) => { const r = e?.getBoundingClientRect(); return !!r && r.height > 0 && r.top >= 0 && r.bottom <= nav; };
+      return { text: n.textContent, lines: Math.round(n.getBoundingClientRect().height / parseFloat(getComputedStyle(n).lineHeight)), names: document.querySelectorAll(".mp-row.starred").length, row: whole(document.querySelector(".mp-row.starred")), day: whole(document.querySelector(".ev-day")) }; });
+    ck(`${w} px: the note names the source, what a time and a date are and a yield's unit, in ${m.lines} line(s) (at most ${most}, as live's)`, m.names === 1 && m.lines <= most && /^Source: Yahoo Finance\. A time is a print's, a date a close's or an official yield's day; a yield's changes are in bp\.$/.test(m.text) && errs.length === 0, { m, errs });
+    if (w === 390) ck("390 x 664: MY NAMES' line and RESULTS AHEAD's first day bar stand whole above the tab bar, as on live", m.row && m.day, m);
+    await ctx.close();
+  }
   // classic layout untouched: a phone without the preview and a desktop still get the desktop views
   console.log("\n[unchanged elsewhere]");
   { const ctx = await b.newContext({ ...devices["iPhone 13"] }); const p = await ctx.newPage(); const errs = []; p.on("pageerror", (e) => errs.push(e.message));

@@ -23,7 +23,7 @@ import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabas
 import { ALERTS, COMPANY, FIRST, HELP, PHILOSOPHY, PHONE, TABS, TOUR, TOUR_ALT, TOUR_LINK, WELCOME_SUBJECT, welcomeMail } from "../supabase/functions/_shared/welcome.ts";
 import { FEED_LATE_MIN, OWN_SHORT_MIN, barDayEnd, barSettled, feedState, fxTrading, silence, stoppedBeforeClose, weekFirstPrint, type Print } from "../supabase/functions/_shared/feedhealth.ts";
 import { OWN_FRESH_MIN, RELAY_BEAT_MAX_S, RELAY_CRON, RELAY_JOBS, RELAY_LATE_MIN, RELAY_OK_RUN, RELAY_WAIT_MIN, beatFresh, cronDue, current, newerOnly, reading, relayAct, relayJobsDue, usable, type RelayView } from "../supabase/functions/_shared/relay.ts";
-import { CBOE_YIELDS, closeDay, isYieldQuote, isYieldRow, newestStats, sourceName, watchRowFromQuote, watchRowFromStat, watchRowFromTable, type QuoteLike } from "../supabase/functions/_shared/watchrow.ts";
+import { CBOE_YIELDS, closeDay, isYieldQuote, isYieldRow, NAME_ORDER, newestStats, sourceName, watchRowFromQuote, watchRowFromStat, watchRowFromTable, type QuoteLike } from "../supabase/functions/_shared/watchrow.ts";
 import { alertFigWord, alertHeadline, sigmaNoteLine } from "../web/src/lib/alertline.ts";
 import { asOfCell, asOfLine, asOfOf, asOfTitle, rowAsOfTitle, rowSource, tileStamp } from "../web/src/lib/time.ts";
 import { finBack, finFit, finRest } from "../web/src/lib/finscroll.ts";
@@ -1105,6 +1105,20 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     // (every 10 and every 20): the row read is the one with the newest close, then the newest quote
     const two = newestStats([{ ...member, idx: "TOPIX", q_time: "2026-11-24T01:23:00+00:00" }, member, { ...nvda }, { ...member, idx: "OLD", d: "2026-11-19", q_time: "2026-11-24T01:40:00+00:00" }]);
     ck("W-1: of a name's rows in two lists the one with the newest close, then the newest quote, is read", two.get("7203.T")?.idx === "NK225" && two.get("NVDA")?.symbol === "NVDA" && two.size === 2, [...two.values()].map((r) => [r.idx, r.symbol]));
+    // W-1's check (F2-1): the Nikkei 225's quotes (read at :x0) and TOPIX's (:03, :23, :43) take turns at being the newest
+    // during Tokyo's session, and the two lists' rows can carry different names and sectors (each list's own, until the
+    // sector job fills its row). The figures stay the newest row's; the name and sector are the first list's of a fixed
+    // order (NAME_ORDER, as INDEX_IDS in constituents.ts: the S&P 500, the Nikkei 225, the Nasdaq-100, TOPIX, ...), so a
+    // row is not renamed or moved to another sector between refreshes, in whichever order the database returns the rows
+    const nk = { ...member, name: "TOYOTA MOTOR CORP.", sector: "Technology" }, tp = { ...member, idx: "TOPIX", name: "トヨタ自動車", sector: "自動車・輸送機" };
+    const quoteAt = (r: typeof member, t: string, px: number) => ({ ...r, q_time: t, q_price: px });
+    const turns = [[quoteAt(nk, "2026-11-24T01:30:00+00:00", 3500), quoteAt(tp, "2026-11-24T01:43:00+00:00", 3510)], [quoteAt(tp, "2026-11-24T01:43:00+00:00", 3510), quoteAt(nk, "2026-11-24T01:50:00+00:00", 3520)]];
+    const seen = turns.flatMap((rows) => [rows, [...rows].reverse()].map((rs) => { const s = newestStats(rs).get("7203.T")!, w = watchRowFromStat(s, "JPY", tokyo); return { idx: s.idx, name: w.name, sector: w.sector, last: w.last, asOf: w.asOf }; }));
+    const usBy = newestStats([{ ...nvda, idx: "NDX", name: "NVIDIA Corp", sector: "Technology", q_time: "2026-11-24T15:10:00+00:00", q_price: 183 }, { ...nvda, sector: "Information Technology", q_time: "2026-11-24T15:00:00+00:00" }]).get("NVDA");
+    const consts = readText(new URL("../supabase/functions/_shared/constituents.ts", import.meta.url), "utf8"), ids = /export const INDEX_IDS: IndexId\[\] = \[([^\]]*)\]/.exec(consts)?.[1].replace(/[\s"]/g, "").split(",") ?? [];
+    ck("W-1 (F2-1): a name in two lists keeps one name and sector whichever list's quote is the newer (the Nikkei 225's before TOPIX's, the S&P 500's before the Nasdaq-100's: the order of constituents.ts INDEX_IDS), with the newest row's figures, in either order of the rows",
+      seen.every((r) => r.name === "TOYOTA MOTOR CORP." && r.sector === "Technology") && seen.map((r) => `${r.idx} ${r.last} ${r.asOf}`).join() === ["TOPIX 3510 2026-11-24T01:43:00+00:00", "TOPIX 3510 2026-11-24T01:43:00+00:00", "NK225 3520 2026-11-24T01:50:00+00:00", "NK225 3520 2026-11-24T01:50:00+00:00"].join()
+        && usBy?.idx === "NDX" && usBy.q_price === 183 && usBy.name === "NVIDIA Corporation" && usBy.sector === "Information Technology" && JSON.stringify(ids) === JSON.stringify(NAME_ORDER), { seen, usBy, ids, NAME_ORDER });
     const api = readText(new URL("../supabase/functions/api/index.ts", import.meta.url), "utf8");
     ck("W-1: the route reads the quote's columns where the database has them (else the closes, as index_stats does), the newest row of each name, and builds a member's row with this mapping, dated by its list's exchange",
       /try \{ return await selectAll<StatLike>\(\(\) => db\.from\("constituent_stats"\)\.select\(COLS \+ ",q_price,q_prev,q_time"\)\.in\("symbol", syms\)/.test(api) && /catch \{ return await selectAll<StatLike>\(\(\) => db\.from\("constituent_stats"\)\.select\(COLS\)\.in\("symbol", syms\)/.test(api)
