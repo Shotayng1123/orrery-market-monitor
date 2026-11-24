@@ -11,7 +11,7 @@ import { scanQuoteAlerts } from "./alerts.ts";
 import { selectCols } from "./paging.ts";
 import { localDate } from "./sessions.ts";
 import { tseHolidays } from "./assets.ts";
-import { LIMIT_COLS, LIMIT_LISTS, beyondNote, lacksLimitCols, limRunOf, quotePrint, rowLimitState, shiftPrev, untradedOf, withoutLimitCols, type LimitStat } from "./rules/limitrow.ts";
+import { LIMIT_COLS, LIMIT_LISTS, beyondNote, lacksLimitCols, quotePrint, rowLimitState, runCols, shiftPrev, untradedOf, withoutLimitCols, type LimitStat } from "./rules/limitrow.ts";
 
 interface Constituent { idx: string; symbol: string; name: string; name_en: string | null; sector: string | null; gics_industry: string | null; weight: number | null }
 
@@ -120,13 +120,14 @@ export async function computeIndexStats(idx: IndexId, log: (s: string) => void =
     }
   } catch (e) { log(`quotes failed: ${e instanceof Error ? e.message : e}`); }
   // the limit chip (L-2): the session before each row's quote, shifted as the flow job shifts it, and, for a Tokyo list,
-  // the run its booked close's own limit rests on, from the closes in hand (rules/limitrow.ts limRunOf)
+  // the run its booked close's own limit rests on, from the closes in hand, with the last session it covers (rules/
+  // limitrow.ts runCols): a reader takes the run only for the booked close it was worked out for
   if (lim) {
     const by = new Map(stored.map((s) => [s.symbol, s])), hol = tokyo ? await tseHolidays().catch(() => null) : null;
     for (const r of rows) {
       const s = by.get(r.symbol as string), at = (r.q_time as string | null | undefined) ?? null, prevCols = shiftPrev(s, at, sessionOf(r.symbol as string));
       Object.assign(r, prevCols);
-      if (tokyo) r.lim_run = hol ? limRunOf(tails.get(r.symbol as string) ?? [], hol, untradedOf({ q_time: at ?? s?.q_time ?? null, volume: at ? (r.volume as number | null) : s?.volume ?? null, ...prevCols }, hol)) : null;
+      if (tokyo) Object.assign(r, hol ? runCols(tails.get(r.symbol as string) ?? [], hol, untradedOf({ q_time: at ?? s?.q_time ?? null, volume: at ? (r.volume as number | null) : s?.volume ?? null, ...prevCols }, hol)) : { lim_run: null, lim_d: null });
     }
   }
   await upsertStats(rows, lim);

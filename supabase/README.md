@@ -576,7 +576,11 @@ whether the print a Tokyo row shows is at its daily price limit, from that row o
   price. When a quote of a later session comes in, the stored quote's volume and time move to `prev_vol` and `prev_qt`,
   and `prev_vol` to `prev2_vol`: the base session's volume and last trade. At booking, a Nikkei 225 or TOPIX row gets
   `lim_run`: the run of sessions up to the one before its booked close that closed at their limit or had no trade,
-  from the closes the job holds, set on the TSE's sessions (`sessions_cal`); + up, − down, null when not known.
+  from the closes the job holds, set on the TSE's sessions (`sessions_cal`); + up, − down, null when not known. With it
+  goes `lim_d`, the last session that run covers (the session before the booked close's). The server reads `lim_run`
+  only where `lim_d` is the session before the row's booked close (`runBefore`): code that keeps no run (live after a
+  revert, or GitHub's jobs at a reverted main) books new closes and leaves both as they were, and that run is then not
+  known, so no chip (the L-2 check's F2-1).
 - **Sent.** `index_stats` (Nikkei 225 and TOPIX) and `watch_list` rows carry `lim` (side, price, base, width, at,
   closed) only while the print the row shows is at its limit; the chip's columns are not sent. A watchlist member's
   `lim` is worked out on the row its figures come from (the name's newest row, as WATCHLIST reads it since W-1), for

@@ -9,18 +9,19 @@ import { EQUAL_YEN, isSession, limitRun, limitState, limitsOf, prevSession, tseD
 /** The lists whose .T names are placed (the rule's not-placed): the Monitor's Nikkei 225 and TOPIX. */
 export const LIMIT_LISTS: readonly string[] = ["NK225", "TOPIX"];
 /** constituent_stats' columns for the chip (migration 20261124000001); a database from before has none of them. */
-export const LIMIT_COLS = ["q_high", "q_low", "prev_vol", "prev2_vol", "prev_qt", "lim_run"] as const;
+export const LIMIT_COLS = ["q_high", "q_low", "prev_vol", "prev2_vol", "prev_qt", "lim_run", "lim_d"] as const;
 /** Whether a database's answer is that one of those columns is not there (Postgres on a read, PostgREST on a write). */
 export const lacksLimitCols = (message: string): boolean => /does not exist|could not find the/i.test(message) && LIMIT_COLS.some((c) => message.includes(c));
 /** A row to write to such a database: key for key as before the chip. */
 export function withoutLimitCols<T extends object>(row: T): T { for (const c of LIMIT_COLS) delete (row as Record<string, unknown>)[c]; return row; }
 
 /** A row of constituent_stats as far as the chip reads it: the booked close (`d`, `close`, the close before it `prev`),
- *  the stored quote (`q_*`, its day `volume`), the session before the stored quote's (`prev_*`) and the run (`lim_run`). */
+ *  the stored quote (`q_*`, its day `volume`), the session before the stored quote's (`prev_*`), and the run (`lim_run`)
+ *  with the last session it covers (`lim_d`, a date: the session before `d`'s when the run was booked). */
 export interface LimitStat {
   symbol: string; d: string; close: number; prev?: number | null;
   q_price?: number | null; q_prev?: number | null; q_time?: string | null; q_high?: number | null; q_low?: number | null; volume?: number | null;
-  prev_vol?: number | null; prev2_vol?: number | null; prev_qt?: string | null; lim_run?: number | null;
+  prev_vol?: number | null; prev2_vol?: number | null; prev_qt?: string | null; lim_run?: number | null; lim_d?: string | null;
 }
 /** A print a row shows: a last price with its time, the day's high and low where held, and the quote's previous close. */
 export interface LimitPrint { price: number | null; at: string | null; high?: number | null; low?: number | null; quotePrev?: number | null }
@@ -74,6 +75,20 @@ export function limRunOf(closes: ReadonlyArray<{ d: string; v: number }>, holida
   for (let i = series.length - 1; i >= 1 && i >= series.length - run; i--) { const c = series[i].close, p = series[i - 1].close; if ((sessionAt(c, p) ?? 0) >= 1) { side = (c as number) < (p as number) ? -1 : 1; break; } }
   return run === 0 ? 0 : side * run;
 }
+/** lim_run and lim_d as a booking writes them: the run (limRunOf) and the last session it covers, the one before the
+ *  booked close's; both null where the run is not known. lim_d is what tells the run of a row's booked close from one an
+ *  earlier booking left (F2-1 of the L-2 check: code without the run, live after a revert or GitHub's jobs at a reverted
+ *  main, books new closes and leaves lim_run as it was). */
+export function runCols(closes: ReadonlyArray<{ d: string; v: number }>, holidays: ReadonlySet<string>, untraded: ReadonlySet<string> = new Set()): { lim_run: number | null; lim_d: string | null } {
+  const run = limRunOf(closes, holidays, untraded);
+  return run === null ? { lim_run: null, lim_d: null } : { lim_run: run, lim_d: prevSession(closes[closes.length - 1].d, holidays) };
+}
+/** A row's lim_run where it is the run its booked close rests on: its last session (lim_d) is the session before the
+ *  booked close's. Otherwise null, not known, as a run never booked: one an earlier booking left, or one without lim_d. */
+export function runBefore(s: Pick<LimitStat, "d" | "lim_run" | "lim_d">, holidays: ReadonlySet<string>): number | null {
+  const b = prevSession(s.d, holidays);
+  return s.lim_run != null && b !== "" && s.lim_d === b ? s.lim_run : null;
+}
 /** The run up to a booked close from the run before it (lim_run) and that close against the one before it: decision-exact
  *  with limitRun over the whole series (under 2 exactly when its is). null stays null. */
 export function runThrough(before: number | null, close: number | null | undefined, prev: number | null | undefined): number | null {
@@ -93,15 +108,17 @@ export function closePrint(s: LimitStat): LimitPrint {
 }
 /** The rule's input for a print of a row (`p`: the row's quote, its booked close, or the stock page's own quote). A print
  *  of a later session than the booked close stands on that close, with the run through it; the booked session's own print
- *  stands on the close before it, which the booking placed on the session before when it kept lim_run. The base
+ *  stands on the close before it, which the booking placed on the session before when it kept lim_run. Either reads
+ *  lim_run only where it is the run before the booked close (runBefore); otherwise the run is not known: no chip, as
+ *  "run" for a later session's print and as "no-base" for the booked session's own (no-base comes first). The base
  *  session's volume and last trade are the stored quote's or the one before it (prev_*), whichever printed in it. */
 export function limitInputOf(s: LimitStat | null | undefined, symbol: string, p: LimitPrint, c: LimitCtx): LimitInput {
   const input: LimitInput = { symbol, members: c.members, price: p.price, at: p.at, high: p.high ?? null, low: p.low ?? null, base: null, baseDay: null, quotePrev: p.quotePrev ?? null, prevVolume: null, prevLastAt: null, run: null, holidays: c.holidays, now: c.now };
   if (!s || p.at === null || !Number.isFinite(Date.parse(p.at))) return input;
-  const day = tseDay(p.at);
+  const day = tseDay(p.at), run = runBefore(s, c.holidays);
   const traded = (session: string) => (s.q_time && tseDay(s.q_time) === session ? { prevVolume: s.volume ?? null, prevLastAt: s.q_time } : s.prev_qt && tseDay(s.prev_qt) === session ? { prevVolume: s.prev_vol ?? null, prevLastAt: s.prev_qt } : {});
-  if (day > s.d) return { ...input, ...traded(s.d), base: s.close, baseDay: s.d, run: runThrough(s.lim_run ?? null, s.close, s.prev) };
-  if (day === s.d) { const b = prevSession(s.d, c.holidays), run = s.lim_run ?? null; return { ...input, ...(b ? traded(b) : {}), base: s.prev ?? null, baseDay: run === null || !b ? null : b, run }; }
+  if (day > s.d) return { ...input, ...traded(s.d), base: s.close, baseDay: s.d, run: runThrough(run, s.close, s.prev) };
+  if (day === s.d) { const b = prevSession(s.d, c.holidays); return { ...input, ...(b ? traded(b) : {}), base: s.prev ?? null, baseDay: run === null || !b ? null : b, run }; }
   return input;
 }
 export const rowLimitState = (s: LimitStat | null | undefined, symbol: string, p: LimitPrint, c: LimitCtx): LimitState => limitState(limitInputOf(s, symbol, p, c));

@@ -9,3 +9,4 @@ alter table constituent_stats add column if not exists prev_vol  double precisio
 alter table constituent_stats add column if not exists prev2_vol double precision;   -- prev_vol as it stood then (the session before that)
 alter table constituent_stats add column if not exists prev_qt   timestamptz;        -- the stored quote's time then: its session's last trade the job saw
 alter table constituent_stats add column if not exists lim_run   smallint;           -- the run of limit closes or no-trade sessions up to the session before d: + up, - down
+alter table constituent_stats add column if not exists lim_d     date;               -- the last session lim_run covers (the session before d's when it was booked)

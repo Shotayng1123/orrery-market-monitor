@@ -511,7 +511,8 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   band's edge, the worked bases, a print at a limit, one tick inside it and each reason for no chip, the page's copy,
   and `pf_jpx`'s compare run), and the limit chip's inputs on the server (section [AP], since L-2,
   `_shared/rules/limitrow.ts`: the session before a row's quote kept with each new session's quote, the run from the
-  booked closes, a row's print as the rule's input for each reason for no chip, `lim` on a row only at a limit (on
+  booked closes with the last session it covers (a run an earlier booking left is read as not known), a row's print as
+  the rule's input for each reason for no chip, `lim` on a row only at a limit (on
   WATCHLIST worked out on the row its figures come from, for the print it shows), the stock page's `limits`, the log's
   line for a print beyond its limits, and a database without the new columns read and written as before).
   `cd jobs && npx tsx ../sim/logic.test.ts`.
@@ -559,8 +560,9 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   account's rows going with it); and
   the results mark's migration (`results-mark.test.cjs`: every stored "confirmed" becomes "not said", an estimate
   and an unmarked date stay as they were, and a second run changes nothing); and the limit chip's inputs
-  (`limit-inputs.test.cjs`: before the migration a read of its columns is refused and the old read serves; the six
-  columns come nullable with no default, no row changes, a second run changes nothing, and a job's write is stored).
+  (`limit-inputs.test.cjs`: before the migration a read of its columns is refused and the old read serves; the seven
+  columns come nullable with no default, no row changes, a second run changes nothing, a job's write is stored, and a
+  write that names neither `lim_run` nor `lim_d` leaves both as they were).
   `cd sim/sql && npm ci && npm test`.
 
 The `deploy-web` workflow runs the browser and logic checks before it publishes: a failing check stops the publish.
