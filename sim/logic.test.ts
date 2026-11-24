@@ -3386,6 +3386,244 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck("limitrow.ts is pure (it imports only the rule, and reads no clock, network or store) and the server's alone: the page's folder has no copy of it", /^import [^\n]* from "\.\/pricelimit\.ts";$/m.test(lsrc) && (lsrc.match(/^\s*import\s/gm) ?? []).length === 1 && !/new Date\(\s*\)|Date\.now\(|fetch\(|Deno\.|process\./.test(lsrc) && !listDir(new URL("../web/src/lib/rules/", import.meta.url)).includes("limitrow.ts"));
   }
 
+  console.log("\n[AR] the index candidates' terms probe (IDX-0e, 24 Nov 2026): jobs/probes/ix_terms.ts run offline on a stand-in fetch: the design's fixed requests in its order and nothing else, a public log that carries no word of a page, and the verdicts");
+  {
+    // Why a probe of its own: the index lists' probe (ix_lists, on its own branch, whose checks are its [AQ]) followed
+    // links whose words named terms, and redirects, and printed titles, clauses and addresses of the pages it read; its
+    // reviews of 24 Nov 2026 (check/IDX0/d-adversary-leaks.md, d-adversary-log.md) found data addresses asked and a
+    // page's text, tokens and contacts printed, both ways. The design of ix_terms (the orchestrator's, 24 Nov 2026,
+    // about 09:45 UTC): 13 fixed addresses in a fixed order, each host's robots.txt first; no link read, no redirect
+    // followed, no data address built; at most 14 requests (the one more only to ask a 429 once again); a log of the
+    // fixed addresses, status numbers, the type in one of five words, counts, yes or no and words of the probe's own
+    // lists alone. Every world below answers by address and records each request; its pages and answers carry
+    // sentinels (Zq…Xv) in titles, headings, sentences, links, alt and title attributes, <noscript>, scripts, headers,
+    // cookies, redirect targets, robots.txt, swagger.json, a PDF's text and error messages, none of which may reach the
+    // log; nor may the server's dates.
+    type IxMod = typeof import("../jobs/probes/ix_terms.ts");
+    let ix: IxMod | null = null, loadErr = "";
+    const onLoad: string[] = [], realFetch = globalThis.fetch, saidOnLoad: string[] = [], logOnLoad = console.log;
+    globalThis.fetch = (async (u: unknown) => { onLoad.push(String(u)); throw new Error("offline"); }) as typeof fetch;
+    console.log = (...a: unknown[]) => { saidOnLoad.push(a.map(String).join(" ")); };
+    try { ix = await import("../jobs/probes/ix_terms.ts"); } catch (e) { loadErr = String(e).slice(0, 160); } finally { globalThis.fetch = realFetch; console.log = logOnLoad; }
+    const SRC = (() => { try { return readText(new URL("../jobs/probes/ix_terms.ts", import.meta.url), "utf8") as string; } catch { return ""; } })();
+    ck(`the probe loads offline, and on loading asks nothing and prints nothing (${loadErr || `${onLoad.length} requests, ${saidOnLoad.length} lines`}): it runs only as the program run (deno run probes/ix_terms.ts)`, ix !== null && onLoad.length === 0 && saidOnLoad.length === 0, { loadErr, onLoad, saidOnLoad });
+
+    const DESIGN = [
+      "https://www.nasdaq.com/robots.txt", "https://www.nasdaq.com/legal",
+      "https://indexes.nasdaqomx.com/robots.txt", "https://indexes.nasdaqomx.com/Home/Disclaimer",
+      "https://www.nasdaqtrader.com/robots.txt", "https://www.nasdaqtrader.com/content/technicalsupport/dataproducts/indexdatapolicy.pdf",
+      "https://www.invesco.com/robots.txt", "https://www.invesco.com/us/en/resources/terms-of-use.html",
+      "https://data.gov.tw/robots.txt", "https://data.gov.tw/license", "https://data.gov.tw/en/license",
+      "https://openapi.twse.com.tw/robots.txt", "https://openapi.twse.com.tw/v1/swagger.json",
+    ];
+    const [R_NQ, LEGAL, R_GIW, DISC, R_NT, PDF, R_INV, INV, R_TW, LIC, LIC_EN, R_OA, SWAG] = DESIGN;
+    ck(`its fixed list is the design's 13 addresses in the design's order, all https, and its budget is 14 requests; its User-Agent names a research probe and carries no address, contact or name of a person (${ix?.UA ?? "–"})`,
+      !!ix && JSON.stringify(ix.FIXED.map((f) => f.url)) === JSON.stringify(DESIGN) && ix.BUDGET === 14 && /research probe/i.test(ix.UA) && !/@|:\/\/|\bwww\.|\.com\b/i.test(ix.UA), { fixed: ix?.FIXED.map((f) => f.url), budget: ix?.BUDGET });
+
+    // ---- the stand-in world ----
+    const SENT: string[] = [], z = (k: string): string => { const t = `Zq${k}Xv`; SENT.push(t); return t; };
+    const enc = (t: string): Uint8Array => new TextEncoder().encode(t);
+    type Ans = { status: number; type?: string | null; body?: string | Uint8Array | (() => ReadableStream<Uint8Array>); headers?: Record<string, string>; throws?: string };
+    type World = Record<string, Ans | Ans[]>;
+    const SERVER_DATES = ["13 Oct", "13:31:17", "Feb 1990", "11:22:33", "Mar 1997", "05:06:07"];
+    const hdr = (k: string): Record<string, string> => ({ "x-request-id": z(`Hdr${k}`), server: z(`Server${k}`), etag: `"${z(`Etag${k}`)}"`, "set-cookie": `sid=${z(`Cookie${k}`)}; Path=/; HttpOnly`, "last-modified": "Wed, 13 Oct 1999 13:31:17 GMT", date: "Thu, 01 Feb 1990 11:22:33 GMT", link: `<https://elsewhere.example/${z(`LinkHdr${k}`)}>; rel="preload"` });
+    const ok = (type: string | null, body: Ans["body"], k: string, more: Record<string, string> = {}): Ans => ({ status: 200, type, body, headers: { ...hdr(k), ...more } });
+    const ROBOTS_OPEN = "User-agent: *\nAllow: /\n";
+    const robots = (k: string, rules = ROBOTS_OPEN, type: string | null = "text/plain; charset=utf-8"): Ans => ok(type, `# ${z(`RobotsNote${k}`)}\nUser-agent: ${z(`Agent${k}`)}\nDisallow: /${z(`RobotsPath${k}`)}\n\n${rules}\nSitemap: https://${z(`MapHost${k}`)}.example/sitemap.xml\n`, `R${k}`);
+    // every page links data addresses (Nasdaq's list endpoint, the SOX export, TWSE's listed companies, the fund's page)
+    const page = (k: string, title: string, body: string): string => `<!doctype html><html><head><title>${z(`Title${k}`)} ${title}</title><meta name="description" content="${z(`Meta${k}`)}"><script>window.dataLayer = ["${z(`Script${k}`)}"];</script><style>.x::after{content:"${z(`Style${k}`)}"}</style></head><body><h1>${z(`Head${k}`)} ${title}</h1>${body}<p><a href="https://api.nasdaq.com/api/quote/list-type/${z(`DataLink${k}`)}">${z(`LinkWords${k}`)} index data</a> <a href="/Index/ExportWeightings/SOX?${z(`Export${k}`)}=1">weights</a> <a href="https://openapi.twse.com.tw/v1/opendata/t187ap03_L?${z(`Dataset${k}`)}=1">listed companies</a> <a href="/us/financial-products/etfs/product-detail?ticker=SOXQ&amp;${z(`Fund${k}`)}=1">the fund</a> <img src="/i.png" alt="${z(`Alt${k}`)} logo"> <noscript>${z(`Noscript${k}`)}</noscript> Write to ${z(`Mail${k}`)}@example.org.</p></body></html>`;
+    const HOLD_EN = (k: string): string => `<p>${z(`S1${k}`)} These terms govern your access to this website and to its content.</p><p>You may not copy, reproduce or redistribute any data or content of this website without our prior written consent. ${z(`S2${k}`)}</p><p>Use of robots, spiders or other automated means to access this website is prohibited. ${z(`S3${k}`)}</p>`;
+    const PASS_EN = `<p>${z("P1")} This page tells readers where the company is based and how to reach its offices.</p><p>Our offices are not open on public holidays, and visitors are welcome from nine to five on weekdays only.</p><p>The lobby has seating for guests who wait for a meeting, and the front desk can call a taxi. ${z("P2")}</p>`;
+    const ZH = `<p>${z("T1")}為利各界廣泛利用政府資料，資料提供機關同意以非專屬及無償之方式，授權使用者利用本授權資料，其範圍包括重製、改作、編輯、公開傳輸或為其他方式之利用。</p><p>使用者利用本授權資料時，不得違反本條款之規定，並應以適當方式標示資料提供機關之名稱。${z("T2")}</p><p>本條款之內容如有修正，以資料開放平臺公告之最新版本為準，使用者應自行留意更新之內容，並保存利用紀錄。</p>`;
+    const OGDL_EN = `<p>${z("E1")} To make government data widely usable, the Data Provider agrees to license the User, on a non-exclusive and royalty-free basis, to use the Open Data, including to reproduce, adapt, edit and publicly transmit it.</p><p>The User shall not breach these terms, and shall name the Data Provider in a reasonable manner. ${z("E2")}</p>`;
+    const PDF_BYTES = enc(`%PDF-1.7\n% ${z("PdfBytes")}\n1 0 obj << /Title (${z("PdfTitle")}) >> endobj\n%%EOF\n`);
+    const PDF_TEXT = `${z("PdfText1")} Nasdaq Index Data Policy. The redistribution of index data, whether delayed or real time, requires a licence from Nasdaq, and index values may not be used to create derivative works without permission. ${z("PdfText2")} Contact ${z("PdfMail")}@example.org about it.`;
+    const SWAGGER = JSON.stringify({ openapi: "3.0.1", info: { title: z("SwagTitle"), description: `${z("SwagDesc")} 授權 https://${z("SwagDescHost")}.example/terms`, version: "1.0", license: { name: z("LicName"), url: "https://data.gov.tw/license" }, contact: { email: `${z("SwagMail")}@example.org`, name: z("SwagContact") }, termsOfService: `https://www.twse.com.tw/${z("Tos")}` }, servers: [{ url: `https://openapi.twse.com.tw/v1/${z("Server")}` }],
+      paths: { "/opendata/t187ap03_L": { get: { summary: z("Sum1"), "x-license": { url: "https://data.gov.tw/license" } } }, [`/opendata/${z("OpPath")}`]: { get: { summary: "上市公司", license: "https://data.gov.tw/license" } }, "/exchangeReport/STOCK_DAY": { get: { summary: z("Sum2"), "x-license": { url: `https://data.gov.tw/license?${z("LicQuery")}=1` } }, post: { "x-license": { url: "https://data.gov.tw/en/license" } } } } });
+    const BASE: World = {
+      [R_NQ]: robots("Nq"), [LEGAL]: ok("text/html; charset=utf-8", page("Legal", "Legal | Nasdaq", HOLD_EN("Legal")), "Legal"),
+      [R_GIW]: robots("Giw"), [DISC]: ok("text/html", page("Disc", "Disclaimer | Global Index Watch", HOLD_EN("Disc")), "Disc"),
+      [R_NT]: robots("Nt"), [PDF]: ok("application/pdf", PDF_BYTES, "Pdf"),
+      [R_INV]: robots("Inv"), [INV]: ok("text/html;charset=UTF-8", page("Inv", "Terms of use | Invesco US", PASS_EN), "Inv"),
+      [R_TW]: robots("Tw"), [LIC]: ok("text/html; charset=utf-8", page("Lic", "政府資料開放授權條款－第1版", ZH), "Lic"), [LIC_EN]: ok("text/html", page("LicEn", "Open Government Data License, version 1.0", OGDL_EN), "LicEn"),
+      [R_OA]: robots("Oa"), [SWAG]: ok("application/json; charset=utf-8", SWAGGER, "Swag"),
+    };
+    const answer = (a: Ans): Response => {
+      const h = new Headers(a.headers ?? {});
+      if (a.type) h.set("content-type", a.type);
+      const b = a.body === undefined ? null : typeof a.body === "function" ? a.body() : typeof a.body === "string" ? enc(a.body) : a.body;
+      return new Response(a.status === 204 || a.status === 304 ? null : b, { status: a.status, headers: h });
+    };
+    type Ev = { fetch: string } | { wait: number };
+    type Run = { asked: Array<{ url: string; init: RequestInit | undefined }>; events: Ev[]; lines: string[]; out: string; said: string[]; result: Awaited<ReturnType<IxMod["ixTerms"]>> | null; threw: string };
+    const runIx = async (world: World, pdfText: (b: Uint8Array) => Promise<string | null> = async (b) => (new TextDecoder().decode(b).startsWith("%PDF-") ? PDF_TEXT : null)): Promise<Run> => {
+      const run: Run = { asked: [], events: [], lines: [], out: "", said: [], result: null, threw: "" };
+      if (!ix) return run;
+      const turn = new Map<string, number>(), keep = { log: console.log, info: console.info, warn: console.warn, error: console.error, debug: console.debug };
+      const io = {
+        fetch: async (url: string, init?: RequestInit): Promise<Response> => {
+          run.asked.push({ url, init }); run.events.push({ fetch: url });
+          const k = turn.get(url) ?? 0; turn.set(url, k + 1);
+          const w = world[url] ?? { status: 404, type: "text/html", body: `<html><title>${z("NotFound")}</title></html>` }, a = Array.isArray(w) ? w[Math.min(k, w.length - 1)] : w;
+          if (a.throws) throw new TypeError(`fetch failed: ${a.throws}`, { cause: new Error(`${a.throws} at ${url}`) });
+          return answer(a);
+        },
+        print: (l: string) => { run.lines.push(l); },
+        wait: async (ms: number) => { run.events.push({ wait: ms }); },
+        pdfText,
+      };
+      for (const k of Object.keys(keep) as Array<keyof typeof keep>) console[k] = (...a: unknown[]) => { run.said.push(a.map(String).join(" ")); };
+      try { run.result = await ix.ixTerms(io); } catch (e) { run.threw = String(e).slice(0, 200); } finally { Object.assign(console, keep); }
+      run.out = run.lines.join("\n");
+      return run;
+    };
+    // what holds in every world: the requests are `want` exactly, each a GET with redirect "manual", the probe's own
+    // User-Agent and no cookie, referer or authorization; a second request to a host comes 3 s or more after its last
+    // (10 s or more when it asks the same address again, after a 429); the log names no sentinel and no server date,
+    // every word in it is a word of the probe's own file (its fixed words, addresses and lists) or a number, nothing was
+    // withheld by its printer, nothing reached the console, and its last line counts the requests out of 14
+    const tokensOutside = (out: string): string[] => [...new Set(out.split(/[^\p{L}\p{N}*'’_-]+/u).filter((w) => w !== "" && !/^\d+$/.test(w) && !SRC.includes(w)))];
+    const holds = (name: string, r: Run, want: string[], minGap: Record<string, number> = {}): void => {
+      const urls = r.asked.map((a) => a.url);
+      const bad = r.asked.filter((a) => { const i = a.init ?? {}, h = new Headers(i.headers as HeadersInit | undefined); return i.redirect !== "manual" || (i.method ?? "GET") !== "GET" || i.body != null || h.get("user-agent") !== ix?.UA || h.has("cookie") || h.has("referer") || h.has("authorization"); }).map((a) => a.url);
+      const since = new Map<string, number>(), pace: string[] = [];
+      let prev = "";
+      for (const e of r.events) {
+        if ("wait" in e) { for (const [k, v] of since) since.set(k, v + e.wait); continue; }
+        const host = new URL(e.fetch).host, need = Math.max(e.fetch === prev ? 10_000 : 3_000, minGap[e.fetch] ?? 0);
+        if (since.has(host) && (since.get(host) ?? 0) < need) pace.push(`${e.fetch} after ${since.get(host)} ms`);
+        since.set(host, 0); prev = e.fetch;
+      }
+      const low = r.out.toLowerCase(), leaked = SENT.filter((t) => low.includes(t.toLowerCase())), dates = SERVER_DATES.filter((d) => r.out.includes(d)), outside = tokensOutside(r.out), last = r.lines[r.lines.length - 1] ?? "";
+      ck(`${name}: the requests are ${want.length}, the design's addresses in its order and nothing else (${urls.length} made), each a GET with redirect "manual", the probe's User-Agent and no cookie; a host's next request 3 s or more after its last (10 s or more when an address is asked again)`, !!ix && JSON.stringify(urls) === JSON.stringify(want) && bad.length === 0 && pace.length === 0, { urls, bad, pace });
+      ck(`${name}: the log (${r.lines.length} lines) names none of the ${new Set(SENT).size} sentinels and no date of the server's, every word in it is the probe's own or a number (${outside.length} others), nothing reached the console (${r.said.length}), nothing was withheld, and its last line is "requests made: ${urls.length} of 14"`,
+        !!ix && r.lines.length > 0 && leaked.length === 0 && dates.length === 0 && outside.length === 0 && r.said.length === 0 && !r.out.includes("(withheld)") && last === `requests made: ${urls.length} of 14` && r.threw === "", { leaked: leaked.slice(0, 8), dates, outside: outside.slice(0, 12), said: r.said.slice(0, 4), last, threw: r.threw });
+    };
+    const verdicts = (r: Run): string => (r.result ? r.result.candidates.map((c) => c.verdict).join(" / ") : "–");
+    const pv = (r: Run, url: string): string => r.result?.pages[url]?.verdict ?? "–";
+    const line = (r: Run, re: RegExp): boolean => r.lines.some((l) => re.test(l));
+
+    // (a) base: every address answers as expected; the pages link data addresses, which are not asked
+    const base = await runIx(BASE);
+    holds("base", base, DESIGN);
+    const legal = base.result?.pages[LEGAL], swag = base.result?.pages[SWAG];
+    ck(`base: Nasdaq's legal page HOLDs on the lists' words (copy, reproduc*, distribut*, robot, spider, automated means, with not, without, prior written, consent*, prohibit*), Global Index Watch's disclaimer and the index data policy (its PDF text) HOLD, Invesco's terms PASS (no word of automated reading or re-use), both licence pages HOLD (重製 with 不得; reproduc* with not) and name the licence in their title or a heading, swagger.json is READ with info.license, its url exactly the licence's and 3 operations whose own licence url is exactly it; the candidates: ${verdicts(base)}`,
+      pv(base, LEGAL) === "HOLD" && ["copy", "reproduc*", "distribut*"].every((w) => (legal?.words.reuse[w] ?? 0) > 0) && ["robot", "spider", "automated means"].every((w) => (legal?.words.auto[w] ?? 0) > 0) && ["not", "without", "prior written", "consent*", "prohibit*"].every((w) => (legal?.words.limit[w] ?? 0) > 0)
+      && pv(base, DISC) === "HOLD" && pv(base, PDF) === "HOLD" && (base.result?.pages[PDF]?.words.reuse["derivative*"] ?? 0) > 0 && pv(base, INV) === "PASS" && pv(base, LIC) === "HOLD" && (base.result?.pages[LIC]?.words.reuse["重製"] ?? 0) > 0 && (base.result?.pages[LIC]?.words.limit["不得"] ?? 0) > 0 && pv(base, LIC_EN) === "HOLD"
+      && base.result?.pages[LIC]?.ogdl === true && base.result?.pages[LIC_EN]?.ogdl === true && pv(base, SWAG) === "READ" && swag?.licence?.present === true && swag.licence.exact === true && swag.licence.ops === 3 && verdicts(base) === "HOLD / PASS / HOLD"
+      && line(base, /^SOX via Nasdaq \(nasdaq\.com\/legal \+ GIW disclaimer \+ index data policy\): HOLD\b.*\bcopy \(\d+\)/) && line(base, /^SOX via Invesco \(terms of use\): PASS\b/) && line(base, /^TAIEX via TWSE Open Data \(data\.gov\.tw licence \+ swagger licence fields\): HOLD\b.*重製 \(\d+\)/),
+      { pages: base.result ? Object.fromEntries(Object.entries(base.result.pages).map(([u, p]) => [u.replace(/^https:\/\//, ""), p.verdict])) : null, legal: legal?.words, swag: swag?.licence, verdicts: verdicts(base) });
+    ck("base: a page's line gives its status, its type in one word, its bytes and characters, last-modified as yes or no, and each word of the lists once with its count; a robots.txt line says it was read and allows the path; the licence lines answer yes or no",
+      line(base, /^GET https:\/\/www\.nasdaq\.com\/legal: 200, html, \d+ bytes, \d+ characters of text; last-modified given: yes$/) && line(base, /^ {2}HOLD\. automated reading: [^;]*\brobot \(1\)/) && line(base, /^GET https:\/\/www\.nasdaq\.com\/robots\.txt: 200, text, \d+ bytes\. robots\.txt read: yes/) && line(base, /^ {2}https:\/\/www\.nasdaq\.com\/legal: robots\.txt allows it: yes$/)
+      && line(base, /政府資料開放授權條款: yes$/) && line(base, /Open Government Data License: yes$/) && line(base, /^ {2}info\.license: yes; its url exactly https:\/\/data\.gov\.tw\/license or https:\/\/data\.gov\.tw\/en\/license: yes; operations whose own licence url is exactly that: 3$/), base.lines.slice(0, 40));
+
+    // (a) redirects of every kind, none followed; the log says to which host, and whether to the same path
+    const R = (status: number, location: string): Ans => ({ status, type: "text/html", body: `<a href="${location}">${z(`Moved${status}`)}</a>`, headers: { ...hdr(`Redir${status}`), location } });
+    const redirects = await runIx({ ...BASE,
+      [LEGAL]: R(301, "https://www.nasdaq.com/legal/"), [DISC]: R(302, `/(S(${z("AspSession")}))/Home/Disclaimer`), [PDF]: R(307, `https://cdn.${z("PdfHost")}.example/content/technicalsupport/dataproducts/indexdatapolicy.pdf`),
+      [INV]: R(308, `https://www.invesco.com/us/en/${z("InvPath")}.html?${z("InvQuery")}=1`), [LIC]: R(301, "https://data.gov.tw/license/"), [LIC_EN]: R(302, `//${z("TwHost")}.example/en/license?${z("TwQuery")}=1`), [SWAG]: R(302, `/v1/opendata/t187ap03_L?${z("SwagRedirect")}=1`) });
+    holds("redirects (301, 302, 307, 308)", redirects, DESIGN);
+    ck(`redirects: every page is NOT READ and every candidate NOT READ (${verdicts(redirects)}); the log says only "redirected" (not followed), to the same host or another, and whether the target's path is the asked path give or take a trailing slash`,
+      DESIGN.filter((u) => !u.endsWith("/robots.txt")).every((u) => pv(redirects, u) === "NOT READ") && verdicts(redirects) === "NOT READ / NOT READ / NOT READ"
+      && line(redirects, /^GET https:\/\/www\.nasdaq\.com\/legal: 301, redirected \(not followed\) to the same host; the target's path is the asked path give or take a trailing slash: yes\. NOT READ$/)
+      && line(redirects, /^GET https:\/\/indexes\.nasdaqomx\.com\/Home\/Disclaimer: 302, redirected \(not followed\) to the same host; the target's path is the asked path give or take a trailing slash: no\. NOT READ$/)
+      && line(redirects, /indexdatapolicy\.pdf: 307, redirected \(not followed\) to another host; the target's path is the asked path give or take a trailing slash: yes\. NOT READ$/)
+      && line(redirects, /^GET https:\/\/data\.gov\.tw\/en\/license: 302, redirected \(not followed\) to another host; the target's path is the asked path give or take a trailing slash: yes\. NOT READ$/), redirects.lines.filter((l) => /redirect/.test(l)));
+
+    // (a) robots.txt not read: 404, 403, served as HTML, a redirect, 500, an HTML page served as text: no page of that host is asked
+    const noRobots = await runIx({ ...BASE, [R_NQ]: { status: 404, type: "text/html", body: z("R404"), headers: hdr("R404") }, [R_GIW]: { status: 403, type: "text/html", body: z("R403"), headers: hdr("R403") }, [R_NT]: robots("NtHtml", ROBOTS_OPEN, "text/html"),
+      [R_INV]: R(301, `https://${z("RobotsElsewhere")}.example/robots.txt`), [R_TW]: { status: 500, type: "text/plain", body: z("R500"), headers: hdr("R500") }, [R_OA]: ok("text/plain", `<!DOCTYPE html><html><title>${z("RobotsAsHtml")}</title><body>User-agent: *</body></html>`, "OaHtml") });
+    holds("robots.txt not read (404, 403, HTML, a redirect, 500, a page served as text)", noRobots, [R_NQ, R_GIW, R_NT, R_INV, R_TW, R_OA]);
+    ck(`robots.txt not read: no page of those hosts is asked, each says so, and every candidate is NOT READ (${verdicts(noRobots)})`, verdicts(noRobots) === "NOT READ / NOT READ / NOT READ" && noRobots.lines.filter((l) => /: not asked \(this host's robots\.txt was not read\)$/.test(l)).length === 7, noRobots.lines.filter((l) => /not asked/.test(l)));
+
+    // (a) robots.txt that disallows: the path itself, a group for the probe's own name, a longer Allow, a pattern with *
+    // and $, one of two paths; a crawl-delay over 3 s is kept, one over 30 s holds the host's pages
+    const TOKEN = ix?.TOKEN ?? "–";
+    const disallow = await runIx({ ...BASE, [R_NQ]: robots("NqD", "User-agent: *\nDisallow: /legal\n"), [R_GIW]: robots("GiwD", "User-agent: *\nDisallow: /Home/\nAllow: /Home/Disclaimer\nCrawl-delay: 7\n"), [R_NT]: robots("NtD", "User-agent: *\nDisallow: /*.pdf$\n"),
+      [R_INV]: robots("InvD", `User-agent: ${TOKEN.toUpperCase()}\nDisallow: /\n\nUser-agent: *\nAllow: /\n`), [R_TW]: robots("TwD", "User-agent: *\nDisallow: /en/\n"), [R_OA]: robots("OaD", "User-agent: *\nAllow: /\nCrawl-delay: 120\n") });
+    holds("robots.txt that disallows", disallow, [R_NQ, R_GIW, DISC, R_NT, R_INV, R_TW, LIC, R_OA], { [DISC]: 7_000 });
+    ck(`robots.txt that disallows: /legal (its own Disallow), the PDF (Disallow: /*.pdf$), Invesco's terms (a group for the probe's own name, ${TOKEN}, in other letter case) and /en/license (Disallow: /en/) are not asked, the disclaimer is (its longer Allow) after the 7 s the site's crawl-delay asks, swagger.json is not (a crawl-delay over 30 s); the candidates: ${verdicts(disallow)}`,
+      verdicts(disallow) === "HOLD / NOT READ / HOLD" && line(disallow, /^ {2}https:\/\/www\.nasdaq\.com\/legal: not asked \(robots\.txt disallows it\)$/) && line(disallow, /a group for this probe's own name: yes/) && line(disallow, /^ {2}https:\/\/openapi\.twse\.com\.tw\/v1\/swagger\.json: not asked \(robots\.txt asks for more than 30 s between requests\)$/)
+      && disallow.events.some((e) => "wait" in e && e.wait === 7_000), disallow.lines.filter((l) => /robots|not asked/.test(l)));
+
+    // (a) pages that answer 403 and 404: asked once each, none read
+    const refused = await runIx({ ...BASE, [LEGAL]: { status: 403, type: "text/html", body: page("L403", "Access Denied", HOLD_EN("L403")), headers: hdr("L403") }, [DISC]: { status: 404, type: "text/html", body: z("D404"), headers: hdr("D404") }, [PDF]: { status: 403, type: "text/html", body: z("P403"), headers: hdr("P403") },
+      [INV]: { status: 404, type: "text/html", body: z("I404"), headers: hdr("I404") }, [LIC]: { status: 403, type: "text/html", body: z("T403"), headers: hdr("T403") }, [LIC_EN]: { status: 404, type: "text/html", body: z("E404"), headers: hdr("E404") }, [SWAG]: { status: 403, type: "application/json", body: `{"message":"${z("S403")}"}`, headers: hdr("S403") } });
+    holds("pages that answer 403 and 404", refused, DESIGN);
+    ck(`403 and 404: each page NOT READ with its status, every candidate NOT READ (${verdicts(refused)})`, DESIGN.filter((u) => !u.endsWith("/robots.txt")).every((u) => pv(refused, u) === "NOT READ") && verdicts(refused) === "NOT READ / NOT READ / NOT READ" && line(refused, /^GET https:\/\/www\.nasdaq\.com\/legal: 403\. NOT READ$/) && line(refused, /^GET https:\/\/www\.invesco\.com\/us\/en\/resources\/terms-of-use\.html: 404\. NOT READ$/), refused.lines.filter((l) => /^GET/.test(l)));
+
+    // (a) 429: asked once more after 10 s, inside the budget: the disclaimer (Retry-After 5) and data.gov.tw's licence
+    // are asked again, Invesco's robots.txt is not (one more there would leave no room for an address still to come)
+    const busy: Ans = { status: 429, type: "text/html", body: z("Busy"), headers: { ...hdr("Busy"), "retry-after": "5" } };
+    const r429 = await runIx({ ...BASE, [DISC]: [busy, BASE[DISC] as Ans], [R_INV]: [{ status: 429, type: "text/plain", body: z("Busy2"), headers: hdr("Busy2") }, BASE[R_INV] as Ans], [LIC]: [{ status: 429, type: "text/html", body: z("Busy3"), headers: hdr("Busy3") }, BASE[LIC] as Ans] });
+    holds("429 (one more ask after 10 s, inside the budget)", r429, [R_NQ, LEGAL, R_GIW, DISC, DISC, R_NT, PDF, R_INV, R_TW, LIC, LIC, LIC_EN, R_OA, SWAG]);
+    ck(`429: the disclaimer and the licence read on their second ask (HOLD), Invesco's robots.txt not asked again, so its terms not asked; 14 requests of 14; the candidates: ${verdicts(r429)}`, pv(r429, DISC) === "HOLD" && pv(r429, LIC) === "HOLD" && pv(r429, INV) === "NOT READ" && r429.result?.made === 14 && verdicts(r429) === "HOLD / NOT READ / HOLD"
+      && line(r429, /^GET https:\/\/indexes\.nasdaqomx\.com\/Home\/Disclaimer: 429\. Asked once more after 10 s\.$/) && line(r429, /^GET https:\/\/www\.invesco\.com\/robots\.txt: 429\. Not asked again: the budget of 14 keeps a place for every address still to come\. robots\.txt read: no/), r429.lines.filter((l) => /429|again/.test(l)));
+    const longWait = await runIx({ ...BASE, [DISC]: [{ ...busy, headers: { ...hdr("Busy4"), "retry-after": "120" } }, BASE[DISC] as Ans], [LIC]: [{ ...busy, headers: { ...hdr("Busy5"), "retry-after": "Fri, 07 Mar 1997 05:06:07 GMT" } }, BASE[LIC] as Ans] });
+    holds("429 with a longer Retry-After", longWait, DESIGN);
+    ck("429 with Retry-After 120 or a date: not asked again (the site asked for a longer wait than 10 s), NOT READ", pv(longWait, DISC) === "NOT READ" && pv(longWait, LIC) === "NOT READ" && line(longWait, /^GET https:\/\/indexes\.nasdaqomx\.com\/Home\/Disclaimer: 429\. Not asked again: the site asks for a longer wait than 10 s\. NOT READ$/), longWait.lines.filter((l) => /429/.test(l)));
+    const all429 = await runIx(Object.fromEntries(DESIGN.map((u) => [u, { status: 429, type: "text/plain", body: z("All429"), headers: hdr("All429") }])));
+    holds("every address answers 429", all429, [R_NQ, R_NQ, R_GIW, R_GIW, R_NT, R_NT, R_INV, R_INV, R_TW, R_TW, R_OA, R_OA]);
+    ck(`every address answers 429: each robots.txt asked once more (12 requests, a place kept for every address still to come), none read, no page asked, every candidate NOT READ (${verdicts(all429)})`, all429.result?.made === 12 && verdicts(all429) === "NOT READ / NOT READ / NOT READ" && all429.lines.filter((l) => /: 429\. Asked once more after 10 s\.$/.test(l)).length === 6 && all429.lines.filter((l) => /: not asked \(this host's robots\.txt was not read\)$/.test(l)).length === 7, all429.lines.filter((l) => /429|not asked/.test(l)));
+
+    // (a) answers of another type than expected, none read; XHTML is HTML
+    const types = await runIx({ ...BASE, [LEGAL]: ok("application/json", `{"t":"${z("JsonAsLegal")}"}`, "TJ"), [DISC]: ok("text/plain", page("TP", "Disclaimer", HOLD_EN("TP")), "TP"), [PDF]: ok("text/html", page("TH", "Policy", HOLD_EN("TH")), "TH"),
+      [INV]: ok("application/xhtml+xml; charset=utf-8", page("TX", "Terms of use", HOLD_EN("TX")), "TX"), [LIC]: ok(null, page("TN", "政府資料開放授權條款", ZH), "TN"), [SWAG]: ok("text/plain", SWAGGER, "TS") });
+    holds("answers of another type", types, DESIGN);
+    ck(`another type: the legal page sent as JSON, the disclaimer as text, the PDF as HTML, the licence with no type and swagger.json as text are NOT READ; Invesco's XHTML is read as HTML (HOLD); the candidates: ${verdicts(types)}`, [LEGAL, DISC, PDF, LIC, SWAG].every((u) => pv(types, u) === "NOT READ") && pv(types, INV) === "HOLD" && pv(types, LIC_EN) === "HOLD" && verdicts(types) === "NOT READ / HOLD / HOLD"
+      && line(types, /^GET https:\/\/www\.nasdaq\.com\/legal: 200, json, \d+ bytes\. NOT READ: html was expected$/) && line(types, /^GET https:\/\/data\.gov\.tw\/license: 200, other, \d+ bytes\. NOT READ: html was expected$/), types.lines.filter((l) => /NOT READ/.test(l)));
+
+    // (a) and (c): a short page, a page drawn by a script, a page whose words of the lists stand only in a JSON script,
+    // a PDF whose text cannot be read, a licence page whose title names no licence, a page of re-use words and no
+    // limiting word, a swagger.json with no licence
+    const SHORT = `<html><head><title>${z("ShortTitle")}</title></head><body><p>You may not copy this. ${z("Short")}</p></body></html>`;
+    const SCRIPTED = `<html><head><title>${z("AppTitle")}</title></head><body><div id="app"></div><script>document.getElementById("app").textContent = "${"You may not scrape or copy this website. ".repeat(10)}${z("AppText")}";</script></body></html>`;
+    const JSONPAGE = page("Js", "Terms of use", `${PASS_EN}<script type="application/json" id="__NEXT_DATA__">{"props":{"terms":"You may not scrape or copy this website. ${z("NextData")}"}}</script>`);
+    const NOLIMIT = page("Nl", "Open data", `<p>${z("N1")} The User may reproduce, adapt and edit the open data, and may publicly transmit it for any purpose, with attribution to the data provider.</p><p>Attribution is given in the form the provider asks for, and the date of the data is named beside it. ${z("N2")}</p>`);
+    const odd = await runIx({ ...BASE, [LEGAL]: ok("text/html", SHORT, "Sh"), [DISC]: ok("text/html", SCRIPTED, "Sc"), [INV]: ok("text/html", JSONPAGE, "Js"), [LIC]: ok("text/html", page("Gen", "政府資料開放平臺", ZH), "Gen"), [LIC_EN]: ok("text/html", NOLIMIT, "Nl"),
+      [SWAG]: ok("application/json", JSON.stringify({ openapi: "3.0.1", info: { title: z("NoLic"), version: "1", description: `${z("NoLicDesc")} `.repeat(12) }, paths: { "/opendata/t187ap03_L": { get: { summary: z("NoLicSum") } } } }), "NoLic") }, async () => null);
+    holds("a short page, a page a script draws, a JSON script's words, an unread PDF, a licence page whose title names no licence, a swagger.json with no licence", odd, DESIGN);
+    ck(`those pages: the short page (under 200 characters), the page a script draws, the page whose words of the lists stand only in a JSON script and the PDF whose text cannot be read are NOT READ; the licence whose title and headings name no licence HOLDs and says so (no); the page of re-use words with no limiting word PASSes; swagger.json is READ with no info.license; the candidates: ${verdicts(odd)}`,
+      [LEGAL, DISC, INV, PDF].every((u) => pv(odd, u) === "NOT READ") && pv(odd, LIC) === "HOLD" && odd.result?.pages[LIC]?.ogdl === false && pv(odd, LIC_EN) === "PASS" && pv(odd, SWAG) === "READ" && odd.result?.pages[SWAG]?.licence?.present === false && odd.result?.pages[SWAG]?.licence?.ops === 0 && verdicts(odd) === "NOT READ / NOT READ / HOLD"
+      && line(odd, /^ {2}NOT READ: \d+ characters of text, under 200$/) && line(odd, /^ {2}NOT READ: words of the lists that would hold it stand in a script's data \(the page may be built by scripts\)$/) && line(odd, /^ {2}NOT READ: the PDF's text could not be read under this runtime$/) && line(odd, /政府資料開放授權條款: no$/)
+      && line(odd, /^ {2}info\.license: no; its url exactly https:\/\/data\.gov\.tw\/license or https:\/\/data\.gov\.tw\/en\/license: no; operations whose own licence url is exactly that: 0$/), odd.lines.filter((l) => /NOT READ|PASS|HOLD|info\.license|條款/.test(l)));
+
+    // (a) no answer: a network error whose message names the address and a sentinel, a time-out, a body cut off, a body
+    // over the size the probe reads
+    const failing = await runIx({ ...BASE, [LEGAL]: { status: 200, throws: z("NetErr") }, [DISC]: { status: 200, throws: `The operation was aborted due to timeout ${z("Timeout")}` },
+      [INV]: ok("text/html", () => new ReadableStream<Uint8Array>({ start(c) { c.enqueue(enc(page("Cut", "Terms", HOLD_EN("Cut")))); c.error(new Error(z("StreamErr"))); } }), "Cut"),
+      [LIC]: ok("text/html", () => { let n = 0; return new ReadableStream<Uint8Array>({ pull(c) { if (n++ > 64) c.close(); else c.enqueue(new Uint8Array(1 << 17).fill(0x41)); } }); }, "Big") });
+    holds("no answer (an error, a time-out, a body cut off, a body over the size read)", failing, DESIGN);
+    ck(`no answer: the legal page and the disclaimer ("no answer"), Invesco's terms (cut off) and the licence (over the size read) are NOT READ, with no word of the error; the candidates: ${verdicts(failing)}`, [LEGAL, DISC, INV, LIC].every((u) => pv(failing, u) === "NOT READ") && verdicts(failing) === "HOLD / NOT READ / HOLD" && line(failing, /^GET https:\/\/www\.nasdaq\.com\/legal: no answer \(an error of the network or no answer within 30 s\)\. NOT READ$/) && line(failing, /^GET https:\/\/data\.gov\.tw\/license: 200, html, over \d+ bytes \(more than this probe reads\)\. NOT READ$/), failing.lines.filter((l) => /^GET/.test(l)));
+
+    // (c) the reading of a page, alone: HOLD, PASS, short, drawn by scripts, the places a word may stand
+    const PAD = `<p>${"The reading room on the second floor has long tables, good lamps and a quiet corner for people who like to read in peace. ".repeat(3)}</p>`;
+    const rv = (html: string): string => { try { return ix ? ix.readHtml(html).verdict : "–"; } catch (e) { return `threw ${String(e).slice(0, 60)}`; } };
+    const readCases: Array<[string, string, string]> = [
+      ["a ban on scraping", `${PAD}<p>You may not scrape this site.</p>`, "HOLD"], ["a limiting word alone", `${PAD}<p>Our offices are not open on Sundays.</p>`, "PASS"], ["a word of re-use alone", `${PAD}<p>Readers may copy the timetable.</p>`, "PASS"],
+      ["a short page", "<p>You may not copy this.</p>", "NOT READ"], ["a page a script draws", SCRIPTED, "NOT READ"], ["the words only in a JSON script", `${PAD}<script type="application/ld+json">{"x":"You may not scrape"}</script>`, "NOT READ"],
+      ["a script's code (not its data)", `${PAD}<script>var s = "scrape copy";</script>`, "PASS"], ["an alt attribute", `${PAD}<img src="a.png" alt="no robots here">`, "HOLD"], ["a title attribute", `${PAD}<span title="Copying prohibited">x</span>`, "HOLD"],
+      ["<noscript>", `${PAD}<noscript>Scraping is not allowed.</noscript>`, "HOLD"], ["a soft hyphen", `${PAD}<p>You may not scra&shy;pe it.</p>`, "HOLD"], ["a word split by an inline tag", `${PAD}<p>You may not scr<b>aping</b> it.</p>`, "HOLD"],
+      ["full-width letters", `${PAD}<p>Ｙｏｕ ｍａｙ ｎｏｔ ｃｏｐｙ ｉｔ．</p>`, "HOLD"], ["a zero-width space", `${PAD}<p>You may not co​py it.</p>`, "HOLD"], ["publication beside a ban", `${PAD}<p>Publication of this content is prohibited without our prior written consent.</p>`, "HOLD"],
+      ["a publication that bans nothing", `${PAD}<p>This publication does not constitute investment advice.</p>`, "PASS"], ["スクロール is no クロール", `${PAD}<p>ページをスクロールしてください。不可</p>`, "PASS"], ["大量保有 is no 大量", `${PAD}<p>大量保有報告書は禁止されていません。</p>`, "PASS"],
+      ["CT-4: modify, adapt, translate", `${PAD}<p>You may not modify, adapt or translate the data, or create works based on it.</p>`, "HOLD"], ["CT-4: AI training", `${PAD}<p>Training artificial intelligence models on the content is not permitted.</p>`, "HOLD"],
+    ];
+    const readWrong = readCases.filter(([, html, want]) => rv(html) !== want).map(([name, html, want]) => `${name}: ${rv(html)}, not ${want}`);
+    ck(`(c) the reading of a page: ${readCases.length} pages, each HOLD, PASS or NOT READ as the design says (visible text; scripts and styles left out; alt, title and <noscript> read; a word split by an inline tag, a soft hyphen, a zero-width space or full-width letters read as the reader sees it; under 200 characters NOT READ; "publication" a re-use only beside a ban, as the strict gate of IDX-0c reads it; スクロール and 大量保有 no words of it; CT-4's words): ${readWrong.length} wrong`, !!ix && readWrong.length === 0, readWrong);
+
+    // the file: it imports nothing; it prints only through its own printer (console only in the default printer and
+    // where a PDF is read under Deno, to keep pdf.js's warnings out of the log); it names no address but the design's
+    // (and the licence's two, which it compares and asks only as fixed addresses); it builds none
+    const literals = [...SRC.matchAll(/https?:\/\/[^\s"'`)\]]+/g)].map((m) => m[0].replace(/[.,;:]+$/, "")), foreign = [...new Set(literals.filter((u) => !DESIGN.includes(u) && !DESIGN.some((d) => d.startsWith(`${u}/`) || d === u)))];
+    ck(`the file imports nothing (one dynamic import, npm:unpdf, for a PDF's text under Deno), calls console only to print and to keep a PDF reader quiet, and writes no address but the design's (${foreign.length} other: ${foreign.slice(0, 4).join(", ")})`,
+      SRC !== "" && !/^\s*import\s/m.test(SRC) && (SRC.match(/\bimport\(/g) ?? []).length === 1 && /import\("npm:unpdf"\)/.test(SRC) && !/\bfetch\(/.test(SRC.replace(/io\.fetch\(|globalThis\.fetch\(/g, "")) && foreign.length === 0 && !/api\.nasdaq|ExportWeightings|product-detail|opendata\/|query[12]\.finance|\/Index\//.test(SRC), { foreign });
+    const quiet: string[] = [], keepLog = { log: console.log, warn: console.warn, error: console.error, info: console.info, debug: console.debug };
+    for (const k of Object.keys(keepLog) as Array<keyof typeof keepLog>) console[k] = (...a: unknown[]) => { quiet.push(a.map(String).join(" ")); };
+    let nodePdf: string | null | undefined;
+    try { nodePdf = ix ? await ix.pdfText(PDF_BYTES) : undefined; } catch { nodePdf = undefined; } finally { Object.assign(console, keepLog); }
+    ck(`under Node the default PDF reader gives no text (the PDF is then NOT READ) and prints nothing (${quiet.length} lines)`, nodePdf === null && quiet.length === 0, { nodePdf, quiet });
+  }
+
   // [AK], what the READMEs say, is in sim/readme.test.ts since 23 Nov 2026: this file stops a deploy of the server or the
   // site when it fails, and since the check of fix part 4 it reads neither README, so no sentence of either can stop a
   // deploy (the check of fix part 3 found, by experiment, that a README change alone ran no check and would then stop the
