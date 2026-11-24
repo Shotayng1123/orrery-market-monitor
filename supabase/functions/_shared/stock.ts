@@ -6,7 +6,7 @@ import { db } from "./db.ts";
 import { fetchText } from "./http.ts";
 import { keyStats, quotes, type KeyStats } from "./yahoo.ts";
 import { benchmarksFor, dailyBars, limitFactsFor, quoteFor } from "./assets.ts";
-import { LIMIT_LISTS, rowLimitState, stockLimitFields } from "./rules/limitrow.ts";
+import { LIMIT_LISTS, pagePrint, rowLimitState, stockLimitFields } from "./rules/limitrow.ts";
 import { FEED_DAYS, feedFor, pageOrQuote, type StockFeed } from "./pagefeed.ts";
 import { avgTurnover, betaCorr, maxDrawdown, perfRows, range52w, realisedVol, type Bar } from "./stockstats.ts";
 import { justReported, resultsDateToWatch, valuation, type Fin, type FinLine } from "./fin.ts";
@@ -186,7 +186,7 @@ export async function stockPage(symbol: string) {
   // the limit chip (L-2): a placed Tokyo name's daily limits for the page's own quote, on the row the lists read
   // (rules/limitrow.ts); a name not placed, or a database from before the chip's columns, gets neither field
   const placed = new Set((con ?? []).some((c: { idx: string }) => LIMIT_LISTS.includes(c.idx)) ? [symbol] : []);
-  const limit = lf ? rowLimitState(lf.stat, symbol, { price: q.price, at: q.time ? new Date(q.time * 1000).toISOString() : null, high: q.high ?? null, low: q.low ?? null, quotePrev: q.prevClose }, { members: placed, holidays: lf.holidays, now: new Date() }) : null;
+  const limit = lf ? rowLimitState(lf.stat, symbol, pagePrint(q), { members: placed, holidays: lf.holidays, now: new Date() }) : null;
 
   return {
     symbol, name: q.name ?? symbol, exchange: q.exchange, currency: q.currency, quoteType: q.quoteType,

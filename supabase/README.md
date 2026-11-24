@@ -582,7 +582,9 @@ whether the print a Tokyo row shows is at its daily price limit, from that row o
   revert, or GitHub's jobs at a reverted main) books new closes and leaves both as they were, and that run is then not
   known, so no chip (the L-2 check's F2-1).
 - **Sent.** `index_stats` (Nikkei 225 and TOPIX) and `watch_list` rows carry `lim` (side, price, base, width, at,
-  closed) only while the print the row shows is at its limit; the chip's columns are not sent. A watchlist member's
+  closed) only while the print the row shows is at its limit; the chip's columns are not sent. `lim.at`, the print's
+  time, is in one form on every route, `toISOString()`'s (`2026-11-24T01:12:00.000Z`), whether it comes from a stored
+  quote (which the database hands back as `…+00:00`) or the stock page's own quote. A watchlist member's
   `lim` is worked out on the row its figures come from (the name's newest row, as WATCHLIST reads it since W-1), for
   the print the row shows: its quote while it is at a print, else its booked close (`watchRowWithLim` in
   `_shared/watchrow.ts`). `stock` sends `limits`

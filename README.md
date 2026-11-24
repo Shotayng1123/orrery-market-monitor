@@ -513,7 +513,8 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   `_shared/rules/limitrow.ts`: the session before a row's quote kept with each new session's quote, the run from the
   booked closes with the last session it covers (a run an earlier booking left is read as not known), a row's print as
   the rule's input for each reason for no chip, `lim` on a row only at a limit (on
-  WATCHLIST worked out on the row its figures come from, for the print it shows), the stock page's `limits`, the log's
+  WATCHLIST worked out on the row its figures come from, for the print it shows; its time one string for one instant
+  on the lists and the stock page), the stock page's `limits`, the log's
   line for a print beyond its limits, and a database without the new columns read and written as before).
   `cd jobs && npx tsx ../sim/logic.test.ts`.
   The same command checks the file itself, in its last two sections. GitHub installs `jobs/` alone before it runs the

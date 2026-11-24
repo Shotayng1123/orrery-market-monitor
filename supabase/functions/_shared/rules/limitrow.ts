@@ -98,6 +98,9 @@ export function runThrough(before: number | null, close: number | null | undefin
 }
 
 // ---- the print a row shows, and the rule's input for it ----
+/** The stock page's own quote as a print (yahoo.ts QuoteRow: its time in epoch seconds). */
+export const pagePrint = (q: { price: number | null; time: number | null; high?: number | null; low?: number | null; prevClose?: number | null }): LimitPrint =>
+  ({ price: q.price, at: q.time ? new Date(q.time * 1000).toISOString() : null, high: q.high ?? null, low: q.low ?? null, quotePrev: q.prevClose ?? null });
 /** The row's stored quote as a print (EQUITIES while its list is live; WATCHLIST's row at a print). */
 export const quotePrint = (s: LimitStat): LimitPrint => ({ price: s.q_price ?? null, at: s.q_time ?? null, high: s.q_high ?? null, low: s.q_low ?? null, quotePrev: s.q_prev ?? null });
 /** The row's booked close as a print: a trade only where the stored quote printed in that same session (its time and day
@@ -124,10 +127,14 @@ export function limitInputOf(s: LimitStat | null | undefined, symbol: string, p:
 export const rowLimitState = (s: LimitStat | null | undefined, symbol: string, p: LimitPrint, c: LimitCtx): LimitState => limitState(limitInputOf(s, symbol, p, c));
 
 // ---- what a row and the stock page carry ----
-/** `lim`, a row's field while the print it shows is at its limit: nothing else is sent (a page of before reads none). */
+/** `lim`, a row's field while the print it shows is at its limit: nothing else is sent (a page of before reads none).
+ *  `at`, the print's time, is in toISOString()'s form wherever it comes from (N-1 of the L-2 check): the lists' prints carry
+ *  the stored quote's time as the database hands it back ("…+00:00"), the stock page's its own quote's, so that one
+ *  instant is one string on every route. */
 export interface Lim { side: "up" | "down"; price: number; base: number; width: number; at: string; closed: boolean }
 export function limOf(st: LimitState | null): Lim | null {
-  return st && st.side && st.why === null && st.price !== null && st.base !== null && st.width !== null && st.at !== null ? { side: st.side, price: st.price, base: st.base, width: st.width, at: st.at, closed: st.closed } : null;
+  const t = st?.at == null ? Number.NaN : Date.parse(st.at);
+  return st && st.side && st.why === null && st.price !== null && st.base !== null && st.width !== null && Number.isFinite(t) ? { side: st.side, price: st.price, base: st.base, width: st.width, at: new Date(t).toISOString(), closed: st.closed } : null;
 }
 /** The row with `lim` at a limit; otherwise the very same row. */
 export function withLim<T extends object>(row: T, st: LimitState | null): T | (T & { lim: Lim }) { const lim = limOf(st); return lim ? { ...row, lim } : row; }
