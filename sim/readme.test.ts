@@ -167,6 +167,18 @@ console.log("\n[AK] what the README says of the checks is what the repository ho
   ck(`IDX-0e2: the README's entry for ix_sox names the ${fixed.length} addresses of FIXED in jobs/probes/ix_sox.ts in its order ("these ${order?.[1] ?? "–"} addresses", ${said.length} named), its budget, BUDGET = ${budget || "–"} ("At most ${most || "–"} requests", "out of ${outOf || "–"}"), the form of a ticker it prints (TICKER = /${ticker || "–"}/) and the owner's release of 24 Nov 2026`,
     fixed.length > 0 && fixed.length === entries && fixed.every((u) => u.startsWith("https://")) && JSON.stringify(said) === JSON.stringify(fixed) && Number(order?.[1]) === fixed.length
       && budget !== "" && most === budget && outOf === budget && ticker !== "" && entry.includes(`\`${ticker}\``) && /released by the owner on 24 Nov 2026/.test(entry) && /personal use/.test(entry), { fixed, said, budget, most, outOf, ticker });
+
+  // IDX-0e3 (24 Nov 2026): the owner's release of ix_sox's two lists despite robots.txt (24 Nov 2026, about 13:30 UTC).
+  // The README's entry for ix_sox gives the switch with the value jobs/probes/ix_sox.ts has, and the two lines the log
+  // prints as the file prints them; and the paragraph that says a probe does not ask a path robots.txt holds names
+  // this exception, while the switch is true
+  const value = /^export const OWNER_RELEASED_DESPITE_ROBOTS = (true|false);$/m.exec(src)?.[1] ?? "";
+  const release = /\bsay`(the owner released these two addresses despite robots\.txt \(24 Nov 2026, personal use\))`;/.exec(src)?.[1] ?? "";
+  const perList = /say` {2}\$\{f\.url\}: (robots\.txt disallows it; asked by the owner's release)`;/.exec(src)?.[1] ?? "";
+  const para = flat.slice(to, to + 600), excepted = /does not ask a path that file holds \(one exception, the owner's: since IDX-0e3 `ix_sox` asks its two Nasdaq lists although a `robots\.txt` that was read disallows them, as its entry says\)/.test(para);
+  ck(`IDX-0e3: the README's entry for ix_sox gives the owner's release as the file has it (OWNER_RELEASED_DESPITE_ROBOTS = ${value || "–"}), of 24 Nov 2026, about 13:30 UTC, and the two lines its log prints ("${perList || "–"}"; "${release || "–"}"); the paragraph on robots.txt names the exception${value === "true" ? "" : " only while it is true"}`,
+    value !== "" && entry.includes(`\`OWNER_RELEASED_DESPITE_ROBOTS = ${value}\``) && /24 Nov 2026, about 13:30 UTC/.test(entry) && release !== "" && entry.includes(`"${release}"`) && perList !== "" && entry.includes(`"${perList}"`) && excepted === (value === "true"),
+    { value, release, perList, excepted });
 }
 
 console.log("\n" + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`) + "\n");

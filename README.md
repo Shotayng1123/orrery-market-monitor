@@ -543,12 +543,17 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   pages read alone, 15 `robots.txt` cases read alone (the two tests of groups of Google's reference parser, file by file
   and reader by reader, and an Allow that ends every reader's User-agent lines), and the file itself: no import but
   unpdf's, pinned at 2.2.1, no address but the design's), and SOX's
-  list from Nasdaq (section [AS], since IDX-0e2: `ix_sox` run offline in twenty-one worlds: its `robots.txt` allowing both
+  list from Nasdaq (section [AS], since IDX-0e2: `ix_sox` run offline in thirty worlds: its `robots.txt` allowing both
   lists, then answering each of the ten ways above, disallowing for every reader, for Mozilla alone (a product the
   Monitor's User-Agent names), SOX's list alone, or every reader and Googlebot at once (a Sitemap line between their
   User-agent lines does not split their group), and asking a Crawl-delay of 7 s or of 45 s; a list answering 429 (asked
   again in the budget's one place more, then none left), 429 with a Retry-After given as a date or of 60 s, a redirect,
-  an HTML page, 403 and no answer. In each the requests are its three addresses in its order and nothing else, each a GET
+  an HTML page, 403 and no answer. Since IDX-0e3 the owner's release of the two lists despite `robots.txt` is on, as the
+  file has it, in every world but the four that disallow the lists, which run with it off (each list not asked, as
+  before) and again with it on: then the `robots.txt` line is the same, each list says `robots.txt` disallows it, the
+  line of the release comes once before the first list is asked, and both are asked and read as allowed lists are; and,
+  with it on, a `robots.txt` answering 500, 503, 429 twice or an HTML page in its place, or disallowing with a
+  Crawl-delay of 45 s: neither list asked and no line of the release. In each the requests are its three addresses in its order and nothing else, each a GET
   with redirect `manual`, `robots.txt` with the Monitor's User-Agent and the lists with exactly the headers
   `fetchNasdaq100` sends (read from `_shared/constituents.ts` and `_shared/http.ts`), 3 s apart, and the log names none
   of the sentinels planted in `robots.txt`, headers, cookies, redirect targets, error messages and every field of the
@@ -588,7 +593,9 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   Since 24 Nov 2026 the README's own checks hold the entry of the probe `ix_terms` to `jobs/probes/ix_terms.ts` as
   well: the addresses it asks, in its order, its budget of requests and the Crawl-delay over which it holds a host's
   pages; and since IDX-0e2 the entry of `ix_sox` to `jobs/probes/ix_sox.ts`: its three addresses in its order, its
-  budget, the form of a ticker it prints and the owner's release. These run in `logic-tests` only, which runs on a change to either README as well.
+  budget, the form of a ticker it prints and the owner's release; since IDX-0e3 also the owner's release of its two lists
+  despite `robots.txt` (the switch's value, the two lines its log prints) and the one exception it makes to the
+  paragraph on `robots.txt` below. These run in `logic-tests` only, which runs on a change to either README as well.
   `cd jobs && npx tsx ../sim/readme.test.ts`.
 - **Database checks** (`sim/sql`): the rules that live in database functions (the limits on verification emails;
   the queue for the reasons of big moves; the request for the second path),
@@ -797,8 +804,16 @@ Two probes ask a fixed list of addresses and nothing else (since 24 Nov 2026):
   Monitor reads it, SOX from Nasdaq; Invesco's holdings are not used), and the log's first lines state that release. It asks these 3
   addresses, all https, in this order: `api.nasdaq.com` `/robots.txt`, `/api/quote/list-type/nasdaq100` and
   `/api/quote/list-type/sox`. Its `robots.txt` comes first, read by `ix_terms`' rules (above); since the probe sends the
-  Monitor's User-Agent and names no product of its own, a list is asked only when the group for every reader allows its
+  Monitor's User-Agent and names no product of its own, a list is allowed only when the group for every reader allows its
   path and so does each group the file has for a product that User-Agent names (Mozilla, AppleWebKit, Chrome, Safari).
+  Since IDX-0e3 the owner's release of 24 Nov 2026, about 13:30 UTC ("Keep both as personal use", after this probe's run
+  found `api.nasdaq.com`'s `robots.txt`, 200, with a group for every reader that disallows both lists) is the file's
+  `OWNER_RELEASED_DESPITE_ROBOTS = true`: for these two list addresses alone, a `robots.txt` that was read and disallows
+  a list no longer holds it. `robots.txt` is still asked first and its line printed as before; each list it disallows
+  says so ("robots.txt disallows it; asked by the owner's release"), and the log prints "the owner released these two
+  addresses despite robots.txt (24 Nov 2026, personal use)" before the first list is asked. A `robots.txt` that was not
+  read (a 5xx, a 429, no answer, a redirect elsewhere, an HTML page in its place) still holds both lists, as does one
+  that asks for more than 30 s between requests; with the release false, a list is asked only where `robots.txt` allows it.
   The Nasdaq-100's list is the address `fetchNasdaq100` (`supabase/functions/_shared/constituents.ts`) reads every day
   (the server's constituents job, 00:40 UTC), asked as the control with the headers that function sends (the Monitor's User-Agent from
   `_shared/http.ts`, `accept: application/json`, and `www.nasdaq.com` as `origin` and `referer`); SOX's is asked with the
@@ -818,7 +833,8 @@ Two probes ask a fixed list of addresses and nothing else (since 24 Nov 2026):
   from `ix_terms`: the rules for `robots.txt` and the helpers that read an answer, none of which prints anything.
 
 Since 21 Nov 2026 (the paper portfolio's second run of probes, `pf_*`) a probe reads a site's `robots.txt` before any
-page or file of it, does not ask a path that file holds, and says what it read and what it did not (`robots()` in
+page or file of it, does not ask a path that file holds (one exception, the owner's: since IDX-0e3 `ix_sox` asks its two
+Nasdaq lists although a `robots.txt` that was read disallows them, as its entry says), and says what it read and what it did not (`robots()` in
 `jobs/probes/lib.ts`: a `robots.txt` that answers 404 or another 4xx, or with an HTML page in its place, is "no
 robots.txt read", never a file that allows, and the probe reads on, as RFC 9309 reads a 4xx; a file of directives is
 the site's rules whatever type it is served as; one that answers 5xx holds every path; one that answers 429 is asked
