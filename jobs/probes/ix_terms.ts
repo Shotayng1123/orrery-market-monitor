@@ -15,7 +15,9 @@
 //     unreadable); a 4xx but 429 means there is no file, so every path is allowed; a 429 (where asked again, a second
 //     one), a 5xx, no answer and an unreadable file mean complete disallow: no page of that host is asked. Where a file
 //     was read, a page is asked only when it allows the page's own path (the group for this probe's own name, else the
-//     one for every reader; the longest rule wins, an Allow on a tie). Requests to one host are 3 s apart, or the
+//     one for every reader; the longest rule wins, an Allow on a tie; a group's User-agent lines end only at an Allow
+//     or a Disallow line, so another record between two of them does not split it, and a line ends only at CR or LF,
+//     its comment running from "#" to its end: since the check of IDX-0e2). Requests to one host are 3 s apart, or the
 //     robots.txt's crawl-delay where it is longer; one over 30 s holds the host's pages. Every request is a GET with
 //     redirect "manual": a page's redirect is not followed, and the log says only that the answer redirected, to the
 //     same host or another, and whether the target's path is the asked path give or take a trailing slash. No link of a
@@ -205,22 +207,31 @@ export function readHtml(html: string): HtmlRead {
 // ---- robots.txt (RFC 9309, as far as this probe needs it) ----
 export interface Robots { own: boolean; rules: Array<{ allow: boolean; path: string }>; delay: number | null }
 /** The rules that apply to a reader named `token` (this probe's own name unless another is given): the groups for that
- *  name, else those for every reader ("*"). */
+ *  name, else those for every reader ("*"). A line ends only at CR or LF, and its comment runs from its first "#" to its
+ *  end, as Google's reference parser of RFC 9309 reads them (robots.cc splits lines at 0x0A and 0x0D alone and cuts a
+ *  comment at its "#"): U+2028 and U+2029 are characters of the line like any other. A group's User-agent lines end
+ *  only at an Allow or a Disallow line, so a Sitemap, Crawl-delay, Host or any other record between two of them does
+ *  not split the group (RFC 9309 §2.1, as that parser reads it: robots.cc ends them only there, and its test
+ *  ID_LineSyntax_Groups_OtherRules). Both since the check of IDX-0e2 (24 Nov 2026): until then such a record split the
+ *  group, and a comment holding U+2028 or U+2029 lost its line, each leaving a page asked that the file disallowed. A
+ *  line is cut at its first "#" and its first ":" and trimmed, in time in proportion to its length. */
 export function robotsRules(txt: string, token: string = TOKEN): Robots {
   type G = { agents: string[]; rules: Array<{ allow: boolean; path: string }>; delay: number | null };
   const groups: G[] = [];
-  let cur: G | null = null, agentLine = false;
+  // inAgents: the group being read is still in its User-agent lines (a User-agent line now adds a name to it)
+  let cur: G | null = null, inAgents = false;
   for (const raw of txt.split(/\r\n|\r|\n/)) {
-    const m = /^\s*([A-Za-z-]+)\s*:\s*(.*?)\s*$/.exec(raw.replace(/#.*$/, ""));
-    if (!m) continue;
-    const key = m[1].toLowerCase(), val = m[2];
+    const hash = raw.indexOf("#"), line = hash < 0 ? raw : raw.slice(0, hash), colon = line.indexOf(":");
+    if (colon < 0) continue;
+    const name = line.slice(0, colon).trim();
+    if (!/^[A-Za-z-]+$/.test(name)) continue;
+    const key = name.toLowerCase(), val = line.slice(colon + 1).trim();
     if (key === "user-agent") {
-      if (cur === null || !agentLine) { cur = { agents: [], rules: [], delay: null }; groups.push(cur); }
-      cur.agents.push(val.toLowerCase().split("/")[0].trim()); agentLine = true; continue;
+      if (cur === null || !inAgents) { cur = { agents: [], rules: [], delay: null }; groups.push(cur); }
+      cur.agents.push(val.toLowerCase().split("/")[0].trim()); inAgents = true; continue;
     }
-    agentLine = false;
     if (cur === null) continue;
-    if (key === "allow" || key === "disallow") cur.rules.push({ allow: key === "allow", path: val });
+    if (key === "allow" || key === "disallow") { cur.rules.push({ allow: key === "allow", path: val }); inAgents = false; }
     else if (key === "crawl-delay") { const d = Number(val); if (Number.isFinite(d) && d >= 0) cur.delay = Math.max(cur.delay ?? 0, d); }
   }
   const own = groups.filter((g) => g.agents.includes(token.toLowerCase())), use = own.length > 0 ? own : groups.filter((g) => g.agents.includes("*"));

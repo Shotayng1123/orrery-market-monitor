@@ -3612,6 +3612,32 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck("robots.txt redirected to itself twice in a row: the first followed, the second not (the budget's one place more is spent), so complete disallow and nasdaq.com/legal not asked",
       line(twice, /^GET https:\/\/www\.nasdaq\.com\/robots\.txt: 302, redirected \(not followed\) to the same host; the target's path is the asked path give or take a trailing slash: yes\. robots\.txt: unreadable \(a redirect to itself not followed: at most 5 are, each while the budget keeps a place for every address still to come\): complete disallow$/)
       && pv(twice, LEGAL) === "NOT READ" && twice.result?.made === 13, twice.lines.filter((l) => /nasdaq\.com\/robots/.test(l)));
+    // a robots.txt that redirects to itself every time, after hosts whose robots.txt held their pages: each page not
+    // asked leaves the budget one place more, so its redirects are followed while a place is kept for every address
+    // still to come, 5 at most (B-1 and T-1 of the check of IDX-0e2, 24 Nov 2026: no world followed more than one, the
+    // README said "a run asks one address again at most", and the loop cut to `hop <= 1` passed every check). Four
+    // pages held: 5 followed, 10 s apart, the sixth answer not followed (5 at most), 13 requests; two pages held: 3
+    // followed, the fourth answer not followed (no place left), 13 requests
+    const OA_FOLLOWED = /^GET https:\/\/openapi\.twse\.com\.tw\/robots\.txt: 30[12], redirected to this same address \(https, this host, the path \/robots\.txt, no query\): asked again after 10 s, redirect (\d+) of at most 5 followed$/;
+    const OA_NOT = /^GET https:\/\/openapi\.twse\.com\.tw\/robots\.txt: 30[12], redirected \(not followed\) to the same host; the target's path is the asked path give or take a trailing slash: yes\. robots\.txt: unreadable \(a redirect to itself not followed: at most 5 are, each while the budget keeps a place for every address still to come\): complete disallow$/;
+    const followed = (r: Run): number[] => r.lines.map((l) => OA_FOLLOWED.exec(l)?.[1]).filter((h): h is string => h !== undefined).map(Number);
+    const waitsBefore = (r: Run, url: string): number[] => {   // the waits before each request to `url` after its first
+      const out: number[] = [];
+      let w = 0, seen = false;
+      for (const e of r.events) { if ("wait" in e) { w += e.wait; continue; } if (e.fetch === url) { if (seen) out.push(w); seen = true; } w = 0; }
+      return out;
+    };
+    const itself = R(301, "https://openapi.twse.com.tw/robots.txt");
+    const held4 = await runIx({ ...BASE, [R_NQ]: st(500, "g"), [R_GIW]: st(500, "h"), [R_NT]: st(500, "i"), [R_INV]: st(500, "j"), [R_OA]: itself });
+    holds("four hosts' robots.txt 500, then openapi's robots.txt redirects to itself every time", held4, [R_NQ, R_GIW, R_NT, R_INV, R_TW, LIC, LIC_EN, R_OA, R_OA, R_OA, R_OA, R_OA, R_OA]);
+    ck(`four hosts' robots.txt 500 (four pages not asked), then a robots.txt that redirects to itself every time: redirects 1 to 5 followed (${followed(held4).join(", ") || "none"}), each 10 s after the last ask, the sixth answer not followed (5 at most): complete disallow, swagger.json not asked; 13 requests (${held4.result?.made ?? "–"}); the candidates: ${verdicts(held4)}`,
+      JSON.stringify(followed(held4)) === "[1,2,3,4,5]" && JSON.stringify(waitsBefore(held4, R_OA)) === "[10000,10000,10000,10000,10000]" && held4.lines.filter((l) => OA_NOT.test(l)).length === 1 && held4.result?.made === 13
+      && line(held4, /^ {2}https:\/\/openapi\.twse\.com\.tw\/v1\/swagger\.json: not asked \(this host's robots\.txt was not read\)$/) && pv(held4, SWAG) === "NOT READ" && verdicts(held4) === "NOT READ / NOT READ / HOLD", held4.lines.filter((l) => /openapi|robots\.txt: 500/.test(l)));
+    const held2 = await runIx({ ...BASE, [R_NQ]: st(500, "k"), [R_GIW]: st(500, "l"), [R_OA]: R(302, "https://openapi.twse.com.tw/robots.txt") });
+    holds("two hosts' robots.txt 500, then openapi's robots.txt redirects to itself every time", held2, [R_NQ, R_GIW, R_NT, PDF, R_INV, INV, R_TW, LIC, LIC_EN, R_OA, R_OA, R_OA, R_OA]);
+    ck(`two hosts' robots.txt 500 (two pages not asked), then a robots.txt that redirects to itself every time: redirects 1 to 3 followed (${followed(held2).join(", ") || "none"}), each 10 s after the last ask, the fourth answer not followed (no place left in the budget): complete disallow; 13 requests (${held2.result?.made ?? "–"}); the candidates: ${verdicts(held2)}`,
+      JSON.stringify(followed(held2)) === "[1,2,3]" && JSON.stringify(waitsBefore(held2, R_OA)) === "[10000,10000,10000]" && held2.lines.filter((l) => OA_NOT.test(l)).length === 1 && held2.result?.made === 13 && pv(held2, SWAG) === "NOT READ" && verdicts(held2) === "HOLD / PASS / HOLD",
+      held2.lines.filter((l) => /openapi|robots\.txt: 500/.test(l)));
 
     // and the world of IDX-0e's first check: a 404 and a 403 are no file now (every path allowed), while a robots.txt
     // served as HTML, one redirected to another host, a 500 and an HTML page served as text still hold their hosts' pages
@@ -3633,6 +3659,55 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck(`robots.txt that disallows: /legal (its own Disallow), the PDF (Disallow: /*.pdf$), Invesco's terms (a group for the probe's own name, ${TOKEN}, in other letter case) and /en/license (Disallow: /en/) are not asked, the disclaimer is (its longer Allow) after the 7 s the site's crawl-delay asks, swagger.json is not (a crawl-delay over 30 s); the candidates: ${verdicts(disallow)}`,
       verdicts(disallow) === "HOLD / NOT READ / HOLD" && line(disallow, /^ {2}https:\/\/www\.nasdaq\.com\/legal: not asked \(robots\.txt disallows it\)$/) && line(disallow, /a group for this probe's own name: yes/) && line(disallow, /^ {2}https:\/\/openapi\.twse\.com\.tw\/v1\/swagger\.json: not asked \(robots\.txt asks for more than 30 s between requests\)$/)
       && disallow.events.some((e) => "wait" in e && e.wait === 7_000), disallow.lines.filter((l) => /robots|not asked/.test(l)));
+    // a record that is not Allow or Disallow (Sitemap, Crawl-delay, Host or one the RFC does not define) between two
+    // User-agent lines does not end the group's User-agent lines, so it does not split the group: Google's reference
+    // parser ends them only at an Allow or a Disallow (robots.cc), and its test ID_LineSyntax_Groups_OtherRules ("Group
+    // must not be closed by rules not explicitly defined in the REP RFC", RFC 9309 §2.1) reads both its files as
+    // disallowing every reader (B-1 of the adversary's check of IDX-0e2, 24 Nov 2026: such a line split the group, the
+    // probe's own group or every reader's was left with no rule, and the page was asked). Here the test's two files,
+    // each with this probe's own name in its first User-agent line and as written (the probe then reads by every
+    // reader's group), a Crawl-delay and a Host record: every page of the six hosts disallowed, none asked
+    const split = await runIx({ ...BASE,
+      [R_NQ]: robots("NqSm", `User-agent: ${TOKEN}\nSitemap: https://${z("SmNq")}.example/sitemap\nUser-agent: *\nDisallow: /\n`),
+      [R_GIW]: robots("GiwSm", `User-agent: BarBot\nSitemap: https://${z("SmGiw")}.example/sitemap\nUser-agent: *\nDisallow: /\n`),
+      [R_NT]: robots("NtUk", `User-agent: ${TOKEN}\nInvalid-Unknown-Line: unknown\nUser-agent: *\nDisallow: /\n`),
+      [R_INV]: robots("InvUk", "User-agent: FooBot\nInvalid-Unknown-Line: unknown\nUser-agent: *\nDisallow: /\n"),
+      [R_TW]: robots("TwCd", "User-agent: *\nCrawl-delay: 2\n\nUser-agent: AhrefsBot\nDisallow: /\n"),
+      [R_OA]: robots("OaHost", "User-agent: *\nHost: openapi.twse.com.tw\nUser-agent: Googlebot\nDisallow: /\n") });
+    holds("robots.txt with a Sitemap, an unknown record, a Crawl-delay or a Host line between two User-agent lines", split, [R_NQ, R_GIW, R_NT, R_INV, R_TW, R_OA]);
+    ck(`robots.txt with another record between two User-agent lines (RFC 9309 §2.1, as Google's reference parser reads it): the group is one, so the reference test's files (Sitemap; an unknown record), with this probe's own name first or as written, a Crawl-delay for every reader then a ban for AhrefsBot, and a Host record then a ban for Googlebot each disallow every page: none of the 7 asked, the probe's own group seen in the two files that name it; the candidates: ${verdicts(split)}`,
+      split.lines.filter((l) => /: not asked \(robots\.txt disallows it\)$/.test(l)).length === 7 && split.lines.filter((l) => /^GET https:\/\/[^ ]+\/robots\.txt: 200, text, \d+ bytes\. robots\.txt read: yes; a group for this probe's own name: yes; /.test(l)).length === 2
+      && line(split, /^GET https:\/\/www\.nasdaq\.com\/robots\.txt: 200, text, \d+ bytes\. robots\.txt read: yes; a group for this probe's own name: yes; /) && line(split, /^GET https:\/\/www\.nasdaqtrader\.com\/robots\.txt: 200, text, \d+ bytes\. robots\.txt read: yes; a group for this probe's own name: yes; /)
+      && verdicts(split) === "NOT READ / NOT READ / NOT READ", split.lines.filter((l) => /robots|not asked/.test(l)));
+    // a comment runs from # to the end of its line, and a line ends only at CR or LF (as Google's reference parser of
+    // RFC 9309 reads them: robots.cc splits lines at 0x0A and 0x0D alone and cuts a comment at its "#"): a comment that
+    // holds U+2028 or U+2029 does not cost its line its rule or its User-agent (B-2 of the adversary's check of
+    // IDX-0e2: in JavaScript "." matches neither, so the comment stayed, the line did not parse, and its Disallow, or
+    // its User-agent line, was dropped)
+    const lsps = await runIx({ ...BASE,
+      [R_NQ]: robots("NqLs", "User-agent: *\nDisallow: /legal # terms\u2028page\n"),
+      [R_GIW]: robots("GiwPs", "User-agent: Googlebot\nAllow: /\n\nUser-agent: * # every reader\u2029else\nDisallow: /Home/\n"),
+      [R_NT]: robots("NtLs", `User-agent: ${TOKEN} # this probe\u2028alone\nDisallow: /content/\n\nUser-agent: *\nAllow: /\n`),
+      [R_INV]: robots("InvPs", "User-agent: *\nDisallow: /us/ # the US site\u2029\n") });
+    holds("robots.txt whose comments hold U+2028 or U+2029", lsps, [R_NQ, R_GIW, R_NT, R_INV, R_TW, LIC, LIC_EN, R_OA, SWAG]);
+    ck(`robots.txt whose comments hold U+2028 or U+2029: a Disallow's comment (on /legal, on /us/), every reader's User-agent line after another group's, and this probe's own User-agent line each keep their line, so the legal page, the disclaimer, the PDF and Invesco's terms are not asked; the other hosts' pages are; the candidates: ${verdicts(lsps)}`,
+      lsps.lines.filter((l) => /: not asked \(robots\.txt disallows it\)$/.test(l)).length === 4 && [LEGAL, DISC, PDF, INV].every((u) => line(lsps, new RegExp(`^ {2}${u.replace(/[.?]/g, "\\$&")}: not asked \\(robots\\.txt disallows it\\)$`)))
+      && line(lsps, /^GET https:\/\/www\.nasdaqtrader\.com\/robots\.txt: 200, text, \d+ bytes\. robots\.txt read: yes; a group for this probe's own name: yes; /) && verdicts(lsps) === "NOT READ / NOT READ / HOLD", lsps.lines.filter((l) => /robots|not asked/.test(l)));
+    // the groups read alone, each file and reader as the reference parser's own tests put them (robots_test.cc
+    // ID_LineSyntax_Groups and ID_LineSyntax_Groups_OtherRules, saved in check/IDX0/e2adv/ref): a rule outside a group
+    // and blank lines change nothing, two groups for one reader are read as one, a record that is not a rule leaves the
+    // User-agent lines open; and an Allow ends them as a Disallow does (robots.cc sets its separator on both)
+    const GROUPS = "allow: /foo/bar/\n\nuser-agent: FooBot\ndisallow: /\nallow: /x/\nuser-agent: BarBot\ndisallow: /\nallow: /y/\n\n\nallow: /w/\nuser-agent: BazBot\n\nuser-agent: FooBot\nallow: /z/\ndisallow: /\n";
+    const OTHER_1 = "User-agent: BarBot\nSitemap: https://foo.bar/sitemap\nUser-agent: *\nDisallow: /\n", OTHER_2 = "User-agent: FooBot\nInvalid-Unknown-Line: unknown\nUser-agent: *\nDisallow: /\n";
+    const groupCases: Array<[string, string, string, string, boolean]> = [
+      ["Groups", GROUPS, "FooBot", "/x/b", true], ["Groups", GROUPS, "FooBot", "/z/d", true], ["Groups", GROUPS, "FooBot", "/y/c", false], ["Groups", GROUPS, "BarBot", "/y/c", true], ["Groups", GROUPS, "BarBot", "/w/a", true],
+      ["Groups", GROUPS, "BarBot", "/z/d", false], ["Groups", GROUPS, "BazBot", "/z/d", true], ["Groups", GROUPS, "FooBot", "/foo/bar/", false], ["Groups", GROUPS, "BarBot", "/foo/bar/", false], ["Groups", GROUPS, "BazBot", "/foo/bar/", false],
+      ["OtherRules 1", OTHER_1, "FooBot", "/", false], ["OtherRules 1", OTHER_1, "BarBot", "/", false], ["OtherRules 2", OTHER_2, "FooBot", "/", false], ["OtherRules 2", OTHER_2, "BarBot", "/", false],
+      ["an Allow ends every reader's User-agent lines", "User-agent: *\nAllow: /z\nUser-agent: Googlebot\nDisallow: /\n", TOKEN, "/legal", true],
+    ];
+    const groupRead = (t: string, who: string, path: string): boolean | null => { try { return ix ? ix.robotsAllows(ix.robotsRules(t, who).rules, path) : null; } catch { return null; } };
+    const groupWrong = groupCases.filter(([, t, who, path, want]) => groupRead(t, who, path) !== want).map(([n, , who, path, want]) => `${n}, ${who} ${path}: ${want ? "allowed" : "disallowed"} expected`);
+    ck(`robots.txt's groups read alone, as Google's reference parser's own tests read them (ID_LineSyntax_Groups, ID_LineSyntax_Groups_OtherRules), and an Allow ending every reader's User-agent lines: ${groupCases.length} cases, ${groupWrong.length} read otherwise`, !!ix && groupWrong.length === 0, groupWrong);
 
     // (a) pages that answer 403 and 404: asked once each, none read
     const refused = await runIx({ ...BASE, [LEGAL]: { status: 403, type: "text/html", body: page("L403", "Access Denied", HOLD_EN("L403")), headers: hdr("L403") }, [DISC]: { status: 404, type: "text/html", body: z("D404"), headers: hdr("D404") }, [PDF]: { status: 403, type: "text/html", body: z("P403"), headers: hdr("P403") },
@@ -3876,6 +3951,14 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
       && sline(sOne, /^ {2}https:\/\/api\.nasdaq\.com\/api\/quote\/list-type\/sox: not asked \(robots\.txt disallows it\)$/) && sOne.result?.lists[S_NDX]?.shape === true && sSlow.events.filter((e) => "wait" in e && e.wait === 7_000).length === 2
       && sHold.lines.filter((l) => /: not asked \(robots\.txt asks for more than 30 s between requests\)$/.test(l)).length === 2,
       { dis: sDis.lines.filter((l) => /not asked|robots/.test(l)), moz: sMoz.lines.filter((l) => /not asked|robots/.test(l)), slow: sSlow.events });
+    // a Sitemap line between every reader's User-agent line and Googlebot's does not split their group, so its
+    // Disallow: /api/ holds every reader (B-1 of the adversary's check of IDX-0e2, 24 Nov 2026: the split left every
+    // reader's group with no rule, and both lists were asked; RFC 9309 §2.1 as Google's reference parser reads it)
+    const sSplit = await runSox({ ...S_BASE, [S_ROB]: srob("Split", `User-agent: *\nSitemap: https://${zs("SmSox")}.example/sitemap.xml\nUser-agent: Googlebot\nDisallow: /api/\n`) });
+    sHolds("robots.txt with a Sitemap line between every reader's User-agent line and Googlebot's, then Disallow: /api/", sSplit, [S_ROB]);
+    ck("robots.txt with a Sitemap line between every reader's User-agent line and Googlebot's: one group, whose Disallow: /api/ holds every reader, so neither list is asked, each saying so",
+      sSplit.result?.robots === "file" && sSplit.lines.filter((l) => /: not asked \(robots\.txt disallows it\)$/.test(l)).length === 2 && sline(sSplit, /a group for every reader: yes/) && sSplit.result?.lists[S_NDX] === null && sSplit.result?.lists[S_SOX] === null,
+      sSplit.lines.filter((l) => /not asked|robots/.test(l)));
 
     // (a) the lists' own answers: a 429 asked again in the budget's one place more, then none left; a redirect, not
     // followed; an HTML page in a list's place; a 403; no answer

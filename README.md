@@ -516,7 +516,7 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   WATCHLIST worked out on the row its figures come from, for the print it shows; its time one string for one instant
   on the lists and the stock page), the stock page's `limits`, the log's
   line for a print beyond its limits, and a database without the new columns read and written as before), and the index
-  candidates' terms probe (section [AR], since 24 Nov 2026: `ix_terms` run offline on a stand-in `fetch` in twenty-six
+  candidates' terms probe (section [AR], since 24 Nov 2026: `ix_terms` run offline on a stand-in `fetch` in thirty
   worlds: every page as expected, each linking data addresses; every page passing, so that each candidate passes, and
   the same with `swagger.json`'s licence url given with a trailing slash, or with the English licence page naming the
   licence in its text alone, not in its title or a heading (TAIEX NOT READ in both); redirects 301, 302, 307 and 308; a
@@ -524,21 +524,29 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   and then 200, a 302 to another path or to another host, 404, 410, 429 twice, 500, 503 and no answer; redirected nearly
   to itself (over http, with a query, with a trailing slash, in other letters, to another port: none followed) and once
   to itself by a relative address (followed); redirected to itself twice in a row (the second not followed: no place
-  left in the budget); and answering 404 and 403 (no file, every path allowed), as HTML, by a redirect elsewhere, 500 or
-  with an HTML page as text (complete disallow); one that disallows by the path, by a
-  pattern or by a group for the probe's own name, gives way to a longer Allow, or asks a Crawl-delay of 7 s or of over
-  30 s; pages that answer 403 and 404; a 429 asked again after 10 s inside the budget, not asked again where the site
-  asks for longer or no place is left, and every address answering 429; answers of another type; a short page, a page
+  left in the budget); redirected to itself every time after the `robots.txt` of four hosts answered 500 (5 followed,
+  10 s apart, and the sixth not: 13 requests) or of two (3 followed, then no place left: 13 requests), since each page
+  not asked leaves the budget a place more (since the check of IDX-0e2); and answering 404 and 403 (no file, every
+  path allowed), as HTML, by a redirect elsewhere, 500 or with an HTML page as text (complete disallow); one that
+  disallows by the path, by a pattern or by a group for the probe's own name, gives way to a longer Allow, or asks a
+  Crawl-delay of 7 s or of over 30 s; one with a Sitemap, an unknown record, a Crawl-delay or a Host line between two
+  User-agent lines (one group, not two: the two files of Google's reference parser's own test among them, with the
+  probe's name and without), and one whose comments hold U+2028 or U+2029 (each line kept, with its rule or its
+  User-agent); pages that answer 403 and 404; a 429 asked again after 10 s inside the budget, not asked again where the
+  site asks for longer or no place is left, and every address answering 429; answers of another type; a short page, a page
   a script draws, words in a JSON script, a PDF that cannot be read, a licence page whose title names no licence and a
   `swagger.json` with no licence; no answer, a body cut off and one over the size read. In each the requests are the
   design's addresses in its order and nothing else, each a GET with redirect `manual`, its User-Agent and no cookie, a
   host's 3 s apart (10 s before an address asked again), and the log names none of the sentinels planted in titles, sentences, headings, links, attributes,
   `<noscript>`, scripts, headers, cookies, redirect targets, `robots.txt`, `swagger.json`, the PDF's text and error
   messages, no date of the server's and no word that is not the probe's own or a number; with each world's verdicts, 20
-  pages read alone, and the file itself: no import but unpdf's, pinned at 2.2.1, no address but the design's), and SOX's
-  list from Nasdaq (section [AS], since IDX-0e2: `ix_sox` run offline in twenty worlds: its `robots.txt` allowing both
+  pages read alone, 15 `robots.txt` cases read alone (the two tests of groups of Google's reference parser, file by file
+  and reader by reader, and an Allow that ends every reader's User-agent lines), and the file itself: no import but
+  unpdf's, pinned at 2.2.1, no address but the design's), and SOX's
+  list from Nasdaq (section [AS], since IDX-0e2: `ix_sox` run offline in twenty-one worlds: its `robots.txt` allowing both
   lists, then answering each of the ten ways above, disallowing for every reader, for Mozilla alone (a product the
-  Monitor's User-Agent names) or SOX's list alone, and asking a Crawl-delay of 7 s or of 45 s; a list answering 429 (asked
+  Monitor's User-Agent names), SOX's list alone, or every reader and Googlebot at once (a Sitemap line between their
+  User-agent lines does not split their group), and asking a Crawl-delay of 7 s or of 45 s; a list answering 429 (asked
   again in the budget's one place more, then none left), 429 with a Retry-After given as a date or of 60 s, a redirect,
   an HTML page, 403 and no answer. In each the requests are its three addresses in its order and nothing else, each a GET
   with redirect `manual`, `robots.txt` with the Monitor's User-Agent and the lists with exactly the headers
@@ -750,14 +758,20 @@ Two probes ask a fixed list of addresses and nothing else (since 24 Nov 2026):
   disallow: no page of that host is asked, and the log says which it was. RFC 9309 makes a 5xx and a network error
   complete disallow (§2.3.1.4) and names the 400–499 range "unavailable" (§2.3.1.3); a 429 is held as a 5xx is, the
   stricter reading. Where a file was read, a page is asked only when it allows the page's own path (the group for the
-  probe's own name, else the one for every reader; the longest matching rule decides, an Allow on a tie). Requests to
+  probe's own name, else the one for every reader; the longest matching rule decides, an Allow on a tie). A group's
+  User-agent lines end only at an Allow or a Disallow line, so a Sitemap, Crawl-delay, Host or other record between two
+  of them does not split the group, and a line ends only at CR or LF, its comment running from `#` to its end (since the
+  check of IDX-0e2, as Google's reference parser reads RFC 9309; until then such a record split the group, and a
+  comment holding U+2028 or U+2029 lost its line, either of which could leave a disallowed page asked). Requests to
   one host are 3 s apart, or the file's Crawl-delay where that is longer, and a Crawl-delay over 30 s holds the host's
   pages. A page's redirect is not followed: the log says only that the answer redirected, to its own host or another, and
   whether the target's path is the asked path give or take a trailing slash. No link of a page is read, and no address
   is built. At most 14 requests: an address that answered 429 is asked once more, after 10 s, only where the site
   asked for no longer wait, and a `robots.txt` that redirected to itself is asked again after 10 s, each only where the
-  budget keeps a place for every address still to come (13 addresses in a budget of 14: a run asks one address again at
-  most). Its User-Agent names a
+  budget keeps a place for every address still to come (13 addresses in a budget of 14: one place to spare, and one more
+  for each page not asked before the address asked again; so a `robots.txt` that redirects to itself every time is
+  followed 5 times only where 4 pages or more before it were not asked, and at most once where every page before it was
+  asked). Its User-Agent names a
   research probe and nothing else (no name, contact or project). A page is NOT READ unless it answered 200 with the
   type expected (HTML, the PDF, JSON) and 200 characters of text or more: an HTML page's visible text (scripts, styles
   and templates left out, its alt and title attributes and `<noscript>` read), a PDF's text by unpdf under Deno (none
