@@ -515,7 +515,23 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   the rule's input for each reason for no chip, `lim` on a row only at a limit (on
   WATCHLIST worked out on the row its figures come from, for the print it shows; its time one string for one instant
   on the lists and the stock page), the stock page's `limits`, the log's
-  line for a print beyond its limits, and a database without the new columns read and written as before).
+  line for a print beyond its limits, and a database without the new columns read and written as before), and the index
+  candidates' terms probe (section [AR], since 24 Nov 2026: `ix_terms` run offline on a stand-in `fetch` in fourteen
+  worlds: every page as expected, each linking data addresses; every page passing, so that each candidate passes, and
+  the same with `swagger.json`'s licence url given with a trailing slash, or with the English licence page naming the
+  licence in its text alone, not in its title or a heading (TAIEX NOT READ in both); redirects 301, 302, 307 and 308; a
+  `robots.txt` that
+  answers 404, 403 or 500, as HTML, by a redirect or with an HTML page as text; one that disallows by the path, by a
+  pattern or by a group for the probe's own name, gives way to a longer Allow, or asks a Crawl-delay of 7 s or of over
+  30 s; pages that answer 403 and 404; a 429 asked again after 10 s inside the budget, not asked again where the site
+  asks for longer or no place is left, and every address answering 429; answers of another type; a short page, a page
+  a script draws, words in a JSON script, a PDF that cannot be read, a licence page whose title names no licence and a
+  `swagger.json` with no licence; no answer, a body cut off and one over the size read. In each the requests are the
+  design's addresses in its order and nothing else, each a GET with redirect `manual`, its User-Agent and no cookie, a
+  host's 3 s apart, and the log names none of the sentinels planted in titles, sentences, headings, links, attributes,
+  `<noscript>`, scripts, headers, cookies, redirect targets, `robots.txt`, `swagger.json`, the PDF's text and error
+  messages, no date of the server's and no word that is not the probe's own or a number; with each world's verdicts, 20
+  pages read alone, and the file itself: no import but unpdf's, no address but the design's).
   `cd jobs && npx tsx ../sim/logic.test.ts`.
   The same command checks the file itself, in its last two sections. GitHub installs `jobs/` alone before it runs the
   logic checks (`logic-tests`, and `deploy-server` before a deploy), so nothing the file imports, directly or through
@@ -546,7 +562,9 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   held all of these, a change to either README alone ran no check at all, and a rewording could merge unchecked and
   stop the next deploy. Since then the logic checks read neither README (the checks of the checks left them first, the
   three sentences that name the code at the check of fix part 4), so no sentence of either README can stop a deploy.
-  These run in `logic-tests` only, which runs on a change to either README as well.
+  Since 24 Nov 2026 the README's own checks hold the entry of the probe `ix_terms` to `jobs/probes/ix_terms.ts` as
+  well: the addresses it asks, in its order, its budget of requests and the Crawl-delay over which it holds a host's
+  pages. These run in `logic-tests` only, which runs on a change to either README as well.
   `cd jobs && npx tsx ../sim/readme.test.ts`.
 - **Database checks** (`sim/sql`): the rules that live in database functions (the limits on verification emails;
   the queue for the reasons of big moves; the request for the second path),
@@ -698,6 +716,41 @@ A new source is tried from GitHub's machines before a job is built on it: a read
 name: the input `sec_user_agent` = true gives the probe's own step, and no other, the secret `SEC_USER_AGENT` (the
 contact the SEC asks automated readers to declare), which a probe of sec.gov (`pf_sec`) sends only as its User-Agent
 and never prints.
+
+One probe asks a fixed list of addresses and nothing else (since 24 Nov 2026):
+
+- `ix_terms` (IDX-0e; run with runtime `deno`): the terms of the index candidates, read before any list of SOX or
+  TAIEX is built. It asks these 13 addresses, all https, in this order: `www.nasdaq.com` `/robots.txt` and `/legal`;
+  `indexes.nasdaqomx.com` `/robots.txt` and `/Home/Disclaimer`; `www.nasdaqtrader.com` `/robots.txt` and
+  `/content/technicalsupport/dataproducts/indexdatapolicy.pdf`; `www.invesco.com` `/robots.txt` and
+  `/us/en/resources/terms-of-use.html`; `data.gov.tw` `/robots.txt`, `/license` and `/en/license`;
+  `openapi.twse.com.tw` `/robots.txt` and `/v1/swagger.json`. Each host's `robots.txt` comes first, and a page is
+  asked only when that file answered 200 as text (not an HTML page) and allows the page's own path (the group for the
+  probe's own name, else the one for every reader; the longest matching rule decides, an Allow on a tie). Requests to
+  one host are 3 s apart, or the file's Crawl-delay where that is longer, and a Crawl-delay over 30 s holds the host's
+  pages. A redirect is not followed: the log says only that the answer redirected, to its own host or another, and
+  whether the target's path is the asked path give or take a trailing slash. No link of a page is read, and no address
+  is built. At most 14 requests: an address that answered 429 is asked once more, after 10 s, only where the site
+  asked for no longer wait and the budget keeps a place for every address still to come. Its User-Agent names a
+  research probe and nothing else (no name, contact or project). A page is NOT READ unless it answered 200 with the
+  type expected (HTML, the PDF, JSON) and 200 characters of text or more: an HTML page's visible text (scripts, styles
+  and templates left out, its alt and title attributes and `<noscript>` read), a PDF's text by unpdf under Deno (none
+  under Node, where the PDF is NOT READ). A page HOLDS when a word of its list of automated reading or of its list of
+  re-use and a word that limits both stand anywhere on it, and else PASSES, unless the words that would hold it stand
+  in its scripts' data (a JSON script or a template): then NOT READ. The lists are the strict gate's of IDX-0c, with the
+  words its reviews found it lacked. Of data.gov.tw's two pages it says whether the title or a heading names
+  政府資料開放授權條款 (`/license`) or Open Government Data License (`/en/license`); of `swagger.json` only whether
+  `info.license` is there, whether its url is exactly `https://data.gov.tw/license` or `https://data.gov.tw/en/license`,
+  and how many operations name exactly that url as their own licence. It prints only these addresses, status numbers,
+  the type as html, pdf, json, text or other, counts of bytes and characters, yes or no, and the words of its own
+  lists that matched, each once with its count: never a page's title, sentence or link, an address from a page or a
+  header, a header's value, a cookie, a date of the server's (last-modified only as yes or no) or an error's message.
+  Its last lines give each candidate HOLD, PASS or NOT READ with those words (SOX via Nasdaq: `/legal`, Global Index
+  Watch's disclaimer and the index data policy; SOX via Invesco: its terms of use; TAIEX via TWSE Open Data: the two
+  licence pages and `swagger.json`'s licence fields): HOLD when any of its pages holds, PASS only when every one was
+  read and passes (for TAIEX, with both licence pages naming the licence and `swagger.json`'s licence url exactly
+  it), else NOT READ; then the requests made out of 14. It imports no file of the repository, since the helpers of
+  `jobs/probes/lib.ts` print what they read; its one import is unpdf's, for the PDF.
 
 Since 21 Nov 2026 (the paper portfolio's second run of probes, `pf_*`) a probe reads a site's `robots.txt` before any
 page or file of it, does not ask a path that file holds, and says what it read and what it did not (`robots()` in
