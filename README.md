@@ -58,6 +58,8 @@ web/        Vite + React + TypeScript. src/styles/tokens.css is the design syste
             the page's switch, or the preview the server grants an account).
             src/lib/pf/ is a copy of the server's engine (supabase/functions/_shared/pf/), written by
             `node tools/sync-pf.cjs` from web/ and never edited by hand; the logic checks fail when the two differ.
+            src/lib/rules/ is written the same way from supabase/functions/_shared/rules/: Tokyo's daily price limits
+            (pricelimit.ts, since 24 Nov 2026), which no screen uses yet.
 supabase/   migrations/ and functions/ (tick, daily, api), cron.sql.
 jobs/       TypeScript scripts for GitHub Actions.
 ```
@@ -500,7 +502,10 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   a future's roll today with and without the new contract's close and one between its last two closes, which σ window
   a print and a booked close are set against), and the widths the browser jobs print (section [AM]: `web/e2e/widths.cjs`
   run as a job runs it, over records written as `run.cjs` writes them, and its step after the run in each of
-  `deploy-web`'s four browser jobs, which never fails the job).
+  `deploy-web`'s four browser jobs, which never fails the job), and Tokyo's daily price limits (section [AO], since 24 Nov
+  2026; `_shared/rules/pricelimit.ts`, which no screen uses yet: JPX's 34 bands as `pf_jpx` printed them and every
+  band's edge, the worked bases, a print at a limit, one tick inside it and each reason for no chip, and the page's
+  copy).
   `cd jobs && npx tsx ../sim/logic.test.ts`.
   The same command checks the file itself, in its last two sections. GitHub installs `jobs/` alone before it runs the
   logic checks (`logic-tests`, and `deploy-server` before a deploy), so nothing the file imports, directly or through
