@@ -3,6 +3,7 @@
 // MARKETS does, never a per cent of the level; and every row says what its figures are as of, and whose they are.
 // Pure: the `api` function's watch_list route uses it, and sim/logic.test.ts checks it.
 import { freshQuote } from "./intraday.ts";
+import { closePrint, LIMIT_LISTS, quotePrint, rowLimitState, withLim, type LimitCtx, type LimitStat } from "./rules/limitrow.ts";
 
 /** What a row's figures are as of: a booked daily close, a print with its time, or an official publisher's daily
  *  figure (a yield read from a stored curve). */
@@ -125,6 +126,16 @@ export function watchRowFromStat(s: StatLike, ccy: string | null, sessionDate: (
     vs50: pctOf(s.dma50), vs200: pctOf(s.dma200), pos52: s.hi52 != null && s.lo52 != null && s.hi52 > s.lo52 ? ((last - s.lo52) / (s.hi52 - s.lo52)) * 100 : null,
     mcap: s.mcap, earningsAt: s.earnings_at, earningsEst: s.earnings_est, isYield: false,
   };
+}
+
+/** A member's watchlist row (watchRowFromStat, W-1) with the limit chip's field (L-2 of C/limit-chip-plan.md): `lim` only
+ *  while the print the row shows is at its daily limit, worked out on the very row its figures come from (the name's
+ *  row newestStats gives) for that print: its stored quote where the row is at a print, its booked close otherwise
+ *  (rules/limitrow.ts). Otherwise it is the very same row: with `c` null (a database without the chip's columns, or
+ *  holiday rows that cannot be read) or a row of a list other than Tokyo's there is no `lim`. */
+export function watchRowWithLim(s: StatLike & LimitStat, ccy: string | null, sessionDate: (iso: string) => string, c: LimitCtx | null) {
+  const row = watchRowFromStat(s, ccy, sessionDate);
+  return withLim(row, c && LIMIT_LISTS.includes(s.idx) ? rowLimitState(s, s.symbol, row.asOfKind === "print" ? quotePrint(s) : closePrint(s), c) : null);
 }
 
 /** The watchlist's row for a market-table instrument. The as-of is a date for a close or a published figure and the

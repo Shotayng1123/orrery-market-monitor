@@ -5,7 +5,8 @@
 import { db } from "./db.ts";
 import { fetchText } from "./http.ts";
 import { keyStats, quotes, type KeyStats } from "./yahoo.ts";
-import { benchmarksFor, dailyBars, quoteFor } from "./assets.ts";
+import { benchmarksFor, dailyBars, limitFactsFor, quoteFor } from "./assets.ts";
+import { LIMIT_LISTS, pagePrint, rowLimitState, stockLimitFields } from "./rules/limitrow.ts";
 import { FEED_DAYS, feedFor, pageOrQuote, type StockFeed } from "./pagefeed.ts";
 import { avgTurnover, betaCorr, maxDrawdown, perfRows, range52w, realisedVol, type Bar } from "./stockstats.ts";
 import { justReported, resultsDateToWatch, valuation, type Fin, type FinLine } from "./fin.ts";
@@ -128,13 +129,14 @@ export async function stockPage(symbol: string) {
   if ("instrument" in first) return first.instrument;
   const q = first.stock;
   const benchmarks = benchmarksFor(symbol), jp = /\.T$/.test(symbol), equity = q.quoteType === "EQUITY";
-  const [{ data: con }, own, benches, fin, ks, feed] = await Promise.all([
+  const [{ data: con }, own, benches, fin, ks, feed, lf] = await Promise.all([
     db.from("constituents").select("idx,sector,gics_industry,gics_source").eq("symbol", symbol).limit(5),
     soft(dailyBars(symbol), [] as Bar[], "price history"),
     Promise.all(benchmarks.map((b) => soft(dailyBars(b.symbol), [] as Bar[], `${b.name} history`))),
     equity ? finFor(symbol, q.currency, jp ? edinetStatements : undefined, q.earningsAt) : Promise.resolve({ fin: null, note: "Statements are available for equities only." }),
     equity ? soft(keyStats(symbol), null as KeyStats | null, "key statistics") : Promise.resolve(null),
     soft(feedFor(db, symbol), { days: FEED_DAYS, news: [], alerts: [], error: "the headlines and alerts could not be read" } as StockFeed, "news and alerts"),
+    jp ? limitFactsFor(symbol) : Promise.resolve(null),
   ]);
   const member = (con ?? []).find((c) => c.sector) ?? (con ?? [])[0] ?? null;
   const d20 = avgTurnover(own, 20), d60 = avgTurnover(own, 60);
@@ -181,6 +183,11 @@ export async function stockPage(symbol: string) {
   const bps = lastFy(f, "bps") ?? (eq != null && sh != null && sh > 0 ? eq / sh : null);
   const val = { ...valuation(q.price, { eps: lastFy(f, "eps"), epsGuide: guided(f, "eps"), bps, dps: lastFy(f, "dps"), dpsGuide: guided(f, "dps") }), basis: f ? "Price over the latest fiscal year's EPS and book value per share, and over the company's guidance where it gives one; yield = DPS over price" : null };
 
+  // the limit chip (L-2): a placed Tokyo name's daily limits for the page's own quote, on the row the lists read
+  // (rules/limitrow.ts); a name not placed, or a database from before the chip's columns, gets neither field
+  const placed = new Set((con ?? []).some((c: { idx: string }) => LIMIT_LISTS.includes(c.idx)) ? [symbol] : []);
+  const limit = lf ? rowLimitState(lf.stat, symbol, pagePrint(q), { members: placed, holidays: lf.holidays, now: new Date() }) : null;
+
   return {
     symbol, name: q.name ?? symbol, exchange: q.exchange, currency: q.currency, quoteType: q.quoteType,
     sector: member?.sector ?? null, industry: member?.gics_industry ?? null, indices: (con ?? []).map((c) => c.idx),
@@ -194,5 +201,6 @@ export async function stockPage(symbol: string) {
     earningsAt: q.earningsAt ? new Date(q.earningsAt * 1000).toISOString() : null, earningsEst: q.earningsEst ?? null,
     val, fin: f, finNote: fin.note,
     feed,   // since 20 Nov 2026; a page from before ignores it, and the page shows no NEWS panel without it
+    ...stockLimitFields(limit),   // `limits` and, at a limit, `lim` (since 24 Nov 2026; no page reads them yet)
   };
 }

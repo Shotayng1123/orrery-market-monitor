@@ -1,19 +1,21 @@
 // api — everything the page reads, one function, `?action=`. Sign-in issues an HMAC token; every other action
 // needs it as a bearer. The research desk publishes with POST report_put and the x-report-secret header.
 import { db, selectAll } from "../_shared/db.ts";
+import { selectCols } from "../_shared/paging.ts";
 import { bearer, verifyToken } from "../_shared/auth.ts";
 import { accountFor, adminSet, adminUsers, authInfo, changePassword, login, mailTest, signup, signupFinish, signupStart, signupVerify } from "../_shared/accounts.ts";
 import { corsHeaders, json, timingSafeEqual } from "../_shared/http.ts";
 import { computeTable } from "../_shared/table.ts";
 import { CURVE_LABELS } from "../_shared/curves.ts";
-import { historyDays, homeIndex, quoteFor, RANGES, relativeLine, statementsFor, yahooSeries } from "../_shared/assets.ts";
+import { historyDays, homeIndex, quoteFor, RANGES, relativeLine, statementsFor, tseHolidays, yahooSeries } from "../_shared/assets.ts";
+import { closePrint, LIMIT_COLS, LIMIT_LISTS, quotePrint, rowLimitState, withLim, withoutLimitCols, type LimitCtx, type LimitStat } from "../_shared/rules/limitrow.ts";
 import { fetchText } from "../_shared/http.ts";
 import { CCY, loadUniverse } from "../_shared/newsalerts.ts";
 import { quotes } from "../_shared/yahoo.ts";
 import { pushState, pushSubscribe, pushTest, pushUnsubscribe } from "../_shared/push.ts";
 import { stockPage } from "../_shared/stock.ts";
 import { liveRows } from "../_shared/intraday.ts";
-import { newestStats, watchRowFromQuote, watchRowFromStat, watchRowFromTable, type StatLike, type TableLike } from "../_shared/watchrow.ts";
+import { newestStats, watchRowFromQuote, watchRowFromTable, watchRowWithLim, type StatLike, type TableLike } from "../_shared/watchrow.ts";
 import { EARLY_CLOSES, HOLIDAY_SOURCES, localDate, type Holidays } from "../_shared/sessions.ts";
 import { feedState } from "../_shared/feedhealth.ts";
 import { beatFresh, type Reading, type RelayNote } from "../_shared/relay.ts";
@@ -307,16 +309,20 @@ interface StatRow { symbol: string; name: string; sector: string | null; weight:
 const LIST_TZ: Record<string, string> = { SP500: "America/New_York", NDX: "America/New_York", NK225: "Asia/Tokyo", TOPIX: "Asia/Tokyo", KOSPI200: "Asia/Seoul", HSI: "Asia/Hong_Kong", SSE180: "Asia/Shanghai" };
 async function indexStats(idx: string) {
   const COLS = "symbol,name,sector,industry,weight,d,close,prev,pct1d,pct1w,pct1m,pct3m,pct6m,pct12m,pct36m,dma50,dma200,hi52,lo52,mcap,volume,adv3m,turnover,adv_turnover,quote_at,mf_up,mf_down,mf_net,mf_d,mf_at";
-  // the quote's own price is kept since migration 20261119000001; a database from before it has no such columns,
-  // and then the tab reads from the closes as it always did
-  let booked: StatRow[];
-  try { booked = await selectAll<StatRow>(() => db.from("constituent_stats").select(COLS + ",q_price,q_prev,q_time").eq("idx", idx).order("symbol")); }
-  catch { booked = await selectAll<StatRow>(() => db.from("constituent_stats").select(COLS).eq("idx", idx).order("symbol")); }
+  // the quote's own price is kept since migration 20261119000001, and the limit chip's columns since 20261124000001; a
+  // database from before either has no such columns, and then the tab reads from what it has as it always did
+  const { rows: booked, set } = await selectCols<StatRow & LimitStat>((cols) => db.from("constituent_stats").select(cols).eq("idx", idx).order("symbol"), [COLS + ",q_price,q_prev,q_time," + LIMIT_COLS.join(","), COLS + ",q_price,q_prev,q_time", COLS]);
   if (!booked.length) return { idx, asOf: null, live: null, rows: [], breadth: null, sectors: [], movers: { top: [], bottom: [] }, shorts: null };
   const asOf = booked.map((r) => r.d).sort().pop() ?? null;
   // while the market is open: today's prices and today's moves (intraday.ts)
   const tz = LIST_TZ[idx] ?? "UTC";
-  const { rows, live } = liveRows(booked, (iso) => localDate(tz, Date.parse(iso) / 1000));
+  const { rows: today, live } = liveRows(booked, (iso) => localDate(tz, Date.parse(iso) / 1000));
+  // the limit chip (L-2): a Tokyo list's row carries `lim` only while the print it shows (its quote, where liveRows put it
+  // at its quote, else its booked close) is at its daily limit (_shared/rules/limitrow.ts); the chip's own columns are
+  // not sent. A page of before reads no such field.
+  const hol = set === 0 && LIMIT_LISTS.includes(idx) ? await tseHolidays().catch(() => null) : null;
+  const lc: LimitCtx | null = hol ? { members: new Set(booked.map((r) => r.symbol)), holidays: hol, now: new Date() } : null;
+  const rows = today.map((r, i) => { const st = lc ? rowLimitState(booked[i], r.symbol, r !== booked[i] ? quotePrint(booked[i]) : closePrint(booked[i]), lc) : null; return withLim(withoutLimitCols(r), st); });
   const n = rows.length;
   const cnt = (f: (r: StatRow) => boolean) => rows.filter(f).length;
   const breadth = {
@@ -493,24 +499,27 @@ async function watchSymbols(userId: string): Promise<Array<{ symbol: string; nam
 /** The user's names with the figures the Monitor holds for them: the market table for its instruments (as MARKETS
  *  shows them: a yield's changes in level, never in per cent of it; `_shared/watchrow.ts`), the constituent
  *  statistics for index members (at today's quote while it is from a later session than the booked close, as EQUITIES
- *  reads them: `watchRowFromStat`), a plain quote for anything else (a Treasury yield index such as ^IRX moving in points,
+ *  reads them: `watchRowFromStat`; a Tokyo member's row with `lim` while the print it shows is at its daily limit, from
+ *  the same row: `watchRowWithLim`), a plain quote for anything else (a Treasury yield index such as ^IRX moving in points,
  *  `watchRowFromQuote`). Each row says what its figures are as of
  *  (`asOfKind`: a close, a print or an official publisher's daily figure) and whose they are (`source`). */
 async function watchList(userId: string) {
   const wl = await watchSymbols(userId);
   if (!wl.length) return { rows: [] };
   const syms = wl.map((w) => w.symbol);
-  // a member's quote is kept since migration 20261119000001; a database from before it has no such columns, and then the
-  // rows are read at their closes as they always were (as indexStats does)
+  // a member's quote is kept since migration 20261119000001, and the limit chip's figures since 20261124000001 (L-2); a
+  // database from before either has none of their columns, and then the rows are read with the columns it has: at their
+  // closes without the quote's, as they always were (as indexStats does), and with no `lim` without the chip's
   const COLS = "idx,symbol,name,sector,d,close,pct1d,pct1w,pct1m,pct3m,pct12m,dma50,dma200,hi52,lo52,mcap,earnings_at,earnings_est";
-  const members = async (): Promise<StatLike[]> => {
-    try { return await selectAll<StatLike>(() => db.from("constituent_stats").select(COLS + ",q_price,q_prev,q_time").in("symbol", syms).order("symbol")); }
-    catch { return await selectAll<StatLike>(() => db.from("constituent_stats").select(COLS).in("symbol", syms).order("symbol")); }
-  };
-  const [{ data: snap }, stats] = await Promise.all([
+  const [{ data: snap }, read] = await Promise.all([
     db.from("snapshots").select("payload").eq("key", "table").maybeSingle(),
-    members(),
+    selectCols<StatLike & LimitStat>((cols) => db.from("constituent_stats").select(cols).in("symbol", syms).order("symbol"), [COLS + ",prev,volume,q_price,q_prev,q_time," + LIMIT_COLS.join(","), COLS + ",q_price,q_prev,q_time", COLS]),
   ]);
+  const { rows: stats, set }: { rows: Array<StatLike & LimitStat>; set: number } = read;
+  // the limit chip (L-2): the Tokyo lists' names and the TSE's holiday rows, where the database has the chip's columns
+  const placed = set === 0 ? stats.filter((s) => LIMIT_LISTS.includes(s.idx) && /\.T$/.test(s.symbol)) : [];
+  const hol = placed.length ? await tseHolidays().catch(() => null) : null;
+  const lc: LimitCtx | null = hol ? { members: new Set(placed.map((s) => s.symbol)), holidays: hol, now: new Date() } : null;
   const tBy = new Map((((snap?.payload as { rows?: TableLike[] } | null)?.rows) ?? []).map((r) => [r.symbol, r]));
   const sBy = newestStats(stats);   // a name in two lists: the newest row's figures, the name and sector of a fixed list order
   const missing = syms.filter((s) => !tBy.has(s) && !sBy.has(s));
@@ -518,7 +527,7 @@ async function watchList(userId: string) {
   const rows = wl.map((w) => {
     const t = tBy.get(w.symbol), s = sBy.get(w.symbol), q = qBy[w.symbol];
     if (t) return { ...watchRowFromTable(t), symbol: w.symbol };
-    if (s) return watchRowFromStat(s, CCY[s.idx] ?? null, (iso) => localDate(LIST_TZ[s.idx] ?? "UTC", Date.parse(iso) / 1000));
+    if (s) return watchRowWithLim(s, CCY[s.idx] ?? null, (iso) => localDate(LIST_TZ[s.idx] ?? "UTC", Date.parse(iso) / 1000), lc);   // `lim` from the same row
     return watchRowFromQuote(w.symbol, w.name, q);   // a plain quote; a Treasury yield index (^IRX) moves in points
   });
   return { rows };
