@@ -3517,6 +3517,42 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
       line(base, /^GET https:\/\/www\.nasdaq\.com\/legal: 200, html, \d+ bytes, \d+ characters of text; last-modified given: yes$/) && line(base, /^ {2}HOLD\. automated reading: [^;]*\brobot \(1\)/) && line(base, /^GET https:\/\/www\.nasdaq\.com\/robots\.txt: 200, text, \d+ bytes\. robots\.txt read: yes/) && line(base, /^ {2}https:\/\/www\.nasdaq\.com\/legal: robots\.txt allows it: yes$/)
       && line(base, /政府資料開放授權條款: yes$/) && line(base, /Open Government Data License: yes$/) && line(base, /^ {2}info\.license: yes; its url exactly https:\/\/data\.gov\.tw\/license or https:\/\/data\.gov\.tw\/en\/license: yes; operations whose own licence url is exactly that: 3$/), base.lines.slice(0, 40));
 
+    // (a) and (c): every page passes, so that a candidate of several pages PASSes; then TAIEX's own rule (both licence
+    // pages name the licence in their title or a heading, and swagger.json's info.license url is exactly the licence's)
+    // where it alone decides: with every page passing, swagger's url given with a trailing slash, or the English licence
+    // page naming the licence in its text alone, leaves TAIEX NOT READ (T-1 of the check of IDX-0e, 24 Nov 2026: no
+    // world made a candidate of several pages PASS, so a TAIEX PASS without its licence would have passed these checks)
+    const ZH_GRANT = `<p>${z("G1")}為利各界廣泛利用政府資料，資料提供機關同意以非專屬及無償之方式，授權使用者利用本授權資料，其範圍包括重製、改作、編輯、公開傳輸或為其他方式之利用。</p><p>使用者利用本授權資料時，應以適當方式標示資料提供機關之名稱。${z("G2")}</p><p>本條款之內容如有修正，以資料開放平臺公告之最新版本為準，使用者應自行留意更新之內容，並保存利用紀錄。</p>`;
+    const PDF_PASS = `${z("PdfPass1")} Nasdaq Index Data Policy. This policy tells readers which index values are shown on the index pages and at what times of the day they are updated. ${z("PdfPass2")} The pages list each index with its base date and base value, and the reading room keeps the older editions. ${z("PdfPass3")}`;
+    const pdfPass = async (b: Uint8Array): Promise<string | null> => (new TextDecoder().decode(b).startsWith("%PDF-") ? PDF_PASS : null);
+    const SWAG_SPEC = JSON.parse(SWAGGER) as { info: Record<string, unknown> & { license: Record<string, unknown> } };
+    const swaggerWith = (url: string): string => JSON.stringify({ ...SWAG_SPEC, info: { ...SWAG_SPEC.info, license: { ...SWAG_SPEC.info.license, url } } });
+    const PASSING: World = { ...BASE,
+      [LEGAL]: ok("text/html; charset=utf-8", page("LegalP", "Legal | Nasdaq", PASS_EN), "LegalP"), [DISC]: ok("text/html", page("DiscP", "Disclaimer | Global Index Watch", PASS_EN), "DiscP"),
+      [LIC]: ok("text/html; charset=utf-8", page("LicP", "政府資料開放授權條款－第1版", ZH_GRANT), "LicP"), [LIC_EN]: ok("text/html", page("LicEnP", "Open Government Data License, version 1.0", PASS_EN), "LicEnP") };
+    const pg = (r: Run, url: string) => r.result?.pages[url];
+    const pagesOf = (r: Run) => (r.result ? Object.fromEntries(Object.entries(r.result.pages).map(([u, p]) => [u.replace(/^https:\/\//, ""), p.ogdl === undefined ? p.verdict : `${p.verdict}, names the licence: ${p.ogdl}`])) : null);
+    const SIX = [LEGAL, DISC, PDF, INV, LIC, LIC_EN];
+    const allPass = await runIx(PASSING, pdfPass);
+    holds("every page passes", allPass, DESIGN);
+    ck(`every page passes: the legal page, the disclaimer, the index data policy (its PDF text) and Invesco's terms PASS (no word of automated reading or re-use), both licence pages PASS (the Chinese one a grant: 重製 and no limiting word) and name the licence in their title or a heading, swagger.json is READ with its url exactly the licence's; so each candidate PASSes, those of three pages as the one of one: ${verdicts(allPass)}`,
+      SIX.every((u) => pv(allPass, u) === "PASS") && (pg(allPass, LIC)?.words.reuse["重製"] ?? 0) > 0 && Object.keys(pg(allPass, LIC)?.words.limit ?? { none: 1 }).length === 0 && pg(allPass, LIC)?.ogdl === true && pg(allPass, LIC_EN)?.ogdl === true
+      && pv(allPass, SWAG) === "READ" && pg(allPass, SWAG)?.licence?.present === true && pg(allPass, SWAG)?.licence?.exact === true && verdicts(allPass) === "PASS / PASS / PASS"
+      && line(allPass, /^SOX via Nasdaq \(nasdaq\.com\/legal \+ GIW disclaimer \+ index data policy\): PASS\. 3 of 3 pages read; /) && line(allPass, /^SOX via Invesco \(terms of use\): PASS\. 1 of 1 pages read; /) && line(allPass, /^TAIEX via TWSE Open Data \(data\.gov\.tw licence \+ swagger licence fields\): PASS\. 3 of 3 pages read; .*re-use: 重製 \(1\)/),
+      { pages: pagesOf(allPass), licence: pg(allPass, SWAG)?.licence, verdicts: verdicts(allPass), lines: allPass.lines.filter((l) => /PASS|HOLD|NOT READ|names|info\.license/.test(l)) });
+    const slashed = await runIx({ ...PASSING, [SWAG]: ok("application/json; charset=utf-8", swaggerWith("https://data.gov.tw/license/"), "SwagSlash") }, pdfPass);
+    holds("every page passes, swagger.json's licence url with a trailing slash", slashed, DESIGN);
+    ck(`every page passes but swagger.json's info.license url is https://data.gov.tw/license/ (its operations' urls still exact): swagger.json is READ, its url not exactly the licence's, with 3 operations whose own url is; so TAIEX is NOT READ with its 3 pages read, and the SOX candidates PASS: ${verdicts(slashed)}`,
+      SIX.every((u) => pv(slashed, u) === "PASS") && pg(slashed, LIC)?.ogdl === true && pg(slashed, LIC_EN)?.ogdl === true && pv(slashed, SWAG) === "READ" && pg(slashed, SWAG)?.licence?.present === true && pg(slashed, SWAG)?.licence?.exact === false && pg(slashed, SWAG)?.licence?.ops === 3 && verdicts(slashed) === "PASS / PASS / NOT READ"
+      && line(slashed, /^ {2}info\.license: yes; its url exactly https:\/\/data\.gov\.tw\/license or https:\/\/data\.gov\.tw\/en\/license: no; operations whose own licence url is exactly that: 3$/) && line(slashed, /^TAIEX via TWSE Open Data \(data\.gov\.tw licence \+ swagger licence fields\): NOT READ\. 3 of 3 pages read; /),
+      { pages: pagesOf(slashed), licence: pg(slashed, SWAG)?.licence, verdicts: verdicts(slashed) });
+    const nameless = await runIx({ ...PASSING, [LIC_EN]: ok("text/html", page("LicEnN", "Open data | data.gov.tw", `<p>${z("LicEnN")} The Open Government Data License, version 1.0, applies to the open data of this platform.</p>${PASS_EN}`), "LicEnN") }, pdfPass);
+    holds("every page passes, the English licence page names the licence in its text alone", nameless, DESIGN);
+    ck(`every page passes but the English licence page's title and headings name no licence (a paragraph does): it PASSes and says no, the Chinese one yes, swagger.json's url is exact; so TAIEX is NOT READ with its 3 pages read, and the SOX candidates PASS: ${verdicts(nameless)}`,
+      SIX.every((u) => pv(nameless, u) === "PASS") && pg(nameless, LIC_EN)?.ogdl === false && pg(nameless, LIC)?.ogdl === true && pg(nameless, SWAG)?.licence?.exact === true && verdicts(nameless) === "PASS / PASS / NOT READ"
+      && line(nameless, /^ {2}the title or a heading names Open Government Data License: no$/) && line(nameless, /^ {2}the title or a heading names 政府資料開放授權條款: yes$/) && line(nameless, /^TAIEX via TWSE Open Data \(data\.gov\.tw licence \+ swagger licence fields\): NOT READ\. 3 of 3 pages read; /),
+      { pages: pagesOf(nameless), verdicts: verdicts(nameless) });
+
     // (a) redirects of every kind, none followed; the log says to which host, and whether to the same path
     const R = (status: number, location: string): Ans => ({ status, type: "text/html", body: `<a href="${location}">${z(`Moved${status}`)}</a>`, headers: { ...hdr(`Redir${status}`), location } });
     const redirects = await runIx({ ...BASE,

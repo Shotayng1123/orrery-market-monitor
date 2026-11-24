@@ -516,8 +516,11 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   WATCHLIST worked out on the row its figures come from, for the print it shows; its time one string for one instant
   on the lists and the stock page), the stock page's `limits`, the log's
   line for a print beyond its limits, and a database without the new columns read and written as before), and the index
-  candidates' terms probe (section [AR], since 24 Nov 2026: `ix_terms` run offline on a stand-in `fetch` in eleven
-  worlds: every page as expected, each linking data addresses; redirects 301, 302, 307 and 308; a `robots.txt` that
+  candidates' terms probe (section [AR], since 24 Nov 2026: `ix_terms` run offline on a stand-in `fetch` in fourteen
+  worlds: every page as expected, each linking data addresses; every page passing, so that each candidate passes, and
+  the same with `swagger.json`'s licence url given with a trailing slash, or with the English licence page naming the
+  licence in its text alone, not in its title or a heading (TAIEX NOT READ in both); redirects 301, 302, 307 and 308; a
+  `robots.txt` that
   answers 404, 403 or 500, as HTML, by a redirect or with an HTML page as text; one that disallows by the path, by a
   pattern or by a group for the probe's own name, gives way to a longer Allow, or asks a Crawl-delay of 7 s or of over
   30 s; pages that answer 403 and 404; a 429 asked again after 10 s inside the budget, not asked again where the site
@@ -559,7 +562,9 @@ Three sets, none of which needs the real API, the live database or a sign-in:
   held all of these, a change to either README alone ran no check at all, and a rewording could merge unchecked and
   stop the next deploy. Since then the logic checks read neither README (the checks of the checks left them first, the
   three sentences that name the code at the check of fix part 4), so no sentence of either README can stop a deploy.
-  These run in `logic-tests` only, which runs on a change to either README as well.
+  Since 24 Nov 2026 the README's own checks hold the entry of the probe `ix_terms` to `jobs/probes/ix_terms.ts` as
+  well: the addresses it asks, in its order, its budget of requests and the Crawl-delay over which it holds a host's
+  pages. These run in `logic-tests` only, which runs on a change to either README as well.
   `cd jobs && npx tsx ../sim/readme.test.ts`.
 - **Database checks** (`sim/sql`): the rules that live in database functions (the limits on verification emails;
   the queue for the reasons of big moves; the request for the second path),
