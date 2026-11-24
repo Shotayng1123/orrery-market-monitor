@@ -16,6 +16,17 @@ export async function selectAll<T>(build: () => any, pageSize = 1000, maxRows = 
   return out;
 }
 
+/** The rows of the first of `sets` (lists of columns, fullest first) the database answers: one from before a migration
+ *  that added columns is read with the columns it has, as before the migration (`set`: the list that answered). A failed
+ *  read moves to the next list only where `fallBack` says so (every failure, unless one is handed in). */
+// deno-lint-ignore no-explicit-any
+export async function selectCols<T>(build: (cols: string) => any, sets: string[], fallBack: (e: unknown) => boolean = () => true): Promise<{ rows: T[]; set: number }> {
+  for (let i = 0; ; i++) {
+    try { return { rows: await selectAll<T>(() => build(sets[i])), set: i }; }
+    catch (e) { if (i + 1 >= sets.length || !fallBack(e)) throw e; }
+  }
+}
+
 export function chunk<T>(arr: T[], n: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));

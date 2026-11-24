@@ -8,6 +8,10 @@ import { fetchText } from "./http.ts";
 import { quotes, spark, type QuoteRow } from "./yahoo.ts";
 import type { IndexId } from "./constituents.ts";
 import { scanQuoteAlerts } from "./alerts.ts";
+import { selectCols } from "./paging.ts";
+import { localDate } from "./sessions.ts";
+import { tseHolidays } from "./assets.ts";
+import { LIMIT_COLS, LIMIT_LISTS, beyondNote, lacksLimitCols, limRunOf, quotePrint, rowLimitState, shiftPrev, untradedOf, withoutLimitCols, type LimitStat } from "./rules/limitrow.ts";
 
 interface Constituent { idx: string; symbol: string; name: string; name_en: string | null; sector: string | null; gics_industry: string | null; weight: number | null }
 
@@ -49,10 +53,30 @@ async function keyRows(idx: string): Promise<Array<{ symbol: string; name: strin
   return selectAll<{ symbol: string; name: string; d: string; close: number }>(() => db.from("constituent_stats").select("symbol,name,d,close").eq("idx", idx).order("symbol"));
 }
 
+/** The rows a list's jobs read before they write: the not-null columns and, for the limit chip (migration 20261124000001),
+ *  the stored quote with the columns kept beside it. `lim` is false where the database has none of those yet: the jobs
+ *  then read and write none of them, as before. Any other failure stops the job, as it did. */
+async function storedRows(idx: string): Promise<{ rows: Array<LimitStat & { name: string }>; lim: boolean }> {
+  const { rows, set } = await selectCols<LimitStat & { name: string }>((cols) => db.from("constituent_stats").select(cols).eq("idx", idx).order("symbol"), ["symbol,name,d,close,prev,q_price,q_prev,q_time,volume," + LIMIT_COLS.join(","), "symbol,name,d,close"], (e) => lacksLimitCols(e instanceof Error ? e.message : String(e)));
+  return { rows, lim: set === 0 };
+}
+/** A list's rows upserted; on a database without the chip's columns, or one whose schema has not caught up with them,
+ *  written without them (key for key as before) rather than not at all. */
+async function upsertStats(rows: Array<Record<string, unknown>>, lim: boolean): Promise<void> {
+  if (!lim) for (const r of rows) withoutLimitCols(r);
+  for (const part of chunk(rows, 500)) {
+    let { error: ue } = await db.from("constituent_stats").upsert(part, { onConflict: "idx,symbol" });
+    if (ue && lim && lacksLimitCols(ue.message)) ({ error: ue } = await db.from("constituent_stats").upsert(part.map((r) => withoutLimitCols({ ...r })), { onConflict: "idx,symbol" }));
+    if (ue) throw new Error("constituent_stats: " + ue.message);
+  }
+}
+const sessionOf = (symbol: string) => (iso: string) => localDate(tzOf(symbol), Date.parse(iso) / 1000);
+
 export async function computeIndexStats(idx: IndexId, log: (s: string) => void = () => {}): Promise<string> {
   const list = await selectAll<Constituent>(() => db.from("constituents").select("idx,symbol,name,name_en,sector,gics_industry,weight").eq("idx", idx).order("symbol"));
   if (!list.length) return `${idx}: no constituents loaded`;
   const series = await spark(list.map((c) => c.symbol), "5y", "1d");
+  const { rows: stored, lim } = await storedRows(idx), tokyo = lim && LIMIT_LISTS.includes(idx), tails = new Map<string, Array<{ d: string; v: number }>>();
   const rows: Array<Record<string, unknown>> = [];
   const breadth = new Map<string, { n: number; adv: number; dec: number; above50: number; above200: number; new_hi: number; new_lo: number }>();
   const sinceBreadth = new Date(Date.now() - 3.1 * 365.25 * 86400e3).toISOString().slice(0, 10);
@@ -63,6 +87,7 @@ export async function computeIndexStats(idx: IndexId, log: (s: string) => void =
     const closes: Array<{ d: string; v: number }> = [];
     for (let i = 0; i < s.close.length; i++) { const v = s.close[i]; if (v != null && Number.isFinite(v)) closes.push({ d: new Date(s.timestamp[i] * 1000).toISOString().slice(0, 10), v }); }
     if (closes.length < 2) { missing++; continue; }
+    if (tokyo) tails.set(c.symbol, closes.slice(-30));
     const vals = closes.map((x) => x.v), n = vals.length, last = vals[n - 1];
     const back = (k: number) => (n - 1 - k >= 0 ? vals[n - 1 - k] : null);
     const m50 = rollingMean(vals, 50), m200 = rollingMean(vals, 200), ex = rollingExtrema(vals, 252);
@@ -94,7 +119,17 @@ export async function computeIndexStats(idx: IndexId, log: (s: string) => void =
       quoted++;
     }
   } catch (e) { log(`quotes failed: ${e instanceof Error ? e.message : e}`); }
-  for (const part of chunk(rows, 500)) { const { error: ue } = await db.from("constituent_stats").upsert(part, { onConflict: "idx,symbol" }); if (ue) throw new Error("constituent_stats: " + ue.message); }
+  // the limit chip (L-2): the session before each row's quote, shifted as the flow job shifts it, and, for a Tokyo list,
+  // the run its booked close's own limit rests on, from the closes in hand (rules/limitrow.ts limRunOf)
+  if (lim) {
+    const by = new Map(stored.map((s) => [s.symbol, s])), hol = tokyo ? await tseHolidays().catch(() => null) : null;
+    for (const r of rows) {
+      const s = by.get(r.symbol as string), at = (r.q_time as string | null | undefined) ?? null, prevCols = shiftPrev(s, at, sessionOf(r.symbol as string));
+      Object.assign(r, prevCols);
+      if (tokyo) r.lim_run = hol ? limRunOf(tails.get(r.symbol as string) ?? [], hol, untradedOf({ q_time: at ?? s?.q_time ?? null, volume: at ? (r.volume as number | null) : s?.volume ?? null, ...prevCols }, hol)) : null;
+    }
+  }
+  await upsertStats(rows, lim);
   // drop statistics of names that left the index
   const keep = new Set(rows.map((r) => r.symbol as string));
   const stale = (await keyRows(idx)).map((r) => r.symbol).filter((s) => !keep.has(s));
@@ -107,27 +142,38 @@ export async function computeIndexStats(idx: IndexId, log: (s: string) => void =
 }
 
 /** The quote's own price, the previous close it is measured against and the time it printed: what EQUITIES shows
- *  while the market is open (intraday.ts). Columns of migration 20261119000001. */
-const lastPrint = (x: { price: number | null; prevClose: number | null; time: number | null }) => ({ q_price: x.price, q_prev: x.prevClose, q_time: x.time ? new Date(x.time * 1000).toISOString() : null });
+ *  while the market is open (intraday.ts). Columns of migration 20261119000001; since the limit chip's L-2
+ *  (20261124000001) also its day high and low, for the rule's "beyond". */
+const lastPrint = (x: { price: number | null; prevClose: number | null; time: number | null; high: number | null; low: number | null }) => ({ q_price: x.price, q_prev: x.prevClose, q_time: x.time ? new Date(x.time * 1000).toISOString() : null, q_high: x.high, q_low: x.low });
 
 /** Intraday refresh of market cap, day volume and turnover for one index (no history), for flow by sector. */
 export async function refreshQuotes(idx: IndexId): Promise<string> {
-  const rows = await keyRows(idx);
+  const { rows, lim } = await storedRows(idx);
   if (!rows.length) return `${idx}: no statistics yet`;
   const q = await quotes(rows.map((r) => r.symbol));
   const at = new Date().toISOString();
-  const upd: Array<Record<string, unknown>> = [];
+  // the limit chip (L-2): a Tokyo list's print beyond its computed limits gets one line in the log per name and day
+  const hol = lim && LIMIT_LISTS.includes(idx) ? await tseHolidays().catch(() => null) : null;
+  const ctx = hol ? { members: new Set(rows.map((r) => r.symbol)), holidays: hol, now: new Date() } : null;
+  const upd: Array<Record<string, unknown>> = [], beyond: string[] = [];
   for (const r of rows) {
     const x = q[r.symbol]; if (!x) continue;
-    const px = x.price ?? r.close;
-    upd.push({ idx, symbol: r.symbol, name: r.name, d: r.d, close: r.close, mcap: x.marketCap, volume: x.volume, adv3m: x.adv3m, turnover: x.volume != null ? x.volume * px : null, adv_turnover: x.adv3m != null ? x.adv3m * px : null, quote_at: at, ...lastPrint(x), ...flowFromQuote(x, px), mf_at: at, earnings_at: x.earningsAt ? new Date(x.earningsAt * 1000).toISOString() : null, earnings_est: x.earningsEst });
+    const px = x.price ?? r.close, p = lastPrint(x);
+    const row: Record<string, unknown> = { idx, symbol: r.symbol, name: r.name, d: r.d, close: r.close, mcap: x.marketCap, volume: x.volume, adv3m: x.adv3m, turnover: x.volume != null ? x.volume * px : null, adv_turnover: x.adv3m != null ? x.adv3m * px : null, quote_at: at, ...p, ...flowFromQuote(x, px), mf_at: at, earnings_at: x.earningsAt ? new Date(x.earningsAt * 1000).toISOString() : null, earnings_est: x.earningsEst };
+    if (lim) Object.assign(row, shiftPrev(r, p.q_time, sessionOf(r.symbol)));
+    if (ctx) {
+      const next = { ...r, ...row } as LimitStat, was = r.q_time ? rowLimitState(r, r.symbol, quotePrint(r), ctx) : null;
+      const note = beyondNote(r.symbol, was, rowLimitState(next, r.symbol, quotePrint(next), ctx), quotePrint(next));
+      if (note) { console.log(note); beyond.push(r.symbol); }
+    }
+    upd.push(row);
   }
-  for (const part of chunk(upd, 500)) { const { error: ue } = await db.from("constituent_stats").upsert(part, { onConflict: "idx,symbol" }); if (ue) throw new Error("constituent_stats: " + ue.message); }
+  await upsertStats(upd, lim);
   // excessive moves among the companies of this list that the minute scan does not cover (alerts.ts)
   let alertNote = "";
   try { const n = await scanQuoteAlerts(idx, rows.filter((r) => q[r.symbol]).map((r) => ({ symbol: r.symbol, name: r.name, q: q[r.symbol] })), new Date()); alertNote = `, alerts ${n}`; }
   catch (e) { alertNote = `, alerts failed: ${e instanceof Error ? e.message : e}`; }
-  return `${idx}: ${upd.length} of ${rows.length} quoted${alertNote}`;
+  return `${idx}: ${upd.length} of ${rows.length} quoted${alertNote}${beyond.length ? `, beyond the computed daily limits (the log has a line each): ${beyond.join(" ")}` : ""}`;
 }
 
 /** Kept for the schedules and the Actions job: the net flow comes with the quotes now. */

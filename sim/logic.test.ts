@@ -23,7 +23,7 @@ import { CAUSE_SYSTEM, causeQuestion, readCause, type MoveCtx } from "../supabas
 import { ALERTS, COMPANY, FIRST, HELP, PHILOSOPHY, PHONE, TABS, TOUR, TOUR_ALT, TOUR_LINK, WELCOME_SUBJECT, welcomeMail } from "../supabase/functions/_shared/welcome.ts";
 import { FEED_LATE_MIN, OWN_SHORT_MIN, barDayEnd, barSettled, feedState, fxTrading, silence, stoppedBeforeClose, weekFirstPrint, type Print } from "../supabase/functions/_shared/feedhealth.ts";
 import { OWN_FRESH_MIN, RELAY_BEAT_MAX_S, RELAY_CRON, RELAY_JOBS, RELAY_LATE_MIN, RELAY_OK_RUN, RELAY_WAIT_MIN, beatFresh, cronDue, current, newerOnly, reading, relayAct, relayJobsDue, usable, type RelayView } from "../supabase/functions/_shared/relay.ts";
-import { CBOE_YIELDS, closeDay, isYieldQuote, isYieldRow, NAME_ORDER, newestStats, sourceName, watchRowFromQuote, watchRowFromStat, watchRowFromTable, type QuoteLike } from "../supabase/functions/_shared/watchrow.ts";
+import { CBOE_YIELDS, closeDay, isYieldQuote, isYieldRow, NAME_ORDER, newestStats, sourceName, watchRowFromQuote, watchRowFromStat, watchRowFromTable, watchRowWithLim, type QuoteLike } from "../supabase/functions/_shared/watchrow.ts";
 import { alertFigWord, alertHeadline, sigmaNoteLine } from "../web/src/lib/alertline.ts";
 import { asOfCell, asOfLine, asOfOf, asOfTitle, rowAsOfTitle, rowSource, tileStamp } from "../web/src/lib/time.ts";
 import { finBack, finFit, finRest } from "../web/src/lib/finscroll.ts";
@@ -52,7 +52,7 @@ import type { TableRow } from "../web/src/lib/types.ts";
 import { byResultsDay, calendarFlag, fmtResultsDate, resultsAhead, RESULTS_KEPT_MS, jpxDated, listingCity, listingTz, MARKS_NOTE, RESULTS_NOTE, resultsDay, resultsDayLabel, resultsMark, resultsStatus, resultsStatusShort, resultsTip, resultsWords } from "../web/src/lib/results.ts";
 import { opensAtTop } from "../web/src/lib/pagetop.ts";
 import { bookWord, csvFile, fileWord, sgDay } from "../web/src/lib/csvname.ts";
-import { selectAll } from "../supabase/functions/_shared/paging.ts";
+import { selectAll, selectCols } from "../supabase/functions/_shared/paging.ts";
 import * as probe from "../jobs/probes/lib.ts";
 import * as tableCore from "../supabase/functions/_shared/tablecore.ts";
 import * as pfWalls from "../jobs/lib/pfwalls.ts";
@@ -79,6 +79,7 @@ import type { BookFull as PfBook, PfStore, StartId as PfStart } from "../supabas
 import { opensAtTop as pfOpensAtTop, portfolioPage } from "../web/src/lib/pagetop.ts";
 import { MEMBERS_SOURCE, PERSONAL_USE, PERSONAL_USE_READ, PERSONAL_USE_TEXT, PORTFOLIO as PORTFOLIO_WORD } from "../web/src/lib/labels.ts";
 import * as pl from "../supabase/functions/_shared/rules/pricelimit.ts";
+import * as lr from "../supabase/functions/_shared/rules/limitrow.ts";
 import { readFileSync, readdirSync, statSync as fileStat } from "node:fs";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -1120,9 +1121,13 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
       seen.every((r) => r.name === "TOYOTA MOTOR CORP." && r.sector === "Technology") && seen.map((r) => `${r.idx} ${r.last} ${r.asOf}`).join() === ["TOPIX 3510 2026-11-24T01:43:00+00:00", "TOPIX 3510 2026-11-24T01:43:00+00:00", "NK225 3520 2026-11-24T01:50:00+00:00", "NK225 3520 2026-11-24T01:50:00+00:00"].join()
         && usBy?.idx === "NDX" && usBy.q_price === 183 && usBy.name === "NVIDIA Corporation" && usBy.sector === "Information Technology" && JSON.stringify(ids) === JSON.stringify(NAME_ORDER), { seen, usBy, ids, NAME_ORDER });
     const api = readText(new URL("../supabase/functions/api/index.ts", import.meta.url), "utf8");
+    // since L-2 (rebased on this, 24 Nov 2026) the route reads the limit chip's columns first where the database has them,
+    // then the quote's, then the closes, moving on at any failure as W-1's try and catch did (selectCols with no fallBack),
+    // and builds the row through watchRowWithLim, which is this mapping with `lim` from the same row ([AP])
     ck("W-1: the route reads the quote's columns where the database has them (else the closes, as index_stats does), the newest row of each name, and builds a member's row with this mapping, dated by its list's exchange",
-      /try \{ return await selectAll<StatLike>\(\(\) => db\.from\("constituent_stats"\)\.select\(COLS \+ ",q_price,q_prev,q_time"\)\.in\("symbol", syms\)/.test(api) && /catch \{ return await selectAll<StatLike>\(\(\) => db\.from\("constituent_stats"\)\.select\(COLS\)\.in\("symbol", syms\)/.test(api)
-        && /const sBy = newestStats\(stats\);/.test(api) && /if \(s\) return watchRowFromStat\(s, CCY\[s\.idx\] \?\? null, \(iso\) => localDate\(LIST_TZ\[s\.idx\] \?\? "UTC", Date\.parse\(iso\) \/ 1000\)\);/.test(api));
+      /selectCols<StatLike & LimitStat>\(\(cols\) => db\.from\("constituent_stats"\)\.select\(cols\)\.in\("symbol", syms\)\.order\("symbol"\), \[COLS \+ ",prev,volume,q_price,q_prev,q_time," \+ LIMIT_COLS\.join\(","\), COLS \+ ",q_price,q_prev,q_time", COLS\]\),\n/.test(api)
+        && /const sBy = newestStats\(stats\);/.test(api) && /if \(s\) return watchRowWithLim\(s, CCY\[s\.idx\] \?\? null, \(iso\) => localDate\(LIST_TZ\[s\.idx\] \?\? "UTC", Date\.parse\(iso\) \/ 1000\), lc\);/.test(api)
+        && /export function watchRowWithLim\([^\n]*?\) \{\n  const row = watchRowFromStat\(s, ccy, sessionDate\);\n  return withLim\(row, /.test(readText(new URL("../supabase/functions/_shared/watchrow.ts", import.meta.url), "utf8")));
   }
 
   console.log("\n[the header's alert line: what its figure is, from the server's own words (the reviewer's R2A-05)]");
@@ -3190,8 +3195,8 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck(`closed: a 20 Nov print read on Tue 24 Nov before Tokyo's first print (Mon 23 Nov a holiday) keeps its chip as "closed at" 20 Nov (${monday.side}, closed ${monday.closed}, ${monday.day}); in its own session it is not closed (${live.closed}); the 11:30 print keeps its chip in the midday break, not closed (${midday.side}, ${midday.closed}); from 15:30 JST it is (${bell.closed})`, monday.side === "up" && monday.closed && monday.day === "2026-11-20" && !live.closed && live.side === "up" && midday.side === "up" && !midday.closed && bell.closed && bell.side === "up", { monday, midday });
     const src = readText(new URL("../supabase/functions/_shared/rules/pricelimit.ts", import.meta.url), "utf8");
     ck("the rule's file is pure: it imports nothing and reads no clock, network or store (the moment, the lists and the holidays are handed in)", !/^\s*(?:import|export\s[^\n]*\sfrom)\s/m.test(src) && !/new Date\(\s*\)|Date\.now\(|fetch\(|Deno\.|process\./.test(src));
-    const cp = pageCopy("rules");
-    ck(`the page's copy of the rules (web/src/lib/rules/, ${cp.copies.length} file) is the server's files (supabase/functions/_shared/rules/) under one line that says so, as the paper engine's is: the stand-in rows and the server reach the same state`, cp.files.join() === "pricelimit.ts" && cp.copies.join() === cp.files.join() && cp.differs.length === 0, cp);
+    const cp = pageCopy("rules", ["limitrow.ts"]);
+    ck(`the page's copy of the rules (web/src/lib/rules/, ${cp.copies.length} file) is the server's files (supabase/functions/_shared/rules/) under one line that says so, as the paper engine's is: the stand-in rows and the server reach the same state (limitrow.ts, since L-2, is the server's alone)`, cp.files.join() === "pricelimit.ts" && cp.copies.join() === cp.files.join() && cp.differs.length === 0, cp);
 
     // pf_jpx's compare mode (P-L1, and the weekly re-read once L-1 merges): JPX's robots.txt and the daily price limits
     // page, nothing else, run offline with its fetch replaced. The page carries the table as JPX printed it on 21 Nov,
@@ -3213,6 +3218,132 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     ck(`pf_jpx's compare mode (the file's default since L-1) asks JPX's robots.txt and the daily price limits page only (${same.asked.length} requests: ${same.asked.map((u) => u.replace("https://www.jpx.co.jp", "")).join(", ")}), prints the table's head in full and "same" when the page's 34 rows are the module's, with the one-read rows this read confirms`,
       JSON.stringify(same.asked) === JSON.stringify(["https://www.jpx.co.jp/robots.txt", LIMITS_PAGE]) && allAsked.every((u) => jpxRead.onJpx(u)) && /Previous Day's Closing Price\/Special Quote \(yen\) \| Daily Price Limits \(yen\)/.test(same.out) && /\bsame\b/.test(same.out) && /13, 14, 16, 18, 19, 21, 22, 24/.test(same.out) && /requests made:/.test(same.out) && !/THE PROBE STOPPED|DIFFERS/.test(same.out), same.out.split("\n").slice(-12));
     ck("and where the page differs, each row that differs, values only (a width changed: row 13, 4,500 on the page against the Monitor's 4,000; a row gone: 33 rows against 34); the prose of the page's other table is not printed, only its size and figures", /DIFFERS/.test(moved.out) && /row 13[^\n]*20,000[^\n]*4,500[^\n]*4,000/.test(moved.out) && !/\bsame\b/.test(moved.out) && /DIFFERS/.test(gone.out) && /33[^\n]*34/.test(gone.out) && ![same, moved, gone].some((r) => r.out.includes("A line of prose") || r.out.includes("stands here")) && /\(1\) and \(2\)|\(1\)/.test(same.out), { moved: moved.out.split("\n").filter((l) => /DIFFERS|row 13/.test(l)), gone: gone.out.split("\n").filter((l) => /DIFFERS|33/.test(l)) });
+  }
+
+  console.log("\n[AP] the limit chip's inputs on the server (slice L-2, 24 Nov 2026): what the jobs keep with each quote and close, a row's print as the rule's input, the field a row carries only at a limit, and a database without the new columns read and written as before");
+  {
+    // C/limit-chip-plan.md, L-2 (supabase/functions/_shared/rules/limitrow.ts, the server's alone). The lists and holidays
+    // are the test's own, as in [AO]; every price is set by the table's own arithmetic (base ± width), no real stock's.
+    const HOL: ReadonlySet<string> = new Set(["2026-03-20", "2026-09-21", "2026-09-22", "2026-09-23", "2026-11-03", "2026-11-23", "2026-12-31", "2027-01-01"]);
+    const MEMBERS: ReadonlySet<string> = new Set(["7203.T", "6758.T", "9984.T"]), NOW = new Date("2026-11-24T01:40:00Z");
+    const ctx = (now: Date = NOW): lr.LimitCtx => ({ members: MEMBERS, holidays: HOL, now });
+    const tokyo = (iso: string) => pl.tseDay(iso), ny = (iso: string) => srv.localDate("America/New_York", Date.parse(iso) / 1000);
+    // 7203.T at Fri 20 Nov's close as the statistics job booked it (base 3,456; the close before, 3,400, inside its limits) and
+    // the quote of Tue 24 Nov 10:12 JST at 3,456 + 700 (Mon 23 Nov is a holiday): the first quote of the session moved
+    // Friday's closing quote (18.2m shares at 15:30 JST) into prev_*
+    const FRI = { symbol: "7203.T", d: "2026-11-20", close: 3_456, prev: 3_400, lim_run: 0, q_price: 3_456, q_prev: 3_400, q_time: "2026-11-20T06:30:00Z", q_high: 3_470, q_low: 3_390, volume: 18_200_000, prev_vol: 15_000_000, prev_qt: "2026-11-19T06:30:00Z", prev2_vol: 14_000_000 };
+    const TUE = { q_price: 4_156, q_prev: 3_456, q_time: "2026-11-24T01:12:00Z", q_high: 4_156, q_low: 3_500, volume: 5_000_000 };
+    const shifted = lr.shiftPrev(FRI, TUE.q_time, tokyo), ROW: lr.LimitStat = { ...FRI, ...TUE, ...shifted };
+    const again = lr.shiftPrev(ROW, "2026-11-24T01:32:00Z", tokyo), first = lr.shiftPrev({ q_time: "2026-11-20T06:30:00Z", volume: 18_200_000 }, TUE.q_time, tokyo), none = lr.shiftPrev(FRI, null, tokyo);
+    ck(`the prev_* shift: the first quote of a later session moves the stored quote's volume and time into prev_vol and prev_qt and the volume before into prev2_vol (${JSON.stringify(shifted)}); a later quote of the same session leaves them (${JSON.stringify(again)}); a row stored before the columns starts them (${JSON.stringify(first)}); a quote with no time changes nothing`,
+      shifted.prev_vol === 18_200_000 && shifted.prev_qt === "2026-11-20T06:30:00Z" && shifted.prev2_vol === 15_000_000 && JSON.stringify(again) === JSON.stringify(shifted) && first.prev_vol === 18_200_000 && first.prev_qt === "2026-11-20T06:30:00Z" && first.prev2_vol === null && JSON.stringify(none) === JSON.stringify({ prev_vol: 15_000_000, prev2_vol: 14_000_000, prev_qt: "2026-11-19T06:30:00Z" }));
+    const nyStored = { q_time: "2026-11-23T20:59:00Z", volume: 9e6, prev_vol: 8e6, prev_qt: "2026-11-20T21:00:00Z", prev2_vol: 7e6 }, nyLate = lr.shiftPrev(nyStored, "2026-11-24T01:30:00Z", ny), nyNext = lr.shiftPrev(nyStored, "2026-11-24T14:31:00Z", ny);
+    ck(`a session is the exchange's own date: a New York print at 20:30 there on Mon 23 Nov (01:30 UTC on the 24th) is still that session (prev_qt stays ${nyLate.prev_qt}), the next morning's moves it (${nyNext.prev_qt})`, nyLate.prev_qt === "2026-11-20T21:00:00Z" && nyNext.prev_qt === "2026-11-23T20:59:00Z" && nyNext.prev_vol === 9e6);
+    // a session the quotes missed: Thursday's closing quote is the stored one when Tuesday's comes in (no quote of Friday kept)
+    const THU = { ...FRI, q_time: "2026-11-19T06:30:00Z", volume: 15_000_000, prev_qt: "2026-11-18T06:30:00Z", prev_vol: 12_000_000 }, gap = lr.shiftPrev(THU, TUE.q_time, tokyo);
+    const gapState = lr.rowLimitState({ ...FRI, ...TUE, ...gap }, "7203.T", lr.quotePrint({ ...FRI, ...TUE, ...gap }), ctx());
+    ck(`a missing session: Thursday's quote meets Tuesday's (Friday's was never kept), so prev_qt is Thursday's (${gap.prev_qt}) and Friday's volume and last trade are not known: the print at its limit gets no chip (${gapState.why})`, gap.prev_qt === "2026-11-19T06:30:00Z" && gap.prev_vol === 15_000_000 && gapState.side === null && gapState.why === "base-in-doubt", gapState);
+
+    // lim_run: the run up to the session before the booked close's (what that close's own limit rests on), from the
+    // closes the statistics job holds, set on the TSE's sessions
+    const C = (pairs: Array<[string, number]>) => pairs.map(([d, v]) => ({ d: `2026-11-${d}`, v }));
+    const RUN: Array<[string, number | null, number | null]> = [
+      ["up: 1,000 -> 1,300 -> 1,600, two limit-up closes before Friday's", lr.limRunOf(C([["16", 1_000], ["17", 1_000], ["18", 1_300], ["19", 1_600], ["20", 1_650]]), HOL), 2],
+      ["down: 1,000 -> 700 -> 550", lr.limRunOf(C([["16", 1_000], ["17", 1_000], ["18", 700], ["19", 550], ["20", 560]]), HOL), -2],
+      ["broken: a limit close, an ordinary one, a limit close", lr.limRunOf(C([["16", 1_000], ["17", 1_300], ["18", 1_350], ["19", 1_650], ["20", 1_700]]), HOL), 1],
+      ["none", lr.limRunOf(C([["16", 1_000], ["17", 1_010], ["18", 1_020], ["19", 1_030], ["20", 1_040]]), HOL), 0],
+      ["a no-trade day: no close for Thu 19 Nov in the series, a limit close before it (Tuesday's booking)", lr.limRunOf(C([["16", 1_000], ["17", 1_000], ["18", 1_300], ["20", 1_300], ["24", 1_320]]), HOL), 3],
+      ["a no-trade day the quotes saw (Yahoo carried the close; no quote printed on 19 or 20 Nov)", lr.limRunOf(C([["16", 1_000], ["17", 1_000], ["18", 1_300], ["19", 1_300], ["20", 1_300], ["24", 1_320]]), HOL, new Set(["2026-11-19", "2026-11-20"])), 3],
+      ["the same without the quotes' record", lr.limRunOf(C([["16", 1_000], ["17", 1_000], ["18", 1_300], ["19", 1_300], ["20", 1_300], ["24", 1_320]]), HOL), 0],
+      ["a close beyond its normal limit (broadened) marked as untraded is never fewer", lr.limRunOf(C([["17", 1_000], ["18", 1_000], ["19", 2_200], ["20", 2_250]]), HOL, new Set(["2026-11-19"])), 2],
+      ["the close before the booked one is not the session before it (Thu 19 Nov missing right before Friday's)", lr.limRunOf(C([["16", 1_000], ["17", 1_000], ["18", 1_300], ["20", 1_300]]), HOL), null],
+      ["a booked close on a holiday (Mon 23 Nov)", lr.limRunOf(C([["19", 1_000], ["20", 1_000], ["23", 1_000]]), HOL), null],
+    ];
+    ck(`lim_run from a closes series, signed (+ up, − down): ${RUN.map(([n, got, want]) => `${n}: ${got}${got === want ? "" : ` (want ${want})`}`).join("; ")}`, RUN.every(([, got, want]) => got === want), RUN.filter(([, g, w]) => g !== w));
+    const un = lr.untradedOf({ q_time: "2026-11-24T01:12:00Z", volume: 5e6, prev_qt: "2026-11-18T06:30:00Z", prev_vol: 2e6, prev2_vol: 0 }, HOL), un0 = lr.untradedOf({ q_time: "2026-11-24T01:12:00Z", volume: 0, prev_qt: "2026-11-20T06:30:00Z", prev_vol: 0, prev2_vol: 3e6 }, HOL);
+    ck(`the sessions the quotes saw without a trade, which may only lengthen a run: between the last trade kept and the quote's session (19 and 20 Nov; the 23rd is a holiday), and where a kept volume is 0 (${[...un].sort().join(", ")}; ${[...un0].sort().join(", ")})`, [...un].sort().join() === "2026-11-17,2026-11-19,2026-11-20" && [...un0].sort().join() === "2026-11-20,2026-11-24");
+    const SERIES: Array<Array<number | null>> = [[1_000, 1_000, 1_300], [1_000, 1_300, 1_600], [1_000, 1_000, 1_000, 2_200], [1_000, 1_300, 1_350], [1_000, null, 1_300], [1_000, 1_000, 700, 400], [1_000, 1_300, 1_600, 1_900], [1_000, 1_100, 1_400]];
+    const through = SERIES.map((xs) => { const whole = pl.limitRun(xs.map((close) => ({ close }))), before = pl.limitRun(xs.slice(0, -1).map((close) => ({ close }))), ext = lr.runThrough(before, xs[xs.length - 1], xs[xs.length - 2]); return { xs, whole, ext, ok: ext !== null && (Math.abs(ext) < 2) === (whole < 2) }; });
+    ck(`a print of the session after the booked close: the run up to that close from the run before it and the close itself agrees with limitRun on the whole series wherever it decides (under 2 or not): ${through.map((t) => `${t.xs.join("→")} ${t.whole}/${t.ext}`).join("; ")}; an unknown run stays unknown (${lr.runThrough(null, 1_300, 1_000)})`, through.every((t) => t.ok) && lr.runThrough(null, 1_300, 1_000) === null, through.filter((t) => !t.ok));
+
+    // a row's print as the rule's input: every reason for no chip of L-1, on its own case
+    const st = (s: lr.LimitStat, p: lr.LimitPrint = lr.quotePrint(s), c: lr.LimitCtx = ctx()) => lr.rowLimitState(s, s.symbol, p, c);
+    const up = st(ROW);
+    ck(`the row's quote of Tue 24 Nov at 4,156 is LIMIT UP on Friday's booked close: base ${up.base} of ${up.baseDay}, ±${up.width}, limits ${up.lower}–${up.upper}, at ${up.at}, not closed`, up.side === "up" && up.why === null && up.base === 3_456 && up.baseDay === "2026-11-20" && up.width === 700 && up.upper === 4_156 && up.lower === 2_756 && up.at === "2026-11-24T01:12:00Z" && !up.closed, up);
+    const WHY: Array<[string, lr.LimitStat, lr.LimitPrint | null, string]> = [
+      ["not-placed: an ETF's row (1306.T)", { ...ROW, symbol: "1306.T" }, null, "not-placed"],
+      ["no-print: no quote price", { ...ROW, q_price: null }, null, "no-print"],
+      ["no-print: Friday's booked close shown while the stored quote is Tuesday's (the close's own trade time is not held)", ROW, lr.closePrint(ROW), "no-print"],
+      ["no-base: the booked close is Thursday's (the job did not book Friday)", { ...ROW, d: "2026-11-19", close: 3_400, prev: 3_350 }, null, "no-base"],
+      ["no-base: a booked close whose base the booking could not place (lim_run not known)", { ...ROW, d: "2026-11-24", close: 4_156, prev: 3_456, lim_run: null }, null, "no-base"],
+      ["unconfirmed: a base of 17,000 (a band read once)", { ...ROW, close: 17_000, prev: 16_900, q_prev: 17_000, q_price: 21_000, q_high: 21_000, q_low: 16_500 }, null, "unconfirmed"],
+      ["base-in-doubt: Yahoo's previous close 1,728 against the booked 3,456 (a split)", { ...ROW, q_prev: 1_728 }, null, "base-in-doubt"],
+      ["base-in-doubt: Friday's last trade at 14:52 JST, before the closing auction", { ...ROW, prev_qt: "2026-11-20T05:52:00Z" }, null, "base-in-doubt"],
+      ["base-in-doubt: Friday's volume 0", { ...ROW, prev_vol: 0 }, null, "base-in-doubt"],
+      ["ex-day: a print on Fri 27 Nov, the month's second-to-last session", { ...ROW, d: "2026-11-26", q_time: "2026-11-27T01:12:00Z", prev_qt: "2026-11-26T06:30:00Z" }, null, "ex-day"],
+      ["run: one limit close before Friday's and Friday's at its own limit (2,956 -> 3,456)", { ...ROW, prev: 2_956, lim_run: 1 }, null, "run"],
+      ["run: the run before Friday's not known", { ...ROW, lim_run: null }, null, "run"],
+      ["beyond: the day's high 4,200 above the computed upper limit", { ...ROW, q_high: 4_200 }, null, "beyond"],
+    ];
+    const whyGot = WHY.map(([n, s, p, want]) => { const x = st(s, p ?? lr.quotePrint(s), n.startsWith("ex-day") ? ctx(new Date("2026-11-27T01:40:00Z")) : ctx()); return { n, want, why: x.why, ok: x.side === null && x.why === want }; });
+    ck(`each reason for no chip from a stats row: ${whyGot.map((x) => `${x.n} -> ${x.why}`).join("; ")}`, whyGot.every((x) => x.ok), whyGot.filter((x) => !x.ok));
+    const broken = st({ ...ROW, lim_run: 2 }), booked = { ...ROW, d: "2026-11-24", close: 4_156, prev: 3_456, lim_run: 0, q_time: "2026-11-24T06:30:00Z", volume: 9_000_000 }, closed = st(booked, lr.closePrint(booked), ctx(new Date("2026-11-24T08:00:00Z")));
+    ck(`a run before Friday's broken by Friday's own ordinary close gives the chip again (${broken.side}); Tuesday's booked close at its limit is "closed at" Tuesday, on Friday's close as its base (${closed.side}, closed ${closed.closed}, base ${closed.base} of ${closed.baseDay})`, broken.side === "up" && closed.side === "up" && closed.closed && closed.base === 3_456 && closed.baseDay === "2026-11-20" && closed.day === "2026-11-24", { broken, closed });
+    const page = st(FRI, { price: 4_156, at: "2026-11-24T01:12:00Z", high: 4_156, low: 3_500, quotePrev: 3_456 });
+    ck(`the stock page's own quote, read before the flow job kept Tuesday's: the same base and limits as the lists' row (${page.lower}–${page.upper} against ${up.lower}–${up.upper}), and the chip (${page.side})`, page.side === "up" && page.upper === up.upper && page.lower === up.lower && page.base === up.base && page.baseDay === up.baseDay, page);
+
+    // what a row carries: `lim` only at a limit, in its compact form; the stock page `limits` for a placed name
+    const row0 = { symbol: "7203.T", close: 4_156, pct1d: 20.25 }, withUp = lr.withLim(row0, up) as typeof row0 & { lim?: Record<string, unknown> };
+    const inside = st({ ...ROW, q_price: 4_100, q_high: 4_100 }), plain = [lr.withLim(row0, inside), lr.withLim(row0, st(ROW, lr.closePrint(ROW))), lr.withLim(row0, null)];
+    ck(`the API's field: a row at its limit carries lim ${JSON.stringify(withUp.lim)} (side, price, base, width, at, closed: nothing else), its other fields as before; a row off its limit, or with no chip, is the very same object, with no lim`,
+      JSON.stringify(Object.keys(withUp.lim ?? {})) === JSON.stringify(["side", "price", "base", "width", "at", "closed"]) && withUp.lim?.side === "up" && withUp.lim?.price === 4_156 && withUp.lim?.base === 3_456 && withUp.lim?.width === 700 && withUp.lim?.at === "2026-11-24T01:12:00Z" && withUp.lim?.closed === false && withUp.close === 4_156 && withUp.pct1d === 20.25 && plain.every((x) => x === row0 && !("lim" in x)), withUp);
+    const spUp = lr.stockLimitFields(up) as { limits?: Record<string, unknown>; lim?: unknown }, spIn = lr.stockLimitFields(inside) as typeof spUp, spWhy = lr.stockLimitFields(st({ ...ROW, close: 17_000, prev: 16_900, q_prev: 17_000, q_price: 21_000, q_high: 21_000, q_low: 16_500 })) as typeof spUp, spUs = lr.stockLimitFields(st({ ...ROW, symbol: "NVDA" }));
+    ck(`the stock page: a placed name gets limits (upper, lower, base, its date, width, why) every day and lim at its limit (${JSON.stringify(spUp.limits)}); off it, limits alone; a band read once, limits with its reason; a name not placed (NVDA), neither field: ${JSON.stringify(spUs)}`,
+      JSON.stringify(Object.keys(spUp.limits ?? {})) === JSON.stringify(["upper", "lower", "base", "baseDay", "width", "why"]) && spUp.limits?.upper === 4_156 && spUp.limits?.baseDay === "2026-11-20" && !!spUp.lim && !!spIn.limits && spIn.limits.why === null && !("lim" in spIn) && spWhy.limits?.why === "unconfirmed" && !("lim" in spWhy) && JSON.stringify(spUs) === "{}" && JSON.stringify(lr.stockLimitFields(null)) === "{}");
+    // WATCHLIST, rebased on W-1 (0673409): a member's row is W-1's (watchRowFromStat on newestStats' row of the name: at its
+    // newest print while its market trades, else at its booked close; the name and sector of the first of its lists in
+    // NAME_ORDER; the figures of the newest row), and it carries `lim` only while the print it shows is at its limit,
+    // worked out on that same row for that print (watchRowWithLim): the Nikkei 225's and TOPIX's rows of one name are read
+    // at their own minutes, and the chip follows the row whose figures the watchlist shows
+    const jp = (iso: string) => srv.localDate("Asia/Tokyo", Date.parse(iso) / 1000);
+    const WL = { name: "TOYOTA MOTOR CORP.", sector: "Consumer Discretionary", pct1d: 1.6, pct1w: 3.1, pct1m: -4.2, pct3m: 7.5, pct12m: 17.7, dma50: 3_300, dma200: 3_000, hi52: 4_200, lo52: 2_500, mcap: 4.5e13, earnings_at: null, earnings_est: null };
+    const nk = { ...WL, ...ROW, idx: "NK225" }, tp = { ...WL, ...ROW, idx: "TOPIX", name: "トヨタ自動車", sector: "輸送用機器", q_price: 4_100, q_high: 4_100, q_time: "2026-11-24T01:03:00Z" };
+    type WRow = ReturnType<typeof watchRowFromStat> & { lim?: lr.Lim };
+    const wl = (rows: Array<typeof nk>, c: lr.LimitCtx | null = ctx()) => { const s = newestStats(rows).get("7203.T")!; return { s, w: watchRowWithLim(s, "JPY", jp, c) as WRow, plain: watchRowFromStat(s, "JPY", jp) }; };
+    const figs = (x: WRow) => { const { lim: _lim, ...rest } = x; return JSON.stringify(rest); };
+    const nkNew = [wl([tp, nk]), wl([nk, tp])], tpNew = [wl([{ ...tp, q_price: 4_156, q_high: 4_156, q_time: "2026-11-24T01:23:00Z" }, { ...nk, q_price: 4_100, q_high: 4_100 }]), wl([{ ...nk, q_price: 4_100, q_high: 4_100 }, { ...tp, q_price: 4_156, q_high: 4_156, q_time: "2026-11-24T01:23:00Z" }])];
+    const offNew = [wl([{ ...tp, q_time: "2026-11-24T01:23:00Z" }, nk]), wl([nk, { ...tp, q_time: "2026-11-24T01:23:00Z" }])];
+    ck(`WATCHLIST (W-1 with L-2): a member's row is W-1's row of the name's newest row, at its print, with the Nikkei 225's name and sector (${nkNew.map(({ s, w }) => `${s.idx} ${w.last} at ${w.asOf} ${w.name}`).join("; ")}), and carries lim at that print (${JSON.stringify(nkNew[0].w.lim)}); with TOPIX's quote the newer, the chip is TOPIX's print's (${tpNew.map(({ s, w }) => `${s.idx} ${w.lim?.at}`).join(", ")}); with TOPIX's newer quote under the limit there is none, though the Nikkei 225's older one is at it; in either order of the rows`,
+      [...nkNew, ...tpNew].every(({ w, plain }) => figs(w) === JSON.stringify(plain) && w.asOfKind === "print" && w.name === "TOYOTA MOTOR CORP." && w.sector === "Consumer Discretionary" && w.lim?.side === "up" && w.lim.price === w.last && w.lim.at === w.asOf && w.lim.base === 3_456 && w.lim.width === 700)
+        && nkNew.every(({ s, w }) => s.idx === "NK225" && w.asOf === "2026-11-24T01:12:00Z") && tpNew.every(({ s, w }) => s.idx === "TOPIX" && w.asOf === "2026-11-24T01:23:00Z")
+        && offNew.every(({ s, w, plain }) => s.idx === "TOPIX" && w.last === 4_100 && !("lim" in w) && JSON.stringify(w) === JSON.stringify(plain)), { nkNew, tpNew, offNew });
+    const tueBooked = { ...nk, d: "2026-11-24", close: 4_156, prev: 3_456, lim_run: 0, q_price: 4_156, q_prev: 3_456, q_time: "2026-11-24T06:30:00Z", q_high: 4_156, q_low: 3_500, volume: 9_000_000 };
+    const atClose = wl([tueBooked], ctx(new Date("2026-11-24T08:00:00Z"))), noCols = wl([tp, nk], null), us = watchRowWithLim({ ...nk, idx: "SP500", symbol: "NVDA" }, "USD", jp, ctx()) as WRow;
+    ck(`and at its booked close (Tuesday booked at its limit, read after 15:30 JST: ${atClose.w.asOfKind} of ${atClose.w.asOf}) the chip is that close's (${JSON.stringify(atClose.w.lim)}); a database without the chip's columns, or a row of a list outside Tokyo's, gives W-1's row as it is, with no lim`,
+      atClose.w.asOfKind === "close" && atClose.w.asOf === "2026-11-24" && figs(atClose.w) === JSON.stringify(atClose.plain) && atClose.w.lim?.side === "up" && atClose.w.lim.closed && atClose.w.lim.price === 4_156 && atClose.w.lim.base === 3_456
+        && !("lim" in noCols.w) && JSON.stringify(noCols.w) === JSON.stringify(noCols.plain) && !("lim" in us), { atClose: atClose.w, noCols: noCols.w });
+    const hi = { ...ROW, q_high: 4_200 }, later = { ...ROW, q_high: 4_210, q_time: "2026-11-24T01:32:00Z" }, nextDay = { ...ROW, q_high: 4_210, q_time: "2026-11-25T01:12:00Z", d: "2026-11-24", close: 3_456, prev: 3_400, prev_qt: "2026-11-24T06:30:00Z" };
+    const beyondSt = st(hi), line = lr.beyondNote("7203.T", up, beyondSt, lr.quotePrint(hi)), twice = lr.beyondNote("7203.T", beyondSt, st(later), lr.quotePrint(later)), next = lr.beyondNote("7203.T", beyondSt, st(nextDay, undefined, ctx(new Date("2026-11-25T01:40:00Z"))), lr.quotePrint(nextDay));
+    ck(`the beyond log line, values only, once per name and day: "${line}"; the same day again: ${twice}; the next day's: ${next ? "a line" : "none"}`, !!line && /7203\.T/.test(line) && /2026-11-24/.test(line) && /4,200/.test(line) && /2,756.4,156/.test(line) && /3,456/.test(line) && twice === null && !!next && lr.beyondNote("7203.T", null, up, lr.quotePrint(ROW)) === null);
+
+    // a database from before migration 20261124000001: reads fall back to the columns it has, writes carry none of the new
+    const COLS = "symbol,d,close,prev,q_price,q_prev,q_time,volume", NEW = lr.LIMIT_COLS.join(","), DB_ROWS = [{ symbol: "7203.T", d: "2026-11-20", close: 3_456, prev: 3_400, q_price: 4_156, q_prev: 3_456, q_time: "2026-11-24T01:12:00Z", volume: 5e6, q_high: 4_156, q_low: 3_500, prev_vol: 18.2e6, prev2_vol: 15e6, prev_qt: "2026-11-20T06:30:00Z", lim_run: 0 }];
+    const standIn = (has: string[]) => (cols: string) => ({ range: async (a: number, b: number) => { const want = cols.split(","), lack = want.find((c) => !has.includes(c)); return lack ? { data: null, error: { code: "42703", message: `column constituent_stats.${lack} does not exist` } } : { data: DB_ROWS.slice(a, b + 1).map((r) => Object.fromEntries(want.map((c) => [c, (r as Record<string, unknown>)[c]]))), error: null }; } });
+    let old: { rows: Array<Record<string, unknown>>; set: number } | null = null, now2: typeof old = null, other: string | null = null;
+    try {
+      old = await selectCols<Record<string, unknown>>(standIn(COLS.split(",")), [`${COLS},${NEW}`, COLS]);
+      now2 = await selectCols<Record<string, unknown>>(standIn([...COLS.split(","), ...lr.LIMIT_COLS]), [`${COLS},${NEW}`, COLS]);
+      await selectCols(standIn(COLS.split(",")), [`${COLS},${NEW}`, COLS], (e) => lr.lacksLimitCols(String(e))).catch((e) => { other = String(e); });
+      await selectCols(() => ({ range: async () => ({ data: null, error: { message: "fetch failed" } }) }), [`${COLS},${NEW}`, COLS], (e) => lr.lacksLimitCols(String(e))).catch((e) => { other = String(e); });
+    } catch (e) { other = `threw: ${String(e)}`; }
+    const oldRow = old?.rows[0] ?? {}, oldLim = old ? lr.rowLimitState(oldRow as unknown as lr.LimitStat, "7203.T", lr.quotePrint(oldRow as unknown as lr.LimitStat), ctx()) : null;
+    ck(`a database without the new columns: the read asks for them, is told "column … does not exist", and reads the columns it has (set ${old?.set}: ${Object.keys(oldRow).join(",")}), the very rows of the query before L-2; with them it reads them (set ${now2?.set}); a job's read falls back only on that answer, never on another (${other})`,
+      old?.set === 1 && JSON.stringify(Object.keys(oldRow)) === JSON.stringify(COLS.split(",")) && now2?.set === 0 && now2.rows[0].lim_run === 0 && now2.rows[0].prev_qt === "2026-11-20T06:30:00Z" && /fetch failed/.test(other ?? "") && oldLim !== null && lr.withLim(oldRow, oldLim) === oldRow, { old, other });
+    const written = { idx: "NK225", symbol: "7203.T", name: "Toyota", d: "2026-11-20", close: 3_456, volume: 5e6, q_price: 4_156, q_prev: 3_456, q_time: "2026-11-24T01:12:00Z", q_high: 4_156, q_low: 3_500, prev_vol: 18.2e6, prev2_vol: 15e6, prev_qt: "2026-11-20T06:30:00Z" };
+    ck(`and a job writes such a database's rows key for key as before (${Object.keys(lr.withoutLimitCols({ ...written })).join(",")}); the answers that say a column is missing are told from others: ${["column constituent_stats.q_high does not exist", "Could not find the 'prev_qt' column of 'constituent_stats' in the schema cache", "column constituent_stats.q_price does not exist", "fetch failed"].map((m) => lr.lacksLimitCols(m)).join(", ")}`,
+      JSON.stringify(Object.keys(lr.withoutLimitCols({ ...written }))) === JSON.stringify(["idx", "symbol", "name", "d", "close", "volume", "q_price", "q_prev", "q_time"]) && lr.lacksLimitCols("column constituent_stats.q_high does not exist") && lr.lacksLimitCols("Could not find the 'prev_qt' column of 'constituent_stats' in the schema cache") && !lr.lacksLimitCols("column constituent_stats.q_price does not exist") && !lr.lacksLimitCols("fetch failed"));
+    const lsrc = readText(new URL("../supabase/functions/_shared/rules/limitrow.ts", import.meta.url), "utf8");
+    ck("limitrow.ts is pure (it imports only the rule, and reads no clock, network or store) and the server's alone: the page's folder has no copy of it", /^import [^\n]* from "\.\/pricelimit\.ts";$/m.test(lsrc) && (lsrc.match(/^\s*import\s/gm) ?? []).length === 1 && !/new Date\(\s*\)|Date\.now\(|fetch\(|Deno\.|process\./.test(lsrc) && !listDir(new URL("../web/src/lib/rules/", import.meta.url)).includes("limitrow.ts"));
   }
 
   // [AK], what the READMEs say, is in sim/readme.test.ts since 23 Nov 2026: this file stops a deploy of the server or the

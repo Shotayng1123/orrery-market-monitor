@@ -11,9 +11,9 @@
 //
 // Edit the files under supabase/functions/_shared/, never the copies. sim/logic.test.ts fails when the two differ
 // (it makes the same comparison), so a change to one side alone does not reach a publish. Not copied: switch.ts, the
-// server's own switch.
+// server's own switch, and rules/limitrow.ts (since L-2), which reads the server's rows for the rule.
 const fs = require("fs"), path = require("path");
-const PAIRS = [{ dir: "pf", serverOnly: new Set(["switch.ts"]) }, { dir: "rules", serverOnly: new Set() }];
+const PAIRS = [{ dir: "pf", serverOnly: new Set(["switch.ts"]) }, { dir: "rules", serverOnly: new Set(["limitrow.ts"]) }];
 const check = process.argv.includes("--check");
 let failed = false;
 for (const { dir, serverOnly } of PAIRS) {

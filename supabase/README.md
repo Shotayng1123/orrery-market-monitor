@@ -567,6 +567,29 @@ one pull request (`README.md`, "The paper portfolio's two switches"). The migrat
 
 The welcome email still says "the six tabs": it is to say seven in the pull request that turns the switches.
 
+## The limit chip's inputs (added 2026-11-24; migration `20261124000001_limit_inputs.sql`)
+
+The LIMIT UP / LIMIT DOWN chip (the owner's request of 24 Nov 2026; the rule is `_shared/rules/pricelimit.ts`). The server works out
+whether the print a Tokyo row shows is at its daily price limit, from that row of `constituent_stats`
+(`_shared/rules/limitrow.ts`, checked in `sim/logic.test.ts` section [AP]); no page shows it yet.
+- **Kept by the jobs.** The flow and statistics jobs store the quote's day high and low (`q_high`, `q_low`) with its
+  price. When a quote of a later session comes in, the stored quote's volume and time move to `prev_vol` and `prev_qt`,
+  and `prev_vol` to `prev2_vol`: the base session's volume and last trade. At booking, a Nikkei 225 or TOPIX row gets
+  `lim_run`: the run of sessions up to the one before its booked close that closed at their limit or had no trade,
+  from the closes the job holds, set on the TSE's sessions (`sessions_cal`); + up, − down, null when not known.
+- **Sent.** `index_stats` (Nikkei 225 and TOPIX) and `watch_list` rows carry `lim` (side, price, base, width, at,
+  closed) only while the print the row shows is at its limit; the chip's columns are not sent. A watchlist member's
+  `lim` is worked out on the row its figures come from (the name's newest row, as WATCHLIST reads it since W-1), for
+  the print the row shows: its quote while it is at a print, else its booked close (`watchRowWithLim` in
+  `_shared/watchrow.ts`). `stock` sends `limits`
+  for a placed name (upper, lower, base, its session, width, and `why` where the limits cannot be known) and `lim` at
+  a limit, for the page's own quote on the row the lists read. A page of any age ignores these fields.
+- **A print beyond its computed limits** (the Monitor's base or width is not JPX's that day) gets one line in the
+  flow job's log per name and day, values only, and its symbol in the run's detail.
+- **A database without the columns** is read and written as before: each read asks for them and falls back to the
+  columns it has, a job writes none of them, and no row carries `lim` (`sim/sql/limit-inputs.test.cjs`, section [AP]).
+  `deploy-server` applies the migration before it deploys the functions.
+
 ## Changing the shared sign-in password
 
 The password exists only as the function secret `MONITOR_PASSWORD`; it is not in git or in the database, and

@@ -8,6 +8,9 @@ import { fetchText } from "./http.ts";
 import type { Bar } from "./stockstats.ts";
 import type { Fin } from "./fin.ts";
 import { legacyStatements } from "./finsrc.ts";
+import { selectAll } from "./paging.ts";
+import { HOLIDAY_SOURCES } from "./sessions.ts";
+import { LIMIT_COLS, LIMIT_LISTS, type LimitStat } from "./rules/limitrow.ts";
 
 export interface SeriesOut { symbol: string; res: "1m" | "15m" | "1h" | "1d"; points: Array<{ t: number; v: number; q?: number | null }>; asOf: string | null; shownFrom?: string; source?: string }
 type Pt = { t: number; v: number; q: number | null };
@@ -134,6 +137,28 @@ export async function relativeLine(symbol: string, indexSeries: Array<{ t: numbe
   if (pts.length < 2) return [];
   const a0 = pts[0].v, b0 = idx.get(Math.floor(pts[0].t / 86400))!;
   return pts.map((p) => ({ t: p.t, v: ((p.v / a0) / (idx.get(Math.floor(p.t / 86400))! / b0)) * 100 }));
+}
+
+// ---- the limit chip's facts (slice L-2): the TSE's holiday rows, and a Tokyo name's row of its list's statistics ----
+/** The TSE's holiday rows (sessions_cal, from JPX's calendar) from ninety days back (a run's sessions, a base) to sixty
+ *  ahead (a month's last sessions). null when they cannot be read, or end within a month of today: the rule would take a
+ *  holiday for a session, so no chip is worked out then. */
+export async function tseHolidays(now: Date = new Date()): Promise<Set<string> | null> {
+  const day = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  if (day(now.getTime() + 31 * 86400e3) > (HOLIDAY_SOURCES.TSE?.through ?? "")) return null;
+  const { data, error } = await db.from("sessions_cal").select("d").eq("market", "TSE").gte("d", day(now.getTime() - 90 * 86400e3)).lte("d", day(now.getTime() + 60 * 86400e3));
+  return error ? null : new Set(((data ?? []) as Array<{ d: string }>).map((r) => r.d));
+}
+/** The stock page's limits read the row the lists read: a Tokyo name's Nikkei 225 or TOPIX row of constituent_stats (the
+ *  newest booked close, then the newest quote; null where it has none), with the holiday rows. null where those cannot
+ *  be read, or the database is from before the chip's columns: the page is then answered as before. */
+export async function limitFactsFor(symbol: string): Promise<{ stat: LimitStat | null; holidays: Set<string> } | null> {
+  if (!/\.T$/.test(symbol)) return null;
+  try {
+    const [rows, holidays] = await Promise.all([selectAll<LimitStat>(() => db.from("constituent_stats").select("symbol,d,close,prev,q_price,q_prev,q_time,volume," + LIMIT_COLS.join(",")).eq("symbol", symbol).in("idx", [...LIMIT_LISTS]).order("idx")), tseHolidays()]);
+    const stat = rows.sort((a, b) => b.d.localeCompare(a.d) || (b.q_time ?? "").localeCompare(a.q_time ?? ""))[0] ?? null;
+    return holidays ? { stat, holidays } : null;
+  } catch { return null; }
 }
 
 export async function quoteFor(symbol: string) {
