@@ -3393,7 +3393,8 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     // reviews of 24 Nov 2026 (check/IDX0/d-adversary-leaks.md, d-adversary-log.md) found data addresses asked and a
     // page's text, tokens and contacts printed, both ways. The design of ix_terms (the orchestrator's, 24 Nov 2026,
     // about 09:45 UTC): 13 fixed addresses in a fixed order, each host's robots.txt first; no link read, no redirect
-    // followed, no data address built; at most 14 requests (the one more only to ask a 429 once again); a log of the
+    // followed, no data address built; at most 14 requests (the one more only to ask a 429 once again, or, since IDX-0e2,
+    // to ask again a robots.txt that redirected to itself, as RFC 9309 §2.3.1 reads a robots.txt); a log of the
     // fixed addresses, status numbers, the type in one of five words, counts, yes or no and words of the probe's own
     // lists alone. Every world below answers by address and records each request; its pages and answers carry
     // sentinels (Zq…Xv) in titles, headings, sentences, links, alt and title attributes, <noscript>, scripts, headers,
@@ -3566,11 +3567,62 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
       && line(redirects, /indexdatapolicy\.pdf: 307, redirected \(not followed\) to another host; the target's path is the asked path give or take a trailing slash: yes\. NOT READ$/)
       && line(redirects, /^GET https:\/\/data\.gov\.tw\/en\/license: 302, redirected \(not followed\) to another host; the target's path is the asked path give or take a trailing slash: yes\. NOT READ$/), redirects.lines.filter((l) => /redirect/.test(l)));
 
-    // (a) robots.txt not read: 404, 403, served as HTML, a redirect, 500, an HTML page served as text: no page of that host is asked
+    // (a) robots.txt by RFC 9309 §2.3.1 (IDX-0e2, 24 Nov 2026: in ix_terms' run 45384712261 four hosts' robots.txt
+    // answered 404, 302, 500 and 404, and no page of those hosts was asked): a 2xx is the file, read when it is text that
+    // is not an HTML page (else unreadable); a 3xx is followed only to this same address (https, its host, the path
+    // /robots.txt, no query), at most 5 times, each while the budget keeps a place for every address still to come (else
+    // unreadable); a 4xx but 429 means no file, every path allowed; a 429, a 5xx, no answer and an unreadable file mean
+    // complete disallow. Each outcome is put to www.nasdaq.com's robots.txt, the other hosts as in the base world
+    const NQ_LINE = (re: string): RegExp => new RegExp(`^GET https://www\\.nasdaq\\.com/robots\\.txt: ${re}$`), NQ_REST = DESIGN.slice(2);
+    const st = (s: number, k: string): Ans => ({ status: s, type: "text/html", body: `<html><title>${z(`St${s}${k}`)}</title></html>`, headers: { ...hdr(`St${s}${k}`), "retry-after": "1" } });
+    const READ_RE = "200, text, \\d+ bytes\\. robots\\.txt read: yes; a group for this probe's own name: no; a crawl-delay over 3 s: no";
+    const ELSEWHERE_RE = "robots\\.txt: unreadable \\(a redirect elsewhere is not followed\\): complete disallow";
+    const OUTCOMES: Array<{ name: string; a: Ans | Ans[]; want: string[]; re: string; legal: "rules" | "none" | "no" }> = [
+      { name: "200", a: robots("Nq200"), want: DESIGN, re: READ_RE, legal: "rules" },
+      { name: "301 to this same address, then 200", a: [R(301, "https://www.nasdaq.com/robots.txt"), robots("Nq301")], want: [R_NQ, R_NQ, ...DESIGN.slice(1)], re: READ_RE, legal: "rules" },
+      { name: "302 to another path of its host", a: R(302, "/en/robots.txt"), want: [R_NQ, ...NQ_REST], re: `302, redirected \\(not followed\\) to the same host; the target's path is the asked path give or take a trailing slash: no\\. ${ELSEWHERE_RE}`, legal: "no" },
+      { name: "302 to another host", a: R(302, `https://${z("RobotsHost")}.example/robots.txt`), want: [R_NQ, ...NQ_REST], re: `302, redirected \\(not followed\\) to another host; the target's path is the asked path give or take a trailing slash: yes\\. ${ELSEWHERE_RE}`, legal: "no" },
+      { name: "404", a: st(404, "a"), want: DESIGN, re: "404\\. robots\\.txt: none \\(4xx\\): every path allowed by RFC 9309", legal: "none" },
+      { name: "410", a: st(410, "b"), want: DESIGN, re: "410\\. robots\\.txt: none \\(4xx\\): every path allowed by RFC 9309", legal: "none" },
+      { name: "429, asked once more, 429 again", a: [st(429, "c"), st(429, "d")], want: [R_NQ, R_NQ, ...NQ_REST], re: "429\\. robots\\.txt: unreachable \\(429\\): complete disallow", legal: "no" },
+      { name: "500", a: st(500, "e"), want: [R_NQ, ...NQ_REST], re: "500\\. robots\\.txt: unreachable \\(5xx\\): complete disallow by RFC 9309", legal: "no" },
+      { name: "503", a: st(503, "f"), want: [R_NQ, ...NQ_REST], re: "503\\. robots\\.txt: unreachable \\(5xx\\): complete disallow by RFC 9309", legal: "no" },
+      { name: "no answer (a network error)", a: { status: 200, throws: z("RobotsNetErr") }, want: [R_NQ, ...NQ_REST], re: "no answer \\(an error of the network or no answer within 30 s\\)\\. robots\\.txt: unreachable \\(no answer\\): complete disallow by RFC 9309", legal: "no" },
+    ];
+    for (const o of OUTCOMES) {
+      const r = await runIx({ ...BASE, [R_NQ]: o.a });
+      holds(`robots.txt ${o.name}`, r, o.want);
+      const pageLine = o.legal === "rules" ? /^ {2}https:\/\/www\.nasdaq\.com\/legal: robots\.txt allows it: yes$/ : o.legal === "none" ? /^ {2}https:\/\/www\.nasdaq\.com\/legal: no robots\.txt, so every path is allowed: yes$/ : /^ {2}https:\/\/www\.nasdaq\.com\/legal: not asked \(this host's robots\.txt was not read\)$/;
+      ck(`robots.txt ${o.name} (RFC 9309 §2.3.1): its line says what the rule makes of it, and nasdaq.com/legal is ${o.legal === "no" ? "not asked (complete disallow)" : o.legal === "none" ? "asked (no file: every path allowed) and HOLDs" : "asked (the file allows it) and HOLDs"}`,
+        line(r, NQ_LINE(o.re)) && line(r, pageLine) && pv(r, LEGAL) === (o.legal === "no" ? "NOT READ" : "HOLD")
+        && (o.name.startsWith("301") ? line(r, /^GET https:\/\/www\.nasdaq\.com\/robots\.txt: 301, redirected to this same address \(https, this host, the path \/robots\.txt, no query\): asked again after 10 s, redirect 1 of at most 5 followed$/) : true),
+        r.lines.filter((l) => /nasdaq\.com\/(?:robots\.txt|legal)/.test(l)));
+    }
+    // a redirect to an address that is not this same one is not followed, however close (over http, with a query, with a
+    // trailing slash, in other letter case, on another port); one to "/robots.txt" (relative) is this same address and is
+    // followed; two in a row to itself: the second finds no place left in the budget
+    const nearly = await runIx({ ...BASE, [R_NQ]: R(301, "http://www.nasdaq.com/robots.txt"), [R_GIW]: R(302, `https://indexes.nasdaqomx.com/robots.txt?${z("RobotsQuery")}=1`), [R_NT]: R(307, "https://www.nasdaqtrader.com/robots.txt/"),
+      [R_INV]: R(308, "https://www.invesco.com/Robots.txt"), [R_TW]: R(301, "https://data.gov.tw:8443/robots.txt"), [R_OA]: [R(302, "/robots.txt"), robots("OaAfter")] });
+    holds("robots.txt redirected nearly to itself (http, a query, a trailing slash, letter case, a port), and once to itself by a relative address", nearly, [R_NQ, R_GIW, R_NT, R_INV, R_TW, R_OA, R_OA, SWAG]);
+    ck(`robots.txt redirected nearly to itself: those five not followed (complete disallow: no page of their hosts asked), the relative one followed after 10 s and read, so swagger.json is asked and READ; the candidates: ${verdicts(nearly)}`,
+      nearly.lines.filter((l) => new RegExp(`\\. ${ELSEWHERE_RE}$`).test(l)).length === 5 && line(nearly, /^GET https:\/\/openapi\.twse\.com\.tw\/robots\.txt: 302, redirected to this same address \(https, this host, the path \/robots\.txt, no query\): asked again after 10 s, redirect 1 of at most 5 followed$/)
+      && pv(nearly, SWAG) === "READ" && verdicts(nearly) === "NOT READ / NOT READ / NOT READ", nearly.lines.filter((l) => /robots\.txt/.test(l)));
+    const twice = await runIx({ ...BASE, [R_NQ]: [R(301, "https://www.nasdaq.com/robots.txt"), R(302, "https://www.nasdaq.com/robots.txt"), robots("NqLate")] });
+    holds("robots.txt redirected to itself twice in a row", twice, [R_NQ, R_NQ, ...NQ_REST]);
+    ck("robots.txt redirected to itself twice in a row: the first followed, the second not (the budget's one place more is spent), so complete disallow and nasdaq.com/legal not asked",
+      line(twice, /^GET https:\/\/www\.nasdaq\.com\/robots\.txt: 302, redirected \(not followed\) to the same host; the target's path is the asked path give or take a trailing slash: yes\. robots\.txt: unreadable \(a redirect to itself not followed: at most 5 are, each while the budget keeps a place for every address still to come\): complete disallow$/)
+      && pv(twice, LEGAL) === "NOT READ" && twice.result?.made === 13, twice.lines.filter((l) => /nasdaq\.com\/robots/.test(l)));
+
+    // and the world of IDX-0e's first check: a 404 and a 403 are no file now (every path allowed), while a robots.txt
+    // served as HTML, one redirected to another host, a 500 and an HTML page served as text still hold their hosts' pages
     const noRobots = await runIx({ ...BASE, [R_NQ]: { status: 404, type: "text/html", body: z("R404"), headers: hdr("R404") }, [R_GIW]: { status: 403, type: "text/html", body: z("R403"), headers: hdr("R403") }, [R_NT]: robots("NtHtml", ROBOTS_OPEN, "text/html"),
       [R_INV]: R(301, `https://${z("RobotsElsewhere")}.example/robots.txt`), [R_TW]: { status: 500, type: "text/plain", body: z("R500"), headers: hdr("R500") }, [R_OA]: ok("text/plain", `<!DOCTYPE html><html><title>${z("RobotsAsHtml")}</title><body>User-agent: *</body></html>`, "OaHtml") });
-    holds("robots.txt not read (404, 403, HTML, a redirect, 500, a page served as text)", noRobots, [R_NQ, R_GIW, R_NT, R_INV, R_TW, R_OA]);
-    ck(`robots.txt not read: no page of those hosts is asked, each says so, and every candidate is NOT READ (${verdicts(noRobots)})`, verdicts(noRobots) === "NOT READ / NOT READ / NOT READ" && noRobots.lines.filter((l) => /: not asked \(this host's robots\.txt was not read\)$/.test(l)).length === 7, noRobots.lines.filter((l) => /not asked/.test(l)));
+    holds("robots.txt 404 and 403 (no file); served as HTML, redirected elsewhere, 500, an HTML page served as text (complete disallow)", noRobots, [R_NQ, LEGAL, R_GIW, DISC, R_NT, R_INV, R_TW, R_OA]);
+    ck(`robots.txt 404 and 403: no file, so the legal page and the disclaimer are asked (each HOLDs); served as HTML, redirected elsewhere, 500 and an HTML page as text: complete disallow, no page of those hosts asked, each says so; the candidates: ${verdicts(noRobots)}`,
+      verdicts(noRobots) === "HOLD / NOT READ / NOT READ" && pv(noRobots, LEGAL) === "HOLD" && pv(noRobots, DISC) === "HOLD" && noRobots.lines.filter((l) => /: not asked \(this host's robots\.txt was not read\)$/.test(l)).length === 5 && noRobots.lines.filter((l) => /: no robots\.txt, so every path is allowed: yes$/.test(l)).length === 2
+      && line(noRobots, /^GET https:\/\/indexes\.nasdaqomx\.com\/robots\.txt: 403\. robots\.txt: none \(4xx\): every path allowed by RFC 9309$/) && line(noRobots, /^GET https:\/\/www\.nasdaqtrader\.com\/robots\.txt: 200, html, \d+ bytes\. robots\.txt read: no \(it is not text\): complete disallow$/)
+      && line(noRobots, /^GET https:\/\/openapi\.twse\.com\.tw\/robots\.txt: 200, text, \d+ bytes\. robots\.txt read: no \(an HTML page in its place\): complete disallow$/) && line(noRobots, /^GET https:\/\/data\.gov\.tw\/robots\.txt: 500\. robots\.txt: unreachable \(5xx\): complete disallow by RFC 9309$/),
+      noRobots.lines.filter((l) => /robots|not asked|allowed/.test(l)));
 
     // (a) robots.txt that disallows: the path itself, a group for the probe's own name, a longer Allow, a pattern with *
     // and $, one of two paths; a crawl-delay over 3 s is kept, one over 30 s holds the host's pages
@@ -3594,7 +3646,7 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     const r429 = await runIx({ ...BASE, [DISC]: [busy, BASE[DISC] as Ans], [R_INV]: [{ status: 429, type: "text/plain", body: z("Busy2"), headers: hdr("Busy2") }, BASE[R_INV] as Ans], [LIC]: [{ status: 429, type: "text/html", body: z("Busy3"), headers: hdr("Busy3") }, BASE[LIC] as Ans] });
     holds("429 (one more ask after 10 s, inside the budget)", r429, [R_NQ, LEGAL, R_GIW, DISC, DISC, R_NT, PDF, R_INV, R_TW, LIC, LIC, LIC_EN, R_OA, SWAG]);
     ck(`429: the disclaimer and the licence read on their second ask (HOLD), Invesco's robots.txt not asked again, so its terms not asked; 14 requests of 14; the candidates: ${verdicts(r429)}`, pv(r429, DISC) === "HOLD" && pv(r429, LIC) === "HOLD" && pv(r429, INV) === "NOT READ" && r429.result?.made === 14 && verdicts(r429) === "HOLD / NOT READ / HOLD"
-      && line(r429, /^GET https:\/\/indexes\.nasdaqomx\.com\/Home\/Disclaimer: 429\. Asked once more after 10 s\.$/) && line(r429, /^GET https:\/\/www\.invesco\.com\/robots\.txt: 429\. Not asked again: the budget of 14 keeps a place for every address still to come\. robots\.txt read: no/), r429.lines.filter((l) => /429|again/.test(l)));
+      && line(r429, /^GET https:\/\/indexes\.nasdaqomx\.com\/Home\/Disclaimer: 429\. Asked once more after 10 s\.$/) && line(r429, /^GET https:\/\/www\.invesco\.com\/robots\.txt: 429\. Not asked again: the budget of 14 keeps a place for every address still to come\. robots\.txt: unreachable \(429\): complete disallow$/), r429.lines.filter((l) => /429|again/.test(l)));
     const longWait = await runIx({ ...BASE, [DISC]: [{ ...busy, headers: { ...hdr("Busy4"), "retry-after": "120" } }, BASE[DISC] as Ans], [LIC]: [{ ...busy, headers: { ...hdr("Busy5"), "retry-after": "Fri, 07 Mar 1997 05:06:07 GMT" } }, BASE[LIC] as Ans] });
     holds("429 with a longer Retry-After", longWait, DESIGN);
     ck("429 with Retry-After 120 or a date: not asked again (the site asked for a longer wait than 10 s), NOT READ", pv(longWait, DISC) === "NOT READ" && pv(longWait, LIC) === "NOT READ" && line(longWait, /^GET https:\/\/indexes\.nasdaqomx\.com\/Home\/Disclaimer: 429\. Not asked again: the site asks for a longer wait than 10 s\. NOT READ$/), longWait.lines.filter((l) => /429/.test(l)));
@@ -3651,8 +3703,8 @@ console.log("\n[H] stock alerts beyond the Nikkei 225 and S&P 500: the day range
     // where a PDF is read under Deno, to keep pdf.js's warnings out of the log); it names no address but the design's
     // (and the licence's two, which it compares and asks only as fixed addresses); it builds none
     const literals = [...SRC.matchAll(/https?:\/\/[^\s"'`)\]]+/g)].map((m) => m[0].replace(/[.,;:]+$/, "")), foreign = [...new Set(literals.filter((u) => !DESIGN.includes(u) && !DESIGN.some((d) => d.startsWith(`${u}/`) || d === u)))];
-    ck(`the file imports nothing (one dynamic import, npm:unpdf, for a PDF's text under Deno), calls console only to print and to keep a PDF reader quiet, and writes no address but the design's (${foreign.length} other: ${foreign.slice(0, 4).join(", ")})`,
-      SRC !== "" && !/^\s*import\s/m.test(SRC) && (SRC.match(/\bimport\(/g) ?? []).length === 1 && /import\("npm:unpdf"\)/.test(SRC) && !/\bfetch\(/.test(SRC.replace(/io\.fetch\(|globalThis\.fetch\(/g, "")) && foreign.length === 0 && !/api\.nasdaq|ExportWeightings|product-detail|opendata\/|query[12]\.finance|\/Index\//.test(SRC), { foreign });
+    ck(`the file imports nothing (one dynamic import, npm:unpdf pinned at 2.2.1, the version its checks read PDFs with, for a PDF's text under Deno), calls console only to print and to keep a PDF reader quiet, and writes no address but the design's (${foreign.length} other: ${foreign.slice(0, 4).join(", ")})`,
+      SRC !== "" && !/^\s*import\s/m.test(SRC) && (SRC.match(/\bimport\(/g) ?? []).length === 1 && /import\("npm:unpdf@2\.2\.1"\)/.test(SRC) && !/\bfetch\(/.test(SRC.replace(/io\.fetch\(|globalThis\.fetch\(/g, "")) && foreign.length === 0 && !/api\.nasdaq|ExportWeightings|product-detail|opendata\/|query[12]\.finance|\/Index\//.test(SRC), { foreign });
     const quiet: string[] = [], keepLog = { log: console.log, warn: console.warn, error: console.error, info: console.info, debug: console.debug };
     for (const k of Object.keys(keepLog) as Array<keyof typeof keepLog>) console[k] = (...a: unknown[]) => { quiet.push(a.map(String).join(" ")); };
     let nodePdf: string | null | undefined;
